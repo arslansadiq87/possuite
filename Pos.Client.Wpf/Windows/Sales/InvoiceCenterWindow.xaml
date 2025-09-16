@@ -1,0 +1,282 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.InvoiceCenterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Pos.Client.Wpf"
+        Title="Invoice Center — Edit &amp; Returns" Height="680" Width="1000"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- Define commands here so XAML can always see them -->
+        <RoutedUICommand x:Key="CmdAmendReturn"   Text="Amend Return"/>
+        <RoutedUICommand x:Key="CmdVoidReturn"    Text="Void Return"/>
+        <RoutedUICommand x:Key="CmdAmend"         Text="Amend"/>
+        <RoutedUICommand x:Key="CmdReturnWith"    Text="Return With"/>
+        <RoutedUICommand x:Key="CmdReturnWithout" Text="Return Without"/>
+        <RoutedUICommand x:Key="CmdVoidSale" Text="Void Sale"/>
+        <RoutedUICommand x:Key="CmdHeld" Text="Held Invoices"/>
+
+    </Window.Resources>
+
+
+    <!-- Keyboard: global shortcuts -->
+    <Window.InputBindings>
+        <KeyBinding Key="F2" Command="{x:Static ApplicationCommands.Find}" />
+        <KeyBinding Key="A" Modifiers="Alt"     Command="{StaticResource CmdAmendReturn}" />
+        <KeyBinding Key="V" Modifiers="Alt"     Command="{StaticResource CmdVoidReturn}" />
+        <KeyBinding Key="E" Modifiers="Alt"     Command="{StaticResource CmdAmend}" />
+        <KeyBinding Key="U" Modifiers="Alt"     Command="{StaticResource CmdReturnWith}" />
+        <KeyBinding Key="U" Modifiers="Control" Command="{StaticResource CmdReturnWithout}" />
+        <KeyBinding Key="D" Modifiers="Alt" Command="{StaticResource CmdVoidSale}" />
+        <KeyBinding Key="F8" Command="{StaticResource CmdHeld}" />
+
+
+    </Window.InputBindings>
+
+    <!-- Keyboard: command wiring -->
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static ApplicationCommands.Find}" Executed="Search_Executed"/>
+        <CommandBinding Command="{StaticResource CmdAmendReturn}"   Executed="AmendReturn_Executed"/>
+        <CommandBinding Command="{StaticResource CmdVoidReturn}"    Executed="VoidReturn_Executed"/>
+        <CommandBinding Command="{StaticResource CmdAmend}"         Executed="Amend_Executed"/>
+        <CommandBinding Command="{StaticResource CmdReturnWith}"    Executed="ReturnWith_Executed"/>
+        <CommandBinding Command="{StaticResource CmdReturnWithout}" Executed="ReturnWithout_Executed"/>
+        <CommandBinding Command="{StaticResource CmdVoidSale}" Executed="VoidSale_Executed"/>
+        <CommandBinding Command="{StaticResource CmdHeld}" Executed="Held_Executed"/>
+
+    </Window.CommandBindings>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top bar: search + date + dropdown filter -->
+        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
+            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="SearchBox" Width="200" Height="28" VerticalContentAlignment="Center"
+                     ToolTip="Invoice #, Customer name, or Phone"/>
+
+            <TextBlock Text=" From:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <DatePicker x:Name="FromDate" Width="140"/>
+            <TextBlock Text=" To:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <DatePicker x:Name="ToDate" Width="140"/>
+
+            <!-- Compact filter dropdown -->
+            <Grid Margin="12,0,0,0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <ToggleButton x:Name="BtnFilter" Grid.Column="0" Height="28" Padding="10,0"
+                              Content="Filter ▾"
+                              IsChecked="{Binding IsOpen, ElementName=PopupFilter, Mode=TwoWay}"
+                              ToolTip="Open filters"/>
+
+                <!-- live summary next to button -->
+                <!--<TextBlock x:Name="FilterSummary" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"
+                           Foreground="Gray" />-->
+
+                <!-- Dropdown popup -->
+                <Popup x:Name="PopupFilter" Placement="Bottom" PlacementTarget="{Binding ElementName=BtnFilter}"
+                       StaysOpen="False" AllowsTransparency="True" Focusable="False">
+                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+                        </Border.Effect>
+                        <StackPanel MinWidth="380">
+                            <TextBlock Text="Filter invoices" FontWeight="Bold" Margin="0,0,0,8"/>
+
+                            <!-- Types -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Type:" Width="60" VerticalAlignment="Center"/>
+                                <CheckBox x:Name="ChkSales"   Content="Sales"   IsChecked="True"  Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkReturns" Content="Returns" IsChecked="True"/>
+                            </StackPanel>
+
+                            <!-- Status -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Status:" Width="60" VerticalAlignment="Center"/>
+                                <CheckBox x:Name="ChkFinal"  Content="Final"   IsChecked="True"  Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkDraft"  Content="Draft"   IsChecked="True"  Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkVoided" Content="Voided"  IsChecked="False"/>
+                            </StackPanel>
+
+                            <!-- Other flags -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <CheckBox x:Name="ChkOnlyWithInvNo" Content="Only with invoice #" IsChecked="True"
+                                          ToolTip="Hide missing/null invoice numbers by default"/>
+                            </StackPanel>
+
+                            <!-- Single-type mode -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <CheckBox x:Name="ChkSingleTypeMode" Content="Single type mode (Sales OR Returns)"
+                                          Checked="ChkSingleTypeMode_Checked" Unchecked="ChkSingleTypeMode_Unchecked"/>
+                            </StackPanel>
+
+                            <!-- Actions inside dropdown -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Clear" Width="80" Margin="0,0,8,0" Click="ClearFilter_Click"/>
+                                <Button Content="Apply" Width="80" Click="ApplyFilter_Click" Style="{StaticResource ModernButton}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </Grid>
+
+            <Button Content="Search _F2" Width="120" Height="28" Margin="12,0,0,0"
+                    Click="Search_Click" Style="{StaticResource ModernButton}"/>
+        </StackPanel>
+
+        <!-- Middle: list | details -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="1.75*" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid x:Name="InvoicesGrid"
+          Grid.Column="0"
+          AutoGenerateColumns="False"
+          CanUserAddRows="False"
+          IsReadOnly="True"
+          SelectionChanged="InvoicesGrid_SelectionChanged"
+          RowHeaderWidth="0"
+          FontSize="13"
+          HeadersVisibility="Column"
+          HorizontalScrollBarVisibility="Disabled">
+
+                <DataGrid.Resources>
+                    <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+                    <!-- Small status badge -->
+                    <Style x:Key="StatusBadge" TargetType="Border">
+                        <Setter Property="CornerRadius" Value="4"/>
+                        <Setter Property="Padding" Value="2,0"/>
+                        <Setter Property="Margin" Value="8,0,0,0"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="BorderBrush" Value="#D0D0D0"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="Background" Value="#F3F3F3"/>
+                    </Style>
+                </DataGrid.Resources>
+
+                <DataGrid.Columns>
+
+                    <!-- COMPACT “Invoice” column: shows Counter-Inv, Rev, status badge, return icon,
+             and a second line with Customer • Time -->
+                    <DataGridTemplateColumn Header="Invoice" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2,0,2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Line 1: 12-345  Rev 2   [Final]   ↩ -->
+                                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="0">
+                                        <TextBlock FontWeight="SemiBold">
+                                <Run Text="{Binding CounterId}"/><Run Text="-"/><Run Text="{Binding InvoiceNumber}"/>
+                                <Run Text="  Rev "/><Run Text="{Binding Revision}"/>
+                                        </TextBlock>
+
+                                        <!-- Status badge (F/D/V) with light color -->
+                                        <Border Style="{StaticResource StatusBadge}">
+                                            <TextBlock Text="{Binding Status}"
+                                           FontSize="11" Margin="4,0,4,0"/>
+                                        </Border>
+
+                                        <!-- Return icon (↩) if IsReturn -->
+                                        <TextBlock Text="  ↩"
+                                       Foreground="#C2185B"
+                                       Visibility="{Binding IsReturn, Converter={StaticResource BoolToVis}}"/>
+                                    </StackPanel>
+
+                                    <!-- Line 2: Customer • 01-Jan-2025 14:20 -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Foreground="#666"
+                                   FontSize="12"
+                                   TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding Customer}"/>
+                            <Run Text=" • "/>
+                            <Run Text="{Binding TsLocal}"/>
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Keep a narrow Total column, right-aligned -->
+                    <DataGridTextColumn Header="Total"
+                            Binding="{Binding Total, StringFormat=0.00}"
+                            Width="95">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                </DataGrid.Columns>
+            </DataGrid>
+
+
+            <Separator Grid.Column="1" Margin="8,0" Width="1" Background="#DDD"/>
+
+            <Grid Grid.Column="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="33*"/>
+                    <ColumnDefinition Width="89*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" Grid.ColumnSpan="2"/>
+
+                <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="ItemId" Binding="{Binding ItemId}" Width="70"/>
+                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"/>
+                        <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="60"/>
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price, StringFormat=0.00}" Width="80"/>
+                        <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat=0.00}" Width="100"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+
+        <!-- Bottom: actions (auto-hide based on selection) -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button x:Name="BtnHeld" Content="_Held (F8)" Width="140" Height="34" Margin="0,0,8,0"
+                    Click="BtnHeld_Click" Style="{StaticResource ModernButton}" Visibility="Collapsed"/>
+
+            <Button x:Name="BtnAmendReturn" Content="_Amend Return (Alt+A)" Width="180" Height="34" Margin="0,0,8,0"
+                    Click="AmendReturn_Click" Style="{StaticResource ModernButton}"/>
+            <Button x:Name="BtnVoidReturn"  Content="_Void Return (Alt+V)"  Width="160" Height="34" Margin="0,0,8,0"
+                    Click="VoidReturn_Click"  Style="{StaticResource ModernButton}"/>
+
+            <Button x:Name="BtnAmend" Content="_Amend (Rev) (Alt+E)" Width="180" Height="34" Margin="0,0,8,0"
+                    Click="Amend_Click" Style="{StaticResource ModernButton}"/>
+            <Button x:Name="BtnVoidSale" Content="_Void Sale (Alt+D)" Width="160" Height="34" Margin="0,0,8,0"
+                    Click="VoidSale_Click" Style="{StaticResource ModernButton}"/>
+
+            <Button x:Name="BtnReturnWith" Content="Ret_urn (with invoice) (Alt+U)" Width="220" Height="34" Margin="0,0,8,0"
+                    Click="ReturnWithInvoice_Click" Style="{StaticResource ModernButton}"/>
+
+            <Button x:Name="BtnReturnWithout" Content="Return (witho_ut invoice) (Ctrl+U)" Width="240" Height="34"
+                    Click="ReturnWithoutInvoice_Click" Style="{StaticResource ModernButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,331 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.SaleInvoiceWindow"
+        x:Name="MainWindowRoot"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="POS — Sales" Height="768" Width="1024">
+   
+    
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>        <!-- Till bar -->
+            <RowDefinition Height="Auto"/>        <!-- Scan bar -->
+            <RowDefinition Height="*"/>           <!-- Cart -->
+            <RowDefinition Height="Auto"/>        <!-- Totals -->
+            
+
+        </Grid.RowDefinitions>
+
+        <!-- Till bar -->
+        <!-- Till bar -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Till status + invoice/date -->
+            <StackPanel Orientation="Horizontal" Grid.Column="0">
+                <TextBlock Text="Till:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock x:Name="TillStatusText" VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                <TextBlock Text="   |   " VerticalAlignment="Center" Foreground="#999" Margin="8,0,8,0"/>
+
+                <TextBlock Text="Invoice #:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock x:Name="InvoicePreviewText" VerticalAlignment="Center" FontWeight="Bold" />
+
+                <TextBlock Text="   " />
+                <TextBlock Text="Date:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock x:Name="InvoiceDateText" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Right: Only ONE button shown at a time -->
+            <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
+                <CheckBox x:Name="WalkInCheck" Content="Walk-in Customer" IsChecked="True" Checked="WalkInCheck_Changed" Unchecked="WalkInCheck_Changed" VerticalAlignment="Center"/>
+                <TextBlock Text="Name:" VerticalAlignment="Center" Margin="6,0,6,0"/>
+                <TextBox x:Name="CustNameBox" Width="180" Height="28" VerticalContentAlignment="Center"/>
+                <TextBlock Text="   Phone:" VerticalAlignment="Center" Margin="6,0,6,0"/>
+                <TextBox x:Name="CustPhoneBox" Width="130" Height="28" VerticalContentAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+
+        <!-- Scan bar -->
+        <!-- Row 1: Scan/Search (left)  |  Cashier → Salesman (right) -->
+        <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <!-- left expands -->
+                <ColumnDefinition Width="Auto" />
+                <!-- right hugs content -->
+            </Grid.ColumnDefinitions>
+
+            <!-- LEFT: Scan / Search + Add -->
+            <!-- LEFT: Scan / Search + Add -->
+            <StackPanel Orientation="Horizontal" Grid.Column="0">
+                <TextBlock Text="Scan / Search:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+
+                <Grid>
+                    <TextBox x:Name="ScanText"
+             Width="320" Height="28"
+             VerticalContentAlignment="Center"
+             TextChanged="ScanText_TextChanged"
+             PreviewKeyDown="ScanText_PreviewKeyDown" />
+
+                    <!-- Our custom dropdown -->
+                    <Popup x:Name="ScanPopup"
+           PlacementTarget="{Binding ElementName=ScanText}"
+           Placement="Bottom"
+           StaysOpen="False"
+           AllowsTransparency="True">
+                        <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
+              Padding="4" MinWidth="{Binding ElementName=ScanText, Path=ActualWidth}">
+                            <ListBox x:Name="ScanList"
+                 MouseDoubleClick="ScanList_MouseDoubleClick"
+                 PreviewKeyDown="ScanList_PreviewKeyDown">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                            <TextBlock Text=" — " Foreground="Gray"/>
+                                            <TextBlock Text="{Binding Sku}" Foreground="Gray"/>
+                                            <TextBlock Text=" (" Foreground="Gray"/>
+                                            <TextBlock Text="{Binding Barcode}" Foreground="Gray"/>
+                                            <TextBlock Text=")" Foreground="Gray"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                    </Popup>
+                </Grid>
+
+                <Button Content="Add" Click="AddButton_Click"
+          Margin="8,0,0,0" Height="28" Width="55"
+          Style="{StaticResource ModernButton}"/>
+            </StackPanel>
+
+
+            <!-- RIGHT: Cashier → Salesman (right-aligned) -->
+            <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
+                <TextBlock Text="Cashier:" VerticalAlignment="Center" Margin="16,0,6,0"/>
+                <TextBlock x:Name="CashierNameText" VerticalAlignment="Center" FontWeight="Bold"/>
+
+                <TextBlock Text="   Salesman:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                <!-- Use DisplayMemberPath that matches your Users: DisplayName or Name -->
+                <ComboBox x:Name="SalesmanBox"
+                  Width="180"
+                  DisplayMemberPath="DisplayName"
+                  SelectedValuePath="Id"
+                  SelectionChanged="SalesmanBox_SelectionChanged"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Grid.Column="2" HorizontalAlignment="Right">
+                <Button x:Name="OpenTillBtn"  Content="Open Till"    Click="OpenTill_Click"  Height="28" Margin="8,0,0,0" Style="{StaticResource ModernButton}"/>
+                <Button x:Name="CloseTillBtn" Content="Close Till" Click="CloseTill_Click" Height="28" Margin="8,0,0,0" Style="{StaticResource ModernButton}"/>
+            </StackPanel>
+        </Grid>
+
+
+
+
+        <!-- Cart -->
+        <DataGrid x:Name="CartGrid" Grid.Row="2" AutoGenerateColumns="False"
+          IsReadOnly="False" CanUserAddRows="False" HeadersVisibility="Column" VerticalContentAlignment="Center" FontSize="16" FontWeight="DemiBold">
+            <DataGrid.Resources>
+                <!-- Style for right-aligning numeric text -->
+                <Style x:Key="NumericRightAligned" TargetType="TextBlock">
+                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                    <Setter Property="TextAlignment" Value="Right"/>
+                </Style>
+            </DataGrid.Resources>
+            
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="SKU"      Binding="{Binding Sku}" Width="*" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Name"     Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True"/>
+                <!-- Qty with +/- -->
+                <DataGridTemplateColumn Header="Qty" Width="100">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="−" Width="24" Height="24" Padding="0" Click="QtyMinus_Click" Tag="{Binding}" />
+                                <TextBlock Text="{Binding Qty}" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="4,0"/>
+                                <Button Content="+" Width="24" Height="24" Padding="0" Click="QtyPlus_Click" Tag="{Binding}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTextColumn Header="Price"    Binding="{Binding UnitPrice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90" ElementStyle="{StaticResource NumericRightAligned}"/>
+                <DataGridTextColumn Header="Disc %"   Binding="{Binding DiscountPct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80" ElementStyle="{StaticResource NumericRightAligned}"/>
+                <DataGridTextColumn Header="Disc Amt" Binding="{Binding DiscountAmt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90" ElementStyle="{StaticResource NumericRightAligned}"/>
+                <DataGridTextColumn Header="Tax %"    Binding="{Binding TaxRatePct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="70" ElementStyle="{StaticResource NumericRightAligned}"/>
+                <DataGridTextColumn Header="Tax Inc"  Binding="{Binding TaxInclusive}"
+                    IsReadOnly="True" Width="50" Visibility="Hidden">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="Gray"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Line Tax"
+                    Binding="{Binding LineTax, StringFormat={}{0:N2}}"
+                    Width="90" IsReadOnly="True" ElementStyle="{StaticResource NumericRightAligned}"/>
+
+                <DataGridTextColumn Header="Line Total"
+                    Binding="{Binding LineTotal, StringFormat={}{0:N2}}"
+                    Width="110" IsReadOnly="True" ElementStyle="{StaticResource NumericRightAligned}"/>
+
+                <!-- Delete line -->
+                <DataGridTemplateColumn Header="" Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="🗑" Width="28" Height="24" Padding="-1"
+              Click="DeleteLine_Click" Tag="{Binding}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+
+        <!-- Totals & Pay -->
+        <Border Grid.Row="3" Margin="0,12,0,0" Padding="12"
+        BorderBrush="#DDD" BorderThickness="1" CornerRadius="8"
+        Background="#FAFAFA">
+
+            <Grid>
+                <!-- Row 0: content | Row 1: buttons -->
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- ===== Row 0: CONTENT (3 columns) ===== -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <!-- Col 1: discounts + return + footer -->
+                        <ColumnDefinition Width="*"/>
+                        <!-- Col 2: items + total qty -->
+                        <ColumnDefinition Width="Auto"/>
+                        <!-- Col 3: totals -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Col 1: invoice discount + return/refund + footer -->
+                    <StackPanel Grid.Column="0" Orientation="Vertical" Margin="0,0,16,0">
+                        <!-- Discounts -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="Inv Disc %:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="InvDiscPctBox" Width="60" Height="28"
+                             VerticalContentAlignment="Center"
+                             TextChanged="InvoiceDiscountChanged"/>
+
+                            <TextBlock Text="   Inv Disc Amt:" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                            <TextBox x:Name="InvDiscAmtBox" Width="90" Height="28"
+                             VerticalContentAlignment="Center"
+                             TextChanged="InvoiceDiscountChanged"/>
+                        </StackPanel>
+
+                        <!-- Return/Refund -->
+                        <CheckBox x:Name="ReturnCheck" Content="Return/Refund" Margin="0,0,0,8"
+                          Checked="ReturnCheck_Changed" Unchecked="ReturnCheck_Changed" />
+
+                        <!-- Invoice footer -->
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Invoice Footer:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="FooterBox" Width="300" Height="28"
+                             VerticalContentAlignment="Center"
+                             TextChanged="FooterBox_TextChanged"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Col 2: items & total qty -->
+                    <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Items:" FontSize="14" Width="120"/>
+                            <TextBlock x:Name="ItemsCountText" FontSize="14"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Total Qty:" FontSize="14" Width="120"/>
+                            <TextBlock x:Name="QtySumText" FontSize="14"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Col 3: totals (right aligned) -->
+                    <!-- Col 3: totals (rigid 2-column grid so labels/values never shift) -->
+                    <Grid Grid.Column="2" HorizontalAlignment="Right" Margin="0,0,0,0" Width="240">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <!-- labels -->
+                            <ColumnDefinition Width="110" />
+                            <!-- values: fixed width -->
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <!-- spacer -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- Grand total -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Labels -->
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Discount:" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Tax:"      FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right" />
+
+                        <!-- Values (right-aligned inside a fixed-width column) -->
+                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="SubtotalText"
+               FontSize="14" FontWeight="DemiBold"
+               HorizontalAlignment="Stretch" TextAlignment="Right"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="DiscountText"
+               FontSize="14" FontWeight="DemiBold" Foreground="#10893E"
+               HorizontalAlignment="Stretch" TextAlignment="Right"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TaxText"
+               FontSize="14" FontWeight="DemiBold"
+               HorizontalAlignment="Stretch" TextAlignment="Right"/>
+
+                        <!-- Divider -->
+                        <Border Grid.Row="3" Grid.ColumnSpan="2" Margin="0,6,0,0"
+            BorderBrush="#EEE" BorderThickness="0,1,0,0"/>
+
+                        <!-- Grand total -->
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Grand Total:" FontSize="18" FontWeight="SemiBold"
+               HorizontalAlignment="Right" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" x:Name="TotalText" FontSize="18" 
+               FontWeight="Bold" Foreground="#1F3A93"
+               HorizontalAlignment="Stretch" TextAlignment="Right"/>
+                    </Grid>
+
+                </Grid>
+
+                <!-- ===== Row 1: BUTTONS BAR ===== -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                    <!-- Add after Stock (F6) -->
+                    <!-- NEW: Till summary (F10) -->
+                    <Button Content="Till Summary (F10)" Height="40" Width="150" Margin="12,0,0,0"
+                        Click="ShowTillSummary_Click" Style="{StaticResource ModernButton}"/>
+
+
+                    <Button Content="Clear(F5)/Hold(F8)" Height="40" Width="150" Margin="12,0,0,0"
+                    Click="ClearHoldButton_Click" Style="{StaticResource ModernButton}"/>
+
+                    <Button Content="Invoices (F7)" Height="40" Width="150" Margin="12,0,0,0"
+                    Click="OpenInvoiceCenter_Click" Style="{StaticResource ModernButton}"/>
+                    <Button Content="Pay (F9)" Height="40" Width="150" Margin="12,0,0,0"
+                    Click="PayButton_Click" Style="{StaticResource ModernButton}"/>
+                    <Button Content="Stock (F6)" Height="40" Width="150" Margin="12,0,0,0"
+                    Click="StockReport_Click" Style="{StaticResource ModernButton}"/>
+                    <!-- Add more buttons here later -->
+                </StackPanel>
+            </Grid>
+        </Border>
+
+
+
+    </Grid>
+
+</Window>

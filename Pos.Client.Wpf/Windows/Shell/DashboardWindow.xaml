@@ -1,0 +1,159 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Shell.DashboardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="POS — Dashboard" Height="720" Width="1080" WindowStartupLocation="CenterScreen">
+    <DockPanel>
+        <ToolBar DockPanel.Dock="Top">
+            <Button Content="New Sale" Click="NewSale_Click"/>
+            <Separator/>
+            <Button Content="New Purchase" Click="NewPurchase_Click"/>
+            <Separator/>
+            <Button Content="Products  &amp; Items" Click="OpenProductsItems_Click"/>
+            <Button Content="Suppliers" Click="OpenSuppliers_Click"/>
+            <Button Content="Outlets/Counters" Click="OpenOutletsCounters_Click"/>
+            <Button Content="Users" Click="OpenUsers_Click"/>
+            <Button Content="Customers" Click="OpenCustomers_Click"/>
+            <Separator/>
+            
+        </ToolBar>
+
+        <Grid>
+            <!-- Top status strip: outlet/shift + connectivity -->
+            <Border DockPanel.Dock="Top" Background="#f2f6ff" Padding="8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding OutletName}" FontWeight="SemiBold"/>
+                        <TextBlock Text="·"/>
+                        <TextBlock Text="{Binding CounterName}"/>
+                        <TextBlock Text="·"/>
+                        <TextBlock Text="{Binding ShiftStatus}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding OnlineText}" />
+                        <TextBlock Text="|" Margin="4,0"/>
+                        <TextBlock Text="{Binding LastSyncText}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Content -->
+            <ScrollViewer>
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- KPI Cards -->
+                    <UniformGrid Grid.Row="0" Columns="4" Margin="0,0,0,8">
+                        <!-- Today Sales -->
+                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
+                            <StackPanel>
+                                <TextBlock Text="Today Sales" Foreground="#5f6b7a" FontSize="12"/>
+                                <TextBlock Text="{Binding TodaySalesFormatted}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding TodaySalesInvoicesText}" Foreground="#8a94a6" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Today Returns -->
+                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
+                            <StackPanel>
+                                <TextBlock Text="Today Returns" Foreground="#5f6b7a" FontSize="12"/>
+                                <TextBlock Text="{Binding TodayReturnsFormatted}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding TodayReturnsCountText}" Foreground="#8a94a6" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Items low on stock -->
+                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
+                            <StackPanel>
+                                <TextBlock Text="Low Stock Items" Foreground="#5f6b7a" FontSize="12"/>
+                                <TextBlock Text="{Binding LowStockCount}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
+                                <TextBlock Text="below reorder level" Foreground="#8a94a6" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Shift cash (optional) -->
+                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
+                            <StackPanel>
+                                <TextBlock Text="Shift Cash" Foreground="#5f6b7a" FontSize="12"/>
+                                <TextBlock Text="{Binding ShiftCashFormatted}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding ShiftHint}" Foreground="#8a94a6" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <!-- Quick actions -->
+                    <Border Grid.Row="2" CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White">
+                        <StackPanel Orientation="Horizontal" >
+                            
+                               
+
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Bottom grid: Recent sales + Low stock list -->
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Recent invoices -->
+                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Background="White" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Recent Invoices" FontWeight="SemiBold" Margin="4,0,0,6"/>
+                                <DataGrid Grid.Row="1" ItemsSource="{Binding RecentInvoices}" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="#" Binding="{Binding InvoiceNo}" Width="80"/>
+                                        <DataGridTextColumn Header="Customer" Binding="{Binding CustomerName}" Width="*"/>
+                                        <DataGridTextColumn Header="Total" Binding="{Binding TotalFormatted}" Width="100"/>
+                                        <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="120"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+
+                        <!-- spacer -->
+                        <Grid Grid.Column="1"/>
+
+                        <!-- Low stock -->
+                        <Border Grid.Column="2" CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Background="White" Padding="8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Low Stock" FontWeight="SemiBold" Margin="4,0,0,6"/>
+                                <DataGrid Grid.Row="1" ItemsSource="{Binding LowStockItems}" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="100"/>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                                        <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="60"/>
+                                        <DataGridTextColumn Header="Reorder" Binding="{Binding ReorderLevel}" Width="80"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

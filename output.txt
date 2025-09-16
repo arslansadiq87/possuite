@@ -1,0 +1,1662 @@
+Folder PATH listing
+Volume serial number is 340D-CBA8
+G:.
+|   output.txt
+|   PosSuite.sln
+|   
++---.vs
+|   |   ProjectSettings.json
+|   |   slnx.sqlite
+|   |   VSWorkspaceState.json
+|   |   
+|   +---PosSuite
+|   |   +---DesignTimeBuild
+|   |   |       .dtbcache.v2
+|   |   |       
+|   |   +---FileContentIndex
+|   |   |       1a5940e0-442e-40c3-ad23-767923ffddba.vsidx
+|   |   |       3b9fffe8-3d06-4519-ac50-9fba6fd9fd58.vsidx
+|   |   |       bce92de3-5754-4950-8368-7727ec146184.vsidx
+|   |   |       c29b8e5c-0f74-44a8-9537-6ac844f4b005.vsidx
+|   |   |       db763747-264a-4f3f-bc28-efc5e58eeec8.vsidx
+|   |   |       
+|   |   \---v17
+|   |           .futdcache.v2
+|   |           DocumentLayout.backup.json
+|   |           DocumentLayout.json
+|   |           workspaceFileList.bin
+|   |           
+|   +---ProjectEvaluation
+|   |       possuite.metadata.v9.bin
+|   |       possuite.projects.v9.bin
+|   |       possuite.strings.v9.bin
+|   |       
+|   \---sd
++---Pos.Client.Wpf
+|   |   App.xaml
+|   |   App.xaml.cs
+|   |   AssemblyInfo.cs
+|   |   Converters.cs
+|   |   Pos.Client.Wpf.csproj
+|   |   Pos.Client.Wpf.csproj.user
+|   |   Sample.xaml
+|   |   Sample.xaml.cs
+|   |   
+|   +---Assets
+|   |       AppIcon.ico
+|   |       
+|   +---bin
+|   |   \---Debug
+|   |       \---net9.0-windows
+|   |           |   Azure.Core.dll
+|   |           |   Azure.Identity.dll
+|   |           |   BCrypt.Net-Next.dll
+|   |           |   CommonWin32.dll
+|   |           |   CommunityToolkit.Mvvm.dll
+|   |           |   Humanizer.dll
+|   |           |   Microsoft.Bcl.AsyncInterfaces.dll
+|   |           |   Microsoft.Build.Locator.dll
+|   |           |   Microsoft.CodeAnalysis.CSharp.dll
+|   |           |   Microsoft.CodeAnalysis.CSharp.Workspaces.dll
+|   |           |   Microsoft.CodeAnalysis.dll
+|   |           |   Microsoft.CodeAnalysis.Workspaces.dll
+|   |           |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll
+|   |           |   Microsoft.CodeAnalysis.Workspaces.MSBuild.dll
+|   |           |   Microsoft.Data.SqlClient.dll
+|   |           |   Microsoft.Data.Sqlite.dll
+|   |           |   Microsoft.EntityFrameworkCore.Abstractions.dll
+|   |           |   Microsoft.EntityFrameworkCore.Design.dll
+|   |           |   Microsoft.EntityFrameworkCore.dll
+|   |           |   Microsoft.EntityFrameworkCore.Relational.dll
+|   |           |   Microsoft.EntityFrameworkCore.Sqlite.dll
+|   |           |   Microsoft.EntityFrameworkCore.SqlServer.dll
+|   |           |   Microsoft.Extensions.Caching.Abstractions.dll
+|   |           |   Microsoft.Extensions.Caching.Memory.dll
+|   |           |   Microsoft.Extensions.Configuration.Abstractions.dll
+|   |           |   Microsoft.Extensions.DependencyInjection.Abstractions.dll
+|   |           |   Microsoft.Extensions.DependencyInjection.dll
+|   |           |   Microsoft.Extensions.DependencyModel.dll
+|   |           |   Microsoft.Extensions.Logging.Abstractions.dll
+|   |           |   Microsoft.Extensions.Logging.dll
+|   |           |   Microsoft.Extensions.Options.dll
+|   |           |   Microsoft.Extensions.Primitives.dll
+|   |           |   Microsoft.Identity.Client.dll
+|   |           |   Microsoft.Identity.Client.Extensions.Msal.dll
+|   |           |   Microsoft.IdentityModel.Abstractions.dll
+|   |           |   Microsoft.IdentityModel.JsonWebTokens.dll
+|   |           |   Microsoft.IdentityModel.Logging.dll
+|   |           |   Microsoft.IdentityModel.Protocols.dll
+|   |           |   Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
+|   |           |   Microsoft.IdentityModel.Tokens.dll
+|   |           |   Microsoft.SqlServer.Server.dll
+|   |           |   ModernWPF.dll
+|   |           |   Mono.TextTemplating.dll
+|   |           |   Npgsql.dll
+|   |           |   Npgsql.EntityFrameworkCore.PostgreSQL.dll
+|   |           |   Pos.Client.Wpf.deps.json
+|   |           |   Pos.Client.Wpf.dll
+|   |           |   Pos.Client.Wpf.exe
+|   |           |   Pos.Client.Wpf.pdb
+|   |           |   Pos.Client.Wpf.runtimeconfig.json
+|   |           |   Pos.Domain.dll
+|   |           |   Pos.Domain.pdb
+|   |           |   Pos.Persistence.dll
+|   |           |   Pos.Persistence.pdb
+|   |           |   SQLitePCLRaw.batteries_v2.dll
+|   |           |   SQLitePCLRaw.core.dll
+|   |           |   SQLitePCLRaw.provider.e_sqlite3.dll
+|   |           |   System.ClientModel.dll
+|   |           |   System.Composition.AttributedModel.dll
+|   |           |   System.Composition.Convention.dll
+|   |           |   System.Composition.Hosting.dll
+|   |           |   System.Composition.Runtime.dll
+|   |           |   System.Composition.TypedParts.dll
+|   |           |   System.Formats.Asn1.dll
+|   |           |   System.IdentityModel.Tokens.Jwt.dll
+|   |           |   System.Memory.Data.dll
+|   |           |   System.Runtime.Caching.dll
+|   |           |   System.Text.Json.dll
+|   |           |   
+|   |           +---cs
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---de
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---es
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---fr
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---it
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---ja
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       ModernWPF.resources.dll
+|   |           |       
+|   |           +---ko
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---pl
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---pt-BR
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---ru
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---runtimes
+|   |           |   +---browser-wasm
+|   |           |   |   \---nativeassets
+|   |           |   |       \---net9.0
+|   |           |   |               e_sqlite3.a
+|   |           |   |               
+|   |           |   +---linux-arm
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-armel
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-mips64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-arm
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-s390x
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-ppc64le
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-s390x
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-x86
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---maccatalyst-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---maccatalyst-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---osx-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---osx-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---unix
+|   |           |   |   \---lib
+|   |           |   |       \---net6.0
+|   |           |   |               Microsoft.Data.SqlClient.dll
+|   |           |   |               
+|   |           |   +---win
+|   |           |   |   \---lib
+|   |           |   |       \---net6.0
+|   |           |   |               Microsoft.Data.SqlClient.dll
+|   |           |   |               System.Runtime.Caching.dll
+|   |           |   |               
+|   |           |   +---win-arm
+|   |           |   |   \---native
+|   |           |   |           e_sqlite3.dll
+|   |           |   |           Microsoft.Data.SqlClient.SNI.dll
+|   |           |   |           
+|   |           |   +---win-arm64
+|   |           |   |   \---native
+|   |           |   |           e_sqlite3.dll
+|   |           |   |           Microsoft.Data.SqlClient.SNI.dll
+|   |           |   |           
+|   |           |   +---win-x64
+|   |           |   |   \---native
+|   |           |   |           e_sqlite3.dll
+|   |           |   |           Microsoft.Data.SqlClient.SNI.dll
+|   |           |   |           
+|   |           |   \---win-x86
+|   |           |       \---native
+|   |           |               e_sqlite3.dll
+|   |           |               Microsoft.Data.SqlClient.SNI.dll
+|   |           |               
+|   |           +---tr
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---zh-Hans
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       ModernWPF.resources.dll
+|   |           |       
+|   |           \---zh-Hant
+|   |                   Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |                   Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |                   Microsoft.CodeAnalysis.resources.dll
+|   |                   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |                   Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |                   ModernWPF.resources.dll
+|   |                   
+|   +---Controls
+|   +---Converters
+|   |       VariantDisplayNameConverter.cs
+|   |       
+|   +---Models
+|   |       CartLine.cs
+|   |       
+|   +---obj
+|   |   |   Pos.Client.Wpf.csproj.EntityFrameworkCore.targets
+|   |   |   Pos.Client.Wpf.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_24a5h4z0_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_24a5h4z0_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_24a5h4z0_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_2a2uyyc0_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_2a2uyyc0_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_2a2uyyc0_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_3amw3jmx_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_3amw3jmx_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_3amw3jmx_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_4fbcqte4_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_4fbcqte4_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_4fbcqte4_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_4nwbwhfm_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_4nwbwhfm_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_4nwbwhfm_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_4tb2ipwk_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_4tb2ipwk_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_4tb2ipwk_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_back2otg_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_back2otg_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_back2otg_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_be0pmczm_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_be0pmczm_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_be0pmczm_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_brdg25p1_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_brdg25p1_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_brdg25p1_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_ckuxwjt4_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_ckuxwjt4_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_ckuxwjt4_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_cq1n25ag_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_cq1n25ag_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_cq1n25ag_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_cxjthdp3_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_cxjthdp3_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_cxjthdp3_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_dmempaqr_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_dmempaqr_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_dmempaqr_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_es0hb5yo_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_es0hb5yo_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_es0hb5yo_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_f53vhxtl_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_f53vhxtl_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_f53vhxtl_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_gdwgpk4e_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_gdwgpk4e_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_gdwgpk4e_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_gfxnnifm_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_gfxnnifm_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_gfxnnifm_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_gggycbv0_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_gggycbv0_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_gggycbv0_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_h0wkf3yc_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_h0wkf3yc_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_h0wkf3yc_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_k2zdk1fs_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_k2zdk1fs_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_k2zdk1fs_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_kekqaapm_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_kekqaapm_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_kekqaapm_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_kgwqlpsw_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_kgwqlpsw_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_kgwqlpsw_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_klh2fcup_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_klh2fcup_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_klh2fcup_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_l0rib3jy_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_l0rib3jy_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_l0rib3jy_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_m1le4ne4_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_m1le4ne4_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_m1le4ne4_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_n4niygju_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_n4niygju_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_n4niygju_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_nfnxg23e_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_nfnxg23e_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_nfnxg23e_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_sibtqudf_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_sibtqudf_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_sibtqudf_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_snphwoxg_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_snphwoxg_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_snphwoxg_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_ucwf3iun_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_ucwf3iun_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_ucwf3iun_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_ujftstdc_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_ujftstdc_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_ujftstdc_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_urwgteel_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_urwgteel_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_urwgteel_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_xvn2fyiy_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_xvn2fyiy_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_xvn2fyiy_wpftmp.csproj.nuget.g.targets
+|   |   |   Pos.Client.Wpf_zjzghtai_wpftmp.csproj.nuget.dgspec.json
+|   |   |   Pos.Client.Wpf_zjzghtai_wpftmp.csproj.nuget.g.props
+|   |   |   Pos.Client.Wpf_zjzghtai_wpftmp.csproj.nuget.g.targets
+|   |   |   project.assets.json
+|   |   |   project.nuget.cache
+|   |   |   
+|   |   \---Debug
+|   |       \---net9.0-windows
+|   |           |   .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+|   |           |   App.baml
+|   |           |   App.g.cs
+|   |           |   App.g.i.cs
+|   |           |   apphost.exe
+|   |           |   EditReturnWindow.g.i.cs
+|   |           |   EditSaleWindow.g.i.cs
+|   |           |   HeldPickerWindow.g.i.cs
+|   |           |   InvoiceCenterWindow.g.i.cs
+|   |           |   MainWindow.g.i.cs
+|   |           |   PayWindow.g.i.cs
+|   |           |   Pos.Clie.400A3814.Up2Date
+|   |           |   Pos.Client.Wpf.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf.assets.cache
+|   |           |   Pos.Client.Wpf.csproj.AssemblyReference.cache
+|   |           |   Pos.Client.Wpf.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf.csproj.CoreCompileInputs.cache
+|   |           |   Pos.Client.Wpf.csproj.FileListAbsolute.txt
+|   |           |   Pos.Client.Wpf.designer.deps.json
+|   |           |   Pos.Client.Wpf.designer.runtimeconfig.json
+|   |           |   Pos.Client.Wpf.dll
+|   |           |   Pos.Client.Wpf.g.resources
+|   |           |   Pos.Client.Wpf.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf.genruntimeconfig.cache
+|   |           |   Pos.Client.Wpf.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf.pdb
+|   |           |   Pos.Client.Wpf_0fjgyryb_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_0fjgyryb_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_0fjgyryb_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_0fjgyryb_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_0fjgyryb_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_0fjgyryb_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_1d3kciva_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_1d3kciva_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_1d3kciva_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_1d3kciva_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_1d3kciva_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_1d3kciva_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_1mcwmwx3_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_1mcwmwx3_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_1mcwmwx3_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_1mcwmwx3_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_1mcwmwx3_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_1mcwmwx3_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_1rmicmy0_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_1rmicmy0_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_1rmicmy0_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_1rmicmy0_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_1rmicmy0_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_24a5h4z0_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_24a5h4z0_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_24a5h4z0_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_24a5h4z0_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_24a5h4z0_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_2a2uyyc0_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_2a2uyyc0_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_2a2uyyc0_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_2a2uyyc0_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_2a2uyyc0_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_2sklgbwc_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_2sklgbwc_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_2sklgbwc_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_2sklgbwc_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_2sklgbwc_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_3amw3jmx_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_3amw3jmx_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_3amw3jmx_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_3amw3jmx_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_3amw3jmx_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_3lkt5fpp_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_3lkt5fpp_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_3lkt5fpp_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_3lkt5fpp_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_3lkt5fpp_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_3ppz55gz_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_3ppz55gz_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_3ppz55gz_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_3ppz55gz_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_3ppz55gz_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_42i5gbb0_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_42i5gbb0_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_42i5gbb0_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_42i5gbb0_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_42i5gbb0_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_42i5gbb0_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_4fbcqte4_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_4fbcqte4_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_4fbcqte4_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_4fbcqte4_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_4fbcqte4_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_4i1uq04x_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_4i1uq04x_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_4i1uq04x_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_4i1uq04x_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_4i1uq04x_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_4i1uq04x_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_4ixeixoy_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_4ixeixoy_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_4ixeixoy_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_4ixeixoy_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_4ixeixoy_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_4ixeixoy_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_4l4luhom_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_4l4luhom_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_4l4luhom_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_4l4luhom_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_4l4luhom_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_4l4luhom_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_4nwbwhfm_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_4nwbwhfm_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_4nwbwhfm_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_4nwbwhfm_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_4nwbwhfm_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_4tb2ipwk_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_4tb2ipwk_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_4tb2ipwk_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_4tb2ipwk_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_4tb2ipwk_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_50upnhxx_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_50upnhxx_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_50upnhxx_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_50upnhxx_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_50upnhxx_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_50upnhxx_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_5za4uben_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_5za4uben_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_5za4uben_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_5za4uben_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_5za4uben_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_aeict1o5_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_aeict1o5_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_aeict1o5_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_aeict1o5_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_aeict1o5_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_aeict1o5_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_aoex13lz_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_aoex13lz_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_aoex13lz_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_aoex13lz_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_aoex13lz_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_back2otg_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_back2otg_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_back2otg_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_back2otg_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_back2otg_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_be0pmczm_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_be0pmczm_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_be0pmczm_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_be0pmczm_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_be0pmczm_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_brdg25p1_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_brdg25p1_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_brdg25p1_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_brdg25p1_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_brdg25p1_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_cfo2b4dj_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_cfo2b4dj_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_cfo2b4dj_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_cfo2b4dj_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_cfo2b4dj_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_ckuxwjt4_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_ckuxwjt4_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_ckuxwjt4_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_ckuxwjt4_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_ckuxwjt4_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_Content.g.cs
+|   |           |   Pos.Client.Wpf_Content.g.i.cs
+|   |           |   Pos.Client.Wpf_cq1n25ag_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_cq1n25ag_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_cq1n25ag_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_cq1n25ag_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_cq1n25ag_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_cxjthdp3_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_cxjthdp3_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_cxjthdp3_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_cxjthdp3_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_cxjthdp3_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_d2wdclcn_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_d2wdclcn_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_d2wdclcn_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_d2wdclcn_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_d2wdclcn_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_d2wdclcn_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_dla2tmw5_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_dla2tmw5_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_dla2tmw5_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_dla2tmw5_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_dla2tmw5_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_dla2tmw5_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_dmempaqr_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_dmempaqr_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_dmempaqr_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_dmempaqr_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_dmempaqr_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_dzehzujn_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_dzehzujn_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_dzehzujn_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_dzehzujn_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_dzehzujn_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_dzehzujn_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_es0hb5yo_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_es0hb5yo_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_es0hb5yo_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_es0hb5yo_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_es0hb5yo_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_f1ihafuq_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_f1ihafuq_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_f1ihafuq_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_f1ihafuq_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_f1ihafuq_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_f53vhxtl_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_f53vhxtl_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_f53vhxtl_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_f53vhxtl_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_f53vhxtl_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_flnxb4sf_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_flnxb4sf_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_flnxb4sf_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_flnxb4sf_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_flnxb4sf_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_flnxb4sf_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_gbto3vif_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_gbto3vif_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_gbto3vif_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_gbto3vif_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_gbto3vif_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_gbto3vif_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_gdwgpk4e_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_gdwgpk4e_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_gdwgpk4e_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_gdwgpk4e_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_gdwgpk4e_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_gfxnnifm_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_gfxnnifm_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_gfxnnifm_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_gfxnnifm_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_gfxnnifm_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_gggycbv0_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_gggycbv0_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_gggycbv0_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_gggycbv0_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_gggycbv0_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_gkvdq5bi_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_gkvdq5bi_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_gkvdq5bi_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_gkvdq5bi_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_gkvdq5bi_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_gkvdq5bi_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_h0wkf3yc_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_h0wkf3yc_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_h0wkf3yc_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_h0wkf3yc_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_h0wkf3yc_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_h4ldpdds_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_h4ldpdds_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_h4ldpdds_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_h4ldpdds_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_h4ldpdds_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_hbiy5jht_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_hbiy5jht_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_hbiy5jht_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_hbiy5jht_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_hbiy5jht_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_hbiy5jht_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_hcmign5b_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_hcmign5b_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_hcmign5b_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_hcmign5b_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_hcmign5b_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_hcmign5b_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_hywu3cf2_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_hywu3cf2_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_hywu3cf2_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_hywu3cf2_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_hywu3cf2_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_icic01bh_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_icic01bh_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_icic01bh_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_icic01bh_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_icic01bh_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_julseced_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_julseced_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_julseced_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_julseced_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_julseced_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_julseced_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_k2zdk1fs_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_k2zdk1fs_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_k2zdk1fs_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_k2zdk1fs_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_k2zdk1fs_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_kekqaapm_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_kekqaapm_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_kekqaapm_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_kekqaapm_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_kekqaapm_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_kgwqlpsw_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_kgwqlpsw_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_kgwqlpsw_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_kgwqlpsw_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_kgwqlpsw_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_klh2fcup_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_klh2fcup_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_klh2fcup_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_klh2fcup_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_klh2fcup_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_klqvcfwh_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_klqvcfwh_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_klqvcfwh_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_klqvcfwh_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_klqvcfwh_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_klqvcfwh_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_l0rib3jy_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_l0rib3jy_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_l0rib3jy_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_l0rib3jy_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_l0rib3jy_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_l4ztphwo_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_l4ztphwo_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_l4ztphwo_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_l4ztphwo_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_l4ztphwo_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_l4ztphwo_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_m1le4ne4_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_m1le4ne4_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_m1le4ne4_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_m1le4ne4_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_m1le4ne4_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_MarkupCompile.cache
+|   |           |   Pos.Client.Wpf_MarkupCompile.i.cache
+|   |           |   Pos.Client.Wpf_MarkupCompile.lref
+|   |           |   Pos.Client.Wpf_mptmjabo_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_mptmjabo_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_mptmjabo_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_mptmjabo_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_mptmjabo_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_n4niygju_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_n4niygju_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_n4niygju_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_n4niygju_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_n4niygju_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_nfnxg23e_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_nfnxg23e_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_nfnxg23e_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_nfnxg23e_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_nfnxg23e_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_nm5u441t_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_nm5u441t_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_nm5u441t_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_nm5u441t_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_nm5u441t_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_nm5u441t_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_nyozmee5_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_nyozmee5_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_nyozmee5_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_nyozmee5_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_nyozmee5_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_oz4j300z_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_oz4j300z_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_oz4j300z_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_oz4j300z_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_oz4j300z_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_oz4j300z_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_pkqpairt_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_pkqpairt_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_pkqpairt_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_pkqpairt_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_pkqpairt_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_psuzc025_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_psuzc025_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_psuzc025_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_psuzc025_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_psuzc025_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_qixv3wuv_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_qixv3wuv_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_qixv3wuv_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_qixv3wuv_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_qixv3wuv_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_qixv3wuv_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_qmdb0r4o_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_qmdb0r4o_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_qmdb0r4o_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_qmdb0r4o_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_qmdb0r4o_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_qmdb0r4o_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_qowamdib_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_qowamdib_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_qowamdib_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_qowamdib_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_qowamdib_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_qr5sqfey_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_qr5sqfey_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_qr5sqfey_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_qr5sqfey_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_qr5sqfey_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_r2gmylr0_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_r2gmylr0_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_r2gmylr0_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_r2gmylr0_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_r2gmylr0_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_r4cyxp50_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_r4cyxp50_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_r4cyxp50_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_r4cyxp50_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_r4cyxp50_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_raqaagv2_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_raqaagv2_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_raqaagv2_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_raqaagv2_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_raqaagv2_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_rltzxil4_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_rltzxil4_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_rltzxil4_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_rltzxil4_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_rltzxil4_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_rltzxil4_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_sibtqudf_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_sibtqudf_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_sibtqudf_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_sibtqudf_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_sibtqudf_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_sl5f2h0r_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_sl5f2h0r_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_sl5f2h0r_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_sl5f2h0r_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_sl5f2h0r_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_sl5f2h0r_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_snphwoxg_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_snphwoxg_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_snphwoxg_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_snphwoxg_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_snphwoxg_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_t2mntic3_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_t2mntic3_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_t2mntic3_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_t2mntic3_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_t2mntic3_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_thdlqgsl_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_thdlqgsl_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_thdlqgsl_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_thdlqgsl_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_thdlqgsl_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_ubzy2iel_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_ubzy2iel_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_ubzy2iel_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_ubzy2iel_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_ubzy2iel_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_ubzy2iel_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_ucwf3iun_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_ucwf3iun_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_ucwf3iun_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_ucwf3iun_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_ucwf3iun_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_ujftstdc_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_ujftstdc_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_ujftstdc_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_ujftstdc_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_ujftstdc_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_uliw3fic_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_uliw3fic_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_uliw3fic_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_uliw3fic_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_uliw3fic_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_urwgteel_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_urwgteel_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_urwgteel_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_urwgteel_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_urwgteel_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_vm2dxhds_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_vm2dxhds_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_vm2dxhds_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_vm2dxhds_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_vm2dxhds_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_vm2dxhds_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_vxmnmfel_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_vxmnmfel_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_vxmnmfel_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_vxmnmfel_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_vxmnmfel_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_vxmnmfel_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_x5u0ze3c_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_x5u0ze3c_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_x5u0ze3c_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_x5u0ze3c_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_x5u0ze3c_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_x5u0ze3c_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_xvn2fyiy_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_xvn2fyiy_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_xvn2fyiy_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_xvn2fyiy_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_xvn2fyiy_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_y4nebkgh_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_y4nebkgh_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_y4nebkgh_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_y4nebkgh_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_y4nebkgh_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_y4nebkgh_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_ybu0wm0x_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_ybu0wm0x_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_ybu0wm0x_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_ybu0wm0x_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_ybu0wm0x_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_ybu0wm0x_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_ypa44p1g_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_ypa44p1g_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_ypa44p1g_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_ypa44p1g_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_ypa44p1g_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_ypa44p1g_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_yzelwyow_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_yzelwyow_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_yzelwyow_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_yzelwyow_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_yzelwyow_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_zctiffa0_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_zctiffa0_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_zctiffa0_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_zctiffa0_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_zctiffa0_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_zctiffa0_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_zjzghtai_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_zjzghtai_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_zjzghtai_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_zjzghtai_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_zjzghtai_wpftmp.GlobalUsings.g.cs
+|   |           |   Pos.Client.Wpf_zxnfwiwj_wpftmp.AssemblyInfo.cs
+|   |           |   Pos.Client.Wpf_zxnfwiwj_wpftmp.AssemblyInfoInputs.cache
+|   |           |   Pos.Client.Wpf_zxnfwiwj_wpftmp.assets.cache
+|   |           |   Pos.Client.Wpf_zxnfwiwj_wpftmp.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Client.Wpf_zxnfwiwj_wpftmp.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Client.Wpf_zxnfwiwj_wpftmp.GlobalUsings.g.cs
+|   |           |   ReturnFromInvoiceWindow.g.i.cs
+|   |           |   ReturnWithoutInvoiceWindow.g.i.cs
+|   |           |   SalesWindow.g.i.cs
+|   |           |   Sample.baml
+|   |           |   Sample.g.cs
+|   |           |   Sample.g.i.cs
+|   |           |   StockReportWindow.g.i.cs
+|   |           |   TillSessionSummaryWindow.g.i.cs
+|   |           |   
+|   |           +---ref
+|   |           |       Pos.Client.Wpf.dll
+|   |           |       
+|   |           +---refint
+|   |           |       Pos.Client.Wpf.dll
+|   |           |       
+|   |           +---Resources
+|   |           |       Styles.baml
+|   |           |       
+|   |           \---Windows
+|   |               +---Admin
+|   |               |       CustomersWindow.baml
+|   |               |       CustomersWindow.g.cs
+|   |               |       CustomersWindow.g.i.cs
+|   |               |       OutletsCountersWindow.baml
+|   |               |       OutletsCountersWindow.g.cs
+|   |               |       OutletsCountersWindow.g.i.cs
+|   |               |       ProductNameDialog.baml
+|   |               |       ProductNameDialog.g.cs
+|   |               |       ProductNameDialog.g.i.cs
+|   |               |       ProductsItemsWindow.baml
+|   |               |       ProductsItemsWindow.g.cs
+|   |               |       ProductsItemsWindow.g.i.cs
+|   |               |       SuppliersWindow.baml
+|   |               |       SuppliersWindow.g.cs
+|   |               |       SuppliersWindow.g.i.cs
+|   |               |       UsersWindow.baml
+|   |               |       UsersWindow.g.cs
+|   |               |       UsersWindow.g.i.cs
+|   |               |       VariantBatchDialog.baml
+|   |               |       VariantBatchDialog.g.cs
+|   |               |       VariantBatchDialog.g.i.cs
+|   |               |       
+|   |               +---Purchases
+|   |               |       ItemQuickDialog.baml
+|   |               |       ItemQuickDialog.g.cs
+|   |               |       ItemQuickDialog.g.i.cs
+|   |               |       PurchaseWindow.baml
+|   |               |       PurchaseWindow.g.cs
+|   |               |       PurchaseWindow.g.i.cs
+|   |               |       SupplierQuickDialog.baml
+|   |               |       SupplierQuickDialog.g.cs
+|   |               |       SupplierQuickDialog.g.i.cs
+|   |               |       
+|   |               +---Sales
+|   |               |       EditReturnWindow.baml
+|   |               |       EditReturnWindow.g.cs
+|   |               |       EditReturnWindow.g.i.cs
+|   |               |       EditSaleWindow.baml
+|   |               |       EditSaleWindow.g.cs
+|   |               |       EditSaleWindow.g.i.cs
+|   |               |       HeldPickerWindow.baml
+|   |               |       HeldPickerWindow.g.cs
+|   |               |       HeldPickerWindow.g.i.cs
+|   |               |       InvoiceCenterWindow.baml
+|   |               |       InvoiceCenterWindow.g.cs
+|   |               |       InvoiceCenterWindow.g.i.cs
+|   |               |       PayWindow.baml
+|   |               |       PayWindow.g.cs
+|   |               |       PayWindow.g.i.cs
+|   |               |       ReturnFromInvoiceWindow.baml
+|   |               |       ReturnFromInvoiceWindow.g.cs
+|   |               |       ReturnFromInvoiceWindow.g.i.cs
+|   |               |       ReturnWithoutInvoiceWindow.baml
+|   |               |       ReturnWithoutInvoiceWindow.g.cs
+|   |               |       ReturnWithoutInvoiceWindow.g.i.cs
+|   |               |       SaleInvoiceWindow .baml
+|   |               |       SaleInvoiceWindow .g.cs
+|   |               |       SaleInvoiceWindow .g.i.cs
+|   |               |       SalesWindow.g.i.cs
+|   |               |       StockReportWindow.baml
+|   |               |       StockReportWindow.g.cs
+|   |               |       StockReportWindow.g.i.cs
+|   |               |       TillSessionSummaryWindow.baml
+|   |               |       TillSessionSummaryWindow.g.cs
+|   |               |       TillSessionSummaryWindow.g.i.cs
+|   |               |       Window1.g.i.cs
+|   |               |       
+|   |               \---Shell
+|   |                       DashboardWindow.baml
+|   |                       DashboardWindow.g.cs
+|   |                       DashboardWindow.g.i.cs
+|   |                       LoginWindow.baml
+|   |                       LoginWindow.g.cs
+|   |                       LoginWindow.g.i.cs
+|   |                       
+|   +---Printing
+|   |       EscPosReceiptBuilder.cs
+|   |       RawPrinterHelper.cs
+|   |       ReceiptPrinter.cs
+|   |       
+|   +---Resources
+|   |       Styles.xaml
+|   |       
+|   +---Services
+|   |       AppState.cs
+|   |       AuthService.cs
+|   |       LocalPrefs.cs
+|   |       
+|   \---Windows
+|       +---Admin
+|       |       CustomersWindow.xaml
+|       |       CustomersWindow.xaml.cs
+|       |       OutletsCountersWindow.xaml
+|       |       OutletsCountersWindow.xaml.cs
+|       |       ProductNameDialog.xaml
+|       |       ProductNameDialog.xaml.cs
+|       |       ProductsItemsVm.cs
+|       |       ProductsItemsWindow.xaml
+|       |       ProductsItemsWindow.xaml.cs
+|       |       SuppliersWindow.xaml
+|       |       SuppliersWindow.xaml.cs
+|       |       UsersWindow.xaml
+|       |       UsersWindow.xaml.cs
+|       |       VariantBatchDialog.xaml
+|       |       VariantBatchDialog.xaml.cs
+|       |       
+|       +---Purchases
+|       |       ItemQuickDialog.xaml
+|       |       ItemQuickDialog.xaml.cs
+|       |       PurchaseWindow.xaml
+|       |       PurchaseWindow.xaml.cs
+|       |       SupplierQuickDialog.xaml
+|       |       SupplierQuickDialog.xaml.cs
+|       |       
+|       +---Sales
+|       |       EditReturnWindow.xaml
+|       |       EditReturnWindow.xaml.cs
+|       |       EditSaleWindow.xaml
+|       |       EditSaleWindow.xaml.cs
+|       |       HeldPickerWindow.xaml
+|       |       HeldPickerWindow.xaml.cs
+|       |       InvoiceCenterWindow.xaml
+|       |       InvoiceCenterWindow.xaml.cs
+|       |       PayWindow.xaml
+|       |       PayWindow.xaml.cs
+|       |       ReturnFromInvoiceWindow.xaml
+|       |       ReturnFromInvoiceWindow.xaml.cs
+|       |       ReturnWithoutInvoiceWindow.xaml
+|       |       ReturnWithoutInvoiceWindow.xaml.cs
+|       |       SaleInvoiceWindow .xaml
+|       |       SaleInvoiceWindow .xaml.cs
+|       |       StockReportWindow.xaml
+|       |       StockReportWindow.xaml.cs
+|       |       TillSessionSummaryWindow.xaml
+|       |       TillSessionSummaryWindow.xaml.cs
+|       |       
+|       \---Shell
+|               DashboardWindow.xaml
+|               DashboardWindow.xaml.cs
+|               LoginWindow.xaml
+|               LoginWindow.xaml.cs
+|               
++---Pos.Domain
+|   |   Enums.cs
+|   |   Pos.Domain.csproj
+|   |   
+|   +---Abstractions
+|   |       BaseEntity.cs
+|   |       
+|   +---bin
+|   |   \---Debug
+|   |       \---net9.0
+|   |               Pos.Domain.deps.json
+|   |               Pos.Domain.dll
+|   |               Pos.Domain.pdb
+|   |               
+|   +---Entities
+|   |       Brand.cs
+|   |       Category.cs
+|   |       Counter.cs
+|   |       CounterSequence.cs
+|   |       Customer.cs
+|   |       Item.cs
+|   |       Outlet.cs
+|   |       Product.cs
+|   |       Purchase.cs
+|   |       Sale.cs
+|   |       SaleLine.cs
+|   |       StockEntry.cs
+|   |       Supplier.cs
+|   |       TillSession.cs
+|   |       User.cs
+|   |       
+|   +---Formatting
+|   |       ProductNameComposer.cs
+|   |       
+|   +---Models
+|   |       ItemVariantRow.cs
+|   |       
+|   +---obj
+|   |   |   Pos.Domain.csproj.nuget.dgspec.json
+|   |   |   Pos.Domain.csproj.nuget.g.props
+|   |   |   Pos.Domain.csproj.nuget.g.targets
+|   |   |   project.assets.json
+|   |   |   project.nuget.cache
+|   |   |   
+|   |   \---Debug
+|   |       \---net9.0
+|   |           |   .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+|   |           |   Pos.Domain.AssemblyInfo.cs
+|   |           |   Pos.Domain.AssemblyInfoInputs.cache
+|   |           |   Pos.Domain.assets.cache
+|   |           |   Pos.Domain.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Domain.csproj.CoreCompileInputs.cache
+|   |           |   Pos.Domain.csproj.FileListAbsolute.txt
+|   |           |   Pos.Domain.dll
+|   |           |   Pos.Domain.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Domain.GlobalUsings.g.cs
+|   |           |   Pos.Domain.pdb
+|   |           |   
+|   |           +---ref
+|   |           |       Pos.Domain.dll
+|   |           |       
+|   |           \---refint
+|   |                   Pos.Domain.dll
+|   |                   
+|   +---Pricing
+|   |       PricingMath.cs
+|   |       
+|   \---Services
+|           IReturnsService.cs
+|           ISalesService.cs
+|           
++---Pos.Persistence
+|   |   AppDbContext.cs
+|   |   DbPath.cs
+|   |   DbSeeder.cs
+|   |   Pos.Persistence.csproj
+|   |   PosClientDbContext.cs
+|   |   PosClientDbContextFactory.cs
+|   |   Seed.cs
+|   |   
+|   +---bin
+|   |   \---Debug
+|   |       \---net9.0
+|   |               Pos.Domain.dll
+|   |               Pos.Domain.pdb
+|   |               Pos.Persistence.deps.json
+|   |               Pos.Persistence.dll
+|   |               Pos.Persistence.pdb
+|   |               Pos.Persistence.runtimeconfig.json
+|   |               
+|   +---Migrations
+|   |   |   20250912032833_InitialClean11.cs
+|   |   |   20250912032833_InitialClean11.Designer.cs
+|   |   |   20250913060309_0000_Foundations_Guid_RowVersion_Audit.cs
+|   |   |   20250913060309_0000_Foundations_Guid_RowVersion_Audit.Designer.cs
+|   |   |   20250913061010_0000_Foundations_Guid_RowVersion_Audit1.cs
+|   |   |   20250913061010_0000_Foundations_Guid_RowVersion_Audit1.Designer.cs
+|   |   |   PosClientDbContextModelSnapshot.cs
+|   |   |   
+|   |   \---Client
+|   |           20250913103236_0000_Client_Init.cs
+|   |           20250913103236_0000_Client_Init.Designer.cs
+|   |           20250914051554_0000_Client_Init1.cs
+|   |           20250914051554_0000_Client_Init1.Designer.cs
+|   |           20250914053823_InitialClient.cs
+|   |           20250914053823_InitialClient.Designer.cs
+|   |           20250914075657_add_purchases_and_lines.cs
+|   |           20250914075657_add_purchases_and_lines.Designer.cs
+|   |           20250914084019_PurchasesSuppliers_Init.cs
+|   |           20250914084019_PurchasesSuppliers_Init.Designer.cs
+|   |           20250914084535_PurchasesSuppliers_Init1.cs
+|   |           20250914084535_PurchasesSuppliers_Init1.Designer.cs
+|   |           20250914085800_PurchasesSuppliers_Init2.cs
+|   |           20250914085800_PurchasesSuppliers_Init2.Designer.cs
+|   |           20250914140155_PurchasesSuppliers_Init3.cs
+|   |           20250914140155_PurchasesSuppliers_Init3.Designer.cs
+|   |           20250914150803_PurchasesSuppliers_Init4.cs
+|   |           20250914150803_PurchasesSuppliers_Init4.Designer.cs
+|   |           20250914151229_PurchasesSuppliers_Init5.cs
+|   |           20250914151229_PurchasesSuppliers_Init5.Designer.cs
+|   |           
+|   +---obj
+|   |   |   Pos.Persistence.csproj.EntityFrameworkCore.targets
+|   |   |   Pos.Persistence.csproj.nuget.dgspec.json
+|   |   |   Pos.Persistence.csproj.nuget.g.props
+|   |   |   Pos.Persistence.csproj.nuget.g.targets
+|   |   |   project.assets.json
+|   |   |   project.nuget.cache
+|   |   |   
+|   |   \---Debug
+|   |       \---net9.0
+|   |           |   .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+|   |           |   Pos.Pers.47A6F767.Up2Date
+|   |           |   Pos.Persistence.AssemblyInfo.cs
+|   |           |   Pos.Persistence.AssemblyInfoInputs.cache
+|   |           |   Pos.Persistence.assets.cache
+|   |           |   Pos.Persistence.csproj.AssemblyReference.cache
+|   |           |   Pos.Persistence.csproj.BuildWithSkipAnalyzers
+|   |           |   Pos.Persistence.csproj.CoreCompileInputs.cache
+|   |           |   Pos.Persistence.csproj.FileListAbsolute.txt
+|   |           |   Pos.Persistence.dll
+|   |           |   Pos.Persistence.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Persistence.genruntimeconfig.cache
+|   |           |   Pos.Persistence.GlobalUsings.g.cs
+|   |           |   Pos.Persistence.pdb
+|   |           |   
+|   |           +---ref
+|   |           |       Pos.Persistence.dll
+|   |           |       
+|   |           \---refint
+|   |                   Pos.Persistence.dll
+|   |                   
+|   +---Repositories
+|   \---Services
+|           CatalogService.cs
+|           InvoiceNumberService.cs
+|           InvoiceService.cs
+|           ItemsService.cs
+|           PurchasesService.cs
+|           ReturnsService.cs
+|           SalesService.cs
+|           SuppliersService.cs
+|           
++---Pos.Server.Api
+|   |   appsettings.Development.json
+|   |   appsettings.json
+|   |   Pos.Server.Api.csproj
+|   |   Pos.Server.Api.csproj.user
+|   |   Pos.Server.Api.http
+|   |   Program.cs
+|   |   
+|   +---bin
+|   |   \---Debug
+|   |       \---net9.0
+|   |           |   appsettings.Development.json
+|   |           |   appsettings.json
+|   |           |   Azure.Core.dll
+|   |           |   Azure.Identity.dll
+|   |           |   BCrypt.Net-Next.dll
+|   |           |   Humanizer.dll
+|   |           |   Microsoft.AspNetCore.OpenApi.dll
+|   |           |   Microsoft.Bcl.AsyncInterfaces.dll
+|   |           |   Microsoft.Build.Locator.dll
+|   |           |   Microsoft.CodeAnalysis.CSharp.dll
+|   |           |   Microsoft.CodeAnalysis.CSharp.Workspaces.dll
+|   |           |   Microsoft.CodeAnalysis.dll
+|   |           |   Microsoft.CodeAnalysis.Workspaces.dll
+|   |           |   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll
+|   |           |   Microsoft.CodeAnalysis.Workspaces.MSBuild.dll
+|   |           |   Microsoft.Data.SqlClient.dll
+|   |           |   Microsoft.Data.Sqlite.dll
+|   |           |   Microsoft.EntityFrameworkCore.Abstractions.dll
+|   |           |   Microsoft.EntityFrameworkCore.Design.dll
+|   |           |   Microsoft.EntityFrameworkCore.dll
+|   |           |   Microsoft.EntityFrameworkCore.Relational.dll
+|   |           |   Microsoft.EntityFrameworkCore.Sqlite.dll
+|   |           |   Microsoft.EntityFrameworkCore.SqlServer.dll
+|   |           |   Microsoft.Extensions.Caching.Abstractions.dll
+|   |           |   Microsoft.Extensions.Caching.Memory.dll
+|   |           |   Microsoft.Extensions.Configuration.Abstractions.dll
+|   |           |   Microsoft.Extensions.DependencyInjection.Abstractions.dll
+|   |           |   Microsoft.Extensions.DependencyInjection.dll
+|   |           |   Microsoft.Extensions.DependencyModel.dll
+|   |           |   Microsoft.Extensions.Logging.Abstractions.dll
+|   |           |   Microsoft.Extensions.Logging.dll
+|   |           |   Microsoft.Extensions.Options.dll
+|   |           |   Microsoft.Extensions.Primitives.dll
+|   |           |   Microsoft.Identity.Client.dll
+|   |           |   Microsoft.Identity.Client.Extensions.Msal.dll
+|   |           |   Microsoft.IdentityModel.Abstractions.dll
+|   |           |   Microsoft.IdentityModel.JsonWebTokens.dll
+|   |           |   Microsoft.IdentityModel.Logging.dll
+|   |           |   Microsoft.IdentityModel.Protocols.dll
+|   |           |   Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
+|   |           |   Microsoft.IdentityModel.Tokens.dll
+|   |           |   Microsoft.OpenApi.dll
+|   |           |   Microsoft.SqlServer.Server.dll
+|   |           |   Microsoft.Win32.SystemEvents.dll
+|   |           |   Mono.TextTemplating.dll
+|   |           |   Npgsql.dll
+|   |           |   Npgsql.EntityFrameworkCore.PostgreSQL.dll
+|   |           |   Pos.Domain.dll
+|   |           |   Pos.Domain.pdb
+|   |           |   Pos.Persistence.dll
+|   |           |   Pos.Persistence.pdb
+|   |           |   Pos.Server.Api.deps.json
+|   |           |   Pos.Server.Api.dll
+|   |           |   Pos.Server.Api.exe
+|   |           |   Pos.Server.Api.pdb
+|   |           |   Pos.Server.Api.runtimeconfig.json
+|   |           |   Pos.Server.Api.staticwebassets.endpoints.json
+|   |           |   Pos.Sync.Contracts.dll
+|   |           |   Pos.Sync.Contracts.pdb
+|   |           |   SQLitePCLRaw.batteries_v2.dll
+|   |           |   SQLitePCLRaw.core.dll
+|   |           |   SQLitePCLRaw.provider.e_sqlite3.dll
+|   |           |   Swashbuckle.AspNetCore.Swagger.dll
+|   |           |   Swashbuckle.AspNetCore.SwaggerGen.dll
+|   |           |   Swashbuckle.AspNetCore.SwaggerUI.dll
+|   |           |   System.ClientModel.dll
+|   |           |   System.CodeDom.dll
+|   |           |   System.Composition.AttributedModel.dll
+|   |           |   System.Composition.Convention.dll
+|   |           |   System.Composition.Hosting.dll
+|   |           |   System.Composition.Runtime.dll
+|   |           |   System.Composition.TypedParts.dll
+|   |           |   System.Configuration.ConfigurationManager.dll
+|   |           |   System.Drawing.Common.dll
+|   |           |   System.Formats.Asn1.dll
+|   |           |   System.IdentityModel.Tokens.Jwt.dll
+|   |           |   System.Memory.Data.dll
+|   |           |   System.Runtime.Caching.dll
+|   |           |   System.Security.Cryptography.ProtectedData.dll
+|   |           |   System.Security.Permissions.dll
+|   |           |   System.Text.Json.dll
+|   |           |   System.Windows.Extensions.dll
+|   |           |   
+|   |           +---cs
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---de
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---es
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---fr
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---it
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---ja
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---ko
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---pl
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---pt-BR
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---ru
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---runtimes
+|   |           |   +---browser-wasm
+|   |           |   |   \---nativeassets
+|   |           |   |       \---net9.0
+|   |           |   |               e_sqlite3.a
+|   |           |   |               
+|   |           |   +---linux-arm
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-armel
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-mips64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-arm
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-s390x
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-musl-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-ppc64le
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-s390x
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---linux-x86
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.so
+|   |           |   |           
+|   |           |   +---maccatalyst-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---maccatalyst-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---osx-arm64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---osx-x64
+|   |           |   |   \---native
+|   |           |   |           libe_sqlite3.dylib
+|   |           |   |           
+|   |           |   +---unix
+|   |           |   |   \---lib
+|   |           |   |       \---net6.0
+|   |           |   |               Microsoft.Data.SqlClient.dll
+|   |           |   |               System.Drawing.Common.dll
+|   |           |   |               
+|   |           |   +---win
+|   |           |   |   \---lib
+|   |           |   |       \---net6.0
+|   |           |   |               Microsoft.Data.SqlClient.dll
+|   |           |   |               Microsoft.Win32.SystemEvents.dll
+|   |           |   |               System.Drawing.Common.dll
+|   |           |   |               System.Runtime.Caching.dll
+|   |           |   |               System.Security.Cryptography.ProtectedData.dll
+|   |           |   |               System.Windows.Extensions.dll
+|   |           |   |               
+|   |           |   +---win-arm
+|   |           |   |   \---native
+|   |           |   |           e_sqlite3.dll
+|   |           |   |           Microsoft.Data.SqlClient.SNI.dll
+|   |           |   |           
+|   |           |   +---win-arm64
+|   |           |   |   \---native
+|   |           |   |           e_sqlite3.dll
+|   |           |   |           Microsoft.Data.SqlClient.SNI.dll
+|   |           |   |           
+|   |           |   +---win-x64
+|   |           |   |   \---native
+|   |           |   |           e_sqlite3.dll
+|   |           |   |           Microsoft.Data.SqlClient.SNI.dll
+|   |           |   |           
+|   |           |   \---win-x86
+|   |           |       \---native
+|   |           |               e_sqlite3.dll
+|   |           |               Microsoft.Data.SqlClient.SNI.dll
+|   |           |               
+|   |           +---tr
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           +---zh-Hans
+|   |           |       Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |           |       Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |           |       Microsoft.CodeAnalysis.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |           |       Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |           |       
+|   |           \---zh-Hant
+|   |                   Microsoft.CodeAnalysis.CSharp.resources.dll
+|   |                   Microsoft.CodeAnalysis.CSharp.Workspaces.resources.dll
+|   |                   Microsoft.CodeAnalysis.resources.dll
+|   |                   Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
+|   |                   Microsoft.CodeAnalysis.Workspaces.resources.dll
+|   |                   
+|   +---obj
+|   |   |   Pos.Server.Api.csproj.EntityFrameworkCore.targets
+|   |   |   Pos.Server.Api.csproj.nuget.dgspec.json
+|   |   |   Pos.Server.Api.csproj.nuget.g.props
+|   |   |   Pos.Server.Api.csproj.nuget.g.targets
+|   |   |   project.assets.json
+|   |   |   project.nuget.cache
+|   |   |   
+|   |   \---Debug
+|   |       \---net9.0
+|   |           |   .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+|   |           |   apphost.exe
+|   |           |   Pos.Serv.5BC40409.Up2Date
+|   |           |   Pos.Server.Api.AssemblyInfo.cs
+|   |           |   Pos.Server.Api.AssemblyInfoInputs.cache
+|   |           |   Pos.Server.Api.assets.cache
+|   |           |   Pos.Server.Api.csproj.AssemblyReference.cache
+|   |           |   Pos.Server.Api.csproj.CoreCompileInputs.cache
+|   |           |   Pos.Server.Api.csproj.FileListAbsolute.txt
+|   |           |   Pos.Server.Api.dll
+|   |           |   Pos.Server.Api.GeneratedMSBuildEditorConfig.editorconfig
+|   |           |   Pos.Server.Api.genruntimeconfig.cache
+|   |           |   Pos.Server.Api.GlobalUsings.g.cs
+|   |           |   Pos.Server.Api.MvcApplicationPartsAssemblyInfo.cache
+|   |           |   Pos.Server.Api.MvcApplicationPartsAssemblyInfo.cs
+|   |           |   Pos.Server.Api.pdb
+|   |           |   staticwebassets.build.endpoints.json
+|   |           |   staticwebassets.build.json
+|   |           |   staticwebassets.removed.txt
+|   |           |   
+|   |           +---ref
+|   |           |       Pos.Server.Api.dll
+|   |           |       
+|   |           +---refint
+|   |           |       Pos.Server.Api.dll
+|   |           |       
+|   |           \---staticwebassets
+|   |                   msbuild.build.Pos.Server.Api.props
+|   |                   msbuild.buildMultiTargeting.Pos.Server.Api.props
+|   |                   msbuild.buildTransitive.Pos.Server.Api.props
+|   |                   
+|   \---Properties
+|           launchSettings.json
+|           
+\---Pos.Sync.Contracts
+    |   Class1.cs
+    |   Pos.Sync.Contracts.csproj
+    |   
+    +---bin
+    |   \---Debug
+    |       \---net9.0
+    |               Pos.Sync.Contracts.deps.json
+    |               Pos.Sync.Contracts.dll
+    |               Pos.Sync.Contracts.pdb
+    |               
+    \---obj
+        |   Pos.Sync.Contracts.csproj.nuget.dgspec.json
+        |   Pos.Sync.Contracts.csproj.nuget.g.props
+        |   Pos.Sync.Contracts.csproj.nuget.g.targets
+        |   project.assets.json
+        |   project.nuget.cache
+        |   
+        \---Debug
+            \---net9.0
+                |   .NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+                |   Pos.Sync.Contracts.AssemblyInfo.cs
+                |   Pos.Sync.Contracts.AssemblyInfoInputs.cache
+                |   Pos.Sync.Contracts.assets.cache
+                |   Pos.Sync.Contracts.csproj.CoreCompileInputs.cache
+                |   Pos.Sync.Contracts.csproj.FileListAbsolute.txt
+                |   Pos.Sync.Contracts.dll
+                |   Pos.Sync.Contracts.GeneratedMSBuildEditorConfig.editorconfig
+                |   Pos.Sync.Contracts.GlobalUsings.g.cs
+                |   Pos.Sync.Contracts.pdb
+                |   
+                +---ref
+                |       Pos.Sync.Contracts.dll
+                |       
+                \---refint
+                        Pos.Sync.Contracts.dll
+                        

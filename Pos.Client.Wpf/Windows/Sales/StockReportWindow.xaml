@@ -1,0 +1,41 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.StockReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Stock On-Hand" Height="768" Width="750" WindowStartupLocation="CenterOwner"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewTextInput="Window_PreviewTextInput">
+
+    <DockPanel Margin="8">
+        <!-- Toolbar -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="SearchBox" Width="240" Height="28" VerticalContentAlignment="Center"
+                     TextChanged="SearchBox_TextChanged"
+                     PreviewKeyDown="SearchBox_PreviewKeyDown"
+                     ToolTip="Type to filter; ↑/↓ to navigate"/>
+            <Separator Width="16" Opacity="0"/>
+
+            <!-- Keep BOTH buttons with mnemonics -->
+            <!-- By Item -->
+            <Button Width="150" Height="28" Margin="0,0,8,0"
+        Click="ByItem_Click" Style="{StaticResource ModernButton}">
+                <AccessText Text="By _Item (Alt+I)"/>
+            </Button>
+
+            <!-- By Product -->
+            <Button Width="150" Height="28"
+        Click="ByProduct_Click" Style="{StaticResource ModernButton}">
+                <AccessText Text="By _Product (Alt+P)"/>
+            </Button>
+        </StackPanel>
+
+        <!-- Grid -->
+        <DataGrid x:Name="Grid"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  HeadersVisibility="Column"
+                  GridLinesVisibility="Horizontal"
+                  SelectionMode="Single"
+                  SelectionUnit="FullRow"/>
+    </DockPanel>
+</Window>

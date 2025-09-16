@@ -1,0 +1,8 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Outlets &amp; Counters" Height="480" Width="720" WindowStartupLocation="CenterOwner">
+    <Grid>
+        <TextBlock Text="Outlets &amp; Counters — placeholder" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Grid>
+</Window>

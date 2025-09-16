@@ -1,0 +1,37 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.HeldPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Held Invoices" Height="420" Width="680"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="12">
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,8">
+            <TextBlock Text="Double-click to resume.  " VerticalAlignment="Center"/>
+            <TextBlock Text="Right-click → Delete." Foreground="Gray" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <ListView x:Name="List" MouseDoubleClick="List_MouseDoubleClick">
+            <ListView.Resources>
+                <ContextMenu x:Key="RowMenu">
+                    <MenuItem Header="Delete held" Click="Delete_Click"/>
+                </ContextMenu>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="ContextMenu" Value="{StaticResource RowMenu}"/>
+                </Style>
+            </ListView.Resources>
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Id" Width="60" DisplayMemberBinding="{Binding Id}"/>
+                    <GridViewColumn Header="When (local)" Width="150" DisplayMemberBinding="{Binding TsLocal}"/>
+                    <GridViewColumn Header="Tag" Width="160" DisplayMemberBinding="{Binding HoldTag}"/>
+                    <GridViewColumn Header="Customer" Width="160" DisplayMemberBinding="{Binding CustomerName}"/>
+                    <GridViewColumn Header="Total" Width="100" DisplayMemberBinding="{Binding TotalFormatted}"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Bottom" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Resume" Width="100" Margin="0,0,8,0" Click="Resume_Click"/>
+            <Button Content="Close" Width="100" Click="Close_Click"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

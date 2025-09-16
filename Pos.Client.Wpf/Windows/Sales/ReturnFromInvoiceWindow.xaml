@@ -1,0 +1,41 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.ReturnFromInvoiceWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Return — From Invoice" Height="520" Width="820" WindowStartupLocation="CenterOwner">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+
+        <DataGrid x:Name="Grid" Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="ItemId"     Binding="{Binding ItemId}"     IsReadOnly="True" Width="70"/>
+                <DataGridTextColumn Header="SKU"        Binding="{Binding Sku}"        IsReadOnly="True" Width="120"/>
+                <DataGridTextColumn Header="Name"       Binding="{Binding Name}"       IsReadOnly="True" Width="2*"/>
+
+                <!-- Sold / Already Returned / Available -->
+                <DataGridTextColumn Header="Sold"       Binding="{Binding SoldQty}"       IsReadOnly="True" Width="60"/>
+                <DataGridTextColumn Header="Returned"   Binding="{Binding AlreadyReturned}" IsReadOnly="True" Width="80"/>
+                <DataGridTextColumn Header="Avail"      Binding="{Binding AvailableQty}"   IsReadOnly="True" Width="70"/>
+
+                <!-- User enters Return Qty (clamped to Avail) -->
+                <DataGridTextColumn Header="Return Qty" Binding="{Binding ReturnQty, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90"/>
+
+                <DataGridTextColumn Header="Unit Price" Binding="{Binding UnitPrice}"   IsReadOnly="True" Width="90"/>
+                <DataGridTextColumn Header="Line Refund" Binding="{Binding LineRefund, StringFormat=0.00}" IsReadOnly="True" Width="100"/>
+            </DataGrid.Columns>
+
+        </DataGrid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <TextBlock Text="Reason:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="ReasonBox" Width="260" Height="28" VerticalContentAlignment="Center" Margin="0,0,12,0"/>
+            <Button Content="Cancel" Width="110" Height="32" Margin="0,0,8,0" IsCancel="True" Style="{StaticResource ModernButton}"/>
+            <Button Content="Save Return" Width="150" Height="32" Click="Save_Click" IsDefault="True" Style="{StaticResource ModernButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>

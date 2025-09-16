@@ -1,0 +1,201 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.PayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Take Payment" Height="620" Width="760"
+        WindowStartupLocation="CenterOwner"
+        KeyDown="Window_KeyDown">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Header -->
+            <RowDefinition Height="*"/>
+            <!-- Content -->
+            <RowDefinition Height="Auto"/>
+            <!-- Big Due/Change -->
+            <RowDefinition Height="Auto"/>
+            <!-- Buttons -->
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Text="Finalize Payment" FontSize="20" FontWeight="Bold" />
+
+        <!-- Content: Summary (L) | Inputs + Numpad (R) -->
+        <Grid Grid.Row="1" Margin="0,12,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="3*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Summary (left) -->
+            <Border BorderBrush="#DDD" BorderThickness="1" CornerRadius="8" Padding="12" Background="#FAFAFA"
+                    Margin="0,0,12,0">
+                <StackPanel>
+                    <TextBlock Text="Summary" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="Items:" Width="120"/>
+                        <TextBlock x:Name="ItemsText"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="Total Qty:" Width="120"/>
+                        <TextBlock x:Name="QtyText"/>
+                    </StackPanel>
+
+                    <Border Margin="0,6,0,6" BorderBrush="#EEE" BorderThickness="0,1,0,0"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="Subtotal:" Width="120"/>
+                        <TextBlock x:Name="SubtotalText" FontWeight="SemiBold"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="Discount:" Width="120"/>
+                        <TextBlock x:Name="DiscountText" Foreground="#10893E"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="Tax:" Width="120"/>
+                        <TextBlock x:Name="TaxText"/>
+                    </StackPanel>
+
+                    <Border Margin="0,6,0,6" BorderBrush="#EEE" BorderThickness="0,1,0,0"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="Grand Total:" Width="120" FontSize="18"/>
+                        <TextBlock x:Name="GrandText" FontSize="18" FontWeight="Bold" Foreground="#1F3A93"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Inputs + Numpad (right) -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <!-- inputs -->
+                    <RowDefinition Height="*"/>
+                    <!-- keypad fills -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- exact/clear row -->
+                </Grid.RowDefinitions>
+
+                <!-- Cash / Card with per-field Clear buttons -->
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Cash -->
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Cash" />
+                        <DockPanel LastChildFill="True">
+                            <Button Content="✖"
+                                    Width="40" Height="40" Margin="0,0,6,0"
+                                    Click="ClearCash_Click"
+                                    ToolTip="Clear Cash"
+                                    DockPanel.Dock="Right"/>
+                            <TextBox x:Name="CashBox"
+                                     Height="40" FontSize="18"
+                                     PreviewTextInput="NumericOnly"
+                                     TextChanged="CashBox_TextChanged"
+                                     GotKeyboardFocus="CashBox_GotKeyboardFocus"/>
+                        </DockPanel>
+                    </StackPanel>
+
+                    <!-- Card -->
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                        <TextBlock Text="Card" />
+                        <DockPanel LastChildFill="True">
+                            <Button Content="✖"
+                                    Width="40" Height="40" Margin="0,0,6,0"
+                                    Click="ClearCard_Click"
+                                    ToolTip="Clear Card"
+                                    DockPanel.Dock="Right"/>
+                            <TextBox x:Name="CardBox"
+                                     Height="40" FontSize="18"
+                                     PreviewTextInput="NumericOnly"
+                                     TextChanged="CardBox_TextChanged"
+                                     GotKeyboardFocus="CardBox_GotKeyboardFocus"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Keypad: fills available space with big buttons -->
+                <Grid Grid.Row="1" Margin="0,0,0,8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Row 0 -->
+                    <Button Grid.Row="0" Grid.Column="0" Content="7" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="0" Grid.Column="1" Content="8" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="0" Grid.Column="2" Content="9" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+                    <!-- Row 1 -->
+                    <Button Grid.Row="1" Grid.Column="0" Content="4" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="1" Grid.Column="1" Content="5" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="1" Grid.Column="2" Content="6" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+                    <!-- Row 2 -->
+                    <Button Grid.Row="2" Grid.Column="0" Content="1" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="2" Grid.Column="1" Content="2" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="2" Grid.Column="2" Content="3" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+                    <!-- Row 3 -->
+                    <Button Grid.Row="3" Grid.Column="0" Content="." Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="3" Grid.Column="1" Content="0" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="3" Grid.Column="2" Content="⌫" Click="Pad_Click"
+                            FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+                    <!-- Row 4 -->
+                    <Button Grid.Row="4" Grid.Column="0" Content="Exact Cash" Click="ExactCash_Click"
+                        FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="4" Grid.Column="1" Content="Exact Card" Click="ExactCard_Click"
+                        FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    <Button Grid.Row="4" Grid.Column="2" Content="Clear Both" Click="ClearBoth_Click"
+                        FontSize="24" MinHeight="44" Margin="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                    
+                </Grid>
+               
+            </Grid>
+        </Grid>
+
+        <!-- Big Due / Change -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
+                <TextBlock Text="Due: " FontSize="24" />
+                <TextBlock x:Name="DueText" FontSize="32" FontWeight="Bold"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="Change: " FontSize="24" />
+                <TextBlock x:Name="ChangeText" FontSize="32" FontWeight="Bold"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel (Esc)" Width="120" Height="40" Margin="0,0,8,0"
+                    Click="Cancel_Click"/>
+            <Button Content="Pay (Enter/F9)" Width="140" Height="40"
+                    IsDefault="True"
+                    Click="Confirm_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,129 @@
+﻿<Window x:Class="Pos.Client.Wpf.Sample"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Win11 Toolbar Demo" Height="520" Width="820"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- Simple glyph style using Segoe MDL2 Assets -->
+        <Style x:Key="Glyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+
+        <!-- Make toolbar buttons tidy & consistent without changing system colors -->
+        <Style x:Key="ToolbarButton" TargetType="Button">
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="ToolbarToggleButton" TargetType="ToggleButton" BasedOn="{StaticResource ToolbarButton}"/>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Top command bar -->
+        <ToolBarTray DockPanel.Dock="Top" IsLocked="True">
+            <ToolBar>
+                <!-- New (dropdown like Explorer) -->
+                <Button x:Name="NewBtn" Style="{StaticResource ToolbarButton}"
+                         ToolBar.OverflowMode="AsNeeded">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE710;"/>
+                        <!-- Add -->
+                        <TextBlock Text="New"/>
+                        <TextBlock Style="{StaticResource Glyph}" Text=" &#xE70D;" Margin="6,0,0,0"/>
+                        <!-- ChevronDown -->
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Folder" Tag="Folder">
+                                <MenuItem.Icon>
+                                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE8B7;"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Text Document" Tag="Text">
+                                <MenuItem.Icon>
+                                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE70B;"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <Separator/>
+
+                <!-- Copy / Paste -->
+                <Button Style="{StaticResource ToolbarButton}"  ToolBar.OverflowMode="AsNeeded">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE8C8;"/>
+                        <!-- Copy -->
+                        <TextBlock Text="Copy"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource ToolbarButton}"  ToolBar.OverflowMode="AsNeeded">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE77F;"/>
+                        <!-- Paste -->
+                        <TextBlock Text="Paste"/>
+                    </StackPanel>
+                </Button>
+
+                <Separator/>
+
+                <!-- Sort (dropdown) -->
+                <Button x:Name="SortBtn" Style="{StaticResource ToolbarButton}"
+                         ToolBar.OverflowMode="AsNeeded">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE8CB;"/>
+                        <!-- Sort -->
+                        <TextBlock Text="Sort"/>
+                        <TextBlock Style="{StaticResource Glyph}" Text=" &#xE70D;" Margin="6,0,0,0"/>
+                        <!-- ChevronDown -->
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Name" Tag="Name"/>
+                            <MenuItem Header="Date" Tag="Date"/>
+                            <MenuItem Header="Size" Tag="Size"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <!-- Compact View toggle -->
+                <ToggleButton x:Name="ViewToggle" 
+                               ToolBar.OverflowMode="AsNeeded">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE890;"/>
+                        <!-- ViewAll -->
+                        <TextBlock Text="Compact View"/>
+                    </StackPanel>
+                </ToggleButton>
+            </ToolBar>
+        </ToolBarTray>
+
+        <!-- Demo content area -->
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <ListView x:Name="List" Grid.Row="0" BorderThickness="1" BorderBrush="#DDD" Padding="4"
+                      SelectionMode="Extended">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Name" Width="300" DisplayMemberBinding="{Binding Name}"/>
+                        <GridViewColumn Header="Type" Width="140" DisplayMemberBinding="{Binding Type}"/>
+                        <GridViewColumn Header="Modified" Width="160" DisplayMemberBinding="{Binding Modified}"/>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <TextBlock x:Name="Status" Grid.Row="1" Margin="0,8,0,0" Foreground="#666"/>
+        </Grid>
+    </DockPanel>
+</Window>
