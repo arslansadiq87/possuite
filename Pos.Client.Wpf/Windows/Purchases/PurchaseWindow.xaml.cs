@@ -1,10 +1,6 @@
 ﻿// Pos.Client.Wpf/Windows/Purchases/PurchaseWindow.xaml.cs
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Persistence.Services;
+using Pos.Client.Wpf.Windows.Purchases;
+
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -42,9 +40,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             private decimal _lineTotal;
             public decimal LineTotal { get => _lineTotal; private set { _lineTotal = value; OnPropertyChanged(nameof(LineTotal)); } }
-
             public string? Notes { get; set; }
-
             public event PropertyChangedEventHandler? PropertyChanged;
             void OnPropertyChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 
@@ -63,44 +59,34 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly PurchasesService _purchaseSvc;
         private readonly SuppliersService _suppliersSvc;
         private readonly ItemsService _itemsSvc;
-
         private Purchase _model = new();
         private readonly ObservableCollection<PurchaseLineVM> _lines = new();
-
         private ObservableCollection<Supplier> _supplierResults = new();
         private ObservableCollection<Item> _itemResults = new();
-
         // NEW: destination pickers data (matches XAML group we added)
         private ObservableCollection<Outlet> _outletResults = new();
         private ObservableCollection<Warehouse> _warehouseResults = new();
-
         private int? _selectedSupplierId;
 
         public PurchaseWindow(PosClientDbContext db)
         {
             InitializeComponent();
-
             _db = db;
             _purchaseSvc = new PurchasesService(_db);
             _suppliersSvc = new SuppliersService(_db);
             _itemsSvc = new ItemsService(_db);
-
             // Initialize header defaults
             DatePicker.SelectedDate = DateTime.Now;
             OtherChargesBox.Text = "0.00";
-
             // Bind lists
             LinesGrid.ItemsSource = _lines;
             SupplierList.ItemsSource = _supplierResults;
             ItemList.ItemsSource = _itemResults;
-
             // Prime empty supplier search
             _ = LoadSuppliersAsync("");
-
             // Recompute totals on edits
             LinesGrid.CellEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
             LinesGrid.RowEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
-
             _lines.CollectionChanged += (_, args) =>
             {
                 if (args.NewItems != null)
@@ -108,7 +94,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         vm.PropertyChanged += (_, __) => RecomputeAndUpdateTotals();
                 RecomputeAndUpdateTotals();
             };
-
             // Fast entry behavior
             LinesGrid.PreviewKeyDown += LinesGrid_PreviewKeyDown;
             Loaded += async (_, __) =>
@@ -119,6 +104,27 @@ namespace Pos.Client.Wpf.Windows.Purchases
             };
             ItemList.PreviewKeyDown += ItemList_PreviewKeyDown;
             SupplierList.PreviewKeyDown += SupplierList_PreviewKeyDown;
+
+            // Keyboard shortcuts like Sales: F5 = Clear, F8 = Hold, F7 = Invoices
+            this.PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == Key.F7) { InvoicesButton_Click(s, e); e.Handled = true; return; }
+
+                if (e.Key == Key.F5)
+                {
+                    ClearCurrentPurchase(confirm: true);
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.Key == Key.F8)
+                {
+                    _ = HoldCurrentPurchaseQuickAsync();
+                    e.Handled = true;
+                    return;
+                }
+            };
+
         }
 
         // ===================== Destination init (NEW) =====================
@@ -131,18 +137,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     await _db.Set<Outlet>().AsNoTracking().OrderBy(o => o.Name).ToListAsync());
             }
             catch { _outletResults = new ObservableCollection<Outlet>(); }
-
             try
             {
                 _warehouseResults = new ObservableCollection<Warehouse>(
                     await _db.Set<Warehouse>().AsNoTracking().OrderBy(w => w.Name).ToListAsync());
             }
             catch { _warehouseResults = new ObservableCollection<Warehouse>(); }
-
             // Wire to XAML combo boxes if present
             try { OutletBox.ItemsSource = _outletResults; } catch { /* if control not present, ignore */ }
             try { WarehouseBox.ItemsSource = _warehouseResults; } catch { /* ignore */ }
-
             // Basic defaults: if you have warehouses, default to Warehouse; else Outlet
             var hasWarehouse = _warehouseResults.Any();
             try
@@ -182,29 +185,22 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             if (e.Key != Key.Enter) return;
             e.Handled = true;
-
             var dg = (DataGrid)sender;
-
             // Commit current edits first
             dg.CommitEdit(DataGridEditingUnit.Cell, true);
             dg.CommitEdit(DataGridEditingUnit.Row, true);
-
             // Flow (headers must match grid)
             var flow = new List<string> { "Qty", "Price", "Disc", "Tax %", "Notes" };
-
             var cellInfo = dg.CurrentCell;
             var col = cellInfo.Column;
             var rawHeader = col != null ? (col.Header as string ?? string.Empty) : string.Empty;
             var header = NormalizeHeader(rawHeader);
-
             var currentRowItem = dg.CurrentItem;
-
             if (col == null)
             {
                 MoveToHeader(dg, currentRowItem, flow[0]);
                 return;
             }
-
             bool backward = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
             if (backward)
             {
@@ -218,7 +214,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 MoveToHeader(dg, currentRowItem, prev);
                 return;
             }
-
             var next = NextHeader(flow, header);
             if (next is null)
             {
@@ -226,7 +221,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 ItemSearchText.SelectAll();
                 return;
             }
-
             MoveToHeader(dg, currentRowItem, next);
         }
 
@@ -255,7 +249,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             return flow[idx - 1];
         }
 
-        // === Supplier -> Vendor Invoice on Enter ===
         private void SupplierText_LostFocus(object sender, RoutedEventArgs e)
         {
             SupplierPopup.IsOpen = false;            // close dropdown
@@ -288,14 +281,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             var targetCol = dg.Columns.FirstOrDefault(c =>
                 string.Equals(NormalizeHeader(c.Header as string ?? string.Empty), header, StringComparison.OrdinalIgnoreCase));
-
             if (targetCol == null) return;
-
             dg.UpdateLayout();
             dg.SelectedItem = rowItem;
             dg.ScrollIntoView(rowItem, targetCol);
             dg.CurrentCell = new DataGridCellInfo(rowItem, targetCol);
-
             dg.BeginEdit();
             Dispatcher.BeginInvoke(() =>
             {
@@ -317,13 +307,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
             e.Handled = !System.Text.RegularExpressions.Regex.IsMatch(e.Text, @"^[0-9.]$");
         }
 
-        // ===================== Supplier search (kept) =====================
         private async Task LoadSuppliersAsync(string term)
         {
             var list = await _suppliersSvc.SearchAsync(term);
             _supplierResults.Clear();
             foreach (var s in list) _supplierResults.Add(s);
-
             SupplierPopup.IsOpen = _supplierResults.Count > 0 && !string.IsNullOrWhiteSpace(SupplierText.Text);
             if (_supplierResults.Count > 0 && SupplierList.SelectedIndex < 0)
                 SupplierList.SelectedIndex = 0;
@@ -339,8 +327,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             if (e.Key == Key.Down || e.Key == Key.Up)
             {
-                // (unchanged) your existing list navigation
-                // ...
                 return;
             }
 
@@ -353,11 +339,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
                 else
                 {
-                    // user typed name and pressed Enter; try to resolve it
                     await EnsureSupplierSelectedAsync();           // NEW
                 }
-
-                // Move to Vendor invoice
                 VendorInvBox.Focus();
                 VendorInvBox.SelectAll();
                 e.Handled = true;
@@ -374,10 +357,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private async Task<bool> EnsureSupplierSelectedAsync() // NEW
         {
             if (_selectedSupplierId != null) return true;
-
             var typed = SupplierText.Text?.Trim();
             if (string.IsNullOrWhiteSpace(typed)) return false;
-
             // 1) exact (case-insensitive) name match
             var exact = await _db.Set<Supplier>()
                 .AsNoTracking()
@@ -387,26 +368,17 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 ChooseSupplier(exact);  // sets _selectedSupplierId and textbox text
                 return true;
             }
-
-            // 2) reuse your search service; if exactly one result or first looks good, pick it
             var hits = await _suppliersSvc.SearchAsync(typed);
             Supplier? pick = null;
-
-            // Prefer exact (culture-insensitive) match from the hits
             pick = hits.FirstOrDefault(s => string.Equals(s.Name, typed, StringComparison.OrdinalIgnoreCase))
                    ?? (hits.Count == 1 ? hits[0] : null);
-
             if (pick != null)
             {
                 ChooseSupplier(pick);
                 return true;
             }
-
-            // Could not resolve uniquely
             return false;
         }
-
-
 
         private void SupplierList_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -442,19 +414,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _selectedSupplierId = s.Id;
             SupplierText.Text = s.Name;
             SupplierPopup.IsOpen = false;
-
-            // Optional: make it easy to overwrite
             SupplierText.Focus();
             SupplierText.SelectAll();
         }
 
-        // ===================== Item search (kept, with auto-fill add-on) =====================
         private async Task LoadItemsAsync(string term)
         {
             var list = await _itemsSvc.SearchAsync(term);
             _itemResults.Clear();
             foreach (var it in list) _itemResults.Add(it);
-
             ItemPopup.IsOpen = _itemResults.Count > 0 && !string.IsNullOrWhiteSpace(ItemSearchText.Text);
             if (_itemResults.Count > 0) ItemList.SelectedIndex = 0;
         }
@@ -496,13 +464,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 e.Handled = true;
                 return;
             }
-
             if (!ItemPopup.IsOpen)
             {
                 if (e.Key == Key.Enter) { BtnAddItem_Click(sender, e); e.Handled = true; }
                 return;
             }
-
             if (e.Key == Key.Enter)
             {
                 var pick = ItemList.SelectedItem as Item ?? _itemResults.FirstOrDefault();
@@ -514,7 +480,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 e.Handled = true;
                 return;
             }
-
             if (e.Key == Key.Escape)
             {
                 ItemPopup.IsOpen = false;
@@ -569,12 +534,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
             ItemSearchText.Focus();
         }
 
-        // ===================== Add line + apply last purchase defaults (NEW) =====================
         private async Task ApplyLastDefaultsAsync(PurchaseLineVM vm)
         {
             var last = await _purchaseSvc.GetLastPurchaseDefaultsAsync(vm.ItemId);
             if (last is null) return;
-
             vm.UnitCost = last.Value.unitCost;
             vm.Discount = last.Value.discount;
             vm.TaxRate = last.Value.taxRate;
@@ -596,22 +559,17 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 Sku = item.Sku ?? "",
                 Name = item.Name ?? "",
                 Qty = 1,
-                // temporary defaults; will be replaced by last purchase defaults (async)
                 UnitCost = item.Price,
                 Discount = 0m,
                 TaxRate = item.DefaultTaxRatePct,
                 Notes = null
             };
             _lines.Add(vm);
-
-            // async default-apply (fire and forget)
             _ = Dispatcher.BeginInvoke(async () =>
             {
                 await ApplyLastDefaultsAsync(vm);
                 RecomputeAndUpdateTotals();
             });
-
-            // focus Qty cell for rapid typing
             Dispatcher.BeginInvoke(() =>
             {
                 LinesGrid.UpdateLayout();
@@ -631,15 +589,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             var discount = Math.Round(_lines.Sum(x => x.Discount), 2);
             var taxSum = Math.Round(_lines.Sum(x =>
                               Math.Max(0m, x.Qty * x.UnitCost - x.Discount) * (x.TaxRate / 100m)), 2);
-
             if (!decimal.TryParse(OtherChargesBox.Text, out var other)) other = 0m;
             var grand = Math.Round(subtotal - discount + taxSum + other, 2);
-
             SubtotalText.Text = subtotal.ToString("N2");
             DiscountText.Text = discount.ToString("N2");
             TaxText.Text = taxSum.ToString("N2");
             GrandTotalText.Text = grand.ToString("N2");
-
             _model.Subtotal = subtotal;
             _model.Discount = discount;
             _model.Tax = taxSum;
@@ -650,7 +605,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void OtherChargesBox_TextChanged(object sender, TextChangedEventArgs e)
             => RecomputeAndUpdateTotals();
 
-        // ===================== Save Draft (updated for destination) =====================
         private async void BtnSaveDraft_Click(object sender, RoutedEventArgs e)
         {
             if (_lines.Count == 0)
@@ -672,24 +626,19 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     return;
                 }
             }
-
             if (!await EnsureSupplierSelectedAsync())   // NEW
             {
                 MessageBox.Show("Please pick a Supplier (press Enter after typing, or choose from the list).");
                 return;
             }
-
             if (_selectedSupplierId == null)
             {
                 MessageBox.Show("Please pick a Supplier (type and press Enter or double-click from list).");
                 return;
             }
-
-            // Destination: prefer the new radios/combos; fallback to legacy OutletIdBox
             int? outletId = null;
             int? warehouseId = null;
             StockTargetType target;
-
             bool usedNewDestinationUI = false;
             try
             {
@@ -724,18 +673,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 target = StockTargetType.Outlet; // UI not present
             }
-
         
-
-            // Build/refresh model
-            _model.SupplierId = _selectedSupplierId.Value;
+        _model.SupplierId = _selectedSupplierId.Value;
             _model.TargetType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
             _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
             _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now; // use UI date
             _model.Status = PurchaseStatus.Draft;
-
             var lines = _lines.Select(l => new PurchaseLine
             {
                 ItemId = l.ItemId,
@@ -745,19 +690,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 TaxRate = l.TaxRate,
                 Notes = l.Notes
             });
-
             _model = await _purchaseSvc.SaveDraftAsync(_model, lines, user: "admin");
-            MessageBox.Show($"Draft saved. Purchase Id: #{_model.Id}");
+            MessageBox.Show($"Purchase Draft saved. Purchase Id: #{_model.Id}");
+            await ResetFormAsync(keepDestination: true);
+
         }
+
 
         private void BtnAddItem_Click(object sender, RoutedEventArgs e)
         {
-            // Prefer selected list item; fallback to single filtered result; else exact text match
             Item? pick = ItemList.SelectedItem as Item;
-
             if (pick == null && _itemResults.Count == 1)
                 pick = _itemResults[0];
-
             if (pick == null && !string.IsNullOrWhiteSpace(ItemSearchText.Text))
             {
                 var t = ItemSearchText.Text.Trim();
@@ -766,13 +710,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
                           string.Equals(i.Barcode, t, StringComparison.OrdinalIgnoreCase) ||
                           string.Equals(i.Name, t, StringComparison.OrdinalIgnoreCase));
             }
-
             if (pick == null)
             {
                 MessageBox.Show("Type to search and pick an item (Enter), or click Add after selecting.");
                 return;
             }
-
             AddItemToLines(pick);
             FinishItemAdd();
         }
@@ -783,37 +725,25 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (dlg.ShowDialog() == true)
             {
                 var now = DateTime.UtcNow;
-
                 var item = new Pos.Domain.Entities.Item
                 {
                     Sku = dlg.Sku,
                     Name = dlg.NameVal,
-                    Barcode = dlg.BarcodeVal,                 // non-nullable string in your entity
+                    Barcode = dlg.BarcodeVal,                 
                     Price = dlg.PriceVal,
                     UpdatedAt = now,
-
-                    // tax defaults
                     TaxCode = dlg.TaxCodeVal,
                     DefaultTaxRatePct = dlg.TaxPctVal,
                     TaxInclusive = dlg.TaxInclusiveVal,
-
-                    // discount defaults (nullable in your entity)
                     DefaultDiscountPct = dlg.DiscountPctVal,
                     DefaultDiscountAmt = dlg.DiscountAmtVal,
-
-                    // variants (optional)
                     Variant1Name = dlg.Variant1NameVal,
                     Variant1Value = dlg.Variant1ValueVal,
                     Variant2Name = dlg.Variant2NameVal,
                     Variant2Value = dlg.Variant2ValueVal,
-
-                    // ProductId is optional — we’re not linking here in quick-add
                     ProductId = null
                 };
-
                 item = await _itemsSvc.CreateAsync(item);
-
-                // Add to lines immediately
                 AddItemToLines(item);
                 FinishItemAdd();
             }
@@ -835,7 +765,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     Country = dlg.Country,
                     IsActive = true
                 });
-
                 _selectedSupplierId = s.Id;
                 SupplierText.Text = s.Name;
                 SupplierPopup.IsOpen = false;
@@ -846,7 +775,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private ObservableCollection<PurchasePayment> _payments = new();
 
-        // call this after loading/saving a purchase
         private async Task RefreshPaymentsAsync()
         {
             if (_model.Id <= 0) { PaymentsGrid.ItemsSource = null; return; }
@@ -858,19 +786,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async void BtnAddAdvance_Click(object sender, RoutedEventArgs e)
         {
-            // OLD: if (_model.Id <= 0) { MessageBox.Show("Save draft first."); return; }
             if (!await EnsurePurchasePersistedAsync()) return;
-
             if (!decimal.TryParse(AdvanceAmtBox.Text, out var amt) || amt <= 0)
             {
                 MessageBox.Show("Enter amount > 0"); return;
             }
-
             var sel = (AdvanceMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Cash";
             var method = Enum.TryParse<TenderMethod>(sel, out var m) ? m : TenderMethod.Cash;
-
             var outletId = _model.OutletId ?? 0;
-
             await _purchaseSvc.AddPaymentAsync(
                 _model.Id,
                 PurchasePaymentKind.Advance,
@@ -882,31 +805,24 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 tillSessionId: null,
                 counterId: null,
                 user: "admin");
-
             await RefreshPaymentsAsync();
             AdvanceAmtBox.Clear();
             AdvanceMethodBox.SelectedIndex = 0;
         }
 
-
-        // PurchaseWindow.xaml.cs  (inside class)
         private async Task<bool> EnsurePurchasePersistedAsync()
         {
             if (_model.Id > 0) return true;
-
             if (_lines.Count == 0)
             {
                 MessageBox.Show("Add at least one item before taking a payment.");
                 return false;
             }
-
             if (!await EnsureSupplierSelectedAsync())
             {
                 MessageBox.Show("Please pick a Supplier (press Enter after typing, or choose from the list).");
                 return false;
             }
-
-            // Build minimal valid draft from current UI state
             int? outletId = null, warehouseId = null;
             var target = StockTargetType.Outlet;
             try
@@ -917,13 +833,211 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 { outletId = ot.Id; target = StockTargetType.Outlet; }
             }
             catch { /* ignore if controls not present */ }
-
             _model.SupplierId = _selectedSupplierId!.Value;
             _model.TargetType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
             _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
             _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now;
+            _model.Status = PurchaseStatus.Draft;
+            var lines = _lines.Select(l => new PurchaseLine
+            {
+                ItemId = l.ItemId,
+                Qty = l.Qty,
+                UnitCost = l.UnitCost,
+                Discount = l.Discount,
+                TaxRate = l.TaxRate,
+                Notes = l.Notes
+            });
+            _model = await _purchaseSvc.SaveDraftAsync(_model, lines, user: "admin");
+            await RefreshPaymentsAsync(); // bind grid to the now-real purchase
+            return _model.Id > 0;
+        }
+
+        private async Task ResetFormAsync(bool keepDestination = true)
+        {
+            try { SupplierPopup.IsOpen = false; } catch { }
+            try { ItemPopup.IsOpen = false; } catch { }
+            bool chooseWarehouse = false;
+            int? selWarehouseId = null, selOutletId = null;
+            if (keepDestination)
+            {
+                try
+                {
+                    chooseWarehouse = DestWarehouseRadio.IsChecked == true;
+                    selWarehouseId = (WarehouseBox.SelectedItem as Warehouse)?.Id;
+                    selOutletId = (OutletBox.SelectedItem as Outlet)?.Id;
+                }
+                catch { }
+            }
+            _model = new Purchase();
+            _selectedSupplierId = null;
+            SupplierText.Clear();
+            VendorInvBox.Clear();
+            DatePicker.SelectedDate = DateTime.Now;
+            _lines.Clear();
+            _payments.Clear();
+            PaymentsGrid.ItemsSource = null; // rebounded when a real purchase is loaded
+            ItemSearchText.Clear();
+            OtherChargesBox.Text = "0.00";
+            SubtotalText.Text = "0.00";
+            DiscountText.Text = "0.00";
+            TaxText.Text = "0.00";
+            GrandTotalText.Text = "0.00";
+            await LoadSuppliersAsync("");
+            await LoadItemsAsync("");
+            if (!keepDestination)
+            {
+                await InitDestinationsAsync();
+            }
+            else
+            {
+                try { OutletBox.ItemsSource = _outletResults; } catch { }
+                try { WarehouseBox.ItemsSource = _warehouseResults; } catch { }
+                try
+                {
+                    if (chooseWarehouse)
+                    {
+                        DestWarehouseRadio.IsChecked = true;
+                        if (selWarehouseId != null)
+                            WarehouseBox.SelectedItem = _warehouseResults.FirstOrDefault(w => w.Id == selWarehouseId);
+                        WarehouseBox.IsEnabled = true;
+                        OutletBox.IsEnabled = false;
+                    }
+                    else
+                    {
+                        DestOutletRadio.IsChecked = true;
+                        if (selOutletId != null)
+                            OutletBox.SelectedItem = _outletResults.FirstOrDefault(o => o.Id == selOutletId);
+                        WarehouseBox.IsEnabled = false;
+                        OutletBox.IsEnabled = true;
+                    }
+                }
+                catch { /* ignore if controls not present */ }
+            }
+            SupplierText.Focus();
+            SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
+        }
+
+        private void InvoicesButton_Click(object sender, RoutedEventArgs e)
+        {
+            var wnd = new PurchaseCenterWindow
+            {
+                Owner = this
+            };
+            wnd.ShowDialog();
+        }
+
+        private void ClearHoldButton_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show(
+                "Choose an action:\n\nYes = CLEAR this purchase (reset form)\nNo = HOLD this purchase as draft\nCancel = Do nothing",
+                "Clear or Hold?",
+                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                ClearCurrentPurchase(confirm: true);
+            }
+            else if (result == MessageBoxResult.No)
+            {
+                _ = HoldCurrentPurchaseQuickAsync();
+            }
+        }
+
+        private async void ClearCurrentPurchase(bool confirm)
+        {
+            // quick “is anything to clear?” check
+            var hasLines = _lines.Count > 0;
+            var hasSupplier = !string.IsNullOrWhiteSpace(SupplierText.Text);
+            var hasVendorInv = !string.IsNullOrWhiteSpace(VendorInvBox.Text);
+            var otherCharges = decimal.TryParse(OtherChargesBox.Text, out var oc) ? oc : 0m;
+            var dirtyTotals = _model.Subtotal > 0m || _model.Tax > 0m || _model.Discount > 0m || _model.GrandTotal > 0m || otherCharges != 0m;
+
+            if (confirm && (hasLines || hasSupplier || hasVendorInv || dirtyTotals))
+            {
+                var ok = MessageBox.Show("Clear the current purchase (lines, supplier, vendor inv#, totals)?",
+                                         "Confirm Clear", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                if (ok != MessageBoxResult.OK) return;
+            }
+
+            await ResetFormAsync(keepDestination: true);   // keep destination like your Save Draft does
+        }
+
+        private async Task HoldCurrentPurchaseQuickAsync()
+        {
+            // Basic validations (mirror BtnSaveDraft_Click)
+            if (_lines.Count == 0)
+            {
+                MessageBox.Show("Nothing to hold — add at least one item.");
+                return;
+            }
+            if (_lines.Any(l => l.Qty <= 0 || l.UnitCost < 0 || l.Discount < 0))
+            {
+                MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative.");
+                return;
+            }
+            foreach (var l in _lines)
+            {
+                var baseAmt = l.Qty * l.UnitCost;
+                if (l.Discount > baseAmt)
+                {
+                    MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'.");
+                    return;
+                }
+            }
+            if (!await EnsureSupplierSelectedAsync())
+            {
+                MessageBox.Show("Please pick a Supplier (press Enter after typing, or choose from the list).");
+                return;
+            }
+            if (_selectedSupplierId == null)
+            {
+                MessageBox.Show("Please pick a Supplier (type and press Enter or double-click from list).");
+                return;
+            }
+
+            // Destination (same logic you used in BtnSaveDraft_Click)
+            int? outletId = null;
+            int? warehouseId = null;
+            StockTargetType target;
+            try
+            {
+                if (DestWarehouseRadio.IsChecked == true)
+                {
+                    if (WarehouseBox.SelectedItem is not Warehouse wh)
+                    {
+                        MessageBox.Show("Please pick a warehouse."); return;
+                    }
+                    warehouseId = wh.Id;
+                    target = StockTargetType.Warehouse;
+                }
+                else if (DestOutletRadio.IsChecked == true)
+                {
+                    if (OutletBox.SelectedItem is not Outlet ot)
+                    {
+                        MessageBox.Show("Please pick an outlet."); return;
+                    }
+                    outletId = ot.Id;
+                    target = StockTargetType.Outlet;
+                }
+                else
+                {
+                    target = StockTargetType.Outlet; // legacy fallback
+                }
+            }
+            catch
+            {
+                target = StockTargetType.Outlet; // UI not present
+            }
+
+            // Build model and lines exactly like BtnSaveDraft_Click
+            _model.SupplierId = _selectedSupplierId.Value;
+            _model.TargetType = target;
+            _model.OutletId = outletId;
+            _model.WarehouseId = warehouseId;
+            _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
+            _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now; // UI date
             _model.Status = PurchaseStatus.Draft;
 
             var lines = _lines.Select(l => new PurchaseLine
@@ -936,11 +1050,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 Notes = l.Notes
             });
 
-            // Save silently to get Id
+            // Save draft (HOLD)
             _model = await _purchaseSvc.SaveDraftAsync(_model, lines, user: "admin");
-            await RefreshPaymentsAsync(); // bind grid to the now-real purchase
-            return _model.Id > 0;
+
+            MessageBox.Show($"Purchase held as Draft. Purchase Id: #{_model.Id}", "Held");
+            await ResetFormAsync(keepDestination: true);
         }
+
+
+
 
 
     }
