@@ -9,6 +9,7 @@ using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Persistence.Services;
 using Pos.Client.Wpf.Windows.Purchases;
+using Pos.Client.Wpf.Services;
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
@@ -921,11 +922,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void InvoicesButton_Click(object sender, RoutedEventArgs e)
         {
-            var wnd = new PurchaseCenterWindow
-            {
-                Owner = this
-            };
-            wnd.ShowDialog();
+            var win = new PurchaseCenterWindow { Owner = this };
+            win.ShowDialog();
         }
 
         private void ClearHoldButton_Click(object sender, RoutedEventArgs e)

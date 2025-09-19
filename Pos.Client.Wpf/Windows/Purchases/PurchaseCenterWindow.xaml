@@ -134,6 +134,7 @@
                     <Button Content="Void"    MinWidth="90" Command="{StaticResource CmdVoid}"    Margin="0,0,12,0"/>
                     
                     
+                    
                 </StackPanel>
             </Grid>
         </Border>

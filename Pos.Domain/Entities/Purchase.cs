@@ -4,7 +4,7 @@ using Pos.Domain.Abstractions;
 namespace Pos.Domain.Entities
 {
     // Keep single, canonical stock ledger elsewhere (StockEntry). No duplicate StockTxn here.
-    public enum PurchaseStatus { Draft = 0, Final = 1, Voided = 2 }
+    public enum PurchaseStatus { Draft = 0, Final = 1, Voided = 2, Revised = 3 }
     public enum StockTargetType { Outlet = 1, Warehouse = 2 }
     public enum PurchasePaymentKind { Advance = 0, OnReceive = 1, Adjustment = 2 }
     public enum TenderMethod { Cash = 0, Card = 1, Bank = 2, Other = 3 }

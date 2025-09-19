@@ -34,7 +34,7 @@ namespace Pos.Client.Wpf
             );
 
             // 3) App services
-            sc.AddSingleton<AppState>();
+            sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
 
             // 4) Windows (register them so we can resolve via DI)

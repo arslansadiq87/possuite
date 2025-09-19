@@ -6,7 +6,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
+using Pos.Client.Wpf.Services;
+using Pos.Domain.Entities;
 using Pos.Persistence;
+
+
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -37,29 +41,49 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
     public partial class PurchaseCenterWindow : Window
     {
-        private readonly DbContextOptions<PosClientDbContext> _dbOptions;
+        private int? _outletIdFilter; // null => all outlets
+        private readonly DbContextOptions<PosClientDbContext> _opts;
         private readonly ObservableCollection<PurchaseRowVM> _rows = new();
 
 
         // Row VM - mirror your Sales VM shape
         public class PurchaseRowVM
         {
-            public string Number { get; set; } = "";
+            // Shown in grid
+            public string Number { get; set; } = "";          // display doc number (fallback to Id)
             public DateTime Date { get; set; }
-            public string SupplierName { get; set; } = "";
-            public string Destination { get; set; } = ""; // Warehouse or "Outlet: Gulberg"
-            public int ItemCount { get; set; }
-            public decimal TotalQty { get; set; }
+            public string Supplier { get; set; } = "";        // for XAML column
+            public string Destination { get; set; } = "";     // "Warehouse" or "Outlet: X"
+            public string? VendorInvoiceNo { get; set; }
+
+            public int Lines { get; set; }                    // count of lines
+
+            // Totals block (new)
+            public decimal Subtotal { get; set; }
+            public decimal Discount { get; set; }
+            public decimal Tax { get; set; }
+            public decimal OtherCharges { get; set; }
             public decimal GrandTotal { get; set; }
+
             public string Status { get; set; } = "";
             public string CreatedBy { get; set; } = "";
+
+            // ===== Legacy fields kept for compatibility with your existing code-behind =====
+            public string SupplierName { get; set; } = "";    // used in filters: SupplierSearchBox
+            public int ItemCount { get; set; }                // legacy alias for Lines
+            public decimal TotalQty { get; set; }             // Sum of line quantities (footer calc)
         }
+
 
         private readonly List<PurchaseRowVM> _all = new(); // replace with real DB results
 
         public PurchaseCenterWindow()
         {
             InitializeComponent();
+            // ✅ same pattern as InvoiceCenterWindow
+            _opts = new DbContextOptionsBuilder<PosClientDbContext>()
+                .UseSqlite(DbPath.ConnectionString)   // <-- use the same DbPath.ConnectionString you use in Sales
+                .Options;
 
             // Command bindings
             CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.Amend, Amend_Executed, RequireSelection_CanExecute));
@@ -70,9 +94,92 @@ namespace Pos.Client.Wpf.Windows.Purchases
             CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.Export, Export_Executed, Always_CanExecute));
 
             // Demo data so the UI renders; replace with actual load
-            SeedDemo();
+            
             BindResults(_all);
+            Loaded += async (_, __) =>
+            {
+                var canViewAll = AuthZ.Has(AuthZ.Perm.Purchases_View_All); // Admin can see all
+                var currentOutletId = AppState.Current.CurrentOutletId;
+
+                _outletIdFilter = canViewAll
+                    ? (int?)null
+                    : (currentOutletId > 0 ? currentOutletId : (int?)null);
+
+                if (!canViewAll && _outletIdFilter is null)
+                {
+                    MessageBox.Show("No outlet is set for the current session. Please select an outlet.", "Outlet Required",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Close();
+                    return;
+                }
+
+                await LoadAllFromDbAsync();
+                RunSearch();
+            };
         }
+
+        private async Task LoadAllFromDbAsync()
+        {
+            _all.Clear();
+
+            using var db = new PosClientDbContext(_opts);
+
+            IQueryable<Purchase> q = db.Purchases.AsNoTracking();
+
+            // outlet restriction (already wired earlier)
+            if (_outletIdFilter.HasValue)
+                q = q.Where(p => p.OutletId == _outletIdFilter.Value);
+
+            var purchases = await q
+                .Include(p => p.Supplier)   // keep/remove based on your model
+                .Include(p => p.Outlet)
+                .Include(p => p.Warehouse)
+                .Include(p => p.Lines)
+                .OrderByDescending(p => p.CreatedAtUtc)   // use your real date/Id field
+                .ToListAsync();
+
+            foreach (var p in purchases)
+            {
+                var destination =
+                    p.WarehouseId != null ? "Warehouse" :
+                    p.Outlet != null ? $"Outlet: {p.Outlet.Name}" :
+                    "Warehouse";
+
+                var linesCount = p.Lines?.Count ?? 0;
+                var totalQty = p.Lines?.Sum(l => (decimal)l.Qty) ?? 0m;
+                var docNumber = p.Id.ToString();
+
+                // ✅ Robust supplier display text (handles nulls/whitespace gracefully)
+                var supplierName =
+                    !string.IsNullOrWhiteSpace(p.Supplier?.Name) ? p.Supplier!.Name.Trim()
+                    : (p.SupplierId > 0 ? $"Supplier #{p.SupplierId}" : "—");
+
+                _all.Add(new PurchaseRowVM
+                {
+                    Number = docNumber,
+                    Date = p.CreatedAtUtc,
+                    Supplier = supplierName,   // <- bind to this in XAML
+                    SupplierName = supplierName,   // <- used by your filter box
+                    Destination = destination,
+                    VendorInvoiceNo = p.VendorInvoiceNo,
+
+                    Lines = linesCount,
+                    ItemCount = linesCount,
+
+                    Subtotal = p.Subtotal,
+                    Discount = p.Discount,
+                    Tax = p.Tax,
+                    OtherCharges = p.OtherCharges,
+                    GrandTotal = p.GrandTotal,
+
+                    TotalQty = totalQty,
+                    Status = p.Status.ToString(),
+                    CreatedBy = p.CreatedBy
+                });
+            }
+
+        }
+
 
         // ===== Command handlers =====
 
@@ -241,19 +348,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
         }
 
 
-
-        private void SeedDemo()
-        {
-            _all.Clear();
-            _all.AddRange(new[]
-            {
-                new PurchaseRowVM { Number="PO-000145", Date=DateTime.Today.AddDays(-1), SupplierName="Al-Madina Traders",
-                    Destination="Warehouse", ItemCount=12, TotalQty=36, GrandTotal=154320.00m, Status="Received", CreatedBy="ahmad" },
-                new PurchaseRowVM { Number="PO-000146", Date=DateTime.Today, SupplierName="Nizam Sons",
-                    Destination="Outlet: Gulberg", ItemCount=4, TotalQty=9, GrandTotal=32450.00m, Status="Draft", CreatedBy="sana" },
-                new PurchaseRowVM { Number="PR-000147", Date=DateTime.Today.AddDays(-3), SupplierName="Imtiaz Supplies",
-                    Destination="Warehouse", ItemCount=2, TotalQty=2, GrandTotal=-5200.00m, Status="Return", CreatedBy="admin" },
-            });
-        }
+        
     }
 }
