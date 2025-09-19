@@ -1,0 +1,39 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Purchases.HeldPurchasesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Held Purchases" Height="520" Width="820"
+        WindowStartupLocation="CenterOwner"
+        KeyDown="Window_KeyDown">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top: search -->
+        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
+            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="SearchBox" Width="240" Height="28" VerticalContentAlignment="Center" 
+                     ToolTip="Supplier, Doc #, Vendor Inv #" TextChanged="SearchBox_TextChanged"/>
+        </StackPanel>
+
+        <!-- Middle: drafts list -->
+        <DataGrid x:Name="DraftsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                  SelectionMode="Single" SelectionUnit="FullRow" MouseDoubleClick="DraftsGrid_MouseDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Doc #" Binding="{Binding DocNoOrId}" Width="120"/>
+                <DataGridTextColumn Header="Date" Binding="{Binding TsLocal}" Width="160"/>
+                <DataGridTextColumn Header="Supplier" Binding="{Binding Supplier}" Width="*"/>
+                <DataGridTextColumn Header="Lines" Binding="{Binding Lines}" Width="80"/>
+                <DataGridTextColumn Header="Grand" Binding="{Binding GrandTotal, StringFormat=0.00}" Width="120"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Bottom: actions -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="_Open (Enter)" Width="140" Height="34" Margin="0,0,8,0" Click="Open_Click"/>
+            <Button Content="_Cancel (Esc)" Width="120" Height="34" Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

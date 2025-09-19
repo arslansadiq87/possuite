@@ -8,14 +8,25 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Persistence.Services;
-using Pos.Client.Wpf.Windows.Purchases;
-using Pos.Client.Wpf.Services;
+using System.Runtime.CompilerServices;
+using Pos.Domain.Formatting;
+using Pos.Client.Wpf.Windows.Sales;
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
     public partial class PurchaseWindow : Window
     {
+        private PurchaseEditorVM VM
+        {
+            get
+            {
+                if (DataContext is PurchaseEditorVM vm) return vm;
+                vm = new PurchaseEditorVM();
+                DataContext = vm;
+                return vm;
+            }
+        }
         // ===================== Line VM (unchanged behavior) =====================
         public class PurchaseLineVM : INotifyPropertyChanged
         {
@@ -55,6 +66,61 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public void ForceRecalc() => Recalc();
         }
 
+        public class PurchaseEditorVM : INotifyPropertyChanged
+        {
+            public int PurchaseId { get => _purchaseId; set { _purchaseId = value; OnChanged(); } }
+            private int _purchaseId;
+
+            public int SupplierId { get => _supplierId; set { _supplierId = value; OnChanged(); } }
+            private int _supplierId;
+
+            public StockTargetType TargetType { get => _targetType; set { _targetType = value; OnChanged(); } }
+            private StockTargetType _targetType;
+
+            public int? OutletId { get => _outletId; set { _outletId = value; OnChanged(); } }
+            private int? _outletId;
+
+            public int? WarehouseId { get => _warehouseId; set { _warehouseId = value; OnChanged(); } }
+            private int? _warehouseId;
+
+            public DateTime PurchaseDate { get => _purchaseDate; set { _purchaseDate = value; OnChanged(); } }
+            private DateTime _purchaseDate = DateTime.UtcNow;
+
+            public string? VendorInvoiceNo { get => _vendorInvoiceNo; set { _vendorInvoiceNo = value; OnChanged(); } }
+            private string? _vendorInvoiceNo;
+
+            public string? DocNo { get => _docNo; set { _docNo = value; OnChanged(); } }
+            private string? _docNo;
+
+            public decimal Subtotal { get => _subtotal; set { _subtotal = value; OnChanged(); } }
+            private decimal _subtotal;
+
+            public decimal Discount { get => _discount; set { _discount = value; OnChanged(); } }
+            private decimal _discount;
+
+            public decimal Tax { get => _tax; set { _tax = value; OnChanged(); } }
+            private decimal _tax;
+
+            public decimal OtherCharges { get => _otherCharges; set { _otherCharges = value; OnChanged(); } }
+            private decimal _otherCharges;
+
+            public decimal GrandTotal { get => _grandTotal; set { _grandTotal = value; OnChanged(); } }
+            private decimal _grandTotal;
+
+            public PurchaseStatus Status { get => _status; set { _status = value; OnChanged(); } }
+            private PurchaseStatus _status = PurchaseStatus.Draft;
+
+            public bool IsDirty { get => _isDirty; set { _isDirty = value; OnChanged(); } }
+            private bool _isDirty;
+
+            public ObservableCollection<PurchaseLineVM> Lines { get; } = new();
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+            private void OnChanged([CallerMemberName] string? prop = null)
+                => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+        }
+
+
         // ===================== Fields & services =====================
         private readonly PosClientDbContext _db;
         private readonly PurchasesService _purchaseSvc;
@@ -68,24 +134,34 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private ObservableCollection<Outlet> _outletResults = new();
         private ObservableCollection<Warehouse> _warehouseResults = new();
         private int? _selectedSupplierId;
+        private readonly DbContextOptions<PosClientDbContext> _opts =
+    new DbContextOptionsBuilder<PosClientDbContext>()
+        .UseSqlite(DbPath.ConnectionString)
+        .Options;
+        // make the accessor resilient (no casts on null)
 
-        public PurchaseWindow(PosClientDbContext db)
+        public PurchaseWindow()  // NEW
         {
             InitializeComponent();
+            if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
+            // … leave the rest of your initialization in the db-ctor, or move it here if you prefer …
+        }
+
+        public PurchaseWindow(PosClientDbContext db) : this()  // CHANGED: chain to parameterless
+        {
             _db = db;
             _purchaseSvc = new PurchasesService(_db);
             _suppliersSvc = new SuppliersService(_db);
             _itemsSvc = new ItemsService(_db);
-            // Initialize header defaults
+
+            // init UI bindings you already had
             DatePicker.SelectedDate = DateTime.Now;
             OtherChargesBox.Text = "0.00";
-            // Bind lists
             LinesGrid.ItemsSource = _lines;
             SupplierList.ItemsSource = _supplierResults;
             ItemList.ItemsSource = _itemResults;
-            // Prime empty supplier search
+
             _ = LoadSuppliersAsync("");
-            // Recompute totals on edits
             LinesGrid.CellEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
             LinesGrid.RowEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
             _lines.CollectionChanged += (_, args) =>
@@ -95,37 +171,25 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         vm.PropertyChanged += (_, __) => RecomputeAndUpdateTotals();
                 RecomputeAndUpdateTotals();
             };
-            // Fast entry behavior
+
             LinesGrid.PreviewKeyDown += LinesGrid_PreviewKeyDown;
+
             Loaded += async (_, __) =>
             {
                 await InitDestinationsAsync();
-                SupplierText.Focus();                    // CHANGED: start at supplier
+                SupplierText.Focus();
                 SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
             };
+
             ItemList.PreviewKeyDown += ItemList_PreviewKeyDown;
             SupplierList.PreviewKeyDown += SupplierList_PreviewKeyDown;
 
-            // Keyboard shortcuts like Sales: F5 = Clear, F8 = Hold, F7 = Invoices
             this.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.F7) { InvoicesButton_Click(s, e); e.Handled = true; return; }
-
-                if (e.Key == Key.F5)
-                {
-                    ClearCurrentPurchase(confirm: true);
-                    e.Handled = true;
-                    return;
-                }
-
-                if (e.Key == Key.F8)
-                {
-                    _ = HoldCurrentPurchaseQuickAsync();
-                    e.Handled = true;
-                    return;
-                }
+                if (e.Key == Key.F5) { ClearCurrentPurchase(confirm: true); e.Handled = true; return; }
+                if (e.Key == Key.F8) { _ = HoldCurrentPurchaseQuickAsync(); e.Handled = true; return; }
             };
-
         }
 
         // ===================== Destination init (NEW) =====================
@@ -920,10 +984,30 @@ namespace Pos.Client.Wpf.Windows.Purchases
             SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
         }
 
-        private void InvoicesButton_Click(object sender, RoutedEventArgs e)
+        private async void InvoicesButton_Click(object sender, RoutedEventArgs e)
         {
-            var win = new PurchaseCenterWindow { Owner = this };
-            win.ShowDialog();
+            var center = new PurchaseCenterWindow() { Owner = this }; // pass options
+            var ok = center.ShowDialog() == true;
+
+            if (ok && center.SelectedHeldPurchaseId.HasValue)
+            {
+                await ResumeHeldAsync(center.SelectedHeldPurchaseId.Value);
+            }
+        }
+
+        private async Task ResumeHeldAsync(int id)
+        {
+            var draft = await _db.Purchases
+                .Include(p => p.Lines)
+                .FirstOrDefaultAsync(p => p.Id == id && p.Status == PurchaseStatus.Draft);
+
+            if (draft == null)
+            {
+                MessageBox.Show($"Held purchase #{id} not found or not in Draft.", "Not found");
+                return;
+            }
+
+            LoadDraft(draft); // loads into THIS window
         }
 
         private void ClearHoldButton_Click(object sender, RoutedEventArgs e)
@@ -1053,6 +1137,123 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             MessageBox.Show($"Purchase held as Draft. Purchase Id: #{_model.Id}", "Held");
             await ResetFormAsync(keepDestination: true);
+        }
+
+        public async void LoadDraft(Purchase draft)
+        {
+            if (draft == null) { MessageBox.Show("Draft not found."); return; }
+
+            // Ensure lines are loaded (defensive)
+            if (draft.Lines == null || draft.Lines.Count == 0)
+            {
+                try
+                {
+                    draft = await _db.Purchases
+                        .Include(p => p.Lines)
+                        .FirstAsync(p => p.Id == draft.Id);
+                }
+                catch { /* ignore, keep whatever came */ }
+            }
+
+            // Keep a copy as the working model
+            _model = draft;
+
+            // Header → UI (these are what your save/hold reads from)
+            DatePicker.SelectedDate = draft.PurchaseDate;
+            VendorInvBox.Text = draft.VendorInvoiceNo ?? "";
+            OtherChargesBox.Text = draft.OtherCharges.ToString("0.00");
+
+            // Supplier box text (lookup name)
+            try
+            {
+                var sup = await _db.Set<Supplier>().AsNoTracking().FirstOrDefaultAsync(s => s.Id == draft.SupplierId);
+                _selectedSupplierId = draft.SupplierId;
+                SupplierText.Text = sup?.Name ?? $"Supplier #{draft.SupplierId}";
+            }
+            catch
+            {
+                _selectedSupplierId = draft.SupplierId;
+                SupplierText.Text = $"Supplier #{draft.SupplierId}";
+            }
+
+            // Destination radios/combos
+            try
+            {
+                if (draft.TargetType == StockTargetType.Warehouse && draft.WarehouseId.HasValue)
+                {
+                    DestWarehouseRadio.IsChecked = true;
+                    WarehouseBox.IsEnabled = true; OutletBox.IsEnabled = false;
+                    var wh = _warehouseResults.FirstOrDefault(w => w.Id == draft.WarehouseId);
+                    if (wh != null) WarehouseBox.SelectedItem = wh;
+                }
+                else
+                {
+                    DestOutletRadio.IsChecked = true;
+                    OutletBox.IsEnabled = true; WarehouseBox.IsEnabled = false;
+                    if (draft.OutletId.HasValue)
+                    {
+                        var ot = _outletResults.FirstOrDefault(o => o.Id == draft.OutletId);
+                        if (ot != null) OutletBox.SelectedItem = ot;
+                    }
+                }
+            }
+            catch { /* controls may not exist yet */ }
+
+            // Lines → the grid's source (_lines), not VM.Lines
+            _lines.Clear();
+            // ---- pull item meta for all ItemIds in the draft lines (single query) ----
+            var lines = draft.Lines ?? new List<PurchaseLine>();
+            var itemIds = lines.Select(l => l.ItemId).Distinct().ToList();
+
+            // SIMPLE version (safe and enough for SKU + Name):
+            var metaDict = await _db.Set<Item>()
+                .AsNoTracking()
+                .Where(i => itemIds.Contains(i.Id))
+                .Select(i => new { i.Id, i.Sku, Name = i.Name })
+                .ToDictionaryAsync(x => x.Id);
+
+            _lines.Clear();
+            foreach (var l in lines)
+            {
+                metaDict.TryGetValue(l.ItemId, out var m);
+                var row = new PurchaseLineVM
+                {
+                    ItemId = l.ItemId,
+                    Sku = m?.Sku ?? "",
+                    Name = m?.Name ?? $"Item #{l.ItemId}",
+                    Qty = l.Qty,
+                    UnitCost = l.UnitCost,
+                    Discount = l.Discount,
+                    TaxRate = l.TaxRate,
+                    Notes = l.Notes
+                };
+                row.ForceRecalc();
+                _lines.Add(row);
+            }
+
+
+            // Totals textboxes (what your save uses)
+            SubtotalText.Text = draft.Subtotal.ToString("0.00");
+            DiscountText.Text = draft.Discount.ToString("0.00");
+            TaxText.Text = draft.Tax.ToString("0.00");
+            GrandTotalText.Text = draft.GrandTotal.ToString("0.00");
+
+            // (Optional) also mirror into VM if you have bindings elsewhere
+            VM.PurchaseId = draft.Id;
+            VM.SupplierId = draft.SupplierId;
+            VM.TargetType = draft.TargetType;
+            VM.OutletId = draft.OutletId;
+            VM.WarehouseId = draft.WarehouseId;
+            VM.PurchaseDate = draft.PurchaseDate;
+            VM.VendorInvoiceNo = draft.VendorInvoiceNo;
+            VM.DocNo = draft.DocNo;
+            VM.Subtotal = draft.Subtotal;
+            VM.Discount = draft.Discount;
+            VM.Tax = draft.Tax;
+            VM.OtherCharges = draft.OtherCharges;
+            VM.GrandTotal = draft.GrandTotal;
+            VM.Status = PurchaseStatus.Draft;
+            VM.IsDirty = false;
         }
 
 

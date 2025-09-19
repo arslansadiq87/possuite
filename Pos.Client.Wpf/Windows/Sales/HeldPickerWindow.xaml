@@ -9,7 +9,7 @@
             <TextBlock Text="Right-click → Delete." Foreground="Gray" VerticalAlignment="Center"/>
         </StackPanel>
 
-        <ListView x:Name="List" MouseDoubleClick="List_MouseDoubleClick">
+        <ListView x:Name="List" MouseDoubleClick="List_MouseDoubleClick" DockPanel.Dock="Top" Height="300">
             <ListView.Resources>
                 <ContextMenu x:Key="RowMenu">
                     <MenuItem Header="Delete held" Click="Delete_Click"/>
@@ -30,8 +30,8 @@
         </ListView>
 
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Bottom" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <Button Content="Resume" Width="100" Margin="0,0,8,0" Click="Resume_Click"/>
-            <Button Content="Close" Width="100" Click="Close_Click"/>
+            <Button Content="Resume" Width="100" Height="40" Margin="0,0,8,0" Click="Resume_Click"/>
+            <Button Content="Close" Width="100" Height="40" Click="Close_Click"/>
         </StackPanel>
     </DockPanel>
 </Window>

@@ -6,137 +6,245 @@
         WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
-        <!-- Routed commands -->
-        
-        
-        <RoutedUICommand x:Key="CmdReceive" Text="Receive (F6)"/>
-        <RoutedUICommand x:Key="CmdReturn"  Text="Return (F7)"/>
-        <RoutedUICommand x:Key="CmdVoid"    Text="Void (Del)"/>
-        
-        
+        <!-- Commands (similar to Sales) -->
+        <RoutedUICommand x:Key="CmdReceive"      Text="Receive"/>
+        <RoutedUICommand x:Key="CmdAmend"        Text="Amend"/>
+        <RoutedUICommand x:Key="CmdReturn"       Text="Return"/>
+        <RoutedUICommand x:Key="CmdVoid"         Text="Void"/>
+        <RoutedUICommand x:Key="CmdHeld"         Text="Held Drafts"/>
     </Window.Resources>
 
+    <!-- Keyboard shortcuts -->
     <Window.InputBindings>
-        
-        <KeyBinding Key="F6"     Command="{StaticResource CmdReceive}"/>
-        <KeyBinding Key="F7"     Command="{StaticResource CmdReturn}"/>
+        <KeyBinding Key="F2" Command="{x:Static ApplicationCommands.Find}"/>
+        <KeyBinding Key="E" Modifiers="Alt" Command="{StaticResource CmdAmend}"/>
+        <KeyBinding Key="R" Modifiers="Alt" Command="{StaticResource CmdReturn}"/>
         <KeyBinding Key="Delete" Command="{StaticResource CmdVoid}"/>
-        
-        
+        <KeyBinding Key="F6" Command="{StaticResource CmdReceive}"/>
+        <KeyBinding Key="F8" Command="{StaticResource CmdHeld}"/>
     </Window.InputBindings>
 
+    <!-- Wire handlers -->
     <Window.CommandBindings>
-        
-        
-        <CommandBinding Command="{StaticResource CmdReceive}" Executed="CmdReceive_Executed" CanExecute="CmdReceive_CanExecute"/>
-        <CommandBinding Command="{StaticResource CmdReturn}"  Executed="CmdReturn_Executed"  CanExecute="CmdReturn_CanExecute"/>
-        <CommandBinding Command="{StaticResource CmdVoid}"    Executed="CmdVoid_Executed"    CanExecute="CmdVoid_CanExecute"/>
-        
-        
+        <CommandBinding Command="{x:Static ApplicationCommands.Find}" Executed="Search_Executed"/>
+        <CommandBinding Command="{StaticResource CmdAmend}"   Executed="Amend_Executed"/>
+        <CommandBinding Command="{StaticResource CmdReturn}"  Executed="Return_Executed"/>
+        <CommandBinding Command="{StaticResource CmdVoid}"    Executed="Void_Executed"/>
+        <CommandBinding Command="{StaticResource CmdReceive}" Executed="Receive_Executed"/>
+        <CommandBinding Command="{StaticResource CmdHeld}"    Executed="Held_Executed"/>
     </Window.CommandBindings>
 
-    <DockPanel>
-        <!-- Filters header -->
-        <Border DockPanel.Dock="Top" Padding="8" Background="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}">
-            <Grid>
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top bar: search + date + dropdown filter -->
+        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
+            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="SearchBox" Width="220" Height="28" VerticalContentAlignment="Center"
+                     ToolTip="Doc #, Supplier name, Vendor Inv #"/>
+
+            <TextBlock Text=" From:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <DatePicker x:Name="FromDate" Width="140"/>
+            <TextBlock Text=" To:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <DatePicker x:Name="ToDate" Width="140"/>
+
+            <!-- Compact filter dropdown, same pattern as Sales -->
+            <Grid Margin="12,0,0,0" VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left filters -->
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Purchase #:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBox x:Name="PurchaseNoBox" Width="140" Margin="0,0,12,0"/>
-                    <TextBlock Text="Supplier:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <TextBox x:Name="SupplierSearchBox" Width="200" Margin="0,0,12,0"/>
-                    <TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <ComboBox x:Name="StatusBox" Width="140" SelectedIndex="0">
-                        <ComboBoxItem Content="Any"/>
-                        <ComboBoxItem Content="Draft"/>
-                        <ComboBoxItem Content="Received"/>
-                        <ComboBoxItem Content="Return"/>
-                        <ComboBoxItem Content="Voided"/>
-                    </ComboBox>
-                </StackPanel>
+                <ToggleButton x:Name="BtnFilter" Grid.Column="0" Height="28" Padding="10,0"
+                              Content="Filter ▾"
+                              IsChecked="{Binding IsOpen, ElementName=PopupFilter, Mode=TwoWay}"
+                              ToolTip="Open filters"/>
 
-                <!-- From -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <DatePicker x:Name="FromDateBox" Width="140"/>
-                </StackPanel>
+                <Popup x:Name="PopupFilter" Placement="Bottom" PlacementTarget="{Binding ElementName=BtnFilter}"
+                       StaysOpen="False" AllowsTransparency="True" Focusable="False">
+                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+                        </Border.Effect>
+                        <StackPanel MinWidth="420">
+                            <TextBlock Text="Filter purchases" FontWeight="Bold" Margin="0,0,0,8"/>
 
-                <!-- To -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <DatePicker x:Name="ToDateBox" Width="140"/>
-                </StackPanel>
+                            <!-- Status -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Status:" Width="70" VerticalAlignment="Center"/>
+                                <CheckBox x:Name="ChkFinal"  Content="Final"   IsChecked="True"  Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkDraft"  Content="Draft"   IsChecked="True"  Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkVoided" Content="Voided"  IsChecked="False"/>
+                            </StackPanel>
 
-                <!-- Actions -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Search" Width="80" Click="SearchBtn_Click" Margin="0,0,6,0"/>
-                    <Button Content="Clear"  Width="70" />
-                </StackPanel>
+                            <!-- Invoice number present? -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <CheckBox x:Name="ChkOnlyWithDocNo" Content="Only with Doc #" IsChecked="True"
+                                          ToolTip="Hide missing/null document numbers by default"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Clear" Width="80" Margin="0,0,8,0" Click="ClearFilter_Click"/>
+                                <Button Content="Apply" Width="80" Click="ApplyFilter_Click" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </Grid>
-        </Border>
 
-        <!-- Results grid (fills middle) -->
-        <DataGrid x:Name="ResultsGrid" Height="500" DockPanel.Dock="Top"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  SelectionMode="Single"
-                  SelectionUnit="FullRow"
-                  Margin="8"
-                  MouseDoubleClick="ResultsGrid_MouseDoubleClick">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Number" Binding="{Binding Number}" Width="70"/>
-                <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat={}{0:dd-MMM-yyyy}}" Width="120"/>
-                <DataGridTextColumn Header="Supplier" Binding="{Binding Supplier}" Width="200"/>
-                <DataGridTextColumn Header="Destination" Binding="{Binding Destination}" Width="160"/>
-                <DataGridTextColumn Header="Vendor Inv #" Binding="{Binding VendorInvoiceNo}" Width="140"/>
-                <DataGridTextColumn Header="Lines" Binding="{Binding Lines}" Width="70"/>
-                <DataGridTextColumn Header="Subtotal" Binding="{Binding Subtotal, StringFormat=N2}" Width="110"/>
-                <DataGridTextColumn Header="Discount" Binding="{Binding Discount, StringFormat=N2}" Width="110"/>
-                <DataGridTextColumn Header="Tax" Binding="{Binding Tax, StringFormat=N2}" Width="100"/>
-                <DataGridTextColumn Header="Other" Binding="{Binding OtherCharges, StringFormat=N2}" Width="100"/>
-                <DataGridTextColumn Header="Grand" Binding="{Binding GrandTotal, StringFormat=N2}" Width="120"/>
-                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100"/>
-            </DataGrid.Columns>
-        </DataGrid>
+            <Button Content="Search _F2" Width="120" Height="28" Margin="12,0,0,0"
+                    Click="Search_Click"/>
+        </StackPanel>
 
-        <!-- Bottom action bar -->
-        <Border DockPanel.Dock="Bottom" Padding="8" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
-            <Grid>
+        <!-- Middle: list | details (same layout as Sales) -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="1.75*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left list -->
+            <DataGrid x:Name="PurchasesGrid"
+                      Grid.Column="0"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      IsReadOnly="True"
+                      SelectionChanged="PurchasesGrid_SelectionChanged"
+                      RowHeaderWidth="0"
+                      FontSize="13"
+                      HeadersVisibility="Column"
+                      HorizontalScrollBarVisibility="Disabled">
+
+                <DataGrid.Resources>
+                    <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+                    <Style x:Key="StatusBadge" TargetType="Border">
+                        <Setter Property="CornerRadius" Value="4"/>
+                        <Setter Property="Padding" Value="2,0"/>
+                        <Setter Property="Margin" Value="8,0,0,0"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="BorderBrush" Value="#D0D0D0"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="Background" Value="#F3F3F3"/>
+                    </Style>
+                </DataGrid.Resources>
+
+                <DataGrid.Columns>
+                    <!-- COMPACT “Purchase” column, mirroring sales -->
+                    <DataGridTemplateColumn Header="Purchase" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2,0,2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Line 1: DocNo or Id   Rev?   [Status] -->
+                                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="0">
+                                        <TextBlock FontWeight="SemiBold">
+                                            <Run Text="{Binding DocNoOrId}"/>
+                                        </TextBlock>
+
+                                        <Border Style="{StaticResource StatusBadge}">
+                                            <TextBlock Text="{Binding Status}" FontSize="11" Margin="4,0,4,0"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Line 2: Supplier • Ts -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0"
+                                               Foreground="#666"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis">
+                                        <Run Text="{Binding Supplier}"/>
+                                        <Run Text=" • "/>
+                                        <Run Text="{Binding TsLocal}"/>
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Keep a narrow Grand Total column, right-aligned -->
+                    <DataGridTextColumn Header="Grand"
+                                        Binding="{Binding GrandTotal, StringFormat=0.00}"
+                                        Width="95">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Separator Grid.Column="1" Margin="8,0" Width="1" Background="#DDD"/>
+
+            <!-- Right details -->
+            <Grid Grid.Column="2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="33*"/>
+                    <ColumnDefinition Width="89*"/>
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-                <!-- Left: quick info + totals -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Selected:" FontWeight="Bold" Margin="0,0,8,0"/>
-                    <TextBlock Text="{Binding SelectedSummary}" Margin="0,0,16,0"/>
-                    <TextBlock Text="Count:" FontWeight="Bold" Margin="0,0,6,0"/>
-                    <TextBlock x:Name="CountLabel" Margin="0,0,16,0"/>
-                    <TextBlock Text="Total Qty:" FontWeight="Bold" Margin="0,0,6,0"/>
-                    <TextBlock x:Name="TotalQtyLabel" Margin="0,0,16,0"/>
-                    <TextBlock Text="Grand:" FontWeight="Bold" Margin="0,0,6,0"/>
-                    <TextBlock x:Name="GrandTotalLabel"/>
-                </StackPanel>
+                <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" Grid.ColumnSpan="2"/>
 
-                <!-- Right: actions -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                    
-                    <Button Content="Receive" MinWidth="90" Command="{StaticResource CmdReceive}" Margin="0,0,6,0"/>
-                    <Button Content="Return"  MinWidth="90" Command="{StaticResource CmdReturn}"  Margin="0,0,6,0"/>
-                    <Button Content="Void"    MinWidth="90" Command="{StaticResource CmdVoid}"    Margin="0,0,12,0"/>
-                    
-                    
-                    
-                </StackPanel>
+                <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="ItemId" Binding="{Binding ItemId}" Width="70"/>
+                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"/>
+                        <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="60"/>
+                        <DataGridTextColumn Header="Cost" Binding="{Binding UnitCost, StringFormat=0.00}" Width="80"/>
+                        <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat=0.00}" Width="100"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </Grid>
-        </Border>
-    </DockPanel>
+        </Grid>
+
+        <!-- Bottom bar: actions -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button x:Name="BtnHeld" Content="_Held (F8)" Width="140" Height="34" Margin="0,0,8,0"
+          Click="BtnHeld_Click" Style="{StaticResource ModernButton}" Visibility="Collapsed"/>
+
+            <!-- Return doc actions (when a selected row is a Purchase Return) -->
+            <Button x:Name="BtnAmendReturn" Content="_Amend Return (Alt+A)" Width="180" Height="34" Margin="0,0,8,0"
+          Click="AmendReturn_Click" Style="{StaticResource ModernButton}"/>
+            <Button x:Name="BtnVoidReturn"  Content="_Void Return (Alt+V)"  Width="160" Height="34" Margin="0,0,8,0"
+          Click="VoidReturn_Click"  Style="{StaticResource ModernButton}"/>
+
+            <!-- Base purchase actions -->
+            <Button x:Name="BtnAmend"   Content="_Amend (Rev) (Alt+E)" Width="180" Height="34" Margin="0,0,8,0"
+          Click="Amend_Click" Style="{StaticResource ModernButton}"/>
+            <Button x:Name="BtnVoidPurchase" Content="_Void Purchase (Alt+D)" Width="180" Height="34" Margin="0,0,8,0"
+          Click="VoidPurchase_Click" Style="{StaticResource ModernButton}"/>
+
+            <!-- Returns to supplier -->
+            <Button x:Name="BtnReturnWith" Content="Ret_urn (with purchase) (Alt+U)" Width="240" Height="34" Margin="0,0,8,0"
+          Click="ReturnWith_Click" Style="{StaticResource ModernButton}"/>
+
+            <Button x:Name="BtnReturnWithout" Content="Return (witho_ut purchase) (Ctrl+U)" Width="260" Height="34"
+          Click="ReturnWithout_Click" Style="{StaticResource ModernButton}"/>
+
+            <!-- Receive finalization -->
+            <Button x:Name="BtnReceive" Content="_Receive (F6)" Width="150" Height="34" Margin="8,0,0,0"
+          Click="Receive_Click" Style="{StaticResource ModernButton}"/>
+        </StackPanel>
+
+    </Grid>
 </Window>

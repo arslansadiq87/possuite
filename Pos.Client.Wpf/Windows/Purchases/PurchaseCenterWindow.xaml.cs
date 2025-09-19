@@ -1,353 +1,426 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
-using Pos.Client.Wpf.Services;
 using Pos.Domain.Entities;
+using Pos.Domain.Formatting;         // for ProductNameComposer (same as Sales)
 using Pos.Persistence;
-
-
+using Pos.Persistence.Services;
+using Pos.Client.Wpf.Windows.Purchases; // for HeldPurchasesWindow (reuse if you like)
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
-    // Public, top-level commands so XAML can resolve {x:Static local:PurchaseCenterWindowCommands.*}
-    public static class PurchaseCenterWindowCommands
-    {
-        public static readonly RoutedUICommand Amend =
-            new RoutedUICommand("Amend", nameof(Amend), typeof(PurchaseCenterWindowCommands),
-                new InputGestureCollection { new KeyGesture(Key.E, ModifierKeys.Control) });
-
-        public static readonly RoutedUICommand ReturnWith =
-            new RoutedUICommand("Return With", nameof(ReturnWith), typeof(PurchaseCenterWindowCommands),
-                new InputGestureCollection { new KeyGesture(Key.R, ModifierKeys.Control) });
-
-        public static readonly RoutedUICommand AmendReturn =
-            new RoutedUICommand("Amend Return", nameof(AmendReturn), typeof(PurchaseCenterWindowCommands));
-
-        public static readonly RoutedUICommand VoidReturn =
-            new RoutedUICommand("Void Return", nameof(VoidReturn), typeof(PurchaseCenterWindowCommands));
-
-        public static readonly RoutedUICommand Refresh =
-            new RoutedUICommand("Refresh", nameof(Refresh), typeof(PurchaseCenterWindowCommands),
-                new InputGestureCollection { new KeyGesture(Key.F5) });
-
-        public static readonly RoutedUICommand Export =
-            new RoutedUICommand("Export", nameof(Export), typeof(PurchaseCenterWindowCommands));
-    }
-
     public partial class PurchaseCenterWindow : Window
     {
-        private int? _outletIdFilter; // null => all outlets
+        public int? SelectedHeldPurchaseId { get; private set; }  // << expose held ID
         private readonly DbContextOptions<PosClientDbContext> _opts;
-        private readonly ObservableCollection<PurchaseRowVM> _rows = new();
+        private readonly PurchasesService _svc;
+        
 
-
-        // Row VM - mirror your Sales VM shape
-        public class PurchaseRowVM
+        // Row shape mirrors Sales UI row
+        public class UiPurchaseRow
         {
-            // Shown in grid
-            public string Number { get; set; } = "";          // display doc number (fallback to Id)
-            public DateTime Date { get; set; }
-            public string Supplier { get; set; } = "";        // for XAML column
-            public string Destination { get; set; } = "";     // "Warehouse" or "Outlet: X"
-            public string? VendorInvoiceNo { get; set; }
-
-            public int Lines { get; set; }                    // count of lines
-
-            // Totals block (new)
-            public decimal Subtotal { get; set; }
-            public decimal Discount { get; set; }
-            public decimal Tax { get; set; }
-            public decimal OtherCharges { get; set; }
-            public decimal GrandTotal { get; set; }
-
+            public int PurchaseId { get; set; }
+            public string DocNoOrId { get; set; } = "";
+            public string Supplier { get; set; } = "";
+            public string TsLocal { get; set; } = "";
             public string Status { get; set; } = "";
-            public string CreatedBy { get; set; } = "";
+            public decimal GrandTotal { get; set; }
+            public bool IsReturn { get; set; } // ← add this (set it when you load rows)
 
-            // ===== Legacy fields kept for compatibility with your existing code-behind =====
-            public string SupplierName { get; set; } = "";    // used in filters: SupplierSearchBox
-            public int ItemCount { get; set; }                // legacy alias for Lines
-            public decimal TotalQty { get; set; }             // Sum of line quantities (footer calc)
         }
 
+        public class UiLineRow
+        {
+            public int ItemId { get; set; }
+            public string Sku { get; set; } = "";
+            public string DisplayName { get; set; } = "";
+            public decimal Qty { get; set; }
+            public decimal UnitCost { get; set; }
+            public decimal LineTotal { get; set; }
+        }
 
-        private readonly List<PurchaseRowVM> _all = new(); // replace with real DB results
+        private readonly ObservableCollection<UiPurchaseRow> _purchases = new();
+        private readonly ObservableCollection<UiLineRow> _lines = new();
 
         public PurchaseCenterWindow()
         {
             InitializeComponent();
-            // ✅ same pattern as InvoiceCenterWindow
+
+            // Double-Esc to close (same feel as Sales)
+            this.PreviewKeyDown += PurchaseCenterWindow_PreviewKeyDown;
+
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
-                .UseSqlite(DbPath.ConnectionString)   // <-- use the same DbPath.ConnectionString you use in Sales
-                .Options;
+                .UseSqlite(DbPath.ConnectionString).Options;
 
-            // Command bindings
-            CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.Amend, Amend_Executed, RequireSelection_CanExecute));
-            CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.ReturnWith, ReturnWith_Executed, RequireSelection_CanExecute));
-            CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.AmendReturn, AmendReturn_Executed, RequireSelection_CanExecute));
-            CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.VoidReturn, VoidReturn_Executed, RequireSelection_CanExecute));
-            CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.Refresh, Refresh_Executed, Always_CanExecute));
-            CommandBindings.Add(new CommandBinding(PurchaseCenterWindowCommands.Export, Export_Executed, Always_CanExecute));
+            _svc = new PurchasesService(new PosClientDbContext(_opts));
 
-            // Demo data so the UI renders; replace with actual load
-            
-            BindResults(_all);
-            Loaded += async (_, __) =>
+            PurchasesGrid.ItemsSource = _purchases;
+            LinesGrid.ItemsSource = _lines;
+
+            // defaults: last 30 days
+            FromDate.SelectedDate = System.DateTime.Today.AddDays(-30);
+            ToDate.SelectedDate = System.DateTime.Today;
+
+            UpdateFilterSummary();
+            LoadPurchases();
+            UpdateHeldButtonVisibility();
+        }
+
+        private System.DateTime? _lastEscDown;
+        private void PurchaseCenterWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
             {
-                var canViewAll = AuthZ.Has(AuthZ.Perm.Purchases_View_All); // Admin can see all
-                var currentOutletId = AppState.Current.CurrentOutletId;
-
-                _outletIdFilter = canViewAll
-                    ? (int?)null
-                    : (currentOutletId > 0 ? currentOutletId : (int?)null);
-
-                if (!canViewAll && _outletIdFilter is null)
+                var now = System.DateTime.UtcNow;
+                if (_lastEscDown.HasValue && (now - _lastEscDown.Value).TotalMilliseconds <= 600)
                 {
-                    MessageBox.Show("No outlet is set for the current session. Please select an outlet.", "Outlet Required",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
                     Close();
                     return;
                 }
-
-                await LoadAllFromDbAsync();
-                RunSearch();
-            };
+                _lastEscDown = now;
+                e.Handled = true;
+            }
         }
 
-        private async Task LoadAllFromDbAsync()
+        // ===== Top bar: filter summary / actions =====
+        private void ApplyFilter_Click(object sender, RoutedEventArgs e)
         {
-            _all.Clear();
+            PopupFilter.IsOpen = false;
+            UpdateFilterSummary();
+            LoadPurchases();
+            UpdateHeldButtonVisibility();
+        }
+
+        private void ClearFilter_Click(object sender, RoutedEventArgs e)
+        {
+            ChkFinal.IsChecked = true;
+            ChkDraft.IsChecked = true;
+            ChkVoided.IsChecked = false;
+            ChkOnlyWithDocNo.IsChecked = true;
+            UpdateFilterSummary();
+        }
+
+        private void UpdateFilterSummary()
+        {
+            // Place to update any summary label if you add one (kept minimal here)
+        }
+
+        private void Search_Click(object sender, RoutedEventArgs e) => LoadPurchases();
+        private void Search_Executed(object sender, ExecutedRoutedEventArgs e) => LoadPurchases();
+
+        // ===== Load & filter list =====
+        private void LoadPurchases()
+        {
+            _purchases.Clear();
+
+            System.DateTime? fromUtc = FromDate.SelectedDate?.Date.ToUniversalTime();
+            System.DateTime? toUtc = ToDate.SelectedDate?.AddDays(1).Date.ToUniversalTime();
 
             using var db = new PosClientDbContext(_opts);
 
-            IQueryable<Purchase> q = db.Purchases.AsNoTracking();
+            // Base query: join Supplier; filter date range on CreatedAt or ReceivedAt
+            var q = db.Purchases.AsNoTracking()
+                    .Include(p => p.Supplier)
+                    .Where(p =>
+                        (!fromUtc.HasValue || (p.CreatedAtUtc >= fromUtc || p.ReceivedAtUtc >= fromUtc)) &&
+                        (!toUtc.HasValue || (p.CreatedAtUtc < toUtc || p.ReceivedAtUtc < toUtc))
+                    );
 
-            // outlet restriction (already wired earlier)
-            if (_outletIdFilter.HasValue)
-                q = q.Where(p => p.OutletId == _outletIdFilter.Value);
-
-            var purchases = await q
-                .Include(p => p.Supplier)   // keep/remove based on your model
-                .Include(p => p.Outlet)
-                .Include(p => p.Warehouse)
-                .Include(p => p.Lines)
-                .OrderByDescending(p => p.CreatedAtUtc)   // use your real date/Id field
-                .ToListAsync();
-
-            foreach (var p in purchases)
+            // Search box: doc no / supplier / vendor inv
+            var term = (SearchBox.Text ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(term))
             {
-                var destination =
-                    p.WarehouseId != null ? "Warehouse" :
-                    p.Outlet != null ? $"Outlet: {p.Outlet.Name}" :
-                    "Warehouse";
+                q = q.Where(p =>
+                    (p.DocNo ?? "").Contains(term) ||
+                    (p.VendorInvoiceNo ?? "").Contains(term) ||
+                    (p.Supplier != null && p.Supplier.Name.Contains(term))
+                );
+            }
 
-                var linesCount = p.Lines?.Count ?? 0;
-                var totalQty = p.Lines?.Sum(l => (decimal)l.Qty) ?? 0m;
-                var docNumber = p.Id.ToString();
+            // Materialize to apply UI checkboxes easily
+            var list = q.OrderByDescending(p => p.ReceivedAtUtc ?? p.CreatedAtUtc)
+                        .Select(p => new
+                        {
+                            p.Id,
+                            p.DocNo,
+                            Supplier = p.Supplier != null ? p.Supplier.Name : "",
+                            Ts = p.ReceivedAtUtc ?? p.CreatedAtUtc,
+                            p.Status,
+                            p.GrandTotal
+                        })
+                        .ToList();
 
-                // ✅ Robust supplier display text (handles nulls/whitespace gracefully)
-                var supplierName =
-                    !string.IsNullOrWhiteSpace(p.Supplier?.Name) ? p.Supplier!.Name.Trim()
-                    : (p.SupplierId > 0 ? $"Supplier #{p.SupplierId}" : "—");
+            bool wantFinal = ChkFinal.IsChecked == true;
+            bool wantDraft = ChkDraft.IsChecked == true;
+            bool wantVoided = ChkVoided.IsChecked == true;
+            bool onlyWithDoc = ChkOnlyWithDocNo.IsChecked == true;
 
-                _all.Add(new PurchaseRowVM
+            var rows = list
+                .Where(r =>
+                    ((r.Status == PurchaseStatus.Final && wantFinal) ||
+                     (r.Status == PurchaseStatus.Draft && wantDraft) ||
+                     (r.Status == PurchaseStatus.Voided && wantVoided))
+                    && (!onlyWithDoc || !string.IsNullOrWhiteSpace(r.DocNo))
+                )
+                .Select(r => new UiPurchaseRow
                 {
-                    Number = docNumber,
-                    Date = p.CreatedAtUtc,
-                    Supplier = supplierName,   // <- bind to this in XAML
-                    SupplierName = supplierName,   // <- used by your filter box
-                    Destination = destination,
-                    VendorInvoiceNo = p.VendorInvoiceNo,
+                    PurchaseId = r.Id,
+                    DocNoOrId = string.IsNullOrWhiteSpace(r.DocNo) ? $"#{r.Id}" : r.DocNo!,
+                    Supplier = string.IsNullOrWhiteSpace(r.Supplier) ? "—" : r.Supplier.Trim(),
+                    TsLocal = r.Ts.ToLocalTime().ToString("dd-MMM-yyyy HH:mm"),
+                    Status = r.Status.ToString(),
+                    GrandTotal = r.GrandTotal
+                });
 
-                    Lines = linesCount,
-                    ItemCount = linesCount,
+            foreach (var r in rows)
+                _purchases.Add(r);
 
-                    Subtotal = p.Subtotal,
-                    Discount = p.Discount,
-                    Tax = p.Tax,
-                    OtherCharges = p.OtherCharges,
-                    GrandTotal = p.GrandTotal,
+            HeaderText.Text = "Select a purchase to view lines.";
+            _lines.Clear();
 
-                    TotalQty = totalQty,
-                    Status = p.Status.ToString(),
-                    CreatedBy = p.CreatedBy
+            UpdateActions(null);
+        }
+
+        // ===== Selection → show lines =====
+        private void PurchasesGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            _lines.Clear();
+            if (PurchasesGrid.SelectedItem is not UiPurchaseRow sel)
+            {
+                HeaderText.Text = "";
+                UpdateActions(null);
+                return;
+            }
+
+            using var db = new PosClientDbContext(_opts);
+
+            // Load purchase + lines via service helper you added
+            var purchase = db.Purchases
+                .Include(p => p.Lines)
+                .First(p => p.Id == sel.PurchaseId);
+
+            HeaderText.Text =
+                $"Purchase {sel.DocNoOrId}  Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
+
+            // Load item/product meta to compose display name (like Sales)
+            var itemIds = purchase.Lines.Select(l => l.ItemId).Distinct().ToList();
+
+            var meta = (
+                from i in db.Items.AsNoTracking()
+                join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
+                from p in gp.DefaultIfEmpty()
+                where itemIds.Contains(i.Id)
+                select new
+                {
+                    i.Id,
+                    ItemName = i.Name,
+                    ProductName = p != null ? p.Name : null,
+                    i.Variant1Name,
+                    i.Variant1Value,
+                    i.Variant2Name,
+                    i.Variant2Value,
+                    i.Sku
+                }
+            ).ToList().ToDictionary(x => x.Id);
+
+            foreach (var line in purchase.Lines)
+            {
+                string display = $"Item #{line.ItemId}";
+                string sku = "";
+                if (meta.TryGetValue(line.ItemId, out var m))
+                {
+                    display = ProductNameComposer.Compose(
+                        m.ProductName, m.ItemName,
+                        m.Variant1Name, m.Variant1Value,
+                        m.Variant2Name, m.Variant2Value);
+                    sku = m.Sku ?? "";
+                }
+
+                _lines.Add(new UiLineRow
+                {
+                    ItemId = line.ItemId,
+                    Sku = sku,
+                    DisplayName = display,
+                    Qty = line.Qty,
+                    UnitCost = line.UnitCost,
+                    LineTotal = line.LineTotal
                 });
             }
 
+            UpdateActions(sel);
+        }
+
+        // ===== Actions visibility (bottom bar) =====
+        private void UpdateActions(UiPurchaseRow? sel)
+        {
+            // hide all by default
+            BtnAmend.Visibility = Visibility.Collapsed;
+            BtnVoidPurchase.Visibility = Visibility.Collapsed;
+            BtnReturnWith.Visibility = Visibility.Collapsed;
+            BtnReturnWithout.Visibility = Visibility.Visible; // independent like Sales
+            BtnReceive.Visibility = Visibility.Collapsed;
+
+            BtnAmendReturn.Visibility = Visibility.Collapsed;
+            BtnVoidReturn.Visibility = Visibility.Collapsed;
+
+            if (sel is null) return;
+
+            // Draft purchase: can Receive, Amend, Void
+            if (!sel.IsReturn && sel.Status == nameof(PurchaseStatus.Draft))
+            {
+                BtnReceive.Visibility = Visibility.Visible;
+                BtnAmend.Visibility = Visibility.Visible;
+                BtnVoidPurchase.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Final purchase: can Amend, Return With
+            if (!sel.IsReturn && sel.Status == nameof(PurchaseStatus.Final))
+            {
+                BtnAmend.Visibility = Visibility.Visible;        // if you support revisions
+                BtnReturnWith.Visibility = Visibility.Visible;   // return to supplier referencing this purchase
+                return;
+            }
+
+            // Final return: can Amend Return, Void Return
+            if (sel.IsReturn && sel.Status == nameof(PurchaseStatus.Final))
+            {
+                BtnAmendReturn.Visibility = Visibility.Visible;
+                BtnVoidReturn.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Voided docs: nothing (ReturnWithout stays visible globally)
         }
 
 
+        private UiPurchaseRow? Pick() => PurchasesGrid.SelectedItem as UiPurchaseRow;
+
+        // ===== Bottom buttons (click) =====
+        private void BtnHeld_Click(object sender, RoutedEventArgs e) => OpenHeldPicker();
+
+        private void Receive_Click(object sender, RoutedEventArgs e) => Receive_Executed(sender, null!);
+        private void Amend_Click(object sender, RoutedEventArgs e) => Amend_Executed(sender, null!);
+        private void Return_Click(object sender, RoutedEventArgs e) => Return_Executed(sender, null!);
+        private void Void_Click(object sender, RoutedEventArgs e) => Void_Executed(sender, null!);
+
         // ===== Command handlers =====
-
-        private void Always_CanExecute(object? sender, CanExecuteRoutedEventArgs e) => e.CanExecute = true;
-
-        private void RequireSelection_CanExecute(object? sender, CanExecuteRoutedEventArgs e)
+        private void Receive_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            e.CanExecute = ResultsGrid?.SelectedItem is PurchaseRowVM;
+            var sel = Pick();
+            if (sel == null) { MessageBox.Show("Select a purchase."); return; }
+            if (sel.Status != nameof(PurchaseStatus.Draft)) { MessageBox.Show("Only DRAFT purchases can be received."); return; }
+
+            // TODO: open your Receive/Finalize dialog (collect OnReceive payments if any)
+            MessageBox.Show($"Receive {sel.DocNoOrId}", "Receive");
+
+            LoadPurchases();
         }
 
         private void Amend_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            if (ResultsGrid.SelectedItem is not PurchaseRowVM row) return;
-            // TODO: open PurchaseWindow in amend mode (like Sales → InvoiceCenterWindow flow)
-            MessageBox.Show($"Amend purchase {row.Number}", "Amend");
+            var sel = Pick();
+            if (sel == null) { MessageBox.Show("Select a purchase."); return; }
+
+            // TODO: open your editor window with PurchaseId = sel.PurchaseId
+            MessageBox.Show($"Amend {sel.DocNoOrId}", "Amend");
+
+            LoadPurchases();
         }
 
-        private void ReturnWith_Executed(object sender, ExecutedRoutedEventArgs e)
+        private void Return_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            if (ResultsGrid.SelectedItem is not PurchaseRowVM row) return;
-            // TODO: open Return With workflow
-            MessageBox.Show($"Return with purchase {row.Number}", "Return With");
+            var sel = Pick();
+            if (sel == null) { MessageBox.Show("Select a purchase."); return; }
+            if (sel.Status != nameof(PurchaseStatus.Final)) { MessageBox.Show("Only FINAL purchases can have returns."); return; }
+
+            // TODO: open Purchase Return flow
+            MessageBox.Show($"Return for {sel.DocNoOrId}", "Return");
+
+            LoadPurchases();
         }
 
-        private void AmendReturn_Executed(object sender, ExecutedRoutedEventArgs e)
+        private void Void_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            if (ResultsGrid.SelectedItem is not PurchaseRowVM row) return;
-            // TODO: open Amend Return window
-            MessageBox.Show($"Amend return for {row.Number}", "Amend Return");
+            var sel = Pick();
+            if (sel == null) { MessageBox.Show("Select a purchase."); return; }
+            if (sel.Status != nameof(PurchaseStatus.Draft)) { MessageBox.Show("Only DRAFT purchases can be voided."); return; }
+
+            var reason = Microsoft.VisualBasic.Interaction.InputBox(
+                $"Void draft {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong entry");
+            if (string.IsNullOrWhiteSpace(reason)) return;
+
+            using var db = new PosClientDbContext(_opts);
+            var p = db.Purchases.First(x => x.Id == sel.PurchaseId);
+            if (p.Status != PurchaseStatus.Draft) { MessageBox.Show("Only DRAFT can be voided."); return; }
+
+            p.Status = PurchaseStatus.Voided;
+            p.UpdatedAtUtc = System.DateTime.UtcNow;
+            p.UpdatedBy = "system"; // replace with current user
+            db.SaveChanges();
+
+            MessageBox.Show("Purchase voided.");
+            LoadPurchases();
         }
 
-        private void VoidReturn_Executed(object sender, ExecutedRoutedEventArgs e)
+        private void Held_Executed(object sender, ExecutedRoutedEventArgs e) => OpenHeldPicker();
+
+        private async void OpenHeldPicker()
         {
-            if (ResultsGrid.SelectedItem is not PurchaseRowVM row) return;
-            // TODO: permissions/confirm + void logic
-            MessageBox.Show($"Void return for {row.Number}", "Void Return");
-        }
-
-        private void Refresh_Executed(object sender, ExecutedRoutedEventArgs e) => RunSearch();
-
-        private void Export_Executed(object sender, ExecutedRoutedEventArgs e)
-        {
-            // TODO: export ResultsGrid.ItemsSource to CSV/Excel
-            MessageBox.Show("Export not implemented yet.", "Export");
-        }
-
-        // ===== UI events =====
-
-        private void SupplierPicker_Click(object sender, RoutedEventArgs e)
-        {
-            // TODO: open supplier picker dialog and set SupplierSearchBox.Text
-            MessageBox.Show("Supplier picker not implemented yet.", "Supplier");
-        }
-
-        private void SearchBtn_Click(object sender, RoutedEventArgs e) => RunSearch();
-
-   
-
-
-        // ===== Filtering & Binding =====
-
-        private void RunSearch()
-        {
-            var q = SupplierSearchBox.Text?.Trim() ?? "";
-            var no = PurchaseNoBox.Text?.Trim() ?? "";
-            var from = FromDateBox.SelectedDate;
-            var to = ToDateBox.SelectedDate?.Date.AddDays(1).AddTicks(-1);
-            var status = (StatusBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Any";
-
-            var filtered = _all.AsEnumerable();
-
-            if (!string.IsNullOrWhiteSpace(q))
-                filtered = filtered.Where(r => r.SupplierName.Contains(q, StringComparison.OrdinalIgnoreCase));
-
-            if (!string.IsNullOrWhiteSpace(no))
-                filtered = filtered.Where(r => r.Number.Contains(no, StringComparison.OrdinalIgnoreCase));
-
-            if (from.HasValue)
-                filtered = filtered.Where(r => r.Date >= from.Value);
-
-            if (to.HasValue)
-                filtered = filtered.Where(r => r.Date <= to.Value);
-
-            if (!string.Equals(status, "Any", StringComparison.OrdinalIgnoreCase))
-                filtered = filtered.Where(r => string.Equals(r.Status, status, StringComparison.OrdinalIgnoreCase));
-
-            BindResults(filtered.ToList());
-        }
-
-        private void BindResults(IList<PurchaseRowVM> rows)
-        {
-            ResultsGrid.ItemsSource = rows;
-            CountLabel.Text = $"{rows.Count} records";
-
-            var totalQty = rows.Sum(r => r.TotalQty);
-            var grand = rows.Sum(r => r.GrandTotal);
-
-            TotalQtyLabel.Text = totalQty.ToString("N2");
-            GrandTotalLabel.Text = grand.ToString("N2");
-        }
-
-        private void ResultsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            if (ResultsGrid.SelectedItem is PurchaseRowVM row) HandleAmend(row);
-        }
-
-        private void HandleAmend(PurchaseRowVM row)
-        {
-            // TODO: open PurchaseEditorWindow for row.Number
-            MessageBox.Show($"Amend purchase {row.Number}", "Amend");
-        }
-
-        private PurchaseRowVM? SelectedRow => ResultsGrid?.SelectedItem as PurchaseRowVM;
-
-        private static bool IsStatus(string? s, params string[] values)
-    => values.Any(v => string.Equals(s, v, StringComparison.OrdinalIgnoreCase));
-
-
-        // === CmdVoid ===
-        private void CmdVoid_CanExecute(object sender, CanExecuteRoutedEventArgs e)
-        {
-            e.CanExecute = SelectedRow != null && IsStatus(SelectedRow.Status, "Draft");
-        }
-        private void CmdVoid_Executed(object sender, ExecutedRoutedEventArgs e)
-        {
-            if (SelectedRow == null) return;
-
-            if (MessageBox.Show($"Void draft {SelectedRow.Number}?", "Confirm",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            var picker = new HeldPurchasesWindow(_opts) { Owner = this };
+            if (picker.ShowDialog() == true && picker.SelectedPurchaseId.HasValue)
             {
-                // TODO: mark void (audit/log)
-                RunSearch();
+                // keep this context alive while the editor window is open
+                var db = new PosClientDbContext(_opts);
+                try
+                {
+                    var svc = new PurchasesService(db);
+                    var draft = await svc.LoadWithLinesAsync(picker.SelectedPurchaseId.Value);
+
+                    var win = new PurchaseWindow(db) { Owner = this };   // ⬅️ pass db
+                    win.LoadDraft(draft);                                 // your loader
+                    win.ShowDialog();
+                }
+                finally
+                {
+                    db.Dispose();
+                }
+
+                LoadPurchases(); // refresh list after editor closes
             }
         }
 
 
-        // === CmdReceive ===
-        private void CmdReceive_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+
+        private void UpdateHeldButtonVisibility()
         {
-            e.CanExecute = SelectedRow != null && IsStatus(SelectedRow.Status, "Draft");
-        }
-        private void CmdReceive_Executed(object sender, ExecutedRoutedEventArgs e)
-        {
-            if (SelectedRow == null) return;
-
-            // TODO: finalize/receive + stock IN
-            MessageBox.Show($"Receive purchase {SelectedRow.Number}", "Receive", MessageBoxButton.OK, MessageBoxImage.Information);
-
-            RunSearch();
-        }
-
-
-        // === CmdReturn ===
-        private void CmdReturn_CanExecute(object sender, CanExecuteRoutedEventArgs e)
-        {
-            e.CanExecute = SelectedRow != null && IsStatus(SelectedRow.Status, "Received");
-        }
-        private void CmdReturn_Executed(object sender, ExecutedRoutedEventArgs e)
-        {
-            if (SelectedRow == null) return;
-
-            // TODO: open Purchase Return flow
-            MessageBox.Show($"Return against {SelectedRow.Number}", "Return", MessageBoxButton.OK, MessageBoxImage.Information);
-
-            RunSearch();
+            try
+            {
+                using var db = new PosClientDbContext(_opts);
+                bool anyHeld = db.Purchases.AsNoTracking()
+                                    .Any(p => p.Status == PurchaseStatus.Draft);
+                if (BtnHeld != null)
+                    BtnHeld.Visibility = anyHeld ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch
+            {
+                if (BtnHeld != null) BtnHeld.Visibility = Visibility.Collapsed;
+            }
         }
 
+        private void AmendReturn_Click(object sender, RoutedEventArgs e) => Return_Executed(sender, null!); // or dedicated flow
+        private void VoidReturn_Click(object sender, RoutedEventArgs e) => Void_Executed(sender, null!);    // or dedicated flow
 
-        
+        private void VoidPurchase_Click(object sender, RoutedEventArgs e) => Void_Executed(sender, null!);
+
+        private void ReturnWith_Click(object sender, RoutedEventArgs e) => Return_Executed(sender, null!);  // open “Return With” dialog (select base purchase)
+        private void ReturnWithout_Click(object sender, RoutedEventArgs e)
+        {
+            // open “Return Without” dialog (free-form return to supplier)
+            MessageBox.Show("Return without base purchase — TODO wire dialog");
+        }
+
     }
 }

@@ -19,10 +19,11 @@ namespace Pos.Persistence.Services
         {
             var lineList = NormalizeAndCompute(lines);
 
-            // (re)compute header totals
             ComputeHeaderTotals(draft, lineList);
 
             draft.Status = PurchaseStatus.Draft;
+            draft.DocNo = null;                    // ⬅️ never number a Draft
+            draft.ReceivedAtUtc = null;            // ⬅️ Drafts are not “received”
             draft.UpdatedAtUtc = DateTime.UtcNow;
             draft.UpdatedBy = user;
 
@@ -35,17 +36,18 @@ namespace Pos.Persistence.Services
             }
             else
             {
-                // Load + replace lines
                 var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id);
 
-                // update header fields you allow in Draft
+                // header fields allowed in Draft
                 existing.SupplierId = draft.SupplierId;
-                existing.TargetType = draft.TargetType;     // Outlet/Warehouse
+                existing.TargetType = draft.TargetType;
                 existing.OutletId = draft.OutletId;
                 existing.WarehouseId = draft.WarehouseId;
                 existing.PurchaseDate = draft.PurchaseDate;
                 existing.VendorInvoiceNo = draft.VendorInvoiceNo;
-                existing.DocNo = draft.DocNo;
+
+                existing.DocNo = null;
+                existing.ReceivedAtUtc = null;
 
                 existing.Subtotal = draft.Subtotal;
                 existing.Discount = draft.Discount;
@@ -57,16 +59,46 @@ namespace Pos.Persistence.Services
                 existing.UpdatedAtUtc = draft.UpdatedAtUtc;
                 existing.UpdatedBy = draft.UpdatedBy;
 
+                // clear old lines
                 _db.PurchaseLines.RemoveRange(existing.Lines);
-                await _db.SaveChangesAsync(); // ensure deletes are flushed before insert
+                await _db.SaveChangesAsync();
+
+                // 🔑 re-attach new lines properly
+                foreach (var l in lineList)
+                {
+                    l.Id = 0;                   // force EF to insert
+                    l.PurchaseId = existing.Id; // make sure FK is set
+                    l.Purchase = null;          // don’t carry over detached ref
+                }
                 existing.Lines = lineList;
 
-                draft = existing; // return the tracked instance
+                draft = existing;
             }
+
 
             await _db.SaveChangesAsync();
             return draft;
         }
+
+        private async Task<string> EnsurePurchaseNumberAsync(Purchase p, CancellationToken ct)
+        {
+            // Simple safe fallback: if DocNo already set, keep it.
+            if (!string.IsNullOrWhiteSpace(p.DocNo)) return p.DocNo!;
+
+            // Minimal, local-only sequence: PO-YYYYMMDD-### (per day)
+            var today = DateTime.UtcNow.Date;
+            var prefix = $"PO-{today:yyyyMMdd}-";
+
+            // Count existing Finals for today and +1 (works fine per-terminal/offline; replace with series later)
+            var countToday = await _db.Purchases
+                .AsNoTracking()
+                .CountAsync(x => x.Status == PurchaseStatus.Final
+                              && x.ReceivedAtUtc >= today
+                              && x.ReceivedAtUtc < today.AddDays(1), ct);
+
+            return prefix + (countToday + 1).ToString("D3");
+        }
+
 
         /// <summary>
         /// Finalize (Receive) a purchase: sets Status=Final, stamps ReceivedAtUtc,
@@ -88,6 +120,7 @@ namespace Pos.Persistence.Services
             {
                 model.CreatedAtUtc = DateTime.UtcNow;
                 model.CreatedBy = user;
+                model.DocNo = await EnsurePurchaseNumberAsync(model, CancellationToken.None);   // ⬅️ assign number
                 model.Lines = lineList;
                 _db.Purchases.Add(model);
             }
@@ -95,14 +128,17 @@ namespace Pos.Persistence.Services
             {
                 var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == model.Id);
 
-                // update all allowed header fields for Finalization
                 existing.SupplierId = model.SupplierId;
                 existing.TargetType = model.TargetType;
                 existing.OutletId = model.OutletId;
                 existing.WarehouseId = model.WarehouseId;
                 existing.PurchaseDate = model.PurchaseDate;
                 existing.VendorInvoiceNo = model.VendorInvoiceNo;
-                existing.DocNo = model.DocNo;
+
+                // Assign number if missing (allows pre-assigned numbers from UI if you want)
+                existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
+                    ? await EnsurePurchaseNumberAsync(existing, CancellationToken.None)          // ⬅️ assign number
+                    : model.DocNo;
 
                 existing.Subtotal = model.Subtotal;
                 existing.Discount = model.Discount;
@@ -117,18 +153,26 @@ namespace Pos.Persistence.Services
 
                 _db.PurchaseLines.RemoveRange(existing.Lines);
                 await _db.SaveChangesAsync();
-                existing.Lines = lineList;
 
+                foreach (var l in lineList)
+                {
+                    l.Id = 0;
+                    l.PurchaseId = existing.Id;
+                    l.Purchase = null;
+                }
+                existing.Lines = lineList;
+                
                 model = existing;
             }
 
             await _db.SaveChangesAsync();
 
-            // NOTE: Stock ledger posting (StockEntry) will be added in the next step,
-            // once we align with your exact StockEntry fields.
+            // ⬇️ Stock ledger posting will hook in here later (Final only)
+            // await _stock.PostPurchaseAsync(model, ct); (when you add it)
 
             return model;
         }
+
 
         /// <summary>
         /// Auto-pick last UnitCost/Discount/TaxRate from latest FINAL purchase line of this item.
@@ -150,35 +194,84 @@ namespace Pos.Persistence.Services
 
         // (Optional convenience) add/record a payment against a purchase
         public async Task<PurchasePayment> AddPaymentAsync(
-            int purchaseId,
-            PurchasePaymentKind kind,
-            TenderMethod method,
-            decimal amount,
-            string? note,
-            int outletId,
-            int supplierId,
-            int? tillSessionId,
-            int? counterId,
-            string user)
-                {
-            if (amount <= 0) throw new InvalidOperationException("Amount must be > 0");
+    int purchaseId,
+    PurchasePaymentKind kind,
+    TenderMethod method,
+    decimal amount,
+    string? note,
+    int outletId,
+    int supplierId,
+    int? tillSessionId,
+    int? counterId,
+    string user)
+        {
+            // ----- Load & basic guards -----
+            var purchase = await _db.Purchases
+                .Include(p => p.Payments)
+                .FirstAsync(p => p.Id == purchaseId);
 
-            var purchase = await _db.Purchases.Include(p => p.Payments).FirstAsync(p => p.Id == purchaseId);
-            if (purchase.Status == PurchaseStatus.Voided) throw new InvalidOperationException("Cannot pay voided purchase");
+            if (purchase.Status == PurchaseStatus.Voided)
+                throw new InvalidOperationException("Cannot pay a voided purchase.");
 
+            var amt = Math.Round(amount, 2);
+            if (amt <= 0)
+                throw new InvalidOperationException("Amount must be > 0.");
+
+            // ----- Business rules by status -----
+            // Draft (Held): only ADVANCE allowed (cash actually taken, but invoice not posted)
+            // Final (Posted): ON_RECEIVE and ADJUSTMENT allowed; ADVANCE is not logical anymore
+            switch (purchase.Status)
+            {
+                case PurchaseStatus.Draft:
+                    if (kind != PurchasePaymentKind.Advance)
+                        throw new InvalidOperationException("Only Advance payments are allowed on held (draft) purchases.");
+                    break;
+
+                case PurchaseStatus.Final:
+                    if (kind == PurchasePaymentKind.Advance)
+                        throw new InvalidOperationException("Use OnReceive or Adjustment for finalized purchases.");
+                    break;
+
+                default:
+                    // Revised behaves like Final for payments, but keep it simple for now:
+                    // If you want different behavior for Revised, branch here.
+                    break;
+            }
+
+            // Prevent overpayment
             var currentPaid = purchase.Payments.Sum(p => p.Amount);
-            if (currentPaid + amount > purchase.GrandTotal)
+            if (currentPaid + amt > purchase.GrandTotal)
                 throw new InvalidOperationException("Payment exceeds total.");
+
+            // Ensure consistent Supplier/Outlet on the payment row
+            var paySupplierId = purchase.SupplierId; // trust the purchase
+            int payOutletId;
+
+            if (purchase.TargetType == StockTargetType.Outlet && purchase.OutletId is int po && po > 0)
+            {
+                payOutletId = po; // tie to the outlet that received stock
+            }
+            else
+            {
+                // For Warehouse-target purchases (or if outlet not on the purchase),
+                // fall back to the outlet explicitly passed for the cash/till.
+                if (outletId <= 0)
+                    throw new InvalidOperationException("Outlet is required for recording the payment.");
+                payOutletId = outletId;
+            }
+
+            // ----- Atomic write: payment + optional cash ledger + snapshots -----
+            using var tx = await _db.Database.BeginTransactionAsync();
 
             var pay = new PurchasePayment
             {
-                PurchaseId = purchaseId,
-                SupplierId = supplierId,
-                OutletId = outletId,
+                PurchaseId = purchase.Id,
+                SupplierId = paySupplierId,
+                OutletId = payOutletId,
                 TsUtc = DateTime.UtcNow,
                 Kind = kind,
                 Method = method,
-                Amount = Math.Round(amount, 2),
+                Amount = amt,
                 Note = note,
                 CreatedAtUtc = DateTime.UtcNow,
                 CreatedBy = user
@@ -187,15 +280,16 @@ namespace Pos.Persistence.Services
             _db.PurchasePayments.Add(pay);
             await _db.SaveChangesAsync();
 
+            // Cash ledger only for cash movements
             if (method == TenderMethod.Cash)
             {
                 var cash = new CashLedger
                 {
-                    OutletId = outletId,
+                    OutletId = payOutletId,
                     CounterId = counterId,
                     TillSessionId = tillSessionId,
                     TsUtc = DateTime.UtcNow,
-                    Delta = -pay.Amount,
+                    Delta = -amt, // cash leaves the drawer to pay supplier
                     RefType = "PurchasePayment",
                     RefId = pay.Id,
                     Note = note,
@@ -206,12 +300,16 @@ namespace Pos.Persistence.Services
                 await _db.SaveChangesAsync();
             }
 
-            purchase.CashPaid = purchase.Payments.Sum(p => p.Amount);
-            purchase.CreditDue = Math.Max(0, purchase.GrandTotal - purchase.CashPaid);
+            // Refresh snapshots
+            var newPaid = purchase.Payments.Sum(p => p.Amount); // includes the one we just added
+            purchase.CashPaid = newPaid;
+            purchase.CreditDue = Math.Max(0, purchase.GrandTotal - newPaid);
             await _db.SaveChangesAsync();
 
+            await tx.CommitAsync();
             return pay;
         }
+
 
         public async Task<(Purchase purchase, List<PurchasePayment> payments)> GetWithPaymentsAsync(int purchaseId)
         {
@@ -296,5 +394,33 @@ namespace Pos.Persistence.Services
                     throw new InvalidOperationException("Warehouse required.");
             }
         }
+
+        // ---------- Convenience Queries for UI Pickers ----------
+
+        public Task<List<Purchase>> ListHeldAsync()
+            => _db.Purchases
+              .AsNoTracking()
+              .Include(p => p.Supplier)   // <- keep this!
+              .Where(p => p.Status == PurchaseStatus.Draft)
+              .OrderByDescending(p => p.PurchaseDate)
+              .ToListAsync();
+
+
+        public Task<List<Purchase>> ListPostedAsync()
+            => _db.Purchases
+                  .AsNoTracking()
+                  .Include(p => p.Supplier)
+                  .Where(p => p.Status == PurchaseStatus.Final)
+                  .OrderByDescending(p => p.ReceivedAtUtc ?? p.PurchaseDate)
+                  .ToListAsync();
+
+        public Task<Purchase> LoadWithLinesAsync(int id)
+            => _db.Purchases
+                  .Include(p => p.Lines)
+                  .Include(p => p.Supplier)
+                  .FirstAsync(p => p.Id == id);
+
+
+
     }
 }
