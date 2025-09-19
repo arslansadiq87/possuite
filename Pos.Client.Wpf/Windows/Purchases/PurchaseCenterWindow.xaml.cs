@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Microsoft.EntityFrameworkCore;
+using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -34,6 +37,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
     public partial class PurchaseCenterWindow : Window
     {
+        private readonly DbContextOptions<PosClientDbContext> _dbOptions;
+        private readonly ObservableCollection<PurchaseRowVM> _rows = new();
+
+
         // Row VM - mirror your Sales VM shape
         public class PurchaseRowVM
         {

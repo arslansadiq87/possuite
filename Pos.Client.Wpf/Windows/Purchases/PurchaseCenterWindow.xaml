@@ -91,15 +91,18 @@
                   Margin="8"
                   MouseDoubleClick="ResultsGrid_MouseDoubleClick">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="No."       Binding="{Binding Number}" Width="120"/>
-                <DataGridTextColumn Header="Date/Time" Binding="{Binding Date, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="150"/>
-                <DataGridTextColumn Header="Supplier"  Binding="{Binding SupplierName}" Width="*"/>
-                <DataGridTextColumn Header="Dest."     Binding="{Binding Destination}" Width="160"/>
-                <DataGridTextColumn Header="Items"     Binding="{Binding ItemCount}" Width="80"/>
-                <DataGridTextColumn Header="Qty"       Binding="{Binding TotalQty, StringFormat=\{0:N2\}}" Width="100"/>
-                <DataGridTextColumn Header="Grand"     Binding="{Binding GrandTotal, StringFormat=\{0:N2\}}" Width="120"/>
-                <DataGridTextColumn Header="Status"    Binding="{Binding Status}" Width="110"/>
-                <DataGridTextColumn Header="By"        Binding="{Binding CreatedBy}" Width="120"/>
+                <DataGridTextColumn Header="Number" Binding="{Binding Number}" Width="70"/>
+                <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat={}{0:dd-MMM-yyyy}}" Width="120"/>
+                <DataGridTextColumn Header="Supplier" Binding="{Binding Supplier}" Width="200"/>
+                <DataGridTextColumn Header="Destination" Binding="{Binding Destination}" Width="160"/>
+                <DataGridTextColumn Header="Vendor Inv #" Binding="{Binding VendorInvoiceNo}" Width="140"/>
+                <DataGridTextColumn Header="Lines" Binding="{Binding Lines}" Width="70"/>
+                <DataGridTextColumn Header="Subtotal" Binding="{Binding Subtotal, StringFormat=N2}" Width="110"/>
+                <DataGridTextColumn Header="Discount" Binding="{Binding Discount, StringFormat=N2}" Width="110"/>
+                <DataGridTextColumn Header="Tax" Binding="{Binding Tax, StringFormat=N2}" Width="100"/>
+                <DataGridTextColumn Header="Other" Binding="{Binding OtherCharges, StringFormat=N2}" Width="100"/>
+                <DataGridTextColumn Header="Grand" Binding="{Binding GrandTotal, StringFormat=N2}" Width="120"/>
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100"/>
             </DataGrid.Columns>
         </DataGrid>
 
