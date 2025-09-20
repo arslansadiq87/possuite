@@ -2,17 +2,20 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations
+namespace Pos.Persistence.Migrations.Client
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250920143831_UserRoles_Init5")]
+    partial class UserRoles_Init5
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -184,65 +187,6 @@ namespace Pos.Persistence.Migrations
                     b.HasIndex("OutletId");
 
                     b.ToTable("Counters");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.CounterBinding", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CounterId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("LastSeenUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("MachineId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("MachineName")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("OutletId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("RowVersion")
-                        .HasColumnType("BLOB");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CounterId")
-                        .IsUnique();
-
-                    b.HasIndex("MachineId")
-                        .IsUnique();
-
-                    b.HasIndex("OutletId");
-
-                    b.ToTable("CounterBindings", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.CounterSequence", b =>
@@ -1198,25 +1142,6 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Outlet");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.CounterBinding", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.Counter", "Counter")
-                        .WithMany("CounterBindings")
-                        .HasForeignKey("CounterId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
-                        .WithMany("CounterBindings")
-                        .HasForeignKey("OutletId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Counter");
-
-                    b.Navigation("Outlet");
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.Item", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.Brand", "Brand")
@@ -1371,15 +1296,8 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Products");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.Counter", b =>
-                {
-                    b.Navigation("CounterBindings");
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.Outlet", b =>
                 {
-                    b.Navigation("CounterBindings");
-
                     b.Navigation("Counters");
 
                     b.Navigation("UserOutlets");

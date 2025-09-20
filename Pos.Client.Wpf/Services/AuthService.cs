@@ -1,8 +1,8 @@
-﻿//Pos.Client.Wpf/Services/AuthService.cs
-using System.Text;
+﻿using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Persistence;
+using Pos.Domain.Entities; // <-- add
 
 namespace Pos.Client.Wpf.Services
 {
@@ -13,6 +13,9 @@ namespace Pos.Client.Wpf.Services
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         public AuthService(IDbContextFactory<PosClientDbContext> dbf) => _dbf = dbf;
+
+        // NEW: cache the signed-in user (for post-login consumers)
+        public User? CurrentUser { get; private set; }   // <-- add
 
         public async Task<(bool ok, string? error)> LoginAsync(string username, string password)
         {
@@ -26,7 +29,12 @@ namespace Pos.Client.Wpf.Services
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
                 return (false, "Wrong password.");
 
+            // NEW: remember who logged in
+            CurrentUser = user;                           // <-- add
             return (true, null);
         }
+
+        // (Optional) logout helper
+        public void Logout() => CurrentUser = null;
     }
 }

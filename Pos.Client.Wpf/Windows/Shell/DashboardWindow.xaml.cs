@@ -1,5 +1,4 @@
-﻿//Pos.Client.Wpf/Windows/Shell/DashboardWindow.cs
-using System.Windows;
+﻿using System.Windows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Windows.Purchases;
@@ -7,36 +6,39 @@ using Pos.Client.Wpf.Windows.Sales;
 using Pos.Persistence;
 using Pos.Client.Wpf.Services;
 
-
 namespace Pos.Client.Wpf.Windows.Shell
 {
     public partial class DashboardWindow : Window
     {
-        private readonly DbContextOptions<PosClientDbContext> _opts;
+        private readonly DashboardVm _vm;
 
         public DashboardWindow()
         {
             InitializeComponent();
-            _opts = Db.ClientOptions; // see Db helper below
 
+            // Build a VM from DI and set DataContext
+            var dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            var st = App.Services.GetRequiredService<AppState>();
+            _vm = new DashboardVm(dbf, st);
+            DataContext = _vm;
+
+            // Refresh when the window loads
+            Loaded += async (_, __) => await _vm.RefreshAsync();
         }
-
 
         private void NewSale_Click(object s, RoutedEventArgs e)
         {
             var win = App.Services.GetRequiredService<SaleInvoiceWindow>();
             win.Owner = this;
             win.Show();
-            // later: open Sales/SaleInvoiceWindow
-            //MessageBox.Show("Sale window to be wired in Step 2", "Info");
         }
 
         private void NewPurchase_Click(object sender, RoutedEventArgs e)
         {
-            // however you currently build your DbContext (DI or manual)
-            var db = /* resolve or create */ new PosClientDbContext(
-                new Microsoft.EntityFrameworkCore.DbContextOptions<PosClientDbContext>());
-            new PurchaseWindow(db) { Owner = this }.ShowDialog();
+            // Use DI — your manual 'new PosClientDbContext(new DbContextOptions<...>())' was wrong
+            var w = App.Services.GetRequiredService<PurchaseWindow>();
+            w.Owner = this;
+            w.ShowDialog();
         }
 
         private void OpenProductsItems_Click(object s, RoutedEventArgs e)
@@ -54,6 +56,9 @@ namespace Pos.Client.Wpf.Windows.Shell
             var w = App.Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
             w.Owner = this;
             w.ShowDialog();
+
+            // After assigning a counter, refresh the banner
+            _ = _vm.RefreshAsync();
         }
         private void OpenUsers_Click(object s, RoutedEventArgs e)
         {
@@ -66,7 +71,5 @@ namespace Pos.Client.Wpf.Windows.Shell
             var w = new Pos.Client.Wpf.Windows.Admin.CustomersWindow();
             w.ShowDialog();
         }
-
-      
     }
 }

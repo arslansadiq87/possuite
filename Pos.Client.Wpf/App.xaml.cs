@@ -37,11 +37,14 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
 
+            // NEW: machine/counter DI (you added these earlier)
+            sc.AddSingleton<IMachineIdentityService, MachineIdentityService>();
+            sc.AddScoped<CounterBindingService>();
+
             // 4) Windows (register them so we can resolve via DI)
             sc.AddTransient<LoginWindow>();
             sc.AddTransient<DashboardWindow>();
             sc.AddTransient<SaleInvoiceWindow>();
-            // NEW: admin & master windows
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UsersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UserOutletAssignmentsWindow>();
@@ -49,7 +52,6 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.SuppliersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.CustomersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseWindow>();
-
 
             Services = sc.BuildServiceProvider();
 
@@ -79,7 +81,7 @@ namespace Pos.Client.Wpf
 
             // App.xaml.cs  (inside OnStartup, right before showing login)
             var oldMode = this.ShutdownMode;
-            this.ShutdownMode = ShutdownMode.OnExplicitShutdown;   // <-- prevent auto-shutdown
+            this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             var login = Services.GetRequiredService<LoginWindow>();
             var ok = login.ShowDialog() == true;
@@ -88,6 +90,87 @@ namespace Pos.Client.Wpf
                 Shutdown();
                 return;
             }
+
+            // NEW: copy the signed-in user into AppState so bindings have a value
+            var auth = App.Services.GetRequiredService<AuthService>();
+            var stForUser = App.Services.GetRequiredService<AppState>();
+            if (auth?.CurrentUser != null)
+            {
+                stForUser.CurrentUserId = auth.CurrentUser.Id;
+                stForUser.CurrentUserName = string.IsNullOrWhiteSpace(auth.CurrentUser.DisplayName)
+                    ? auth.CurrentUser.Username
+                    : auth.CurrentUser.DisplayName;
+            }
+            else
+            {
+                // Fallback so UI isn’t blank even if AuthService didn’t populate yet
+                stForUser.CurrentUserId = stForUser.CurrentUserId > 0 ? stForUser.CurrentUserId : 0;
+                stForUser.CurrentUserName = string.IsNullOrWhiteSpace(stForUser.CurrentUserName) ? "admin" : stForUser.CurrentUserName;
+            }
+            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            // HYDRATE AppState from the current PC's counter binding.
+            // If not bound, open the Outlets & Counters window so the user can assign now.
+            try
+            {
+                var binder = Services.GetRequiredService<CounterBindingService>();
+                var binding = binder.GetCurrentBinding();
+
+                if (binding == null)
+                {
+                    // No owner — the login window is gone and MainWindow isn't set yet.
+                    var manage = Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
+                    manage.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    manage.ShowInTaskbar = true; // since there's no main window yet
+
+                    MessageBox.Show(
+                        "This PC is not assigned to any counter yet.\n\n" +
+                        "Open the outlet, select a counter, and click 'Assign This PC'. Then close the window.",
+                        "Counter Assignment Required",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    try
+                    {
+                        // Show modally to block until user closes it
+                        manage.ShowDialog();
+                    }
+                    catch (ArgumentException aex)
+                    {
+                        // Safety: if anything odd happens showing the dialog, surface the reason
+                        MessageBox.Show("Could not open Outlets & Counters window:\n\n" + aex.Message,
+                                        "Window Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Shutdown();
+                        return;
+                    }
+
+                    // Try again after the window closes
+                    binding = binder.GetCurrentBinding();
+                    if (binding == null)
+                    {
+                        MessageBox.Show(
+                            "No counter assignment was made.\n\n" +
+                            "The app will exit. Open Admin → Outlets & Counters to assign later.",
+                            "No Counter Assigned",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        Shutdown();
+                        return;
+                    }
+                }
+
+                // Success: lock AppState to bound outlet+counter
+                var st = Services.GetRequiredService<AppState>(); // or AppState.Current
+                st.CurrentOutletId = binding.OutletId;
+                st.CurrentCounterId = binding.CounterId;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to resolve counter binding:\n\n" + ex.Message,
+                                "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown();
+                return;
+            }
+
+
+            // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
             var dash = Services.GetRequiredService<DashboardWindow>();
             MainWindow = dash;

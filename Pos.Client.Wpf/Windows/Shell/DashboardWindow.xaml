@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="POS — Dashboard" Height="720" Width="1080" WindowStartupLocation="CenterScreen">
     <DockPanel>
+        <!-- Top toolbar (unchanged) -->
         <ToolBar DockPanel.Dock="Top">
             <Button Content="New Sale" Click="NewSale_Click"/>
             <Separator/>
@@ -14,56 +15,64 @@
             <Button Content="Users" Click="OpenUsers_Click"/>
             <Button Content="Customers" Click="OpenCustomers_Click"/>
             <Separator/>
-
         </ToolBar>
 
+        <!-- NEW bottom status bar -->
+        <StatusBar DockPanel.Dock="Bottom" Background="#f2f6ff" Padding="6">
+            <StatusBarItem BorderThickness="0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: outlet / counter / till status (names) -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding OutletName}" FontWeight="SemiBold"/>
+                        <TextBlock Text=" · " />
+                        <TextBlock Text="{Binding CounterName}"/>
+                        <TextBlock Text=" · " />
+                        <TextBlock Text="{Binding TillStatus}"/>
+                    </StackPanel>
+
+                    <!-- Middle: connectivity -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0">
+                        <TextBlock Text="{Binding OnlineText}" />
+                        <TextBlock Text=" | " Margin="4,0"/>
+                        <TextBlock Text="{Binding LastSyncText}" />
+                    </StackPanel>
+
+                    <!-- Right: user (names only). IDs available on hover -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                        ToolTip="{Binding CurrentOutletId, StringFormat=OutletId: {0}}">
+                        <TextBlock Text="User: " FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding CurrentUserName}"/>
+                        
+                        <TextBlock Text="   •   Outlet: " FontWeight="SemiBold" Margin="8,0,0,0"/>
+                        <TextBlock Text="{Binding OutletName}"/>
+                        <TextBlock Text="   •   Counter: " FontWeight="SemiBold" Margin="8,0,0,0"/>
+                        <TextBlock Text="{Binding CounterName}"/>
+                
+                    </StackPanel>
+                </Grid>
+            </StatusBarItem>
+        </StatusBar>
+        
+
+        <!-- Main content (unchanged, except we removed the old quick-info border at Grid.Row=2) -->
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="109*"/>
                 <ColumnDefinition Width="26*"/>
             </Grid.ColumnDefinitions>
-            <!-- Top status strip: outlet/shift + connectivity -->
-            <Border Background="#f2f6ff" Padding="8" Grid.ColumnSpan="2">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
 
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding OutletName}" FontWeight="SemiBold"/>
-                        <TextBlock Text="·"/>
-                        <TextBlock Text="{Binding CounterName}"/>
-                        <TextBlock Text="·"/>
-                        <TextBlock Text="{Binding ShiftStatus}"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding OnlineText}" />
-                        <TextBlock Text="|" Margin="4,0"/>
-                        <TextBlock Text="{Binding LastSyncText}" />
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
-                        <TextBlock Text="User: " FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding CurrentUserName}"/>
-                        <TextBlock Text="   •   Outlet: " FontWeight="SemiBold" Margin="8,0,0,0"/>
-                        <TextBlock Text="{Binding CurrentOutletId}"/>
-                        <TextBlock Text="   •   Counter: " FontWeight="SemiBold" Margin="8,0,0,0"/>
-                        <TextBlock Text="{Binding CurrentCounterId}"/>
-                    </StackPanel>
-                </Grid>
-                
-            </Border>
-
-            <!-- Content -->
             <ScrollViewer Grid.ColumnSpan="2">
                 <Grid Margin="16">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="10"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="10"/>
+                        <!-- removed the quick info row -->
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -87,7 +96,7 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Items low on stock -->
+                        <!-- Low stock -->
                         <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
                             <StackPanel>
                                 <TextBlock Text="Low Stock Items" Foreground="#5f6b7a" FontSize="12"/>
@@ -96,7 +105,7 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Shift cash (optional) -->
+                        <!-- Shift cash -->
                         <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
                             <StackPanel>
                                 <TextBlock Text="Shift Cash" Foreground="#5f6b7a" FontSize="12"/>
@@ -106,17 +115,8 @@
                         </Border>
                     </UniformGrid>
 
-                    <!-- Quick actions -->
-                    <Border Grid.Row="2" CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White">
-                        <StackPanel Orientation="Horizontal" >
-
-
-
-                        </StackPanel>
-                    </Border>
-
                     <!-- Bottom grid: Recent sales + Low stock list -->
-                    <Grid Grid.Row="4">
+                    <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="2*"/>
                             <ColumnDefinition Width="10"/>
@@ -167,8 +167,8 @@
                         </Border>
                     </Grid>
                 </Grid>
-
             </ScrollViewer>
         </Grid>
     </DockPanel>
+
 </Window>

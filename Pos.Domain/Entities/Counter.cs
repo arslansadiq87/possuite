@@ -11,5 +11,7 @@ namespace Pos.Domain.Entities
 
         public int OutletId { get; set; }
         public Outlet Outlet { get; set; } = null!;
+        public ICollection<CounterBinding> CounterBindings { get; set; } = new List<CounterBinding>();
+
     }
 }

@@ -1,4 +1,5 @@
 ﻿// Pos.Persistence/PosClientDbContext.cs
+using System.Reflection.Emit;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 
@@ -32,6 +33,7 @@ namespace Pos.Persistence
         public DbSet<Outlet> Outlets { get; set; } = null!;
         public DbSet<Counter> Counters { get; set; } = null!;
         public DbSet<UserOutlet> UserOutlets { get; set; } = null!;
+        public DbSet<CounterBinding> CounterBindings { get; set; } = null!;
 
 
         // Use the same connection when options weren't supplied
@@ -209,6 +211,26 @@ namespace Pos.Persistence
                    .WithMany(o => o.UserOutlets)
                    .HasForeignKey(x => x.OutletId)
                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<CounterBinding>(e =>
+            {
+                e.ToTable("CounterBindings");
+                e.HasIndex(x => x.MachineId).IsUnique();
+                e.HasIndex(x => x.CounterId).IsUnique(); // <— ensures "same counter not assigned to multiple PCs"
+
+                e.Property(x => x.MachineId).HasMaxLength(128).IsRequired();
+                e.Property(x => x.MachineName).HasMaxLength(128);
+
+                e.HasOne(x => x.Outlet)
+                    .WithMany(o => o.CounterBindings)
+                    .HasForeignKey(x => x.OutletId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasOne(x => x.Counter)
+                    .WithMany(c => c.CounterBindings)
+                    .HasForeignKey(x => x.CounterId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

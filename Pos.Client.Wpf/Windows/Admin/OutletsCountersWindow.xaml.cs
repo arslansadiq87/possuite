@@ -8,11 +8,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Client.Wpf.Windows.Common;
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OutletsCountersWindow : Window
     {
+        
+
         // Lightweight DTOs for safe binding
         private sealed class OutletRow
         {
@@ -21,6 +25,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             public string Name { get; init; } = "";
             public string? Address { get; init; }
             public bool IsActive { get; init; }
+
         }
 
         private sealed class CounterRow
@@ -29,6 +34,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             public int OutletId { get; init; }
             public string Name { get; init; } = "";
             public bool IsActive { get; init; }
+            public string? AssignedTo { get; init; }  // NEW
+
         }
 
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
@@ -101,11 +108,17 @@ namespace Pos.Client.Wpf.Windows.Admin
                         Id = c.Id,
                         OutletId = c.OutletId,
                         Name = c.Name,
-                        IsActive = c.IsActive
+                        IsActive = c.IsActive,
+                        // NEW: show machine name if bound
+                        AssignedTo = db.CounterBindings
+                            .Where(b => b.CounterId == c.Id)
+                            .Select(b => b.MachineName)
+                            .FirstOrDefault()
                     })
                     .ToList();
 
                 CountersGrid.ItemsSource = counters;
+
             }
             catch (Exception ex)
             {
@@ -361,5 +374,42 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             return false;
         }
+
+        private void AssignThisPc_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_selectedOutletId is not int outletId) { MessageBox.Show("Select an outlet first."); return; }
+                if (CountersGrid.SelectedItem is not CounterRow row) { MessageBox.Show("Select a counter."); return; }
+
+                var binder = App.Services.GetRequiredService<CounterBindingService>();
+                binder.AssignThisPcToCounter(outletId, row.Id);
+                SafeLoadCounters(outletId);
+                MessageBox.Show("This PC is now assigned to the selected counter.", "Binding", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to assign this PC:\n\n" + ex.Message, "Binding", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void UnassignThisPc_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var binder = App.Services.GetRequiredService<CounterBindingService>();
+                binder.UnassignThisPc();
+
+                if (_selectedOutletId is int outletId) SafeLoadCounters(outletId);
+
+                MessageBox.Show("This PC has been unassigned.", "Binding", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to unassign:\n\n" + ex.Message, "Binding", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
     }
 }
