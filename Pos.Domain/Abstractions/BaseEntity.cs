@@ -9,6 +9,8 @@ namespace Pos.Domain.Abstractions
         public string? CreatedBy { get; set; }
         public DateTime? UpdatedAtUtc { get; set; }
         public string? UpdatedBy { get; set; }
-        public byte[]? RowVersion { get; set; } // concurrency token
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+
     }
 }

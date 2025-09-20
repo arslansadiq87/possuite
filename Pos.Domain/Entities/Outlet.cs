@@ -14,6 +14,8 @@ namespace Pos.Domain.Entities
         public ICollection<Counter> Counters { get; set; } = new List<Counter>();
 
         public ICollection<CounterBinding> CounterBindings { get; set; } = new List<CounterBinding>();
+        public ICollection<PartyOutlet> PartyOutlets { get; set; } = new List<PartyOutlet>();
+
 
     }
 }
