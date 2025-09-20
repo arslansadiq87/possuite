@@ -2,17 +2,20 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations
+namespace Pos.Persistence.Migrations.Client
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250920103004_UserRoles_Init0")]
+    partial class UserRoles_Init0
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -183,7 +186,7 @@ namespace Pos.Persistence.Migrations
 
                     b.HasIndex("OutletId");
 
-                    b.ToTable("Counters");
+                    b.ToTable("Counter");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.CounterSequence", b =>
@@ -995,9 +998,6 @@ namespace Pos.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
-                    b.Property<bool>("IsGlobalAdmin")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1027,24 +1027,6 @@ namespace Pos.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.UserOutlet", b =>
-                {
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("OutletId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Role")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("UserId", "OutletId");
-
-                    b.HasIndex("OutletId");
-
-                    b.ToTable("UserOutlets");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Warehouse", b =>
@@ -1245,25 +1227,6 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("RefSale");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.UserOutlet", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
-                        .WithMany("UserOutlets")
-                        .HasForeignKey("OutletId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Pos.Domain.Entities.User", "User")
-                        .WithMany("UserOutlets")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Outlet");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Product", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.Brand", "Brand")
@@ -1296,8 +1259,6 @@ namespace Pos.Persistence.Migrations
             modelBuilder.Entity("Pos.Domain.Entities.Outlet", b =>
                 {
                     b.Navigation("Counters");
-
-                    b.Navigation("UserOutlets");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Purchase", b =>
@@ -1305,11 +1266,6 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Lines");
 
                     b.Navigation("Payments");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.User", b =>
-                {
-                    b.Navigation("UserOutlets");
                 });
 
             modelBuilder.Entity("Product", b =>

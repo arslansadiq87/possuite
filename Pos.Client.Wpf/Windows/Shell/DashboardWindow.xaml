@@ -14,12 +14,16 @@
             <Button Content="Users" Click="OpenUsers_Click"/>
             <Button Content="Customers" Click="OpenCustomers_Click"/>
             <Separator/>
-            
+
         </ToolBar>
 
         <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="109*"/>
+                <ColumnDefinition Width="26*"/>
+            </Grid.ColumnDefinitions>
             <!-- Top status strip: outlet/shift + connectivity -->
-            <Border DockPanel.Dock="Top" Background="#f2f6ff" Padding="8">
+            <Border Background="#f2f6ff" Padding="8" Grid.ColumnSpan="2">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -39,11 +43,21 @@
                         <TextBlock Text="|" Margin="4,0"/>
                         <TextBlock Text="{Binding LastSyncText}" />
                     </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
+                        <TextBlock Text="User: " FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding CurrentUserName}"/>
+                        <TextBlock Text="   •   Outlet: " FontWeight="SemiBold" Margin="8,0,0,0"/>
+                        <TextBlock Text="{Binding CurrentOutletId}"/>
+                        <TextBlock Text="   •   Counter: " FontWeight="SemiBold" Margin="8,0,0,0"/>
+                        <TextBlock Text="{Binding CurrentCounterId}"/>
+                    </StackPanel>
                 </Grid>
+                
             </Border>
 
             <!-- Content -->
-            <ScrollViewer>
+            <ScrollViewer Grid.ColumnSpan="2">
                 <Grid Margin="16">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -95,8 +109,8 @@
                     <!-- Quick actions -->
                     <Border Grid.Row="2" CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White">
                         <StackPanel Orientation="Horizontal" >
-                            
-                               
+
+
 
                         </StackPanel>
                     </Border>
@@ -153,6 +167,7 @@
                         </Border>
                     </Grid>
                 </Grid>
+
             </ScrollViewer>
         </Grid>
     </DockPanel>

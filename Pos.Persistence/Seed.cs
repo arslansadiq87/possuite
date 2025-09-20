@@ -4,7 +4,7 @@ using System.Linq;
 // REMOVE: using System.Security.Cryptography;
 using Pos.Domain.Entities;                 // for User, Item, Product, StockEntry, etc.
 // If you still have a Pos.Domain.UserRole, alias to avoid ambiguity:
-using UserRoleEnum = Pos.Domain.Entities.UserRole;
+using UserRoleEnum = Pos.Domain.UserRole;
 
 namespace Pos.Persistence
 {

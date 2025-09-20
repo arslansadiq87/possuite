@@ -16,6 +16,7 @@ namespace Pos.Persistence // ← keep a namespace (recommended)
         public DbSet<User> Users => Set<User>();
         public DbSet<Outlet> Outlets => Set<Outlet>();
         public DbSet<CounterEntity> Counters => Set<CounterEntity>();
+        public DbSet<UserOutlet> UserOutlets => Set<UserOutlet>();
         public DbSet<Product> Products => Set<Product>();
         public DbSet<Item> Items => Set<Item>();
         public DbSet<Sale> Sales => Set<Sale>();
@@ -26,6 +27,10 @@ namespace Pos.Persistence // ← keep a namespace (recommended)
         public DbSet<PurchaseLine> PurchaseLines { get; set; }
         public DbSet<PurchasePayment> PurchasePayments => Set<PurchasePayment>();
         public DbSet<CashLedger> CashLedgers => Set<CashLedger>();
+        
+        
+                
+
 
         protected override void OnModelCreating(ModelBuilder b)
         {
@@ -110,6 +115,21 @@ namespace Pos.Persistence // ← keep a namespace (recommended)
                 e.HasKey(x => x.Id);
                 e.Property(x => x.Delta).HasColumnType("decimal(18,2)");
                 e.HasIndex(x => new { x.OutletId, x.TsUtc });
+            });
+
+            b.Entity<UserOutlet>(cfg =>
+            {
+                cfg.HasKey(x => new { x.UserId, x.OutletId });
+
+                cfg.HasOne(x => x.User)
+                   .WithMany(u => u.UserOutlets)
+                   .HasForeignKey(x => x.UserId)
+                   .OnDelete(DeleteBehavior.Cascade);
+
+                cfg.HasOne(x => x.Outlet)
+                   .WithMany(o => o.UserOutlets)
+                   .HasForeignKey(x => x.OutletId)
+                   .OnDelete(DeleteBehavior.Cascade);
             });
 
         }

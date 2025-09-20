@@ -1,16 +1,26 @@
 ﻿//Pos.Client.Wpf/Windows/Shell/DashboardWindow.cs
 using System.Windows;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Windows.Purchases;
 using Pos.Client.Wpf.Windows.Sales;
 using Pos.Persistence;
+using Pos.Client.Wpf.Services;
 
 
 namespace Pos.Client.Wpf.Windows.Shell
 {
     public partial class DashboardWindow : Window
     {
-        public DashboardWindow() => InitializeComponent();
+        private readonly DbContextOptions<PosClientDbContext> _opts;
+
+        public DashboardWindow()
+        {
+            InitializeComponent();
+            _opts = Db.ClientOptions; // see Db helper below
+
+        }
+
 
         private void NewSale_Click(object s, RoutedEventArgs e)
         {
@@ -41,12 +51,14 @@ namespace Pos.Client.Wpf.Windows.Shell
         }
         private void OpenOutletsCounters_Click(object s, RoutedEventArgs e)
         {
-            var w = new Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow();
+            var w = App.Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
+            w.Owner = this;
             w.ShowDialog();
         }
         private void OpenUsers_Click(object s, RoutedEventArgs e)
         {
-            var w = new Pos.Client.Wpf.Windows.Admin.UsersWindow();
+            var w = App.Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.UsersWindow>();
+            w.Owner = this;
             w.ShowDialog();
         }
         private void OpenCustomers_Click(object s, RoutedEventArgs e)

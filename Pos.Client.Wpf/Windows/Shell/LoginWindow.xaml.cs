@@ -59,36 +59,42 @@ namespace Pos.Client.Wpf.Windows.Shell
 
         private async void Login_Click(object sender, RoutedEventArgs e)
         {
-            var username = UserBox.Text.Trim();
-            var password = PassBox.Password;
-
-            if (string.IsNullOrWhiteSpace(username))
+            try
             {
-                MessageBox.Show("Please enter username.", "Login",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                UserBox.Focus();
-                return;
-            }
+                var username = UserBox.Text.Trim();
+                var password = PassBox.Password;
 
-            var (ok, error) = await _auth.LoginAsync(username, password);
-            if (!ok)
+                if (string.IsNullOrWhiteSpace(username))
+                {
+                    MessageBox.Show("Please enter username.", "Login",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    UserBox.Focus();
+                    return;
+                }
+
+                var (ok, error) = await _auth.LoginAsync(username, password);
+                if (!ok)
+                {
+                    MessageBox.Show(error, "Login", MessageBoxButton.OK, MessageBoxImage.Error);
+                    PassBox.Clear();
+                    PassBox.Focus();
+                    return;
+                }
+
+                LocalPrefs.SaveLastUsername(username);
+
+                using var db = await _dbf.CreateDbContextAsync();
+                var user = await db.Users.FirstAsync(u => u.Username == username);
+                _state.CurrentUser = user;
+
+                // tell App we succeeded; App will open Dashboard and set MainWindow
+                DialogResult = true;   // this closes the login dialog
+            }
+            catch (Exception ex)
             {
-                MessageBox.Show(error, "Login", MessageBoxButton.OK, MessageBoxImage.Error);
-                PassBox.Clear();
-                PassBox.Focus();
-                return;
+                MessageBox.Show(ex.Message, "Login Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-
-            // remember last successful username on this PC
-            LocalPrefs.SaveLastUsername(username);
-
-            using var db = await _dbf.CreateDbContextAsync();
-            var user = await db.Users.FirstAsync(u => u.Username == username);
-            _state.CurrentUser = user;
-
-            var dash = App.Services.GetRequiredService<DashboardWindow>();
-            dash.Show();
-            Close();
         }
+
     }
 }

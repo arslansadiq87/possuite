@@ -1,58 +1,20 @@
 ﻿// Pos.Client.Wpf/Services/AuthZ.cs
-using System;
-using System.Collections.Generic;
 using Pos.Domain.Entities;
+using Pos.Domain;
+
 
 namespace Pos.Client.Wpf.Services
 {
     public static class AuthZ
     {
-        // Rank order matters (bigger = more power)
-        public enum Role
-        {
-            Salesman = 0,
-            Cashier = 1,
-            Supervisor = 2,
-            Manager = 3,
-            Admin = 4
-        }
-
-        // Permissions (expand as needed)
-        public enum Perm
-        {
-            // Purchases
-            Purchases_View_All,       // see all outlets’ purchases
-            Purchases_Edit,           // create/amend/receive
-            PurchaseReturns_Process,  // process purchase returns
-
-            // Sales
-            Sales_View_All,
-            Sales_Returns_Process,
-            Sales_Void,
-
-            // Till/Shift
-            Shift_Open,
-            Shift_Close,
-            Drawer_Kick,
-
-            // Admin & Masters
-            Users_Manage,
-            Catalog_Manage,
-            Outlets_Manage,
-            Reports_View_All
-        }
-
-        // --- Public API ---
-
-        // Handy accessor if you need the user anywhere
+        // Just reuse UserRole directly
         public static User? CurrentUser => AppState.Current.CurrentUser;
+        public static UserRole CurrentRole => CurrentUser?.Role ?? UserRole.Cashier;
 
-        public static Role CurrentRole => ResolveRole(CurrentUser);
-
-        public static bool IsAdmin() => CurrentRole >= Role.Admin;
-        public static bool IsManagerOrAbove() => CurrentRole >= Role.Manager;
-        public static bool IsSupervisorOrAbove() => CurrentRole >= Role.Supervisor;
-        public static bool IsCashierOrAbove() => CurrentRole >= Role.Cashier;
+        public static bool IsAdmin() => CurrentRole >= UserRole.Admin;
+        public static bool IsManagerOrAbove() => CurrentRole >= UserRole.Manager;
+        public static bool IsSupervisorOrAbove() => CurrentRole >= UserRole.Supervisor;
+        public static bool IsCashierOrAbove() => CurrentRole >= UserRole.Cashier;
 
         public static bool Has(Perm permission)
         {
@@ -60,45 +22,39 @@ namespace Pos.Client.Wpf.Services
             return CurrentRole >= minRole;
         }
 
-        // Single source of truth for who can do what
-        private static readonly Dictionary<Perm, Role> _policy = new()
+        // Permissions stay the same, but map against UserRole
+        public enum Perm
         {
-            // Purchases
-            { Perm.Purchases_View_All,      Role.Admin      }, // only Admin sees all outlets
-            { Perm.Purchases_Edit,          Role.Supervisor },
-            { Perm.PurchaseReturns_Process, Role.Supervisor },
-
-            // Sales
-            { Perm.Sales_View_All,          Role.Manager    },
-            { Perm.Sales_Returns_Process,   Role.Supervisor },
-            { Perm.Sales_Void,              Role.Manager    },
-
-            // Till/Shift
-            { Perm.Shift_Open,              Role.Cashier    },
-            { Perm.Shift_Close,             Role.Supervisor },
-            { Perm.Drawer_Kick,             Role.Cashier    },
-
-            // Admin & Masters
-            { Perm.Users_Manage,            Role.Admin      },
-            { Perm.Catalog_Manage,          Role.Manager    },
-            { Perm.Outlets_Manage,          Role.Manager    },
-            { Perm.Reports_View_All,        Role.Manager    },
-        };
-
-        // Normalize your user shape → Role
-        public static Role ResolveRole(User? user)
-        {
-            if (user is null) return Role.Cashier; // safe default
-
-            return user.Role switch
-            {
-                UserRole.Admin => Role.Admin,
-                UserRole.Manager => Role.Manager,
-                UserRole.Cashier => Role.Cashier,
-                UserRole.Salesman => Role.Salesman,
-                _ => Role.Cashier
-            };
+            Purchases_View_All,
+            Purchases_Edit,
+            PurchaseReturns_Process,
+            Sales_View_All,
+            Sales_Returns_Process,
+            Sales_Void,
+            Shift_Open,
+            Shift_Close,
+            Drawer_Kick,
+            Users_Manage,
+            Catalog_Manage,
+            Outlets_Manage,
+            Reports_View_All
         }
 
+        private static readonly Dictionary<Perm, UserRole> _policy = new()
+        {
+            { Perm.Purchases_View_All,      UserRole.Admin      },
+            { Perm.Purchases_Edit,          UserRole.Supervisor },
+            { Perm.PurchaseReturns_Process, UserRole.Supervisor },
+            { Perm.Sales_View_All,          UserRole.Manager    },
+            { Perm.Sales_Returns_Process,   UserRole.Supervisor },
+            { Perm.Sales_Void,              UserRole.Manager    },
+            { Perm.Shift_Open,              UserRole.Cashier    },
+            { Perm.Shift_Close,             UserRole.Supervisor },
+            { Perm.Drawer_Kick,             UserRole.Cashier    },
+            { Perm.Users_Manage,            UserRole.Admin      },
+            { Perm.Catalog_Manage,          UserRole.Manager    },
+            { Perm.Outlets_Manage,          UserRole.Manager    },
+            { Perm.Reports_View_All,        UserRole.Manager    },
+        };
     }
 }

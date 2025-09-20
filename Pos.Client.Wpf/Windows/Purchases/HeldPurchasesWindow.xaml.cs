@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
+using Pos.Client.Wpf.Services;
 using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Persistence.Services;
@@ -41,12 +42,27 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async void HeldPurchasesWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            var outletId = AppState.Current.CurrentOutletId;
+            var counterId = AppState.Current.CurrentCounterId;
+
+            if (outletId <= 0 || counterId <= 0)
+            {
+                MessageBox.Show(
+                    "Please select outlet and counter (till) before opening Held Purchases.",
+                    "Outlet/Counter Required",
+                    MessageBoxButton.OK, MessageBoxImage.Exclamation);
+
+                DialogResult = false;
+                Close();
+                return;
+            }
+
             using var db = new PosClientDbContext(_opts);
             var results = await db.Purchases
                 .AsNoTracking()
                 .Include(p => p.Supplier)   // bring supplier names
                 .Include(p => p.Lines)      // bring line counts
-                .Where(p => p.Status == PurchaseStatus.Draft)
+                .Where(p => p.OutletId == outletId && p.Status == PurchaseStatus.Draft)
                 .OrderByDescending(p => p.CreatedAtUtc)
                 .Select(p => new UiDraftRow
                 {

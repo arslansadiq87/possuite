@@ -1,6 +1,7 @@
 ﻿// Pos.Persistence/DbSeeder.cs
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
+using Pos.Domain;
 
 namespace Pos.Persistence;
 

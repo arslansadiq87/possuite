@@ -1,5 +1,4 @@
 ﻿using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +6,8 @@ using Pos.Domain.Entities;
 using Pos.Domain.Formatting;         // for ProductNameComposer (same as Sales)
 using Pos.Persistence;
 using Pos.Persistence.Services;
-using Pos.Client.Wpf.Windows.Purchases; // for HeldPurchasesWindow (reuse if you like)
+using Pos.Client.Wpf.Services;   // AppState / AppCtx
+
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {

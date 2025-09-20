@@ -2,29 +2,27 @@
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 
+
 namespace Pos.Persistence
 {
     public class PosClientDbContext : DbContext
     {
         public PosClientDbContext(DbContextOptions<PosClientDbContext> options) : base(options) { }
 
-        // ===== Core / catalog =====
         public DbSet<User> Users { get; set; }
         public DbSet<Brand> Brands => Set<Brand>();
         public DbSet<Category> Categories => Set<Category>();
         public DbSet<Item> Items { get; set; }
         public DbSet<Product> Products { get; set; }
 
-        // ===== Sales =====
+        
         public DbSet<Sale> Sales { get; set; }
         public DbSet<SaleLine> SaleLines { get; set; }
         public DbSet<StockEntry> StockEntries { get; set; }
-
-        // ===== Till / counters =====
+                
         public DbSet<TillSession> TillSessions { get; set; }
         public DbSet<CounterSequence> CounterSequences { get; set; }
-
-        // ===== Purchasing =====
+                
         public DbSet<Purchase> Purchases { get; set; }
         public DbSet<PurchaseLine> PurchaseLines { get; set; }
         public DbSet<PurchasePayment> PurchasePayments { get; set; }   // payments
@@ -32,6 +30,8 @@ namespace Pos.Persistence
         public DbSet<Supplier> Suppliers { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
         public DbSet<Outlet> Outlets { get; set; } = null!;
+        public DbSet<Counter> Counters { get; set; } = null!;
+        public DbSet<UserOutlet> UserOutlets { get; set; } = null!;
 
 
         // Use the same connection when options weren't supplied
@@ -44,6 +44,7 @@ namespace Pos.Persistence
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);
+            b.Entity<User>().Property(u => u.Role).HasConversion<int>();
 
             // ---------- Users ----------
             b.Entity<User>()
@@ -193,6 +194,21 @@ namespace Pos.Persistence
                 e.Property(x => x.TsUtc);
                 e.Property(x => x.RefType).IsRequired();
                 e.HasIndex(x => new { x.OutletId, x.TsUtc });
+            });
+
+            b.Entity<UserOutlet>(cfg =>
+            {
+                cfg.HasKey(x => new { x.UserId, x.OutletId });
+
+                cfg.HasOne(x => x.User)
+                   .WithMany(u => u.UserOutlets)
+                   .HasForeignKey(x => x.UserId)
+                   .OnDelete(DeleteBehavior.Cascade);
+
+                cfg.HasOne(x => x.Outlet)
+                   .WithMany(o => o.UserOutlets)
+                   .HasForeignKey(x => x.OutletId)
+                   .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

@@ -41,6 +41,14 @@ namespace Pos.Client.Wpf
             sc.AddTransient<LoginWindow>();
             sc.AddTransient<DashboardWindow>();
             sc.AddTransient<SaleInvoiceWindow>();
+            // NEW: admin & master windows
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UsersWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UserOutletAssignmentsWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.ProductsItemsWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.SuppliersWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.CustomersWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseWindow>();
 
 
             Services = sc.BuildServiceProvider();
@@ -59,6 +67,8 @@ namespace Pos.Client.Wpf
 
                 db.Database.Migrate();
                 Seed.Ensure(db);  // make sure this seeds bcrypt admin/admin123
+                DataFixups.NormalizeUsers(db);  // <-- add this line
+
             }
             catch (Exception ex)
             {
@@ -67,9 +77,23 @@ namespace Pos.Client.Wpf
                 return;
             }
 
-            // 6) Show login after DI is ready
+            // App.xaml.cs  (inside OnStartup, right before showing login)
+            var oldMode = this.ShutdownMode;
+            this.ShutdownMode = ShutdownMode.OnExplicitShutdown;   // <-- prevent auto-shutdown
+
             var login = Services.GetRequiredService<LoginWindow>();
-            login.Show();
+            var ok = login.ShowDialog() == true;
+            if (!ok)
+            {
+                Shutdown();
+                return;
+            }
+
+            var dash = Services.GetRequiredService<DashboardWindow>();
+            MainWindow = dash;
+            dash.Show();
+
+            this.ShutdownMode = oldMode; // e.g. back to OnMainWindowClose
         }
     }
 }

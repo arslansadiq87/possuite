@@ -1,0 +1,21 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.UserOutletAssignmentsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="User Outlet Assignments" Height="520" Width="720" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="12">
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,8">
+            <Button Content="Add" Click="Add_Click" Margin="0,0,6,0"/>
+            <Button Content="Edit" Click="Edit_Click" Margin="0,0,6,0"/>
+            <Button Content="Remove" Click="Remove_Click" Margin="0,0,6,0"/>
+            <Button Content="Close" Click="Close_Click" />
+        </StackPanel>
+
+        <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Outlet Code" Binding="{Binding Outlet.Code}" Width="120"/>
+                <DataGridTextColumn Header="Outlet Name" Binding="{Binding Outlet.Name}" Width="*"/>
+                <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="150"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>
