@@ -2,17 +2,20 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations
+namespace Pos.Persistence.Migrations.Client
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250921194413_Init13")]
+    partial class Init13
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -728,9 +731,6 @@ namespace Pos.Persistence.Migrations
                     b.Property<decimal>("GrandTotal")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<bool>("IsReturn")
-                        .HasColumnType("INTEGER");
-
                     b.Property<decimal>("OtherCharges")
                         .HasColumnType("decimal(18,2)");
 
@@ -751,15 +751,6 @@ namespace Pos.Persistence.Migrations
 
                     b.Property<DateTime?>("ReceivedAtUtc")
                         .HasColumnType("TEXT");
-
-                    b.Property<int?>("RefPurchaseId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("RevisedFromPurchaseId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("RevisedToPurchaseId")
-                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Revision")
                         .HasColumnType("INTEGER");
@@ -802,12 +793,6 @@ namespace Pos.Persistence.Migrations
                     b.HasIndex("PartyId");
 
                     b.HasIndex("PartyId1");
-
-                    b.HasIndex("RefPurchaseId");
-
-                    b.HasIndex("RevisedFromPurchaseId");
-
-                    b.HasIndex("RevisedToPurchaseId");
 
                     b.HasIndex("Status");
 
@@ -855,9 +840,6 @@ namespace Pos.Persistence.Migrations
                     b.Property<decimal>("Qty")
                         .HasColumnType("decimal(18,3)");
 
-                    b.Property<int?>("RefPurchaseLineId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<byte[]>("RowVersion")
                         .IsRequired()
                         .HasColumnType("BLOB");
@@ -883,8 +865,6 @@ namespace Pos.Persistence.Migrations
                     b.HasIndex("PurchaseId");
 
                     b.HasIndex("PurchaseId1");
-
-                    b.HasIndex("RefPurchaseLineId");
 
                     b.ToTable("PurchaseLines");
                 });
@@ -1215,50 +1195,6 @@ namespace Pos.Persistence.Migrations
                     b.ToTable("StockEntries");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.SupplierCredit", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("OutletId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsRequired()
-                        .HasColumnType("BLOB");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SupplierId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("SupplierCredits");
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.TillSession", b =>
                 {
                     b.Property<int>("Id")
@@ -1579,21 +1515,6 @@ namespace Pos.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("PartyId1");
 
-                    b.HasOne("Pos.Domain.Entities.Purchase", "RefPurchase")
-                        .WithMany()
-                        .HasForeignKey("RefPurchaseId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Pos.Domain.Entities.Purchase", null)
-                        .WithMany()
-                        .HasForeignKey("RevisedFromPurchaseId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Pos.Domain.Entities.Purchase", null)
-                        .WithMany()
-                        .HasForeignKey("RevisedToPurchaseId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Pos.Domain.Entities.Warehouse", "Warehouse")
                         .WithMany()
                         .HasForeignKey("WarehouseId");
@@ -1601,8 +1522,6 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Outlet");
 
                     b.Navigation("Party");
-
-                    b.Navigation("RefPurchase");
 
                     b.Navigation("Warehouse");
                 });
@@ -1628,11 +1547,6 @@ namespace Pos.Persistence.Migrations
                     b.HasOne("Pos.Domain.Entities.Purchase", "Purchase")
                         .WithMany()
                         .HasForeignKey("PurchaseId1");
-
-                    b.HasOne("Pos.Domain.Entities.PurchaseLine", null)
-                        .WithMany()
-                        .HasForeignKey("RefPurchaseLineId")
-                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Item");
 

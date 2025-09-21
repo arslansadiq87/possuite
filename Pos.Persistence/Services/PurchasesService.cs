@@ -1,9 +1,17 @@
 ﻿// Pos.Persistence/Services/PurchasesService.cs
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Pos.Persistence.Services
 {
+    // NEW: lightweight DTO to carry refund instructions from UI
+    public record SupplierRefundSpec(TenderMethod Method, decimal Amount, string? Note);
+
     public class PurchasesService
     {
         private readonly PosClientDbContext _db;
@@ -17,6 +25,7 @@ namespace Pos.Persistence.Services
         /// </summary>
         public async Task<Purchase> SaveDraftAsync(Purchase draft, IEnumerable<PurchaseLine> lines, string? user = null)
         {
+            // Drafts are *purchases*, not returns. We coerce negatives to zero.
             var lineList = NormalizeAndCompute(lines);
 
             ComputeHeaderTotals(draft, lineList);
@@ -75,7 +84,6 @@ namespace Pos.Persistence.Services
                 draft = existing;
             }
 
-
             await _db.SaveChangesAsync();
             return draft;
         }
@@ -99,7 +107,6 @@ namespace Pos.Persistence.Services
             return prefix + (countToday + 1).ToString("D3");
         }
 
-
         /// <summary>
         /// Finalize (Receive) a purchase: sets Status=Final, stamps ReceivedAtUtc,
         /// replaces lines, recomputes totals. (Stock ledger posting comes next step.)
@@ -108,6 +115,7 @@ namespace Pos.Persistence.Services
         {
             ValidateDestination(model);
 
+            // Purchases (not returns) – prevent negative qtys
             var lineList = NormalizeAndCompute(lines);
             ComputeHeaderTotals(model, lineList);
 
@@ -173,10 +181,24 @@ namespace Pos.Persistence.Services
             }
 
             await _db.SaveChangesAsync();
+
+            // NEW: After finalize, auto-apply any Supplier Credits before user records cash
+            try
+            {
+                await ApplySupplierCreditsAsync(
+                    supplierId: model.PartyId,
+                    outletId: model.OutletId,
+                    purchase: model,
+                    user: user ?? "system"
+                );
+            }
+            catch
+            {
+                // non-fatal
+            }
+
             return model;
         }
-
-
 
         /// <summary>
         /// Auto-pick last UnitCost/Discount/TaxRate from latest FINAL purchase line of this item.
@@ -198,16 +220,16 @@ namespace Pos.Persistence.Services
 
         // (Optional convenience) add/record a payment against a purchase
         public async Task<PurchasePayment> AddPaymentAsync(
-    int purchaseId,
-    PurchasePaymentKind kind,
-    TenderMethod method,
-    decimal amount,
-    string? note,
-    int outletId,
-    int supplierId,
-    int? tillSessionId,
-    int? counterId,
-    string user)
+            int purchaseId,
+            PurchasePaymentKind kind,
+            TenderMethod method,
+            decimal amount,
+            string? note,
+            int outletId,
+            int supplierId,
+            int? tillSessionId,
+            int? counterId,
+            string user)
         {
             // ----- Load & basic guards -----
             var purchase = await _db.Purchases
@@ -238,7 +260,6 @@ namespace Pos.Persistence.Services
 
                 default:
                     // Revised behaves like Final for payments, but keep it simple for now:
-                    // If you want different behavior for Revised, branch here.
                     break;
             }
 
@@ -257,8 +278,6 @@ namespace Pos.Persistence.Services
             }
             else
             {
-                // For Warehouse-target purchases (or if outlet not on the purchase),
-                // fall back to the outlet explicitly passed for the cash/till.
                 if (outletId <= 0)
                     throw new InvalidOperationException("Outlet is required for recording the payment.");
                 payOutletId = outletId;
@@ -314,7 +333,6 @@ namespace Pos.Persistence.Services
             return pay;
         }
 
-
         public async Task<(Purchase purchase, List<PurchasePayment> payments)> GetWithPaymentsAsync(int purchaseId)
         {
             var purchase = await _db.Purchases.FirstAsync(p => p.Id == purchaseId);
@@ -332,8 +350,25 @@ namespace Pos.Persistence.Services
             int? counterId,
             string user)
         {
+            // 1) Finalize the purchase
             var model = await ReceiveAsync(purchase, lines, user);
 
+            // 2) Auto-apply any Supplier Credits first
+            try
+            {
+                await ApplySupplierCreditsAsync(
+                    supplierId: model.PartyId,
+                    outletId: model.OutletId,
+                    purchase: model,
+                    user: user ?? "system"
+                );
+            }
+            catch
+            {
+                // non-fatal
+            }
+
+            // 3) Record OnReceive cash/card/bank payments
             foreach (var p in onReceivePayments)
             {
                 await AddPaymentAsync(model.Id, PurchasePaymentKind.OnReceive, p.method, p.amount, p.note,
@@ -343,14 +378,256 @@ namespace Pos.Persistence.Services
             return model;
         }
 
+        // ---------- PURCHASE RETURNS (with refunds & supplier credit) ----------
+
+        /// <summary>
+        /// Build a draft for a return from a FINAL purchase.
+        /// Pre-fills remaining-allowed quantities per line.
+        /// </summary>
+        public async Task<PurchaseReturnDraft> BuildReturnDraftAsync(int originalPurchaseId)
+        {
+            var p = await _db.Purchases
+                .Include(x => x.Lines).ThenInclude(l => l.Item)
+                .Include(x => x.Party)
+                .FirstAsync(x => x.Id == originalPurchaseId && x.Status == PurchaseStatus.Final && !x.IsReturn);
+
+            // Already returned per original line (stored as negative qty; convert to positive for math)
+            var already = await _db.Purchases
+                .Where(r => r.IsReturn && r.RefPurchaseId == originalPurchaseId && r.Status != PurchaseStatus.Voided)
+                .SelectMany(r => r.Lines)
+                .Where(l => l.RefPurchaseLineId != null)
+                .GroupBy(l => l.RefPurchaseLineId!.Value)
+                .Select(g => new { OriginalLineId = g.Key, ReturnedAbs = Math.Abs(g.Sum(z => z.Qty)) })
+                .ToListAsync();
+
+            var returnedByLine = already.ToDictionary(x => x.OriginalLineId, x => x.ReturnedAbs);
+
+            return new PurchaseReturnDraft
+            {
+                PartyId = p.PartyId,
+                TargetType = p.TargetType,
+                OutletId = p.OutletId,
+                WarehouseId = p.WarehouseId,
+                RefPurchaseId = p.Id,
+                Lines = p.Lines.Select(ol =>
+                {
+                    var done = returnedByLine.TryGetValue(ol.Id, out var r) ? r : 0m;
+                    var remain = Math.Max(0, ol.Qty - done);
+
+                    return new PurchaseReturnDraftLine
+                    {
+                        OriginalLineId = ol.Id,
+                        ItemId = ol.ItemId,
+                        ItemName = ol.Item?.Name ?? "",
+                        UnitCost = ol.UnitCost,
+                        MaxReturnQty = remain,
+                        ReturnQty = remain
+                    };
+                })
+                .Where(x => x.MaxReturnQty > 0)
+                .ToList()
+            };
+        }
+
+        /// <summary>
+        /// Save a FINAL purchase return (same table).
+        /// Forces negative line Qty, validates per-line remaining caps, computes totals from |Qty|.
+        /// Overload kept to avoid breaking existing callers (no refunds).
+        /// </summary>
+        public Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null)
+            => SaveReturnAsync(model, lines, user, refunds: null, tillSessionId: null, counterId: null);
+
+        /// <summary>
+        /// Save a FINAL purchase return with optional refunds and auto-credit creation.
+        /// </summary>
+        public async Task<Purchase> SaveReturnAsync(
+            Purchase model,
+            IEnumerable<PurchaseLine> lines,
+            string? user = null,
+            IEnumerable<SupplierRefundSpec>? refunds = null,
+            int? tillSessionId = null,
+            int? counterId = null)
+        {
+            if (!model.IsReturn)
+                throw new InvalidOperationException("Model must be a return (IsReturn=true).");
+
+            if (model.RefPurchaseId is null or <= 0)
+                throw new InvalidOperationException("RefPurchaseId (original purchase) is required for returns.");
+
+            // Normalize for returns (keep negative qty)
+            var lineList = NormalizeAndComputeReturn(lines);
+
+            // Cap check vs remaining allowed
+            var draft = await BuildReturnDraftAsync(model.RefPurchaseId.Value);
+            var maxMap = draft.Lines
+                .Where(x => x.OriginalLineId.HasValue)
+                .ToDictionary(x => x.OriginalLineId!.Value, x => x.MaxReturnQty);
+
+            foreach (var l in lineList)
+            {
+                if (l.RefPurchaseLineId.HasValue &&
+                    maxMap.TryGetValue(l.RefPurchaseLineId.Value, out var maxAllowed))
+                {
+                    var req = Math.Abs(l.Qty); // l.Qty is negative
+                    if (req - maxAllowed > 0.0001m)
+                        throw new InvalidOperationException("Return qty exceeds remaining for one or more lines.");
+                }
+            }
+
+            ComputeHeaderTotalsForReturn(model, lineList);
+
+            model.Status = PurchaseStatus.Final;
+            model.ReceivedAtUtc ??= DateTime.UtcNow;
+            model.UpdatedAtUtc = DateTime.UtcNow;
+            model.UpdatedBy = user;
+
+            using var tx = await _db.Database.BeginTransactionAsync();
+
+            if (model.Id == 0)
+            {
+                model.CreatedAtUtc = DateTime.UtcNow;
+                model.CreatedBy = user;
+                model.DocNo = await EnsureReturnNumberAsync(model, CancellationToken.None);
+                model.Revision = 0;
+                model.Lines = lineList;
+                _db.Purchases.Add(model);
+            }
+            else
+            {
+                // Amending an existing return
+                var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == model.Id);
+
+                if (!existing.IsReturn)
+                    throw new InvalidOperationException("Cannot overwrite a purchase with a return.");
+
+                var wasFinal = existing.Status == PurchaseStatus.Final;
+
+                existing.PartyId = model.PartyId;
+                existing.TargetType = model.TargetType;
+                existing.OutletId = model.OutletId;
+                existing.WarehouseId = model.WarehouseId;
+                existing.PurchaseDate = model.PurchaseDate;
+                existing.VendorInvoiceNo = model.VendorInvoiceNo;
+
+                existing.RefPurchaseId = model.RefPurchaseId;
+
+                existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
+                    ? await EnsureReturnNumberAsync(existing, CancellationToken.None)
+                    : model.DocNo;
+
+                existing.Subtotal = model.Subtotal;
+                existing.Discount = model.Discount;
+                existing.Tax = model.Tax;
+                existing.OtherCharges = model.OtherCharges;
+                existing.GrandTotal = model.GrandTotal;
+
+                existing.Status = PurchaseStatus.Final;
+                existing.ReceivedAtUtc = model.ReceivedAtUtc;
+                existing.UpdatedAtUtc = model.UpdatedAtUtc;
+                existing.UpdatedBy = model.UpdatedBy;
+
+                if (wasFinal)
+                    existing.Revision = (existing.Revision <= 0 ? 1 : existing.Revision + 1);
+                else
+                    existing.Revision = 0;
+
+                _db.PurchaseLines.RemoveRange(existing.Lines);
+                await _db.SaveChangesAsync();
+
+                foreach (var l in lineList)
+                {
+                    l.Id = 0; l.PurchaseId = existing.Id; l.Purchase = null;
+                }
+                existing.Lines = lineList;
+
+                model = existing;
+            }
+
+            await _db.SaveChangesAsync();
+
+            // 1) Auto-apply against the original purchase and get the applied amount
+            decimal appliedToOriginal = 0m;
+            try
+            {
+                appliedToOriginal = await AutoApplyReturnToOriginalAsync_ReturnApplied(model, user ?? "system");
+            }
+            catch
+            {
+                // non-fatal; you can log if you have logging
+            }
+
+            // 2) Compute leftover value of the return
+            var leftover = model.GrandTotal - appliedToOriginal;
+
+            // 3) If operator entered refunds, record CASH IN (positive delta)
+            var totalRefund = Math.Round((refunds ?? Array.Empty<SupplierRefundSpec>()).Sum(r => Math.Max(0, r.Amount)), 2);
+            if (totalRefund > 0)
+            {
+                if (totalRefund > leftover + 0.0001m)
+                    throw new InvalidOperationException("Refund exceeds leftover after applying to the original invoice.");
+
+                var outletForCash = model.OutletId ?? 0; // if warehouse return but refund taken at outlet, pass outlet via caller/UI
+                var who = user ?? "system";
+
+                foreach (var r in refunds!)
+                    await RecordSupplierRefundAsync(
+                        returnId: model.Id,
+                        supplierId: model.PartyId,
+                        outletId: outletForCash,
+                        tillSessionId: null,    // pass from caller if you track sessions at return time
+                        counterId: null,        // pass from caller if needed
+                        refund: r,
+                        user: who
+                    );
+
+                leftover -= totalRefund;
+            }
+
+            // 4) Any remaining leftover becomes Supplier Credit
+            if (leftover > 0.0001m)
+            {
+                var credit = new SupplierCredit
+                {
+                    SupplierId = model.PartyId,
+                    OutletId = model.OutletId, // or null to keep credit global per supplier
+                    Amount = Math.Round(leftover, 2),
+                    Source = $"Return {(string.IsNullOrWhiteSpace(model.DocNo) ? $"#{model.Id}" : model.DocNo)}"
+                };
+                _db.SupplierCredits.Add(credit);
+                await _db.SaveChangesAsync();
+            }
+
+            // TODO: Post stock ledger with negative deltas...
+
+            await tx.CommitAsync();
+            return model;
+        }
+
+        private async Task<string> EnsureReturnNumberAsync(Purchase p, CancellationToken ct)
+        {
+            if (!string.IsNullOrWhiteSpace(p.DocNo)) return p.DocNo!;
+
+            var day = (p.ReceivedAtUtc ?? DateTime.UtcNow).Date;
+            var prefix = $"PR-{day:yyyyMMdd}-";
+
+            var countToday = await _db.Purchases
+                .AsNoTracking()
+                .CountAsync(x => x.IsReturn
+                              && x.Status == PurchaseStatus.Final
+                              && x.ReceivedAtUtc >= day
+                              && x.ReceivedAtUtc < day.AddDays(1), ct);
+
+            return prefix + (countToday + 1).ToString("D3");
+        }
+
         // ---------- Helpers ----------
 
         private static List<PurchaseLine> NormalizeAndCompute(IEnumerable<PurchaseLine> lines)
         {
+            // For purchases (not returns). Negative qtys are coerced to zero.
             var list = lines.ToList();
             foreach (var l in list)
             {
-                // coerce negatives to zero where it makes sense
                 l.Qty = l.Qty < 0 ? 0 : l.Qty;
                 l.UnitCost = l.UnitCost < 0 ? 0 : l.UnitCost;
                 l.Discount = l.Discount < 0 ? 0 : l.Discount;
@@ -364,8 +641,32 @@ namespace Pos.Persistence.Services
             return list;
         }
 
+        private static List<PurchaseLine> NormalizeAndComputeReturn(IEnumerable<PurchaseLine> lines)
+        {
+            // For returns. FORCE negative quantity; compute amounts on ABS(qty)
+            var list = lines.ToList();
+            foreach (var l in list)
+            {
+                if (l.Qty > 0) l.Qty = -l.Qty;                // make sure it's negative
+                l.UnitCost = l.UnitCost < 0 ? 0 : l.UnitCost;
+                l.Discount = l.Discount < 0 ? 0 : l.Discount;
+                l.TaxRate = l.TaxRate < 0 ? 0 : l.TaxRate;
+
+                var qtyAbs = Math.Abs(l.Qty);
+                var baseAmt = qtyAbs * l.UnitCost;
+                var taxable = Math.Max(0, baseAmt - l.Discount);
+                var tax = Math.Round(taxable * (l.TaxRate / 100m), 2);
+                l.LineTotal = Math.Round(taxable + tax, 2);
+
+                // IMPORTANT: line.RefPurchaseLineId should be set by caller when "Return With..."
+                // (We don't enforce it here because you might allow free-form returns too.)
+            }
+            return list;
+        }
+
         private static void ComputeHeaderTotals(Purchase p, IReadOnlyCollection<PurchaseLine> lines)
         {
+            // Standard purchase math (qty assumed >= 0)
             p.Subtotal = Math.Round(lines.Sum(x => x.Qty * x.UnitCost), 2);
             p.Discount = Math.Round(lines.Sum(x => x.Discount), 2);
             p.Tax = Math.Round(lines.Sum(x =>
@@ -373,13 +674,27 @@ namespace Pos.Persistence.Services
             // keep p.OtherCharges as set by caller (UI)
             p.GrandTotal = Math.Round(p.Subtotal - p.Discount + p.Tax + p.OtherCharges, 2);
 
-            // keep these snapshots consistent if present
             try
             {
                 p.CashPaid = Math.Min(p.CashPaid, p.GrandTotal);
                 p.CreditDue = Math.Max(0, p.GrandTotal - p.CashPaid);
             }
             catch { /* ignore if fields not present */ }
+        }
+
+        private static void ComputeHeaderTotalsForReturn(Purchase p, IReadOnlyCollection<PurchaseLine> lines)
+        {
+            // Return math – amounts based on ABS(qty), but the document is a credit (GrandTotal positive).
+            var subtotal = lines.Sum(x => Math.Abs(x.Qty) * x.UnitCost);
+            var discount = lines.Sum(x => x.Discount);
+            var tax = lines.Sum(x => Math.Round(Math.Max(0, Math.Abs(x.Qty) * x.UnitCost - x.Discount) * (x.TaxRate / 100m), 2));
+
+            p.Subtotal = Math.Round(subtotal, 2);
+            p.Discount = Math.Round(discount, 2);
+            p.Tax = Math.Round(tax, 2);
+            p.GrandTotal = Math.Round(p.Subtotal - p.Discount + p.Tax + p.OtherCharges, 2);
+
+            // For returns, you typically *reduce payable*. Payments/credits handled outside.
         }
 
         private static void ValidateDestination(Purchase p)
@@ -409,7 +724,6 @@ namespace Pos.Persistence.Services
               .OrderByDescending(p => p.PurchaseDate)
               .ToListAsync();
 
-
         public Task<List<Purchase>> ListPostedAsync()
             => _db.Purchases
                   .AsNoTracking()
@@ -424,7 +738,154 @@ namespace Pos.Persistence.Services
                   .Include(p => p.Party)
                   .FirstAsync(p => p.Id == id);
 
+        // ---------- INTERNAL CREDIT/REFUND HELPERS ----------
 
+        /// <summary>
+        /// Non-cash adjustment on original purchase for return value. Returns amount applied.
+        /// </summary>
+        private async Task<decimal> AutoApplyReturnToOriginalAsync_ReturnApplied(Purchase savedReturn, string user)
+        {
+            if (!savedReturn.IsReturn || savedReturn.RefPurchaseId is null or <= 0)
+                return 0m;
 
+            var original = await _db.Purchases
+                .Include(p => p.Payments)
+                .FirstAsync(p => p.Id == savedReturn.RefPurchaseId.Value);
+
+            if (original.Status == PurchaseStatus.Voided)
+                return 0m; // nothing to apply
+
+            var alreadyPaid = original.Payments.Sum(p => p.Amount);
+            var due = Math.Max(0, original.GrandTotal - alreadyPaid);
+            if (due <= 0) return 0m;
+
+            var toApply = Math.Min(due, savedReturn.GrandTotal);
+            if (toApply <= 0) return 0m;
+
+            await AddPaymentAsync(
+                purchaseId: original.Id,
+                kind: PurchasePaymentKind.Adjustment,
+                method: TenderMethod.Other, // non-cash
+                amount: toApply,
+                note: $"Auto-applied from Return {(string.IsNullOrWhiteSpace(savedReturn.DocNo) ? $"#{savedReturn.Id}" : savedReturn.DocNo)}",
+                outletId: original.OutletId ?? savedReturn.OutletId ?? 0,
+                supplierId: original.PartyId,
+                tillSessionId: null,
+                counterId: null,
+                user: user
+            );
+
+            return toApply;
+        }
+
+        /// <summary>
+        /// Record supplier refund cash/bank/card IN tied to a purchase return (positive cash delta).
+        /// </summary>
+        private async Task RecordSupplierRefundAsync(
+            int returnId,
+            int supplierId,
+            int outletId,
+            int? tillSessionId,
+            int? counterId,
+            SupplierRefundSpec refund,
+            string user)
+        {
+            var amt = Math.Round(refund.Amount, 2);
+            if (amt <= 0) throw new InvalidOperationException("Refund amount must be > 0.");
+
+            var cash = new CashLedger
+            {
+                OutletId = outletId,
+                CounterId = counterId,
+                TillSessionId = tillSessionId,
+                TsUtc = DateTime.UtcNow,
+                Delta = +amt, // CASH IN
+                RefType = "PurchaseReturnRefund",
+                RefId = returnId,
+                Note = $"{refund.Method} refund — {refund.Note}",
+                CreatedAtUtc = DateTime.UtcNow,
+                CreatedBy = user
+            };
+
+            _db.CashLedgers.Add(cash);
+            await _db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Consume available SupplierCredits as non-cash adjustments on a purchase.
+        /// Prefers outlet-scoped credits, then global credits; oldest first.
+        /// </summary>
+        private async Task<decimal> ApplySupplierCreditsAsync(
+            int supplierId, int? outletId, Purchase purchase, string user)
+        {
+            // Determine how much we still need to cover
+            var currentPaid = purchase.Payments.Sum(p => p.Amount);
+            var need = Math.Max(0, purchase.GrandTotal - currentPaid);
+            if (need <= 0) return 0m;
+
+            // Pull credits (oldest first). Prefer outlet-specific first, then global.
+            var credits = await _db.SupplierCredits
+                .Where(c => c.SupplierId == supplierId && (c.OutletId == outletId || c.OutletId == null) && c.Amount > 0)
+                .OrderBy(c => c.CreatedAtUtc)
+                .ToListAsync();
+
+            decimal used = 0m;
+
+            foreach (var c in credits)
+            {
+                if (need <= 0) break;
+                var take = Math.Min(c.Amount, need);
+                if (take <= 0) continue;
+
+                // Apply as non-cash adjustment to this purchase
+                await AddPaymentAsync(
+                    purchaseId: purchase.Id,
+                    kind: PurchasePaymentKind.Adjustment,
+                    method: TenderMethod.Other,
+                    amount: take,
+                    note: $"Applied Supplier Credit ({c.Source})",
+                    outletId: purchase.OutletId ?? outletId ?? 0,
+                    supplierId: supplierId,
+                    tillSessionId: null,
+                    counterId: null,
+                    user: user
+                );
+
+                // Reduce credit
+                c.Amount = Math.Round(c.Amount - take, 2);
+                used += take;
+                need -= take;
+            }
+
+            // Remove zeroed credits to keep table clean
+            var zeroed = credits.Where(c => c.Amount <= 0.0001m).ToList();
+            if (zeroed.Count > 0)
+                _db.SupplierCredits.RemoveRange(zeroed);
+
+            await _db.SaveChangesAsync();
+            return used;
+        }
+    }
+
+    // ---------- Simple DTOs for Return Draft ----------
+
+    public class PurchaseReturnDraft
+    {
+        public int PartyId { get; set; }
+        public StockTargetType TargetType { get; set; }
+        public int? OutletId { get; set; }
+        public int? WarehouseId { get; set; }
+        public int RefPurchaseId { get; set; }
+        public List<PurchaseReturnDraftLine> Lines { get; set; } = new();
+    }
+
+    public class PurchaseReturnDraftLine
+    {
+        public int? OriginalLineId { get; set; }
+        public int ItemId { get; set; }
+        public string ItemName { get; set; } = "";
+        public decimal UnitCost { get; set; }
+        public decimal MaxReturnQty { get; set; }
+        public decimal ReturnQty { get; set; }
     }
 }

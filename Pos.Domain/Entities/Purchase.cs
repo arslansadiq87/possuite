@@ -44,12 +44,22 @@ namespace Pos.Domain.Entities
         public List<PurchaseLine> Lines { get; set; } = new();
         public List<PurchasePayment> Payments { get; set; } = new();
         public int Revision { get; set; }  // 0 for first final; +1 per amendment
+                                           // --- Returns (mirror Sale) ---
+        public bool IsReturn { get; set; }                 // true = this doc is a return
+        public int? RefPurchaseId { get; set; }            // original purchase when "Return With..."
+        public Purchase? RefPurchase { get; set; }         // self-ref navigation
+
+        // --- Optional revision links (you already have Revision int) ---
+        public int? RevisedFromPurchaseId { get; set; }
+        public int? RevisedToPurchaseId { get; set; }
 
     }
 
     public class PurchaseLine : BaseEntity
     {
         public int PurchaseId { get; set; }
+        public int? RefPurchaseLineId { get; set; }        // original line id (if "Return With...")
+
         public Purchase? Purchase { get; set; }
 
         public int ItemId { get; set; }

@@ -1,0 +1,137 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Purchases.PurchaseReturnWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Purchase Return" Height="720" Width="1100"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="CanUserDeleteRows" Value="False"/>
+            <Setter Property="IsReadOnly" Value="False"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Header -->
+            <RowDefinition Height="*"/>
+            <!-- Lines -->
+            <RowDefinition Height="Auto"/>
+            <!-- Totals + actions -->
+        </Grid.RowDefinitions>
+
+        <!-- ===== HEADER ===== -->
+        <Border Grid.Row="0" Padding="12" BorderBrush="#DDD" BorderThickness="1" CornerRadius="8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Supplier (editable only for Return-Without) -->
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Supplier:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                    <TextBox x:Name="SupplierText" Width="260"
+                             IsReadOnly="{Binding IsSupplierReadonly}"
+                             Text="{Binding SupplierDisplay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Button x:Name="BtnPickSupplier" Content="Find" Margin="6,0,0,0"
+                            Visibility="{Binding SupplierPickerVisibility}"
+                            Click="BtnPickSupplier_Click"/>
+                </StackPanel>
+
+                <!-- Target (Outlet / Warehouse) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left">
+                    <TextBlock Text="Target:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                    <TextBlock Text="{Binding TargetDisplay}"/>
+                </StackPanel>
+
+                <!-- Base document -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Left">
+                    <TextBlock Text="Base Purchase:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                    <TextBlock Text="{Binding BasePurchaseDisplay}"/>
+                </StackPanel>
+
+                <!-- Return No + Date -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="Return No:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                    <TextBlock Text="{Binding ReturnNoDisplay}"/>
+                    <TextBlock Text=" | " Foreground="#AAA" Margin="6,0"/>
+                    <TextBlock Text="{Binding DateDisplay}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== LINES ===== -->
+        <DataGrid Grid.Row="1" x:Name="GridLines" Margin="0,12,0,12"
+                  ItemsSource="{Binding Lines}"
+                  RowHeaderWidth="0"
+                  CellEditEnding="GridLines_CellEditEnding">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Item ID" Binding="{Binding ItemId}" IsReadOnly="True" Width="80"/>
+                <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" IsReadOnly="True" Width="120"/>
+                <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*"/>
+                <DataGridTextColumn Header="Unit Cost" Binding="{Binding UnitCost, StringFormat={}{0:N2}}" Width="100"/>
+                <DataGridTextColumn Header="Disc" Binding="{Binding Discount, StringFormat={}{0:N2}}" Width="90"/>
+                <DataGridTextColumn Header="Tax %" Binding="{Binding TaxRate, StringFormat={}{0:N2}}" Width="90"/>
+                <DataGridTextColumn Header="Max" Binding="{Binding MaxReturnQty, StringFormat={}{0:N2}}" IsReadOnly="True" Width="80"/>
+                <DataGridTextColumn Header="Return Qty" Binding="{Binding ReturnQty, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N3}}" Width="110"/>
+                <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" IsReadOnly="True" Width="120"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- ===== TOTALS / ACTIONS ===== -->
+        <DockPanel Grid.Row="2" LastChildFill="False">
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                <Button x:Name="BtnCancel" Content="Cancel" Width="110" Click="BtnCancel_Click"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+
+                <!-- REFUND PANEL (new) -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Refund:" FontWeight="SemiBold"/>
+                    <ComboBox Width="120" SelectedItem="{Binding RefundMethod}"
+                              ItemsSource="{Binding RefundMethods}"/>
+                    <TextBox Width="100" HorizontalContentAlignment="Right"
+                             Text="{Binding RefundAmount, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}"/>
+                </StackPanel>
+
+                <!-- Totals -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Subtotal:" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Subtotal, StringFormat={}{0:N2}}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Discount:" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Discount, StringFormat={}{0:N2}}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Tax:" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Tax, StringFormat={}{0:N2}}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Other:" FontWeight="SemiBold"/>
+                    <TextBox Width="90" HorizontalContentAlignment="Right"
+                             Text="{Binding OtherCharges, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Grand:" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}" FontWeight="Bold"/>
+                </StackPanel>
+
+                <Button x:Name="BtnSave" Content="Save Return" Width="150" Click="BtnSave_Click"/>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

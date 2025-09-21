@@ -36,6 +36,7 @@ namespace Pos.Persistence
         public DbSet<PartyOutlet> PartyOutlets { get; set; } = null!;
         public DbSet<PartyLedger> PartyLedgers { get; set; } = null!;
         public DbSet<PartyBalance> PartyBalances { get; set; } = null!;
+        public DbSet<SupplierCredit> SupplierCredits => Set<SupplierCredit>();
 
         // Use the same connection when options weren't supplied
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -132,6 +133,20 @@ namespace Pos.Persistence
                  .WithOne(p => p.Purchase!)
                  .HasForeignKey(p => p.PurchaseId)
                  .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.RefPurchase)
+                 .WithMany()
+                 .HasForeignKey(x => x.RefPurchaseId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasOne<Purchase>()
+                 .WithMany()
+                 .HasForeignKey(x => x.RevisedFromPurchaseId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasOne<Purchase>()
+                 .WithMany()
+                 .HasForeignKey(x => x.RevisedToPurchaseId)
+                 .OnDelete(DeleteBehavior.Restrict);
             });
 
             b.Entity<PurchaseLine>(e =>
@@ -149,6 +164,10 @@ namespace Pos.Persistence
                 e.HasOne<Item>()
                  .WithMany()
                  .HasForeignKey(x => x.ItemId)
+                 .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne<PurchaseLine>()
+                 .WithMany()
+                 .HasForeignKey(x => x.RefPurchaseLineId)
                  .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -292,6 +311,12 @@ namespace Pos.Persistence
                 e.HasIndex(pb => new { pb.PartyId, pb.OutletId }).IsUnique();
                 e.Property(pb => pb.Balance).HasPrecision(18, 2);
             });
+
+            b.Entity<SupplierCredit>(e =>
+            {
+                e.Property(x => x.Amount).HasPrecision(18, 2);
+            });
+
 
         }
     }
