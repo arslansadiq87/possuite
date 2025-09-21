@@ -370,26 +370,23 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private async void OpenHeldPicker()
         {
             var picker = new HeldPurchasesWindow(_opts) { Owner = this };
+
+            // If user picked a draft, bubble the ID up to the caller (PurchaseWindow),
+            // close Held picker AND close Invoice Center itself.
             if (picker.ShowDialog() == true && picker.SelectedPurchaseId.HasValue)
             {
-                // keep this context alive while the editor window is open
-                var db = new PosClientDbContext(_opts);
-                try
-                {
-                    var svc = new PurchasesService(db);
-                    var draft = await svc.LoadWithLinesAsync(picker.SelectedPurchaseId.Value);
+                // expose the selection to the caller
+                this.SelectedHeldPurchaseId = picker.SelectedPurchaseId;
 
-                    var win = new PurchaseWindow(db) { Owner = this };   // ⬅️ pass db
-                    win.LoadDraft(draft);                                 // your loader
-                    win.ShowDialog();
-                }
-                finally
-                {
-                    db.Dispose();
-                }
+                // mark this window as “OK” so PurchaseWindow.InvoicesButton_Click continues
+                this.DialogResult = true;
 
-                LoadPurchases(); // refresh list after editor closes
+                // close the invoice center — caller (PurchaseWindow) will resume held
+                this.Close();
+                return;
             }
+
+            // If nothing picked, just stay open (or close if you prefer)
         }
 
 

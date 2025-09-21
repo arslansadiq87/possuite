@@ -12,6 +12,10 @@ using System.Runtime.CompilerServices;
 using Pos.Domain.Formatting;
 using Pos.Client.Wpf.Windows.Sales;
 using Pos.Client.Wpf.Services;
+using System.Windows.Data;
+using Microsoft.VisualBasic;
+using System.Linq;            // at top of PurchasesService.cs
+
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
@@ -19,6 +23,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
     public partial class PurchaseWindow : Window
     {
         private readonly PartyLookupService _partySvc;
+        private bool _suppressSupplierPopup;
+        private static bool IsNewItemPlaceholder(object? o) => Equals(o, CollectionView.NewItemPlaceholder);
 
         private PurchaseEditorVM VM
         {
@@ -149,10 +155,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             InitializeComponent();
             if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
+            
             // … leave the rest of your initialization in the db-ctor, or move it here if you prefer …
         }
 
-      
+
         private void ApplyDestinationPermissionGuard()
         {
             bool canPick = CanSelectDestination();
@@ -472,23 +479,37 @@ namespace Pos.Client.Wpf.Windows.Purchases
             e.Handled = !System.Text.RegularExpressions.Regex.IsMatch(e.Text, @"^[0-9.]$");
         }
 
-        private async Task LoadSuppliersAsync(string term)
+        private async Task LoadSuppliersAsync(string term, bool allowPopup = true)
         {
-            var outletId = AppState.Current.CurrentOutletId; // use your current outlet accessor
+            var outletId = AppState.Current.CurrentOutletId;
             var list = await _partySvc.SearchSuppliersAsync(term, outletId);
+
             _supplierResults.Clear();
             foreach (var p in list) _supplierResults.Add(p);
-            SupplierPopup.IsOpen = _supplierResults.Count > 0 && !string.IsNullOrWhiteSpace(SupplierText.Text);
+
+            // only open popup if allowed, not suppressed, and user actually typed/focused
+            SupplierPopup.IsOpen = allowPopup
+                                   && !_suppressSupplierPopup
+                                   && _supplierResults.Count > 0
+                                   && !string.IsNullOrWhiteSpace(SupplierText.Text)
+                                   && SupplierText.IsKeyboardFocusWithin;
+
             if (_supplierResults.Count > 0 && SupplierList.SelectedIndex < 0)
                 SupplierList.SelectedIndex = 0;
         }
 
 
+
         private async void SupplierText_TextChanged(object sender, TextChangedEventArgs e)
         {
             _selectedPartyId = null;
-            await LoadSuppliersAsync(SupplierText.Text ?? "");
+
+            if (_suppressSupplierPopup)
+                return; // don’t search/open while we’re programmatically setting text
+
+            await LoadSuppliersAsync(SupplierText.Text ?? "", allowPopup: true);
         }
+
 
         private async void SupplierText_KeyDown(object sender, KeyEventArgs e)
         {
@@ -1380,14 +1401,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
             // Supplier box text (lookup name)
             try
             {
+                _suppressSupplierPopup = true;           // ← start suppressing
                 var p = await _db.Set<Party>().AsNoTracking().FirstOrDefaultAsync(x => x.Id == draft.PartyId);
                 _selectedPartyId = draft.PartyId;
                 SupplierText.Text = p?.Name ?? $"Supplier #{draft.PartyId}";
+                SupplierPopup.IsOpen = false;            // force closed just in case
             }
-            catch
+            finally
             {
-                _selectedPartyId = draft.PartyId;
-                SupplierText.Text = $"Supplier #{draft.PartyId}";
+                _suppressSupplierPopup = false;          // ← end suppressing
             }
 
             // Destination radios/combos
@@ -1496,28 +1518,49 @@ namespace Pos.Client.Wpf.Windows.Purchases
             VM.GrandTotal = draft.GrandTotal;
             VM.Status = PurchaseStatus.Draft;
             VM.IsDirty = false;
+            await RefreshPaymentsAsync();  // loads & binds payments for this draft
+
         }
-                        
+
         private void DeleteLineButton_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as Button)?.Tag is PurchaseLineVM vm)
-            {
-                // Commit any in-progress edit to avoid ghost values
-                LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
-                LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
+            LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+            LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
 
+            if ((sender as Button)?.Tag is PurchaseLineVM vm && _lines.Contains(vm))
+            {
                 _lines.Remove(vm);
                 RecomputeAndUpdateTotals();
             }
         }
 
+
         private void DeleteSelectedMenu_Click(object sender, RoutedEventArgs e)
             => RemoveSelectedLines();
 
+        // Replace your RemoveSelectedLines with this
         private void RemoveSelectedLines(bool askConfirm = false)
         {
-            var rows = LinesGrid.SelectedItems.Cast<PurchaseLineVM>().ToList();
-            if (rows.Count == 0) return;
+            // Commit any in-progress edit first
+            LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+            LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
+
+            // Filter out the “new item” placeholder and any non-line objects
+            var rows = LinesGrid.SelectedItems
+                .OfType<PurchaseLineVM>()             // only real line VMs
+                .Where(vm => _lines.Contains(vm))     // belt & suspenders
+                .ToList();
+
+            // Also handle case where the only selection is the placeholder
+            if (rows.Count == 0)
+            {
+                // if placeholder is selected, just unselect and bail
+                var onlyPlaceholderSelected = LinesGrid.SelectedItems.Count == 1 &&
+                                              IsNewItemPlaceholder(LinesGrid.SelectedItems[0]);
+                if (onlyPlaceholderSelected)
+                    LinesGrid.UnselectAll();
+                return;
+            }
 
             if (askConfirm && rows.Count >= 5)
             {
@@ -1526,14 +1569,106 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 if (ok != MessageBoxResult.OK) return;
             }
 
-            LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
-            LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
-
             foreach (var r in rows) _lines.Remove(r);
             RecomputeAndUpdateTotals();
         }
 
+        public async Task UpdatePaymentAsync(int paymentId, decimal newAmount, TenderMethod newMethod, string? newNote, string user)
+        {
+            var pay = await _db.PurchasePayments.FirstOrDefaultAsync(p => p.Id == paymentId);
+            if (pay is null) throw new InvalidOperationException($"Payment #{paymentId} not found.");
 
+            pay.Amount = newAmount;
+            pay.Method = newMethod;
+            pay.Note = string.IsNullOrWhiteSpace(newNote) ? null : newNote.Trim();
+            pay.UpdatedAtUtc = DateTime.UtcNow;
+            pay.UpdatedBy = user;
+
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task RemovePaymentAsync(int paymentId, string user)
+        {
+            var pay = await _db.PurchasePayments.FirstOrDefaultAsync(p => p.Id == paymentId);
+            if (pay is null) return; // already gone
+
+            _db.PurchasePayments.Remove(pay);
+            await _db.SaveChangesAsync();
+        }
+
+        private bool CanEditPayments()
+        {
+            return _model != null && _model.Id > 0 && _model.Status == PurchaseStatus.Draft;
+        }
+
+        private async void EditPayment_Click(object sender, RoutedEventArgs e)
+        {
+            if (!CanEditPayments()) { MessageBox.Show("Payments can be edited only for DRAFT purchases."); return; }
+            if (PaymentsGrid.SelectedItem is not PurchasePayment pay)
+            {
+                MessageBox.Show("Select a payment first."); return;
+            }
+
+            var amtStr = Interaction.InputBox("Enter new amount:", "Edit Payment", pay.Amount.ToString("0.00"));
+            if (string.IsNullOrWhiteSpace(amtStr)) return;
+            if (!decimal.TryParse(amtStr, out var newAmt) || newAmt <= 0m)
+            {
+                MessageBox.Show("Invalid amount."); return;
+            }
+
+            var methodStr = Interaction.InputBox("Method (Cash, Card, Bank, MobileWallet, etc.):",
+                                                 "Edit Payment Method", pay.Method.ToString());
+            if (string.IsNullOrWhiteSpace(methodStr)) return;
+            if (!Enum.TryParse<TenderMethod>(methodStr, true, out var newMethod))
+            {
+                MessageBox.Show("Unknown method."); return;
+            }
+
+            var newNote = Interaction.InputBox("Note (optional):", "Edit Payment Note", pay.Note ?? "");
+
+            var user = AppState.Current?.CurrentUserName ?? "system";
+
+            // ✅ Call your local method (not the service)
+            await UpdatePaymentAsync(pay.Id, newAmt, newMethod, newNote, user);
+
+            await RefreshPaymentsAsync();
+        }
+
+        private async void DeletePayment_Click(object sender, RoutedEventArgs e)
+        {
+            if (!CanEditPayments()) { MessageBox.Show("Payments can be deleted only for DRAFT purchases."); return; }
+            if (PaymentsGrid.SelectedItem is not PurchasePayment pay)
+            {
+                MessageBox.Show("Select a payment first."); return;
+            }
+
+            var ok = MessageBox.Show(
+                $"Delete payment #{pay.Id} ({pay.Method}, {pay.Amount:N2})?",
+                "Confirm Delete", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (ok != MessageBoxResult.OK) return;
+
+            var user = AppState.Current?.CurrentUserName ?? "system";
+
+            // ✅ Call your local method (not the service)
+            await RemovePaymentAsync(pay.Id, user);
+
+            await RefreshPaymentsAsync();
+        }
+
+        // Optional: double-click row to edit
+        private void PaymentsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            EditPayment_Click(sender, e);
+        }
+
+                
+        private void PaymentsGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            var cm = (sender as DataGrid)?.ContextMenu;
+            if (cm == null) return;
+            var allowed = CanEditPayments();
+            foreach (var item in cm.Items.OfType<MenuItem>()) item.IsEnabled = allowed;
+        }
 
 
     }
