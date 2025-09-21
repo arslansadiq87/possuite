@@ -150,16 +150,40 @@
 
         <!-- ======================= Lines grid ======================= -->
         <DataGrid x:Name="LinesGrid" Grid.Row="2"
-                  AutoGenerateColumns="False" CanUserAddRows="True" CanUserDeleteRows="True"
-                  Margin="0,0,0,4">
+          AutoGenerateColumns="False"
+          CanUserAddRows="True"
+          CanUserDeleteRows="True"
+          SelectionMode="Extended"
+          SelectionUnit="FullRow"
+          Margin="0,0,0,4">
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Delete selected row(s)" Click="DeleteSelectedMenu_Click"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+
             <DataGrid.Columns>
+
+                <!-- 🗑 Delete button column must be INSIDE Columns -->
+                <DataGridTemplateColumn Width="40" IsReadOnly="True">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Padding="0" Margin="0"
+                  Content="🗑"
+                  ToolTip="Delete this line"
+                  Click="DeleteLineButton_Click"
+                  Tag="{Binding}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
                 <!-- Identifiers -->
                 <DataGridTextColumn Header="SKU"  Binding="{Binding Sku}"  Width="120" IsReadOnly="True"/>
                 <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="2*"  IsReadOnly="True"/>
 
                 <!-- Qty -->
                 <DataGridTextColumn Header="Qty" Width="80"
-                                    Binding="{Binding Qty, UpdateSourceTrigger=PropertyChanged, StringFormat=N3}">
+                        Binding="{Binding Qty, UpdateSourceTrigger=PropertyChanged, StringFormat=N3}">
                     <DataGridTextColumn.EditingElementStyle>
                         <Style TargetType="TextBox">
                             <Setter Property="HorizontalContentAlignment" Value="Right"/>
@@ -175,7 +199,7 @@
 
                 <!-- Price -->
                 <DataGridTextColumn Header="Price" Width="100"
-                                    Binding="{Binding UnitCost, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
+                        Binding="{Binding UnitCost, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
                     <DataGridTextColumn.EditingElementStyle>
                         <Style TargetType="TextBox">
                             <Setter Property="HorizontalContentAlignment" Value="Right"/>
@@ -191,7 +215,7 @@
 
                 <!-- Discount (amount) -->
                 <DataGridTextColumn Header="Disc" Width="90"
-                                    Binding="{Binding Discount, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
+                        Binding="{Binding Discount, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
                     <DataGridTextColumn.EditingElementStyle>
                         <Style TargetType="TextBox">
                             <Setter Property="HorizontalContentAlignment" Value="Right"/>
@@ -207,7 +231,7 @@
 
                 <!-- Tax % -->
                 <DataGridTextColumn Header="Tax %" Width="80"
-                                    Binding="{Binding TaxRate, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
+                        Binding="{Binding TaxRate, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
                     <DataGridTextColumn.EditingElementStyle>
                         <Style TargetType="TextBox">
                             <Setter Property="HorizontalContentAlignment" Value="Right"/>
@@ -223,7 +247,7 @@
 
                 <!-- Computed -->
                 <DataGridTextColumn Header="Line Total" Width="110" IsReadOnly="True"
-                                    Binding="{Binding LineTotal, Mode=OneWay, StringFormat=N2}">
+                        Binding="{Binding LineTotal, Mode=OneWay, StringFormat=N2}">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="TextAlignment" Value="Right"/>
@@ -232,8 +256,10 @@
                 </DataGridTextColumn>
 
                 <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+
             </DataGrid.Columns>
         </DataGrid>
+
 
         <!-- =================== Bottom: Destination + Totals + Actions + Payments =================== -->
         <Border Grid.Row="3" Margin="0,0,0,0" Padding="12"
@@ -347,7 +373,7 @@ TextChanged="OtherChargesBox_TextChanged" Margin="0,0,0,16" Grid.RowSpan="2"/>
                                     Click="ClearHoldButton_Click"
                                     Style="{StaticResource ModernButton}"/>
                                 <Button Content="Invoices (F7)" Width="150" Height="40"  Margin="0,0,8,0" Click="InvoicesButton_Click" Style="{StaticResource ModernButton}"/>
-                                <Button x:Name="BtnSaveDraft" Content="Save Draft" Width="150" Height="40" Click="BtnSaveDraft_Click" Style="{StaticResource ModernButton}"/>
+                                <Button x:Name="BtnSave" Content="Save Draft" Width="150" Height="40" Click="BtnSaveFinal_Click" Style="{StaticResource ModernButton}"/>
                             </StackPanel>
                         </Grid>
 
