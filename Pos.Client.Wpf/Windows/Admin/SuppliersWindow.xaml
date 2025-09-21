@@ -1,8 +1,0 @@
-﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.SuppliersWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Suppliers" Height="480" Width="720" WindowStartupLocation="CenterOwner">
-    <Grid>
-        <TextBlock Text="Suppliers — placeholder" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-    </Grid>
-</Window>

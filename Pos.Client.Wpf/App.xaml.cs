@@ -50,9 +50,9 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UserOutletAssignmentsWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.ProductsItemsWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.SuppliersWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.CustomersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.PartiesWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.EditPartyWindow>();
             // WINDOWS (register every window you resolve from DI)
             sc.AddTransient<BrandsWindow>();
             sc.AddTransient<EditBrandWindow>();

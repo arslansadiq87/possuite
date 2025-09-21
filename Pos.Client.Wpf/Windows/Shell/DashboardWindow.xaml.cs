@@ -46,11 +46,7 @@ namespace Pos.Client.Wpf.Windows.Shell
             var w = new Pos.Client.Wpf.Windows.Admin.ProductsItemsWindow();
             w.ShowDialog();
         }
-        private void OpenSuppliers_Click(object s, RoutedEventArgs e)
-        {
-            var w = new Pos.Client.Wpf.Windows.Admin.SuppliersWindow();
-            w.ShowDialog();
-        }
+        
         private void OpenOutletsCounters_Click(object s, RoutedEventArgs e)
         {
             var w = App.Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
@@ -66,10 +62,14 @@ namespace Pos.Client.Wpf.Windows.Shell
             w.Owner = this;
             w.ShowDialog();
         }
-        private void OpenCustomers_Click(object s, RoutedEventArgs e)
+        private void OpenParties_Click(object s, RoutedEventArgs e)
         {
-            var w = new Pos.Client.Wpf.Windows.Admin.CustomersWindow();
+            var w = App.Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.PartiesWindow>();
+            w.Owner = this;
             w.ShowDialog();
         }
+
+        
+
     }
 }
