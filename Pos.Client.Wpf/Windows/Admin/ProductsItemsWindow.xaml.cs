@@ -12,6 +12,7 @@ using Pos.Persistence;
 using Pos.Persistence.Services;
 using Pos.Client.Wpf.Windows.Purchases; // for ItemQuickDialog
 using Pos.Domain.Models;
+using System.Windows.Media;
 
 
 namespace Pos.Client.Wpf.Windows.Admin
@@ -502,7 +503,19 @@ namespace Pos.Client.Wpf.Windows.Admin
             MessageBox.Show("Item voided.");
         }
 
+        private void Brands_Click(object sender, RoutedEventArgs e)
+        {
+            var w = App.Services.GetRequiredService<BrandsWindow>();
+            w.Owner = this;
+            w.ShowDialog();
+        }
 
+        private void Categories_Click(object sender, RoutedEventArgs e)
+        {
+            var w = App.Services.GetRequiredService<CategoriesWindow>();
+            w.Owner = this;
+            w.ShowDialog();
+        }
 
     }
 }

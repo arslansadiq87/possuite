@@ -13,13 +13,33 @@
         </Grid.RowDefinitions>
 
         <!-- Top bar: shared search + filter + actions -->
-        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
-            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <TextBox x:Name="SearchBox" Width="280" Height="28" VerticalContentAlignment="Center"
-                     ToolTip="Product name, brand, SKU, or item barcode/name"/>
-            <Button Content="Find" Width="80" Height="28" Margin="8,0,0,0" Click="Find_Click"/>
-            <Button Content="Refresh" Width="90" Height="28" Margin="8,0,0,0" Click="Refresh_Click"/>
-        </StackPanel>
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <!-- Search: -->
+                <ColumnDefinition Width="280"/>
+                <!-- TextBox -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Find -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Refresh -->
+                <ColumnDefinition Width="*"/>
+                <!-- spacer -->
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <!-- Brands -->
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox   Grid.Column="1" x:Name="SearchBox" Height="28" VerticalContentAlignment="Center"
+               ToolTip="Product name, brand, SKU, or item barcode/name"/>
+            <Button    Grid.Column="2" Content="Find"     Width="80" Height="28" Margin="8,0,0,0" Click="Find_Click"/>
+            <Button    Grid.Column="3" Content="Refresh"  Width="90" Height="28" Margin="8,0,0,0" Click="Refresh_Click"/>
+            <!-- column 4 is the stretch spacer -->
+            <Button    Grid.Column="5" Content="Brands"   Width="90" Height="28" Margin="8,0,0,0" Click="Brands_Click"/>
+            <Button    Grid.Column="6" Content="Categories"   Width="90" Height="28" Margin="8,0,0,0" Click="Categories_Click"/>
+        </Grid>
+
 
         <!-- Body: Left tabs (Products / Standalone Items) and Right editable grid -->
         <Grid Grid.Row="1">

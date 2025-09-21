@@ -9,6 +9,7 @@ using Pos.Client.Wpf.Services;
 using Pos.Client.Wpf.Windows.Shell;   // << add
 using Pos.Client.Wpf.Windows.Sales;
 using Pos.Persistence;
+using Pos.Client.Wpf.Windows.Admin;
 
 namespace Pos.Client.Wpf
 {
@@ -52,6 +53,13 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.SuppliersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.CustomersWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseWindow>();
+            // WINDOWS (register every window you resolve from DI)
+            sc.AddTransient<BrandsWindow>();
+            sc.AddTransient<EditBrandWindow>();
+            sc.AddTransient<CategoriesWindow>();
+            sc.AddTransient<EditCategoryWindow>();
+
+                       
 
             Services = sc.BuildServiceProvider();
 

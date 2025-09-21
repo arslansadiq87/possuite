@@ -163,22 +163,8 @@ namespace Pos.Persistence
                 e.HasIndex(x => new { x.OutletId, x.TsUtc });
             });
 
-            // ---------- Suppliers ----------
-            //b.Entity<Supplier>(e =>
-            //{
-            //    e.HasKey(x => x.Id);
-            //    e.Property(x => x.Name).IsRequired().HasMaxLength(200);
-            //    e.Property(x => x.Phone).HasMaxLength(50);
-            //    e.Property(x => x.Email).HasMaxLength(200);
-            //    e.Property(x => x.AddressLine1).HasMaxLength(250);
-            //    e.Property(x => x.AddressLine2).HasMaxLength(250);
-            //    e.Property(x => x.City).HasMaxLength(100);
-            //    e.Property(x => x.State).HasMaxLength(100);
-            //    e.Property(x => x.Country).HasMaxLength(100);
-            //    e.Property(x => x.OpeningBalance).HasColumnType("decimal(18,2)");
-            //    e.HasIndex(x => x.Name);
-            //    e.HasIndex(x => x.IsActive);
-            //});
+            b.Entity<Brand>().HasIndex(x => x.Name).IsUnique();
+            b.Entity<Category>().HasIndex(x => x.Name).IsUnique();
 
             // ---------- Warehouses ----------
             b.Entity<Warehouse>(e =>
