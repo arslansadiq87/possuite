@@ -149,7 +149,7 @@
 
 
         <!-- ======================= Lines grid ======================= -->
-        <DataGrid x:Name="LinesGrid" Grid.Row="2"
+        <DataGrid x:Name="LinesGrid" Grid.Row="2" FontSize="16" FontWeight="DemiBold"
           AutoGenerateColumns="False"
           CanUserAddRows="False"
           CanUserDeleteRows="True"

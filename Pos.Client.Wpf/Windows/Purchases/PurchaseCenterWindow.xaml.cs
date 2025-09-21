@@ -28,6 +28,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public string Status { get; set; } = "";
             public decimal GrandTotal { get; set; }
             public bool IsReturn { get; set; } // ← add this (set it when you load rows)
+            public int Revision { get; set; }                // NEW
 
         }
 
@@ -148,7 +149,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                             Supplier = p.Party != null ? p.Party.Name : "",
                             Ts = p.ReceivedAtUtc ?? p.CreatedAtUtc,
                             p.Status,
-                            p.GrandTotal
+                            p.GrandTotal,
+                            p.Revision
                         })
                         .ToList();
 
@@ -171,7 +173,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     Supplier = string.IsNullOrWhiteSpace(r.Supplier) ? "—" : r.Supplier.Trim(),
                     TsLocal = r.Ts.ToLocalTime().ToString("dd-MMM-yyyy HH:mm"),
                     Status = r.Status.ToString(),
-                    GrandTotal = r.GrandTotal
+                    GrandTotal = r.GrandTotal,
+                    Revision = r.Revision                              // NEW
                 });
 
             foreach (var r in rows)
@@ -202,7 +205,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 .First(p => p.Id == sel.PurchaseId);
 
             HeaderText.Text =
-                $"Purchase {sel.DocNoOrId}  Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
+                $"Purchase {sel.DocNoOrId}  Rev {purchase.Revision}  " +   // NEW
+                $"Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
 
             // Load item/product meta to compose display name (like Sales)
             var itemIds = purchase.Lines.Select(l => l.ItemId).Distinct().ToList();
@@ -253,6 +257,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         }
 
         // ===== Actions visibility (bottom bar) =====
+        // ===== Actions visibility (bottom bar) =====
         private void UpdateActions(UiPurchaseRow? sel)
         {
             // hide all by default
@@ -276,11 +281,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 return;
             }
 
-            // Final purchase: can Amend, Return With
+            // Final purchase: can Amend, Return With, **Void (NEW)**
             if (!sel.IsReturn && sel.Status == nameof(PurchaseStatus.Final))
             {
-                BtnAmend.Visibility = Visibility.Visible;        // if you support revisions
-                BtnReturnWith.Visibility = Visibility.Visible;   // return to supplier referencing this purchase
+                BtnAmend.Visibility = Visibility.Visible;
+                BtnReturnWith.Visibility = Visibility.Visible;
+                BtnVoidPurchase.Visibility = Visibility.Visible;   // NEW
                 return;
             }
 
@@ -291,8 +297,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 BtnVoidReturn.Visibility = Visibility.Visible;
                 return;
             }
-
-            // Voided docs: nothing (ReturnWithout stays visible globally)
         }
 
 
@@ -323,11 +327,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a purchase."); return; }
+            if (sel.IsReturn) { MessageBox.Show("Returns cannot be amended here."); return; }
+            if (sel.Status != nameof(PurchaseStatus.Final)) { MessageBox.Show("Only FINAL purchases can be amended."); return; }
 
-            // TODO: open your editor window with PurchaseId = sel.PurchaseId
-            MessageBox.Show($"Amend {sel.DocNoOrId}", "Amend");
-
-            LoadPurchases();
+            var win = new EditPurchaseWindow(sel.PurchaseId) { Owner = this };
+            if (win.ShowDialog() == true || win.Confirmed)
+            {
+                // Optional toast is already shown inside the dialog
+                MessageBox.Show($"Amended to Revision {win.NewRevision}.");   // NEW
+                LoadPurchases();
+            }
         }
 
         private void Return_Executed(object sender, ExecutedRoutedEventArgs e)
@@ -346,23 +355,65 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a purchase."); return; }
-            if (sel.Status != nameof(PurchaseStatus.Draft)) { MessageBox.Show("Only DRAFT purchases can be voided."); return; }
 
-            var reason = Microsoft.VisualBasic.Interaction.InputBox(
-                $"Void draft {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong entry");
-            if (string.IsNullOrWhiteSpace(reason)) return;
+            // Draft → (existing behavior)
+            if (sel.Status == nameof(PurchaseStatus.Draft))
+            {
+                var reason = Microsoft.VisualBasic.Interaction.InputBox(
+                    $"Void draft {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong entry");
+                if (string.IsNullOrWhiteSpace(reason)) return;
 
-            using var db = new PosClientDbContext(_opts);
-            var p = db.Purchases.First(x => x.Id == sel.PurchaseId);
-            if (p.Status != PurchaseStatus.Draft) { MessageBox.Show("Only DRAFT can be voided."); return; }
+                using var db = new PosClientDbContext(_opts);
+                var p = db.Purchases.First(x => x.Id == sel.PurchaseId);
+                if (p.Status != PurchaseStatus.Draft) { MessageBox.Show("Only DRAFT can be voided."); return; }
 
-            p.Status = PurchaseStatus.Voided;
-            p.UpdatedAtUtc = System.DateTime.UtcNow;
-            p.UpdatedBy = "system"; // replace with current user
-            db.SaveChanges();
+                p.Status = PurchaseStatus.Voided;
+                p.UpdatedAtUtc = System.DateTime.UtcNow;
+                p.UpdatedBy = AppState.Current?.CurrentUserName ?? "system";
+                db.SaveChanges();
 
-            MessageBox.Show("Purchase voided.");
-            LoadPurchases();
+                MessageBox.Show("Purchase voided.");
+                LoadPurchases();
+                return;
+            }
+
+            // FINAL → NEW
+            if (sel.Status == nameof(PurchaseStatus.Final))
+            {
+                var reason = Microsoft.VisualBasic.Interaction.InputBox(
+                    $"Void purchase {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong purchase");
+                if (string.IsNullOrWhiteSpace(reason)) return;
+
+                try
+                {
+                    using var db = new PosClientDbContext(_opts);
+                    using var tx = db.Database.BeginTransaction();
+
+                    var p = db.Purchases.Include(x => x.Lines).First(x => x.Id == sel.PurchaseId);
+                    if (p.Status != PurchaseStatus.Final) { MessageBox.Show("Only FINAL purchases can be voided here."); return; }
+
+                    // NOTE: No stock reversal here yet – PurchasesService.ReceiveAsync doesn’t post stock entries.
+                    // When you wire purchase posting, add symmetric reversal entries here (like Sales).
+
+                    p.Status = PurchaseStatus.Voided;
+                    p.UpdatedAtUtc = System.DateTime.UtcNow;
+                    p.UpdatedBy = AppState.Current?.CurrentUserName ?? "system";
+                    // (If later you add fields p.VoidReason / p.VoidedAtUtc, set them here)
+
+                    db.SaveChanges();
+                    tx.Commit();
+
+                    MessageBox.Show("Purchase voided.");
+                    LoadPurchases();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Failed to void purchase: " + ex.Message);
+                }
+                return;
+            }
+
+            MessageBox.Show("Only DRAFT or FINAL purchases can be voided.");
         }
 
         private void Held_Executed(object sender, ExecutedRoutedEventArgs e) => OpenHeldPicker();

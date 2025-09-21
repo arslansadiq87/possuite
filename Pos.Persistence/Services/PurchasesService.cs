@@ -118,16 +118,20 @@ namespace Pos.Persistence.Services
 
             if (model.Id == 0)
             {
+                // First time finalization
                 model.CreatedAtUtc = DateTime.UtcNow;
                 model.CreatedBy = user;
-                model.DocNo = await EnsurePurchaseNumberAsync(model, CancellationToken.None);   // ⬅️ assign number
+                model.DocNo = await EnsurePurchaseNumberAsync(model, CancellationToken.None);
+                model.Revision = 0;                              // NEW
                 model.Lines = lineList;
                 _db.Purchases.Add(model);
             }
             else
             {
                 var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == model.Id);
+                bool wasFinal = existing.Status == PurchaseStatus.Final;   // NEW
 
+                // header updates...
                 existing.PartyId = model.PartyId;
                 existing.TargetType = model.TargetType;
                 existing.OutletId = model.OutletId;
@@ -135,9 +139,8 @@ namespace Pos.Persistence.Services
                 existing.PurchaseDate = model.PurchaseDate;
                 existing.VendorInvoiceNo = model.VendorInvoiceNo;
 
-                // Assign number if missing (allows pre-assigned numbers from UI if you want)
                 existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
-                    ? await EnsurePurchaseNumberAsync(existing, CancellationToken.None)          // ⬅️ assign number
+                    ? await EnsurePurchaseNumberAsync(existing, CancellationToken.None)
                     : model.DocNo;
 
                 existing.Subtotal = model.Subtotal;
@@ -151,27 +154,28 @@ namespace Pos.Persistence.Services
                 existing.UpdatedAtUtc = model.UpdatedAtUtc;
                 existing.UpdatedBy = model.UpdatedBy;
 
+                // 🔁 NEW: bump revision if this is an amendment of a FINAL
+                if (wasFinal)
+                    existing.Revision = (existing.Revision <= 0 ? 1 : existing.Revision + 1);
+                else
+                    existing.Revision = 0; // first time becoming Final
+
                 _db.PurchaseLines.RemoveRange(existing.Lines);
                 await _db.SaveChangesAsync();
 
                 foreach (var l in lineList)
                 {
-                    l.Id = 0;
-                    l.PurchaseId = existing.Id;
-                    l.Purchase = null;
+                    l.Id = 0; l.PurchaseId = existing.Id; l.Purchase = null;
                 }
                 existing.Lines = lineList;
-                
+
                 model = existing;
             }
 
             await _db.SaveChangesAsync();
-
-            // ⬇️ Stock ledger posting will hook in here later (Final only)
-            // await _stock.PostPurchaseAsync(model, ct); (when you add it)
-
             return model;
         }
+
 
 
         /// <summary>

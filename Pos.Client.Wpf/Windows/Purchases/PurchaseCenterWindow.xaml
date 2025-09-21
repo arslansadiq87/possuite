@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Purchase Center — Edit • Receive • Returns"
-        Height="680" Width="1000"
+        Height="680" Width="1068"
         WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
@@ -153,6 +153,9 @@
                                         <TextBlock FontWeight="SemiBold">
                                             <Run Text="{Binding DocNoOrId}"/>
                                         </TextBlock>
+                                        <TextBlock FontWeight="SemiBold">
+                                            <Run Text="{Binding Revision}"/>
+                                        </TextBlock>
 
                                         <Border Style="{StaticResource StatusBadge}">
                                             <TextBlock Text="{Binding Status}" FontSize="11" Margin="4,0,4,0"/>
@@ -223,22 +226,22 @@
           Click="BtnHeld_Click" Style="{StaticResource ModernButton}" Visibility="Collapsed"/>
 
             <!-- Return doc actions (when a selected row is a Purchase Return) -->
-            <Button x:Name="BtnAmendReturn" Content="_Amend Return (Alt+A)" Width="180" Height="34" Margin="0,0,8,0"
+            <Button x:Name="BtnAmendReturn" Content="_Amend Return (F4)" Width="150" Height="34" Margin="0,0,8,0"
           Click="AmendReturn_Click" Style="{StaticResource ModernButton}"/>
-            <Button x:Name="BtnVoidReturn"  Content="_Void Return (Alt+V)"  Width="160" Height="34" Margin="0,0,8,0"
+            <Button x:Name="BtnVoidReturn"  Content="_Void Return (F3)"  Width="150" Height="34" Margin="0,0,8,0"
           Click="VoidReturn_Click"  Style="{StaticResource ModernButton}"/>
 
             <!-- Base purchase actions -->
-            <Button x:Name="BtnAmend"   Content="_Amend (Rev) (Alt+E)" Width="180" Height="34" Margin="0,0,8,0"
+            <Button x:Name="BtnAmend"   Content="_Amend (Rev) (F2)" Width="150" Height="34" Margin="0,0,8,0"
           Click="Amend_Click" Style="{StaticResource ModernButton}"/>
-            <Button x:Name="BtnVoidPurchase" Content="_Void Purchase (Alt+D)" Width="180" Height="34" Margin="0,0,8,0"
+            <Button x:Name="BtnVoidPurchase" Content="_Void Purchase(F9)" Width="150" Height="34" Margin="0,0,8,0"
           Click="VoidPurchase_Click" Style="{StaticResource ModernButton}"/>
 
             <!-- Returns to supplier -->
-            <Button x:Name="BtnReturnWith" Content="Ret_urn (with purchase) (Alt+U)" Width="240" Height="34" Margin="0,0,8,0"
+            <Button x:Name="BtnReturnWith" Content="Ret_urn Invoice(F8)" Width="150" Height="34" Margin="0,0,8,0"
           Click="ReturnWith_Click" Style="{StaticResource ModernButton}"/>
 
-            <Button x:Name="BtnReturnWithout" Content="Return (witho_ut purchase) (Ctrl+U)" Width="260" Height="34"
+            <Button x:Name="BtnReturnWithout" Content="Ret. w/o Invoice(F7)" Width="150" Height="34"
           Click="ReturnWithout_Click" Style="{StaticResource ModernButton}"/>
 
             <!-- Receive finalization -->

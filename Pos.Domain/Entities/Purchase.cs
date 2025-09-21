@@ -43,6 +43,8 @@ namespace Pos.Domain.Entities
 
         public List<PurchaseLine> Lines { get; set; } = new();
         public List<PurchasePayment> Payments { get; set; } = new();
+        public int Revision { get; set; }  // 0 for first final; +1 per amendment
+
     }
 
     public class PurchaseLine : BaseEntity
