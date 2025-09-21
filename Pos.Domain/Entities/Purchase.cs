@@ -12,8 +12,8 @@ namespace Pos.Domain.Entities
 
     public class Purchase : BaseEntity
     {
-        public int SupplierId { get; set; }
-        public Supplier? Supplier { get; set; }
+        public int PartyId { get; set; }
+        public Party? Party { get; set; }
 
         // Where stock lands
         public StockTargetType TargetType { get; set; } = StockTargetType.Outlet;

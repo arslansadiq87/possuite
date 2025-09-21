@@ -60,7 +60,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             using var db = new PosClientDbContext(_opts);
             var results = await db.Purchases
                 .AsNoTracking()
-                .Include(p => p.Supplier)   // bring supplier names
+                .Include(p => p.Party)   // bring supplier names
                 .Include(p => p.Lines)      // bring line counts
                 .Where(p => p.OutletId == outletId && p.Status == PurchaseStatus.Draft)
                 .OrderByDescending(p => p.CreatedAtUtc)
@@ -68,7 +68,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 {
                     PurchaseId = p.Id,
                     DocNoOrId = string.IsNullOrWhiteSpace(p.DocNo) ? $"#{p.Id}" : p.DocNo!,
-                    Supplier = string.IsNullOrWhiteSpace(p.Supplier!.Name) ? "—" : p.Supplier!.Name,
+                    Supplier = string.IsNullOrWhiteSpace(p.Party!.Name) ? "—" : p.Party!.Name,
                     TsLocal = (p.UpdatedAtUtc ?? p.CreatedAtUtc).ToLocalTime().ToString("dd-MMM-yyyy HH:mm"),
                     Lines = p.Lines.Count,
                     GrandTotal = p.GrandTotal

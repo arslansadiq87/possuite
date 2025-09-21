@@ -11,12 +11,15 @@ using Pos.Persistence.Services;
 using System.Runtime.CompilerServices;
 using Pos.Domain.Formatting;
 using Pos.Client.Wpf.Windows.Sales;
+using Pos.Client.Wpf.Services;
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
     public partial class PurchaseWindow : Window
     {
+        private readonly PartyLookupService _partySvc;
+
         private PurchaseEditorVM VM
         {
             get
@@ -124,16 +127,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
         // ===================== Fields & services =====================
         private readonly PosClientDbContext _db;
         private readonly PurchasesService _purchaseSvc;
-        private readonly SuppliersService _suppliersSvc;
+        //private readonly SuppliersService _suppliersSvc;
         private readonly ItemsService _itemsSvc;
         private Purchase _model = new();
         private readonly ObservableCollection<PurchaseLineVM> _lines = new();
-        private ObservableCollection<Supplier> _supplierResults = new();
+        private ObservableCollection<Party> _supplierResults = new();  // was ObservableCollection<Supplier>
+
+
         private ObservableCollection<Item> _itemResults = new();
         // NEW: destination pickers data (matches XAML group we added)
         private ObservableCollection<Outlet> _outletResults = new();
         private ObservableCollection<Warehouse> _warehouseResults = new();
-        private int? _selectedSupplierId;
+        private int? _selectedPartyId;
         private readonly DbContextOptions<PosClientDbContext> _opts =
     new DbContextOptionsBuilder<PosClientDbContext>()
         .UseSqlite(DbPath.ConnectionString)
@@ -151,7 +156,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             _db = db;
             _purchaseSvc = new PurchasesService(_db);
-            _suppliersSvc = new SuppliersService(_db);
+            _partySvc = new PartyLookupService(_db);
             _itemsSvc = new ItemsService(_db);
 
             // init UI bindings you already had
@@ -374,17 +379,19 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task LoadSuppliersAsync(string term)
         {
-            var list = await _suppliersSvc.SearchAsync(term);
+            var outletId = AppState.Current.CurrentOutletId; // use your current outlet accessor
+            var list = await _partySvc.SearchSuppliersAsync(term, outletId);
             _supplierResults.Clear();
-            foreach (var s in list) _supplierResults.Add(s);
+            foreach (var p in list) _supplierResults.Add(p);
             SupplierPopup.IsOpen = _supplierResults.Count > 0 && !string.IsNullOrWhiteSpace(SupplierText.Text);
             if (_supplierResults.Count > 0 && SupplierList.SelectedIndex < 0)
                 SupplierList.SelectedIndex = 0;
         }
 
+
         private async void SupplierText_TextChanged(object sender, TextChangedEventArgs e)
         {
-            _selectedSupplierId = null;
+            _selectedPartyId = null;
             await LoadSuppliersAsync(SupplierText.Text ?? "");
         }
 
@@ -399,12 +406,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 if (SupplierPopup.IsOpen)
                 {
-                    var pick = SupplierList.SelectedItem as Supplier ?? _supplierResults.FirstOrDefault();
-                    if (pick != null) ChooseSupplier(pick);
+                    var pick = SupplierList.SelectedItem as Party ?? _supplierResults.FirstOrDefault();
+                    if (pick != null) ChooseParty(pick);
                 }
                 else
                 {
-                    await EnsureSupplierSelectedAsync();           // NEW
+                    await EnsureSupplierSelectedAsync();
                 }
                 VendorInvBox.Focus();
                 VendorInvBox.SelectAll();
@@ -419,39 +426,31 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
-        private async Task<bool> EnsureSupplierSelectedAsync() // NEW
+        private async Task<bool> EnsureSupplierSelectedAsync()
         {
-            if (_selectedSupplierId != null) return true;
+            if (_selectedPartyId != null) return true;
             var typed = SupplierText.Text?.Trim();
             if (string.IsNullOrWhiteSpace(typed)) return false;
-            // 1) exact (case-insensitive) name match
-            var exact = await _db.Set<Supplier>()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Name.ToLower() == typed.ToLower());
-            if (exact != null)
-            {
-                ChooseSupplier(exact);  // sets _selectedSupplierId and textbox text
-                return true;
-            }
-            var hits = await _suppliersSvc.SearchAsync(typed);
-            Supplier? pick = null;
-            pick = hits.FirstOrDefault(s => string.Equals(s.Name, typed, StringComparison.OrdinalIgnoreCase))
-                   ?? (hits.Count == 1 ? hits[0] : null);
-            if (pick != null)
-            {
-                ChooseSupplier(pick);
-                return true;
-            }
+
+            var outletId = AppState.Current.CurrentOutletId;
+            var exact = await _partySvc.FindSupplierByExactNameAsync(typed, outletId);
+            if (exact != null) { ChooseParty(exact); return true; }
+
+            var hits = await _partySvc.SearchSuppliersAsync(typed, outletId);
+            var pick = hits.FirstOrDefault(p => string.Equals(p.Name, typed, StringComparison.OrdinalIgnoreCase))
+                       ?? (hits.Count == 1 ? hits[0] : null);
+            if (pick != null) { ChooseParty(pick); return true; }
+
             return false;
         }
+
 
         private void SupplierList_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                if (SupplierList.SelectedItem is Supplier s) ChooseSupplier(s);
-                e.Handled = true;
-                return;
+                if (SupplierList.SelectedItem is Party p) ChooseParty(p);
+                e.Handled = true; return;
             }
             if (e.Key == Key.Escape)
             {
@@ -471,18 +470,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void SupplierList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (SupplierList.SelectedItem is Supplier s) ChooseSupplier(s);
+            if (SupplierList.SelectedItem is Party p) ChooseParty(p);
         }
 
-        private void ChooseSupplier(Supplier s)
+
+        private void ChooseParty(Party p)
         {
-            _selectedSupplierId = s.Id;
-            SupplierText.Text = s.Name;
+            _selectedPartyId = p.Id;
+            SupplierText.Text = p.Name;
             SupplierPopup.IsOpen = false;
             SupplierText.Focus();
             SupplierText.SelectAll();
         }
 
+       
         private async Task LoadItemsAsync(string term)
         {
             var list = await _itemsSvc.SearchAsync(term);
@@ -696,7 +697,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 MessageBox.Show("Please pick a Supplier (press Enter after typing, or choose from the list).");
                 return;
             }
-            if (_selectedSupplierId == null)
+            if (_selectedPartyId == null)
             {
                 MessageBox.Show("Please pick a Supplier (type and press Enter or double-click from list).");
                 return;
@@ -739,7 +740,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 target = StockTargetType.Outlet; // UI not present
             }
         
-        _model.SupplierId = _selectedSupplierId.Value;
+        _model.PartyId = _selectedPartyId.Value;
             _model.TargetType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
@@ -820,21 +821,34 @@ namespace Pos.Client.Wpf.Windows.Purchases
             var dlg = new SupplierQuickDialog { Owner = this };
             if (dlg.ShowDialog() == true)
             {
-                var s = await _suppliersSvc.CreateAsync(new Supplier
+                var now = DateTime.UtcNow;
+                // 1) create party
+                var party = new Party
                 {
                     Name = dlg.SupplierName,
                     Phone = dlg.SupplierPhone,
                     Email = dlg.SupplierEmail,
-                    AddressLine1 = dlg.Address1,
-                    City = dlg.City,
-                    Country = dlg.Country,
-                    IsActive = true
-                });
-                _selectedSupplierId = s.Id;
-                SupplierText.Text = s.Name;
+                    IsActive = true,
+                    IsSharedAcrossOutlets = true, // or false + map below
+                };
+                _db.Parties.Add(party);
+                await _db.SaveChangesAsync();
+
+                // 2) add Supplier role
+                _db.PartyRoles.Add(new PartyRole { PartyId = party.Id, Role = RoleType.Supplier });
+                await _db.SaveChangesAsync();
+
+                // 3) optionally map to current outlet if not shared
+                // var outletId = AppState.Current.CurrentOutletId;
+                // _db.PartyOutlets.Add(new PartyOutlet { PartyId = party.Id, OutletId = outletId, AllowCredit = false, IsActive = true });
+                // await _db.SaveChangesAsync();
+
+                _selectedPartyId = party.Id;
+                SupplierText.Text = party.Name;
                 SupplierPopup.IsOpen = false;
             }
         }
+
 
         private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
@@ -866,7 +880,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 amt,
                 note: null,
                 outletId: outletId,
-                supplierId: _model.SupplierId,
+                supplierId: _model.PartyId,
                 tillSessionId: null,
                 counterId: null,
                 user: "admin");
@@ -898,7 +912,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 { outletId = ot.Id; target = StockTargetType.Outlet; }
             }
             catch { /* ignore if controls not present */ }
-            _model.SupplierId = _selectedSupplierId!.Value;
+            _model.PartyId = _selectedPartyId!.Value;
             _model.TargetType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
@@ -936,7 +950,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 catch { }
             }
             _model = new Purchase();
-            _selectedSupplierId = null;
+            _selectedPartyId = null;
             SupplierText.Clear();
             VendorInvBox.Clear();
             DatePicker.SelectedDate = DateTime.Now;
@@ -1073,7 +1087,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 MessageBox.Show("Please pick a Supplier (press Enter after typing, or choose from the list).");
                 return;
             }
-            if (_selectedSupplierId == null)
+            if (_selectedPartyId == null)
             {
                 MessageBox.Show("Please pick a Supplier (type and press Enter or double-click from list).");
                 return;
@@ -1114,7 +1128,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
 
             // Build model and lines exactly like BtnSaveDraft_Click
-            _model.SupplierId = _selectedSupplierId.Value;
+            _model.PartyId = _selectedPartyId.Value;
             _model.TargetType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
@@ -1166,14 +1180,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
             // Supplier box text (lookup name)
             try
             {
-                var sup = await _db.Set<Supplier>().AsNoTracking().FirstOrDefaultAsync(s => s.Id == draft.SupplierId);
-                _selectedSupplierId = draft.SupplierId;
-                SupplierText.Text = sup?.Name ?? $"Supplier #{draft.SupplierId}";
+                var p = await _db.Set<Party>().AsNoTracking().FirstOrDefaultAsync(x => x.Id == draft.PartyId);
+                _selectedPartyId = draft.PartyId;
+                SupplierText.Text = p?.Name ?? $"Supplier #{draft.PartyId}";
             }
             catch
             {
-                _selectedSupplierId = draft.SupplierId;
-                SupplierText.Text = $"Supplier #{draft.SupplierId}";
+                _selectedPartyId = draft.PartyId;
+                SupplierText.Text = $"Supplier #{draft.PartyId}";
             }
 
             // Destination radios/combos
@@ -1240,7 +1254,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             // (Optional) also mirror into VM if you have bindings elsewhere
             VM.PurchaseId = draft.Id;
-            VM.SupplierId = draft.SupplierId;
+            VM.SupplierId = draft.PartyId;
             VM.TargetType = draft.TargetType;
             VM.OutletId = draft.OutletId;
             VM.WarehouseId = draft.WarehouseId;
@@ -1257,6 +1271,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
         }
 
 
+        //private async Task LoadSupplierSuggestionsAsync(string term)
+        //{
+        //    using var db = new PosClientDbContext(_opts);
+        //    var svc = new PartyLookupService(db);
+        //    var list = await svc.SearchSuppliersAsync(term ?? string.Empty, AppState.Current.CurrentOutletId);
+        //    SupplierText.SourceUpdated = list;          // your suppliers dropdown/list
+        //}
+
+        private async Task<Party?> FindSupplierByExactNameAsync(string name)
+        {
+            using var db = new PosClientDbContext(_opts);
+            var svc = new PartyLookupService(db);
+            return await svc.FindSupplierByExactNameAsync(name ?? string.Empty, AppState.Current.CurrentOutletId);
+        }
 
 
 

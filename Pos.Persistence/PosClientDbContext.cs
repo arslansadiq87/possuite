@@ -25,7 +25,7 @@ namespace Pos.Persistence
         public DbSet<PurchaseLine> PurchaseLines { get; set; }
         public DbSet<PurchasePayment> PurchasePayments { get; set; }   // payments
         public DbSet<CashLedger> CashLedgers { get; set; }             // cash ledger
-        public DbSet<Supplier> Suppliers { get; set; }
+        //public DbSet<Supplier> Suppliers { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
         public DbSet<Outlet> Outlets { get; set; } = null!;
         public DbSet<Counter> Counters { get; set; } = null!;
@@ -101,9 +101,9 @@ namespace Pos.Persistence
             {
                 e.HasKey(x => x.Id);
 
-                e.HasOne<Supplier>()
+                e.HasOne<Party>()
                  .WithMany()
-                 .HasForeignKey(x => x.SupplierId)
+                 .HasForeignKey(x => x.PartyId)
                  .OnDelete(DeleteBehavior.Restrict);
 
                 e.Property(x => x.Status).HasConversion<int>();
@@ -164,21 +164,21 @@ namespace Pos.Persistence
             });
 
             // ---------- Suppliers ----------
-            b.Entity<Supplier>(e =>
-            {
-                e.HasKey(x => x.Id);
-                e.Property(x => x.Name).IsRequired().HasMaxLength(200);
-                e.Property(x => x.Phone).HasMaxLength(50);
-                e.Property(x => x.Email).HasMaxLength(200);
-                e.Property(x => x.AddressLine1).HasMaxLength(250);
-                e.Property(x => x.AddressLine2).HasMaxLength(250);
-                e.Property(x => x.City).HasMaxLength(100);
-                e.Property(x => x.State).HasMaxLength(100);
-                e.Property(x => x.Country).HasMaxLength(100);
-                e.Property(x => x.OpeningBalance).HasColumnType("decimal(18,2)");
-                e.HasIndex(x => x.Name);
-                e.HasIndex(x => x.IsActive);
-            });
+            //b.Entity<Supplier>(e =>
+            //{
+            //    e.HasKey(x => x.Id);
+            //    e.Property(x => x.Name).IsRequired().HasMaxLength(200);
+            //    e.Property(x => x.Phone).HasMaxLength(50);
+            //    e.Property(x => x.Email).HasMaxLength(200);
+            //    e.Property(x => x.AddressLine1).HasMaxLength(250);
+            //    e.Property(x => x.AddressLine2).HasMaxLength(250);
+            //    e.Property(x => x.City).HasMaxLength(100);
+            //    e.Property(x => x.State).HasMaxLength(100);
+            //    e.Property(x => x.Country).HasMaxLength(100);
+            //    e.Property(x => x.OpeningBalance).HasColumnType("decimal(18,2)");
+            //    e.HasIndex(x => x.Name);
+            //    e.HasIndex(x => x.IsActive);
+            //});
 
             // ---------- Warehouses ----------
             b.Entity<Warehouse>(e =>

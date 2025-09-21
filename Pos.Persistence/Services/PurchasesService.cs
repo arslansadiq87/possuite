@@ -39,7 +39,7 @@ namespace Pos.Persistence.Services
                 var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id);
 
                 // header fields allowed in Draft
-                existing.SupplierId = draft.SupplierId;
+                existing.PartyId = draft.PartyId;
                 existing.TargetType = draft.TargetType;
                 existing.OutletId = draft.OutletId;
                 existing.WarehouseId = draft.WarehouseId;
@@ -128,7 +128,7 @@ namespace Pos.Persistence.Services
             {
                 var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == model.Id);
 
-                existing.SupplierId = model.SupplierId;
+                existing.PartyId = model.PartyId;
                 existing.TargetType = model.TargetType;
                 existing.OutletId = model.OutletId;
                 existing.WarehouseId = model.WarehouseId;
@@ -244,7 +244,7 @@ namespace Pos.Persistence.Services
                 throw new InvalidOperationException("Payment exceeds total.");
 
             // Ensure consistent Supplier/Outlet on the payment row
-            var paySupplierId = purchase.SupplierId; // trust the purchase
+            var paySupplierId = purchase.PartyId; // trust the purchase
             int payOutletId;
 
             if (purchase.TargetType == StockTargetType.Outlet && purchase.OutletId is int po && po > 0)
@@ -380,7 +380,7 @@ namespace Pos.Persistence.Services
 
         private static void ValidateDestination(Purchase p)
         {
-            if (p.SupplierId <= 0)
+            if (p.PartyId <= 0)
                 throw new InvalidOperationException("Supplier required.");
 
             if (p.TargetType == StockTargetType.Outlet)
@@ -400,7 +400,7 @@ namespace Pos.Persistence.Services
         public Task<List<Purchase>> ListHeldAsync()
             => _db.Purchases
               .AsNoTracking()
-              .Include(p => p.Supplier)   // <- keep this!
+              .Include(p => p.Party)   // <- keep this!
               .Where(p => p.Status == PurchaseStatus.Draft)
               .OrderByDescending(p => p.PurchaseDate)
               .ToListAsync();
@@ -409,7 +409,7 @@ namespace Pos.Persistence.Services
         public Task<List<Purchase>> ListPostedAsync()
             => _db.Purchases
                   .AsNoTracking()
-                  .Include(p => p.Supplier)
+                  .Include(p => p.Party)
                   .Where(p => p.Status == PurchaseStatus.Final)
                   .OrderByDescending(p => p.ReceivedAtUtc ?? p.PurchaseDate)
                   .ToListAsync();
@@ -417,7 +417,7 @@ namespace Pos.Persistence.Services
         public Task<Purchase> LoadWithLinesAsync(int id)
             => _db.Purchases
                   .Include(p => p.Lines)
-                  .Include(p => p.Supplier)
+                  .Include(p => p.Party)
                   .FirstAsync(p => p.Id == id);
 
 

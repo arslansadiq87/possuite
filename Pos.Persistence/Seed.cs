@@ -403,17 +403,30 @@ namespace Pos.Persistence
 
         private static void EnsureSuppliers(PosClientDbContext db)
         {
-            // Create a default supplier only if none exist (idempotent)
-            if (!db.Suppliers.Any())
+            // Do we already have any supplier party?
+            if (db.PartyRoles.Any(r => r.Role == RoleType.Supplier))
+                return;
+
+            // Create the Party row
+            var party = new Party
             {
-                db.Suppliers.Add(new Supplier
-                {
-                    Name = "Default Supplier",
-                    IsActive = true,
-                    CreatedAtUtc = DateTime.UtcNow
-                });
-                db.SaveChanges();
-            }
+                Name = "Default Supplier",
+                IsActive = true,
+                IsSharedAcrossOutlets = true,     // shared supplier; no PartyOutlet rows required
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Parties.Add(party);
+            db.SaveChanges();
+
+            // Attach the Supplier role
+            db.PartyRoles.Add(new PartyRole
+            {
+                PartyId = party.Id,
+                Role = RoleType.Supplier,
+                CreatedAtUtc = DateTime.UtcNow
+            });
+
+            db.SaveChanges();
         }
 
     }

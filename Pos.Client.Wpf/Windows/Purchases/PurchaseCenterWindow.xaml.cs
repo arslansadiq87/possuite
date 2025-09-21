@@ -122,7 +122,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             // Base query: join Supplier; filter date range on CreatedAt or ReceivedAt
             var q = db.Purchases.AsNoTracking()
-                    .Include(p => p.Supplier)
+                    .Include(p => p.Party)
                     .Where(p =>
                         (!fromUtc.HasValue || (p.CreatedAtUtc >= fromUtc || p.ReceivedAtUtc >= fromUtc)) &&
                         (!toUtc.HasValue || (p.CreatedAtUtc < toUtc || p.ReceivedAtUtc < toUtc))
@@ -135,7 +135,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 q = q.Where(p =>
                     (p.DocNo ?? "").Contains(term) ||
                     (p.VendorInvoiceNo ?? "").Contains(term) ||
-                    (p.Supplier != null && p.Supplier.Name.Contains(term))
+                    (p.Party != null && p.Party.Name.Contains(term))
                 );
             }
 
@@ -145,7 +145,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         {
                             p.Id,
                             p.DocNo,
-                            Supplier = p.Supplier != null ? p.Supplier.Name : "",
+                            Supplier = p.Party != null ? p.Party.Name : "",
                             Ts = p.ReceivedAtUtc ?? p.CreatedAtUtc,
                             p.Status,
                             p.GrandTotal
