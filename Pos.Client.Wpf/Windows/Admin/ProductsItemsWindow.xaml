@@ -30,14 +30,14 @@
                 <!-- Brands -->
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource ModernTextBlock}"/>
             <TextBox   Grid.Column="1" x:Name="SearchBox" Height="28" VerticalContentAlignment="Center"
-               ToolTip="Product name, brand, SKU, or item barcode/name"/>
-            <Button    Grid.Column="2" Content="Find"     Width="80" Height="28" Margin="8,0,0,0" Click="Find_Click"/>
-            <Button    Grid.Column="3" Content="Refresh"  Width="90" Height="28" Margin="8,0,0,0" Click="Refresh_Click"/>
+               ToolTip="Product name, brand, SKU, or item barcode/name" Style="{StaticResource ModernTextBox}"/>
+            <Button    Grid.Column="2" Content="Find"     Width="80" Margin="8,0,0,0" Click="Find_Click" Style="{StaticResource ModernButton}"/>
+            <Button    Grid.Column="3" Content="Refresh"  Width="90" Margin="8,0,0,0" Click="Refresh_Click" Style="{StaticResource ModernButton}"/>
             <!-- column 4 is the stretch spacer -->
-            <Button    Grid.Column="5" Content="Brands"   Width="90" Height="28" Margin="8,0,0,0" Click="Brands_Click"/>
-            <Button    Grid.Column="6" Content="Categories"   Width="90" Height="28" Margin="8,0,0,0" Click="Categories_Click"/>
+            <Button    Grid.Column="5" Content="Brands"   Width="90" Margin="8,0,0,0" Click="Brands_Click" Style="{StaticResource ModernButton}"/>
+            <Button    Grid.Column="6" Content="Categories"   Width="90" Margin="8,0,0,0" Click="Categories_Click" Style="{StaticResource ModernButton}"/>
         </Grid>
 
 
@@ -50,37 +50,43 @@
             </Grid.ColumnDefinitions>
 
             <!-- LEFT: Tabs -->
-            <TabControl x:Name="LeftTabs" Grid.Column="0" SelectionChanged="LeftTabs_SelectionChanged">
+            <TabControl x:Name="LeftTabs" Grid.Column="0" SelectionChanged="LeftTabs_SelectionChanged" Style="{StaticResource ModernTabControl}">
                 <!-- PRODUCTS TAB -->
-                <TabItem Header="Products">
+                <TabItem Header="Products" Style="{StaticResource ModernTabItem}">
                     <DockPanel>
-                        <ToolBar DockPanel.Dock="Top">
-                            <Button Content="New Product" Click="NewProduct_Click"/>
-                            <Button Content="Add Variants" Margin="8,0,0,0" Click="AddVariants_Click"/>
+                        <ToolBar DockPanel.Dock="Top"
+                 Style="{StaticResource ModernToolBar.Compact}"
+                 ToolBarTray.IsLocked="True">
+                            <!-- keeps one row -->
+                            <Button Content="New Product" ToolBar.OverflowMode="Never" Click="NewProduct_Click"/>
+                            <Button Content="Add Variants" ToolBar.OverflowMode="Never" Click="AddVariants_Click"/>
                             <Separator/>
-                            <Button Content="Delete Product" Click="DeleteProduct_Click"/>
-                            <Button Content="Void Product" Margin="8,0,0,0" Click="VoidProduct_Click"/>
+                            <Button Content="Delete Product" ToolBar.OverflowMode="Never" Click="DeleteProduct_Click"/>
+                            <Button Content="Void Product" ToolBar.OverflowMode="Never" Click="VoidProduct_Click"/>
                         </ToolBar>
 
                         <ListBox x:Name="ProductsList"
-                             SelectionMode="Single"
-                             SelectionChanged="ProductsList_SelectionChanged"
-                             DisplayMemberPath="Name"/>
-
+                 Style="{StaticResource ModernListBox}"
+                 ItemContainerStyle="{StaticResource ModernListBoxItem}"
+                 SelectionMode="Single"
+                 SelectionChanged="ProductsList_SelectionChanged"
+                 DisplayMemberPath="Name"/>
                     </DockPanel>
                 </TabItem>
 
                 <!-- STANDALONE ITEMS TAB -->
-                <TabItem Header="Standalone Items">
+                <TabItem Header="Standalone Items" Style="{StaticResource ModernTabItem}">
                     <DockPanel>
-                        <ToolBar DockPanel.Dock="Top">
-                            <Button Content="New Item" Click="NewStandaloneItem_Click"/>
+                        <ToolBar DockPanel.Dock="Top" Style="{StaticResource ModernToolBar.Compact}"
+                            ToolBarTray.IsLocked="True">
+                            <Button Content="New Item" Click="NewStandaloneItem_Click" ToolBar.OverflowMode="Never"/>
                             <Separator/>
-                            <Button Content="Delete Item" Click="DeleteStandaloneItem_Click"/>
-                            <Button Content="Void Item" Margin="8,0,0,0" Click="VoidStandaloneItem_Click"/>
+                            <Button Content="Delete Item" Click="DeleteStandaloneItem_Click" ToolBar.OverflowMode="Never"/>
+                            <Button Content="Void Item" Margin="8,0,0,0" Click="VoidStandaloneItem_Click" ToolBar.OverflowMode="Never"/>
                         </ToolBar>
 
-                        <ListBox x:Name="StandaloneList"
+                        <ListBox x:Name="StandaloneList" Style="{StaticResource ModernListBox}"
+                                ItemContainerStyle="{StaticResource ModernListBoxItem}"
                                  DisplayMemberPath="Name"
                                  SelectionChanged="StandaloneList_SelectionChanged"/>
                     </DockPanel>
@@ -90,18 +96,19 @@
             <Border Grid.Column="1"/>
 
             <!-- RIGHT: Editable grid (shows product variants OR standalone items) -->
-            <GroupBox Grid.Column="2">
-                <GroupBox.Header>
+            <GroupBox Grid.Column="2" Style="{StaticResource ModernGroupBox}">
+                <GroupBox.Header >
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Edit " />
                         <TextBlock x:Name="GridTitle" FontWeight="Bold" Text="Variants"/>
                     </StackPanel>
                 </GroupBox.Header>
                 <DockPanel>
-                    <ToolBar DockPanel.Dock="Top">
+                    <ToolBar DockPanel.Dock="Top" Style="{StaticResource ModernToolBar.Compact}"
+                        ToolBarTray.IsLocked="True">
                         <Button Content="Save Changes" Click="SaveVariants_Click"/>
                     </ToolBar>
-                    <DataGrid x:Name="VariantsGrid"
+                    <DataGrid x:Name="VariantsGrid" Style="{StaticResource ModernDataGrid}"
                               AutoGenerateColumns="False"
                               CanUserAddRows="True"
                               CanUserDeleteRows="True">
@@ -202,7 +209,7 @@
 
         <!-- Footer -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Close" Width="110" Height="32" IsCancel="True"/>
+            <Button Content="Close" Width="110" IsCancel="True" Style="{StaticResource ModernButton}"/>
         </StackPanel>
     </Grid>
 </Window>

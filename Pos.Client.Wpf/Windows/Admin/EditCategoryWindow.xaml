@@ -26,8 +26,8 @@
         </Grid>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Save" Width="90" Margin="0,0,8,0" Click="Save_Click"/>
-            <Button Content="Cancel" Width="90" Click="Cancel_Click"/>
+            <Button Content="Save" Width="90" Margin="0,0,8,0" Click="Save_Click" Style="{StaticResource ModernButton}"/>
+            <Button Content="Cancel" Width="90" Click="Cancel_Click" Style="{StaticResource ModernButton}"/>
         </StackPanel>
     </Grid>
 </Window>

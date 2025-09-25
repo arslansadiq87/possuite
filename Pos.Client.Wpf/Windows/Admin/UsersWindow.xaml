@@ -10,17 +10,17 @@
         </Grid.RowDefinitions>
 
         <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,8">
-            <TextBlock Text="Users" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <TextBlock Text="Users" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" Style="{StaticResource ModernTextBlock}"/>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                <Button Content="Refresh" Click="Refresh_Click" Margin="8,0,0,0"/>
-                <Button Content="Add" Click="Add_Click" Margin="8,0,0,0"/>
-                <Button Content="Edit" Click="Edit_Click" Margin="8,0,0,0"/>
-                <Button Content="Delete" Click="Delete_Click" Margin="8,0,0,0"/>
-                <Button Content="Outlet Assignments" Click="Assignments_Click" Margin="8,0,0,0"/>
+                <Button Content="Refresh" Click="Refresh_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
+                <Button Content="Add" Click="Add_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
+                <Button Content="Edit" Click="Edit_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
+                <Button Content="Delete" Click="Delete_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
+                <Button Content="Outlet Assignments" Click="Assignments_Click" Margin="8,0,0,0" Width="150" Style="{StaticResource ModernButton}"/>
             </StackPanel>
         </DockPanel>
 
-        <DataGrid x:Name="UsersGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single">
+        <DataGrid x:Name="UsersGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" Style="{StaticResource ModernDataGrid}"  FontSize="16" FontWeight="DemiBold">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="*"/>
                 <DataGridTextColumn Header="Display Name" Binding="{Binding DisplayName}" Width="1.2*"/>
@@ -30,6 +30,6 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <TextBlock Grid.Row="2" FontSize="12" Opacity="0.7" Text="Tip: Use 'Outlet Assignments' to set per-outlet roles (Manager, Cashier, etc.)."/>
+        <TextBlock Grid.Row="2" FontSize="12" Opacity="0.7" Text="Tip: Use 'Outlet Assignments' to set per-outlet roles (Manager, Cashier, etc.)." Style="{StaticResource ModernTextBlock}"/>
     </Grid>
 </Window>

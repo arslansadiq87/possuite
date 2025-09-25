@@ -14,23 +14,23 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Username" Grid.Row="0" Margin="0,0,0,4"/>
+        <TextBlock Text="Username" Grid.Row="0" Margin="0,0,0,4" Style="{StaticResource ModernTextBlock}"/>
         <TextBox x:Name="UserBox"
-                 Grid.Row="1" Height="28" Margin="0,0,0,12"
+                 Grid.Row="1" Margin="0,0,0,12"
                  TabIndex="0"
-                 KeyDown="UserBox_KeyDown"/>
+                 KeyDown="UserBox_KeyDown" Style="{StaticResource ModernTextBox}"/>
 
-        <TextBlock Text="Password" Grid.Row="2" Margin="0,0,0,4"/>
+        <TextBlock Text="Password" Grid.Row="2" Margin="0,0,0,4" Style="{StaticResource ModernTextBlock}"/>
         <PasswordBox x:Name="PassBox"
-                     Grid.Row="3" Height="28" Margin="0,0,0,12"
+                     Grid.Row="3" Margin="0,0,0,12"
                      TabIndex="1"
-                     KeyDown="PassBox_KeyDown"/>
+                     KeyDown="PassBox_KeyDown" Style="{StaticResource ModernPasswordBox}"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="LoginBtn"
                     Content="Login" Width="100" Height="32"
                     IsDefault="True"
-                    Click="Login_Click"/>
+                    Click="Login_Click" Style="{StaticResource ModernButton}"/>
         </StackPanel>
     </Grid>
 </Window>

@@ -16,7 +16,7 @@
         <DockPanel Grid.Row="0" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,0,0,8">
             <TextBlock Text="Outlets - Counters" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" >
-                <Button Content="Refresh" Margin="8,0,0,0" Click="Refresh_Click"/>
+                <Button Content="Refresh" Margin="8,0,0,0" Click="Refresh_Click"  Style="{StaticResource ModernButton}"/>
             </StackPanel>
         </DockPanel>
 
@@ -24,12 +24,12 @@
         <GroupBox Grid.Row="1" Grid.Column="0" Header="Outlets" Margin="0,0,8,0">
             <DockPanel>
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,6">
-                    <Button Content="Add" Click="AddOutlet_Click" Margin="0,0,6,0"/>
-                    <Button Content="Edit" Click="EditOutlet_Click" Margin="0,0,6,0"/>
-                    <Button Content="Delete" Click="DeleteOutlet_Click"/>
+                    <Button Content="Add" Click="AddOutlet_Click" Margin="0,0,6,0"  Width="80" Style="{StaticResource ModernButton}"/>
+                    <Button Content="Edit" Click="EditOutlet_Click" Margin="0,0,6,0"  Width="80" Style="{StaticResource ModernButton}"/>
+                    <Button Content="Delete" Click="DeleteOutlet_Click"  Width="80" Style="{StaticResource ModernButton}"/>
                 </StackPanel>
                 <DataGrid x:Name="OutletsGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                          SelectionChanged="OutletsGrid_SelectionChanged">
+                          SelectionChanged="OutletsGrid_SelectionChanged"  FontSize="16" FontWeight="DemiBold">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="80"/>
                         <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
@@ -46,23 +46,23 @@
             <DockPanel>
                 <!-- TOOLBAR -->
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,6">
-                    <Button Content="Add" Click="AddCounter_Click" Margin="0,0,6,0"/>
-                    <Button Content="Edit" Click="EditCounter_Click" Margin="0,0,6,0"/>
-                    <Button Content="Delete" Click="DeleteCounter_Click" Margin="12,0,6,0"/>
+                    <Button Content="Add" Click="AddCounter_Click" Margin="0,0,6,0"  Style="{StaticResource ModernButton}"/>
+                    <Button Content="Edit" Click="EditCounter_Click" Margin="0,0,6,0"  Style="{StaticResource ModernButton}"/>
+                    <Button Content="Delete" Click="DeleteCounter_Click" Margin="0,0,6,0"  Style="{StaticResource ModernButton}"/>
 
                     <!-- NEW: Assign / Unassign This PC -->
                     <Separator Width="8" />
                     <Button Content="Assign This PC"
                         Click="AssignThisPc_Click"
                         Margin="0,0,6,0"
-                        ToolTip="Bind this machine to the selected counter"/>
+                        ToolTip="Bind this machine to the selected counter"  Style="{StaticResource ModernButton}"/>
                     <Button Content="Unassign This PC"
                         Click="UnassignThisPc_Click"
-                        ToolTip="Remove this machine's binding (free the counter)"/>
+                        ToolTip="Remove this machine's binding (free the counter)" Style="{StaticResource ModernButton}"/>
                 </StackPanel>
 
                 <!-- GRID -->
-                <DataGrid x:Name="CountersGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                <DataGrid x:Name="CountersGrid" AutoGenerateColumns="False" IsReadOnly="True"  FontSize="16" FontWeight="DemiBold">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Counter" Binding="{Binding Name}" Width="*"/>
                         <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="70"/>

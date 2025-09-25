@@ -7,23 +7,23 @@
     <DockPanel Margin="12">
         <!-- Top bar -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource ModernTextBlock}"/>
             <TextBox x:Name="SearchBox" Width="240" Margin="0,0,8,0" 
-                     TextChanged="SearchBox_TextChanged"/>
-            <Button Content="Add" Width="90" Margin="0,0,8,0" Click="Add_Click"/>
-            <Button x:Name="EditBtn" Content="Edit" Width="90" Margin="0,0,8,0" Click="Edit_Click"/>
+                     TextChanged="SearchBox_TextChanged" Style="{StaticResource ModernTextBox}"/>
+            <Button Content="Add" Width="90" Margin="0,0,8,0" Click="Add_Click" Style="{StaticResource ModernButton}"/>
+            <Button x:Name="EditBtn" Content="Edit" Width="90" Margin="0,0,8,0" Click="Edit_Click" Style="{StaticResource ModernButton}"/>
 
             <!-- Only one of these will be visible at a time -->
             <Button x:Name="DisableBtn" Content="Disable" Width="90" Margin="0,0,8,0"
-            Visibility="Collapsed" Click="Disable_Click"/>
+            Visibility="Collapsed" Click="Disable_Click" Style="{StaticResource ModernButton}"/>
             <Button x:Name="EnableBtn"  Content="Enable"  Width="90" Margin="0,0,8,0"
-            Visibility="Collapsed" Click="Enable_Click"/>
+            Visibility="Collapsed" Click="Enable_Click" Style="{StaticResource ModernButton}"/>
             <CheckBox x:Name="ShowInactive" Content="Show inactive" Margin="16,0,0,0"
-                      Checked="FilterChanged" Unchecked="FilterChanged"/>
+                      Checked="FilterChanged" Unchecked="FilterChanged" Style="{StaticResource ModernCheckBox}"/>
         </StackPanel>
 
         <!-- Grid -->
-        <DataGrid x:Name="BrandsGrid"
+        <DataGrid x:Name="BrandsGrid" Style="{StaticResource ModernDataGrid}" 
           AutoGenerateColumns="False"
           IsReadOnly="True"
           SelectionMode="Single"

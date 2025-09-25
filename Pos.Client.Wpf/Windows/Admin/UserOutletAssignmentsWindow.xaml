@@ -4,10 +4,10 @@
         Title="User Outlet Assignments" Height="520" Width="720" WindowStartupLocation="CenterOwner">
     <DockPanel Margin="12">
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,8">
-            <Button Content="Add" Click="Add_Click" Margin="0,0,6,0"/>
-            <Button Content="Edit" Click="Edit_Click" Margin="0,0,6,0"/>
-            <Button Content="Remove" Click="Remove_Click" Margin="0,0,6,0"/>
-            <Button Content="Close" Click="Close_Click" />
+            <Button Content="Add" Click="Add_Click" Margin="0,0,6,0" Style="{StaticResource ModernButton}"/>
+            <Button Content="Edit" Click="Edit_Click" Margin="0,0,6,0" Style="{StaticResource ModernButton}"/>
+            <Button Content="Remove" Click="Remove_Click" Margin="0,0,6,0" Style="{StaticResource ModernButton}"/>
+            <Button Content="Close" Click="Close_Click" Style="{StaticResource ModernButton}"/>
         </StackPanel>
 
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True">
