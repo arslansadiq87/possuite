@@ -1,9 +1,10 @@
 ﻿// Pos.Domain/Entities/Warehouse.cs
+using Pos.Domain.Abstractions;
+
 namespace Pos.Domain.Entities
 {
-    public class Warehouse
+    public class Warehouse : BaseEntity
     {
-        public int Id { get; set; }
         public string Name { get; set; } = "";
         public bool IsActive { get; set; } = true;
 
