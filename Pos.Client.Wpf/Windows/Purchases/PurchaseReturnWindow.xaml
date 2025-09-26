@@ -5,6 +5,8 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
         <Style TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -23,6 +25,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <!-- Header -->
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <!-- Lines -->
             <RowDefinition Height="Auto"/>
@@ -42,13 +45,45 @@
                 <!-- Supplier (editable only for Return-Without) -->
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Supplier:" FontWeight="SemiBold" Margin="0,0,6,0"/>
-                    <TextBox x:Name="SupplierText" Width="260"
-                             IsReadOnly="{Binding IsSupplierReadonly}"
-                             Text="{Binding SupplierDisplay, UpdateSourceTrigger=PropertyChanged}"/>
-                    <Button x:Name="BtnPickSupplier" Content="Find" Margin="6,0,0,0"
-                            Visibility="{Binding SupplierPickerVisibility}"
-                            Click="BtnPickSupplier_Click"/>
+
+                    <Grid>
+                        <TextBox x:Name="SupplierText" Width="260" Height="28"
+             IsReadOnly="{Binding IsSupplierReadonly}"
+             Text="{Binding SupplierDisplay, UpdateSourceTrigger=PropertyChanged}"
+             TextChanged="SupplierText_TextChanged"
+             PreviewKeyDown="SupplierText_PreviewKeyDown"
+             LostKeyboardFocus="SupplierText_LostKeyboardFocus"/>
+
+                        <!-- Autocomplete popup -->
+                        <Popup x:Name="SupplierPopup"
+           Placement="Bottom"
+           PlacementTarget="{Binding ElementName=SupplierText}"
+           StaysOpen="False"
+           AllowsTransparency="True"
+           Focusable="False">
+                            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="4" Width="{Binding ElementName=SupplierText, Path=ActualWidth}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
+                                    <ListBox x:Name="SupplierList"
+                   MouseDoubleClick="SupplierList_MouseDoubleClick"
+                   PreviewKeyDown="SupplierList_PreviewKeyDown"
+                   IsTextSearchEnabled="False">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Vertical" Margin="4,3">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Phone}" Foreground="#777" FontSize="12"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    
                 </StackPanel>
+
 
                 <!-- Target (Outlet / Warehouse) -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left">
@@ -72,28 +107,72 @@
             </Grid>
         </Border>
 
+        <!-- ===== ITEM SEARCH (free-form only) ===== -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,12" HorizontalAlignment="Left"
+            Visibility="{Binding CanAddItems, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="Item:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+            <Grid>
+                <TextBox x:Name="ItemText" Width="360" Height="32"
+             TextChanged="ItemText_TextChanged"
+             PreviewKeyDown="ItemText_PreviewKeyDown"
+             LostKeyboardFocus="ItemText_LostKeyboardFocus"/>
+
+                <Popup x:Name="ItemPopup"
+           Placement="Bottom"
+           PlacementTarget="{Binding ElementName=ItemText}"
+           StaysOpen="False"
+           AllowsTransparency="True"
+           Focusable="False">
+                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="4"
+              Width="{Binding ElementName=ItemText, Path=ActualWidth}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="260">
+                            <ListBox x:Name="ItemList"
+                   MouseDoubleClick="ItemList_MouseDoubleClick"
+                   PreviewKeyDown="ItemList_PreviewKeyDown"
+                   IsTextSearchEnabled="False">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="4,3">
+                                            <TextBlock Text="{Binding Display}" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Sku}" Foreground="#777" FontSize="12"/>
+                                                <TextBlock Text="{Binding LastCostDisplay}" Foreground="#777" FontSize="12"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+        </StackPanel>
+
+
         <!-- ===== LINES ===== -->
-        <DataGrid Grid.Row="1" x:Name="GridLines" Margin="0,12,0,12"
+        <DataGrid Grid.Row="2" x:Name="GridLines" Margin="0,12,0,12"
                   ItemsSource="{Binding Lines}"
                   RowHeaderWidth="0"
-                  CellEditEnding="GridLines_CellEditEnding">
+                  CellEditEnding="GridLines_CellEditEnding"
+                      PreviewKeyDown="GridLines_PreviewKeyDown">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Item ID" Binding="{Binding ItemId}" IsReadOnly="True" Width="80"/>
                 <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" IsReadOnly="True" Width="120"/>
                 <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*"/>
                 <DataGridTextColumn Header="Unit Cost" Binding="{Binding UnitCost, StringFormat={}{0:N2}}" Width="100"/>
+                <DataGridTextColumn Header="Unit Cost" Binding="{Binding UnitCost, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" Width="100" />
                 <DataGridTextColumn Header="Disc" Binding="{Binding Discount, StringFormat={}{0:N2}}" Width="90"/>
                 <DataGridTextColumn Header="Tax %" Binding="{Binding TaxRate, StringFormat={}{0:N2}}" Width="90"/>
                 <DataGridTextColumn Header="Max" Binding="{Binding MaxReturnQty, StringFormat={}{0:N2}}" IsReadOnly="True" Width="80"/>
-                <DataGridTextColumn Header="Return Qty" Binding="{Binding ReturnQty, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N3}}" Width="110"/>
+                <DataGridTextColumn Header="Return Qty" Binding="{Binding ReturnQty, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" Width="100"/>
                 <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" IsReadOnly="True" Width="120"/>
             </DataGrid.Columns>
         </DataGrid>
 
         <!-- ===== TOTALS / ACTIONS ===== -->
-        <DockPanel Grid.Row="2" LastChildFill="False">
+        <DockPanel Grid.Row="3" LastChildFill="False">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <Button x:Name="BtnCancel" Content="Cancel" Width="110" Click="BtnCancel_Click"/>
+                <Button x:Name="BtnCancel" Content="Cancel" Width="110" Click="BtnCancel_Click" Style="{StaticResource ModernButton}"/>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
@@ -130,7 +209,7 @@
                     <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}" FontWeight="Bold"/>
                 </StackPanel>
 
-                <Button x:Name="BtnSave" Content="Save Return" Width="150" Click="BtnSave_Click"/>
+                <Button x:Name="BtnSave" Content="Save Return" Width="150" Click="BtnSave_Click" Style="{StaticResource ModernButton}"/>
             </StackPanel>
         </DockPanel>
     </Grid>
