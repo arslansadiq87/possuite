@@ -30,6 +30,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public decimal GrandTotal { get; set; }
             public bool IsReturn { get; set; }     // ← IMPORTANT: set while loading
             public int Revision { get; set; }
+            public bool HasRevisions => Revision > 1;
+            public bool IsReturnWithInvoice { get; set; }
+
         }
 
         public class UiLineRow
@@ -142,18 +145,19 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             // Pull minimal columns for speed and transform
             var list = q.OrderByDescending(p => p.ReceivedAtUtc ?? p.CreatedAtUtc)
-                        .Select(p => new
-                        {
-                            p.Id,
-                            p.DocNo,
-                            Supplier = p.Party != null ? p.Party.Name : "",
-                            Ts = p.ReceivedAtUtc ?? p.CreatedAtUtc,
-                            p.Status,
-                            p.GrandTotal,
-                            p.Revision,
-                            p.IsReturn
-                        })
-                        .ToList();
+                .Select(p => new
+                {
+                    p.Id,
+                    p.DocNo,
+                    Supplier = p.Party != null ? p.Party.Name : "",
+                    Ts = p.ReceivedAtUtc ?? p.CreatedAtUtc,
+                    p.Status,
+                    p.GrandTotal,
+                    p.Revision,
+                    p.IsReturn,
+                    p.RefPurchaseId            // << add this
+                })
+                .ToList();
 
             bool wantFinal = ChkFinal.IsChecked == true;
             bool wantDraft = ChkDraft.IsChecked == true;
@@ -174,9 +178,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     Supplier = string.IsNullOrWhiteSpace(r.Supplier) ? "—" : r.Supplier.Trim(),
                     TsLocal = r.Ts.ToLocalTime().ToString("dd-MMM-yyyy HH:mm"),
                     Status = r.Status.ToString(),
-                    GrandTotal = r.GrandTotal,
+                    GrandTotal = r.IsReturn ? -Math.Abs(r.GrandTotal) : Math.Abs(r.GrandTotal),
                     Revision = r.Revision,
-                    IsReturn = r.IsReturn               // ← KEY: now your action bar logic can differentiate
+                    IsReturn = r.IsReturn,               // ← KEY: now your action bar logic can differentiate
+                    IsReturnWithInvoice = r.IsReturn && r.RefPurchaseId.HasValue
                 });
 
             foreach (var r in rows)
@@ -208,9 +213,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             // Header (show PR / PO semantics via IsReturn)
             var kind = sel.IsReturn ? "Return" : "Purchase";
-            HeaderText.Text =
-                $"{kind} {sel.DocNoOrId}  Rev {purchase.Revision}  " +
-                $"Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
+            var revPart = purchase.Revision > 1 ? $"  Rev {purchase.Revision}  " : "  ";
+            HeaderText.Text = $"{kind} {sel.DocNoOrId}{revPart}" +
+                              $"Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
+
 
             // Compose friendly line display names (same as Sales)
             var itemIds = purchase.Lines.Select(l => l.ItemId).Distinct().ToList();

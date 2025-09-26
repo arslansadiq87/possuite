@@ -33,16 +33,23 @@ namespace Pos.Persistence.Services
             using var db = new PosClientDbContext(_opts);
 
             // Max revision per (CounterId, InvoiceNumber), excluding Voided
+            // Latest revision per (OutletId, CounterId, InvoiceNumber) — includes Voided
             var maxRev = db.Sales.AsNoTracking()
-                .Where(s => s.Status != SaleStatus.Voided)
-                .GroupBy(s => new { s.CounterId, s.InvoiceNumber })
-                .Select(g => new { g.Key.CounterId, g.Key.InvoiceNumber, Rev = g.Max(x => x.Revision) });
+                .GroupBy(s => new { s.OutletId, s.CounterId, s.InvoiceNumber })
+                .Select(g => new
+                {
+                    g.Key.OutletId,
+                    g.Key.CounterId,
+                    g.Key.InvoiceNumber,
+                    Rev = g.Max(x => x.Revision)
+                });
+
 
             var q =
                 from s in db.Sales.AsNoTracking()
                 join m in maxRev
-                    on new { s.CounterId, s.InvoiceNumber, Revision = s.Revision }
-                    equals new { m.CounterId, m.InvoiceNumber, Revision = m.Rev }
+                    on new { s.OutletId, s.CounterId, s.InvoiceNumber, s.Revision }
+                    equals new { m.OutletId, m.CounterId, m.InvoiceNumber, Revision = m.Rev }
                 select s;
 
 

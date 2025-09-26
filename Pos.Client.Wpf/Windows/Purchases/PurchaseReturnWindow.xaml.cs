@@ -669,6 +669,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         };
                     })
                     .ToList();
+                // 👉 NEW: block mixing check — prevents “referenced lines without a base invoice”
+                var hasRefPurchase = (_refPurchaseId ?? VM.RefPurchaseId).HasValue;
+                var anyLineReferencesOriginal = lines.Any(l => l.RefPurchaseLineId.HasValue);
+                if (!hasRefPurchase && anyLineReferencesOriginal)
+                {
+                    MessageBox.Show("This return has lines referencing an original purchase but no base invoice is selected.");
+                    return;
+                }
+                // 👆 Place exactly here, before refunds and SaveReturnAsync
                 // Auto-suggest refund = grand total if none entered
                 if (VM.RefundAmount <= 0m && VM.GrandTotal > 0m)
                 {

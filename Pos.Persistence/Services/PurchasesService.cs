@@ -441,39 +441,63 @@ namespace Pos.Persistence.Services
         /// Save a FINAL purchase return with optional refunds and auto-credit creation.
         /// </summary>
         public async Task<Purchase> SaveReturnAsync(
-            Purchase model,
-            IEnumerable<PurchaseLine> lines,
-            string? user = null,
-            IEnumerable<SupplierRefundSpec>? refunds = null,
-            int? tillSessionId = null,
-            int? counterId = null)
+    Purchase model,
+    IEnumerable<PurchaseLine> lines,
+    string? user = null,
+    IEnumerable<SupplierRefundSpec>? refunds = null,
+    int? tillSessionId = null,
+    int? counterId = null)
         {
             if (!model.IsReturn)
                 throw new InvalidOperationException("Model must be a return (IsReturn=true).");
 
-            if (model.RefPurchaseId is null or <= 0)
-                throw new InvalidOperationException("RefPurchaseId (original purchase) is required for returns.");
+            // === NEW: Determine mode ===
+            var hasRefPurchase = model.RefPurchaseId.HasValue && model.RefPurchaseId > 0;
+            var anyLineReferencesOriginal = lines.Any(l => l.RefPurchaseLineId.HasValue);
 
-            // Normalize for returns (keep negative qty)
-            var lineList = NormalizeAndComputeReturn(lines);
-
-            // Cap check vs remaining allowed
-            var draft = await BuildReturnDraftAsync(model.RefPurchaseId.Value);
-            var maxMap = draft.Lines
-                .Where(x => x.OriginalLineId.HasValue)
-                .ToDictionary(x => x.OriginalLineId!.Value, x => x.MaxReturnQty);
-
-            foreach (var l in lineList)
+            // === NEW: Validation for the two modes ===
+            if (hasRefPurchase)
             {
-                if (l.RefPurchaseLineId.HasValue &&
-                    maxMap.TryGetValue(l.RefPurchaseLineId.Value, out var maxAllowed))
-                {
-                    var req = Math.Abs(l.Qty); // l.Qty is negative
-                    if (req - maxAllowed > 0.0001m)
-                        throw new InvalidOperationException("Return qty exceeds remaining for one or more lines.");
-                }
+                // Referenced return is OK; lines MAY reference original lines.
+                // (No extra check needed here.)
+            }
+            else
+            {
+                // Free-form return: must NOT reference any original purchase line.
+                if (anyLineReferencesOriginal)
+                    throw new InvalidOperationException("Free-form returns cannot contain lines with RefPurchaseLineId.");
             }
 
+            // Normalize for returns (keep negative qty, round, etc.)
+            var lineList = NormalizeAndComputeReturn(lines);
+
+            // === CHANGED: Cap checks only when we HAVE a RefPurchaseId
+            if (hasRefPurchase)
+            {
+                // Cap check vs remaining allowed on the referenced purchase
+                var draft = await BuildReturnDraftAsync(model.RefPurchaseId!.Value);
+                var maxMap = draft.Lines
+                    .Where(x => x.OriginalLineId.HasValue)
+                    .ToDictionary(x => x.OriginalLineId!.Value, x => x.MaxReturnQty);
+
+                foreach (var l in lineList)
+                {
+                    if (l.RefPurchaseLineId.HasValue &&
+                        maxMap.TryGetValue(l.RefPurchaseLineId.Value, out var maxAllowed))
+                    {
+                        var req = Math.Abs(l.Qty); // l.Qty is negative
+                        if (req - maxAllowed > 0.0001m)
+                            throw new InvalidOperationException("Return qty exceeds remaining for one or more lines.");
+                    }
+                }
+            }
+            else
+            {
+                // Free-form: no cap checks against a base purchase.
+                // We still allow editable UnitCost coming from the UI.
+            }
+
+            // Compute header totals from the prepared line list
             ComputeHeaderTotalsForReturn(model, lineList);
 
             model.Status = PurchaseStatus.Final;
@@ -509,7 +533,7 @@ namespace Pos.Persistence.Services
                 existing.PurchaseDate = model.PurchaseDate;
                 existing.VendorInvoiceNo = model.VendorInvoiceNo;
 
-                existing.RefPurchaseId = model.RefPurchaseId;
+                existing.RefPurchaseId = model.RefPurchaseId; // may be null for free-form
 
                 existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
                     ? await EnsureReturnNumberAsync(existing, CancellationToken.None)
@@ -526,10 +550,9 @@ namespace Pos.Persistence.Services
                 existing.UpdatedAtUtc = model.UpdatedAtUtc;
                 existing.UpdatedBy = model.UpdatedBy;
 
-                if (wasFinal)
-                    existing.Revision = (existing.Revision <= 0 ? 1 : existing.Revision + 1);
-                else
-                    existing.Revision = 0;
+                existing.Revision = wasFinal
+                    ? (existing.Revision <= 0 ? 1 : existing.Revision + 1)
+                    : 0;
 
                 _db.PurchaseLines.RemoveRange(existing.Lines);
                 await _db.SaveChangesAsync();
@@ -545,28 +568,32 @@ namespace Pos.Persistence.Services
 
             await _db.SaveChangesAsync();
 
-            // 1) Auto-apply against the original purchase and get the applied amount
+            // === CHANGED: Only auto-apply against original if one exists.
             decimal appliedToOriginal = 0m;
-            try
+            if (hasRefPurchase)
             {
-                appliedToOriginal = await AutoApplyReturnToOriginalAsync_ReturnApplied(model, user ?? "system");
-            }
-            catch
-            {
-                // non-fatal; you can log if you have logging
+                try
+                {
+                    appliedToOriginal = await AutoApplyReturnToOriginalAsync_ReturnApplied(model, user ?? "system");
+                }
+                catch
+                {
+                    // non-fatal; optionally log
+                }
             }
 
-            // 2) Compute leftover value of the return
+            // Compute leftover value of the return
             var leftover = model.GrandTotal - appliedToOriginal;
 
-            // 3) If operator entered refunds, record CASH IN (positive delta)
+            // If operator entered refunds, record CASH IN (positive delta)
             var totalRefund = Math.Round((refunds ?? Array.Empty<SupplierRefundSpec>()).Sum(r => Math.Max(0, r.Amount)), 2);
             if (totalRefund > 0)
             {
+                // For free-form, appliedToOriginal = 0, so this still guards against over-refund
                 if (totalRefund > leftover + 0.0001m)
                     throw new InvalidOperationException("Refund exceeds leftover after applying to the original invoice.");
 
-                var outletForCash = model.OutletId ?? 0; // if warehouse return but refund taken at outlet, pass outlet via caller/UI
+                var outletForCash = model.OutletId ?? 0; // adjust if you want warehouse-specific handling
                 var who = user ?? "system";
 
                 foreach (var r in refunds!)
@@ -574,8 +601,8 @@ namespace Pos.Persistence.Services
                         returnId: model.Id,
                         supplierId: model.PartyId,
                         outletId: outletForCash,
-                        tillSessionId: null,    // pass from caller if you track sessions at return time
-                        counterId: null,        // pass from caller if needed
+                        tillSessionId: tillSessionId,
+                        counterId: counterId,
                         refund: r,
                         user: who
                     );
@@ -583,7 +610,7 @@ namespace Pos.Persistence.Services
                 leftover -= totalRefund;
             }
 
-            // 4) Any remaining leftover becomes Supplier Credit
+            // Any remaining leftover becomes Supplier Credit
             if (leftover > 0.0001m)
             {
                 var credit = new SupplierCredit
@@ -597,11 +624,15 @@ namespace Pos.Persistence.Services
                 await _db.SaveChangesAsync();
             }
 
-            // TODO: Post stock ledger with negative deltas...
+            // TODO: Post stock ledger with negative deltas for all lines:
+            // - Location: OutletId or WarehouseId depending on model.TargetType
+            // - Delta: l.Qty (already negative)
+            // - Valuation: l.UnitCost (free-form uses edited cost; referenced uses locked cost)
 
             await tx.CommitAsync();
             return model;
         }
+
 
         private async Task<string> EnsureReturnNumberAsync(Purchase p, CancellationToken ct)
         {

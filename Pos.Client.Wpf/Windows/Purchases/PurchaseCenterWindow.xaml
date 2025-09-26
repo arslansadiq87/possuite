@@ -12,6 +12,16 @@
         <RoutedUICommand x:Key="CmdReturn"       Text="Return"/>
         <RoutedUICommand x:Key="CmdVoid"         Text="Void"/>
         <RoutedUICommand x:Key="CmdHeld"         Text="Held Drafts"/>
+
+        <!-- Badge colors -->
+        <SolidColorBrush x:Key="BadgeBorder"  Color="#D0D0D0"/>
+        <SolidColorBrush x:Key="BadgeDraft"   Color="#FFF9C4"/>
+        <SolidColorBrush x:Key="BadgeSale"    Color="#C8E6C9"/>
+        <SolidColorBrush x:Key="BadgeVoided"  Color="#E0E0E0"/>
+
+        <!-- Return icon color (↩ + document/slash) -->
+        <SolidColorBrush x:Key="ReturnIconBrush" Color="#C2185B"/>
+      
     </Window.Resources>
 
     <!-- Keyboard shortcuts -->
@@ -127,9 +137,27 @@
                         <Setter Property="Padding" Value="2,0"/>
                         <Setter Property="Margin" Value="8,0,0,0"/>
                         <Setter Property="VerticalAlignment" Value="Center"/>
-                        <Setter Property="BorderBrush" Value="#D0D0D0"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BadgeBorder}"/>
                         <Setter Property="BorderThickness" Value="1"/>
                         <Setter Property="Background" Value="#F3F3F3"/>
+
+                        <Style.Triggers>
+                            <!-- Final -> green -->
+                            <DataTrigger Binding="{Binding Status}" Value="Final">
+                                <Setter Property="Background" Value="{StaticResource BadgeSale}"/>
+                            </DataTrigger>
+
+                            <!-- Draft -> pale yellow -->
+                            <DataTrigger Binding="{Binding Status}" Value="Draft">
+                                <Setter Property="Background" Value="{StaticResource BadgeDraft}"/>
+                            </DataTrigger>
+
+                            <!-- Voided -> grey -->
+                            <DataTrigger Binding="{Binding Status}" Value="Voided">
+                                <Setter Property="Background" Value="{StaticResource BadgeVoided}"/>
+                                <Setter Property="Opacity" Value="0.9"/>
+                            </DataTrigger>
+                        </Style.Triggers>
                     </Style>
                 </DataGrid.Resources>
 
@@ -148,18 +176,46 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Line 1: DocNo or Id   Rev?   [Status] -->
+                                    <!-- Line 1: DocNo/Id   Rev?   [Status]   ↩ + doc/slash -->
                                     <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="0">
                                         <TextBlock FontWeight="SemiBold">
                                             <Run Text="{Binding DocNoOrId}"/>
-                                        </TextBlock>
-                                        <TextBlock FontWeight="SemiBold">
-                                            <Run Text="{Binding Revision}"/>
+                                            <InlineUIContainer>
+                                                <TextBlock Text="{Binding Revision, StringFormat=  Rev {0}}"
+                                                           Visibility="{Binding HasRevisions, Converter={StaticResource BoolToVis}}"/>
+                                            </InlineUIContainer>
                                         </TextBlock>
 
                                         <Border Style="{StaticResource StatusBadge}">
                                             <TextBlock Text="{Binding Status}" FontSize="11" Margin="4,0,4,0"/>
                                         </Border>
+
+                                        <!-- Return icon cluster -->
+                                        <!-- Return visuals: arrow always for returns; invoice icon only when with-invoice -->
+                                        <StackPanel Orientation="Horizontal" Margin="6,0,0,0" VerticalAlignment="Center">
+                                            <!-- ↩ shown for any return -->
+                                            <TextBlock Text="↩"
+             Foreground="{StaticResource ReturnIconBrush}"
+             Visibility="{Binding IsReturn, Converter={StaticResource BoolToVis}}"
+             Margin="0,0,4,0"/>
+
+                                            <!-- Invoice icon shown only when return is WITH invoice -->
+                                            <Viewbox Width="12" Height="12" Stretch="Uniform"
+           Visibility="{Binding IsReturnWithInvoice, Converter={StaticResource BoolToVis}}">
+                                                <Canvas Width="24" Height="24">
+                                                    <!-- Neuicons “document” path (MIT) -->
+                                                    <Path Fill="{StaticResource ReturnIconBrush}"
+            Data="M21,1 H3 A1,1 0 0 0 2,2 V22 a1,1 0 0 0 1,1 H17
+                  a1.011,1.011 0 0 0 0.383,-0.077
+                  a1,1 0 0 0 0.325,-0.217 l4,-4
+                  A1.131,1.131 0 0 0 22,18 V2 A1,1 0 0 0 21,1 Z
+                  M16,18 v3 H4 V3 H20 V17 H17 A1,1 0 0 0 16,18 Z
+                  M17,10 a1,1 0 0 1 -1,1 H8 A1,1 0 0 1 8,9 h8 A1,1 0 0 1 17,10 Z
+                  M13,14 a1,1 0 0 1 -1,1 H8 a1,1 0 0 1 0,-2 h4 A1,1 0 0 1 13,14 Z"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </StackPanel>
+
                                     </StackPanel>
 
                                     <!-- Line 2: Supplier • Ts -->
@@ -223,30 +279,30 @@
         <!-- Bottom bar: actions -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
             <Button x:Name="BtnHeld" Content="_Held (F8)" Width="140" Height="34" Margin="0,0,8,0"
-          Click="BtnHeld_Click" Style="{StaticResource ModernButton}" Visibility="Collapsed"/>
+                    Click="BtnHeld_Click" Style="{StaticResource ModernButton}" Visibility="Collapsed"/>
 
             <!-- Return doc actions (when a selected row is a Purchase Return) -->
             <Button x:Name="BtnAmendReturn" Content="_Amend Return (F4)" Width="150" Height="34" Margin="0,0,8,0"
-          Click="AmendReturn_Click" Style="{StaticResource ModernButton}"/>
+                    Click="AmendReturn_Click" Style="{StaticResource ModernButton}"/>
             <Button x:Name="BtnVoidReturn"  Content="_Void Return (F3)"  Width="150" Height="34" Margin="0,0,8,0"
-          Click="VoidReturn_Click"  Style="{StaticResource ModernButton}"/>
+                    Click="VoidReturn_Click"  Style="{StaticResource ModernButton}"/>
 
             <!-- Base purchase actions -->
             <Button x:Name="BtnAmend"   Content="_Amend (Rev) (F2)" Width="150" Height="34" Margin="0,0,8,0"
-          Click="Amend_Click" Style="{StaticResource ModernButton}"/>
+                    Click="Amend_Click" Style="{StaticResource ModernButton}"/>
             <Button x:Name="BtnVoidPurchase" Content="_Void Purchase(F9)" Width="150" Height="34" Margin="0,0,8,0"
-          Click="VoidPurchase_Click" Style="{StaticResource ModernButton}"/>
+                    Click="VoidPurchase_Click" Style="{StaticResource ModernButton}"/>
 
             <!-- Returns to supplier -->
             <Button x:Name="BtnReturnWith" Content="Ret_urn Invoice(F8)" Width="150" Height="34" Margin="0,0,8,0"
-          Click="ReturnWith_Click" Style="{StaticResource ModernButton}"/>
+                    Click="ReturnWith_Click" Style="{StaticResource ModernButton}"/>
 
             <Button x:Name="BtnReturnWithout" Content="Ret. w/o Invoice(F7)" Width="150" Height="34"
-          Click="ReturnWithout_Click" Style="{StaticResource ModernButton}"/>
+                    Click="ReturnWithout_Click" Style="{StaticResource ModernButton}"/>
 
             <!-- Receive finalization -->
             <Button x:Name="BtnReceive" Content="_Receive (F6)" Width="150" Height="34" Margin="8,0,0,0"
-          Click="Receive_Click" Style="{StaticResource ModernButton}"/>
+                    Click="Receive_Click" Style="{StaticResource ModernButton}"/>
         </StackPanel>
 
     </Grid>
