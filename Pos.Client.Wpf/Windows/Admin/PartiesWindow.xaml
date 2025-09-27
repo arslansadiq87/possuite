@@ -21,9 +21,9 @@
                       Checked="FilterChanged" Unchecked="FilterChanged"/>
             <CheckBox x:Name="RoleSupplierCheck" Content="Supplier" IsChecked="True" Margin="0,0,16,0"
                       Checked="FilterChanged" Unchecked="FilterChanged"/>
-            <Button Content="New (Ctrl+N)" Click="New_Click" Margin="0,0,6,0"  Style="{StaticResource ModernButton}"/>
-            <Button Content="Edit (Enter)" Click="Edit_Click" Margin="0,0,6,0"  Style="{StaticResource ModernButton}"/>
-            <Button Content="Close (Esc)" Click="Close_Click"  Style="{StaticResource ModernButton}"/>
+            <Button Content="New (Ctrl+N)" Click="New_Click" Margin="0,0,6,0"  Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button Content="Edit (Enter)" Click="Edit_Click" Margin="0,0,6,0"  Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button Content="Close (Esc)" Click="Close_Click"  Style="{StaticResource Btn.GlobalPrimary}"/>
         </StackPanel>
 
         <!-- Grid -->

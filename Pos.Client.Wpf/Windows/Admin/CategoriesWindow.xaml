@@ -11,8 +11,8 @@
             <TextBox x:Name="SearchBox" Width="240" Margin="0,0,8,0"
                      TextChanged="SearchBox_TextChanged"/>
 
-            <Button Content="Add"  Width="90" Margin="0,0,8,0" Click="Add_Click" Style="{StaticResource ModernButton}"/>
-            <Button x:Name="EditBtn" Content="Edit" Width="90" Margin="0,0,8,0" Click="Edit_Click" Style="{StaticResource ModernButton}"/>
+            <Button Content="Add"  Width="90" Margin="0,0,8,0" Click="Add_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button x:Name="EditBtn" Content="Edit" Width="90" Margin="0,0,8,0" Click="Edit_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
 
             <!-- Show one of these depending on selection -->
             <Button x:Name="DisableBtn" Content="Disable" Width="90" Margin="0,0,8,0"

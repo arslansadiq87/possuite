@@ -21,7 +21,8 @@ namespace Pos.Client.Wpf
     {
         public Sample()
         {
-            
+            InitializeComponent();   // <--- without this, your XAML is never parsed!
+
         }
     }
 }

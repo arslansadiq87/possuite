@@ -18,6 +18,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public int? SelectedHeldPurchaseId { get; private set; }  // bubble selection back to caller
         private readonly DbContextOptions<PosClientDbContext> _opts;
         private readonly PurchasesService _svc;
+        public Style? CurrentButtonStyle { get; set; }
 
         // ----- Grid row shapes -----
         public class UiPurchaseRow

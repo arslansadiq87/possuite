@@ -5,6 +5,7 @@ using Pos.Client.Wpf.Windows.Purchases;
 using Pos.Client.Wpf.Windows.Sales;
 using Pos.Persistence;
 using Pos.Client.Wpf.Services;
+using Pos.Client.Wpf.Windows.Admin;
 
 namespace Pos.Client.Wpf.Windows.Shell
 {
@@ -69,6 +70,19 @@ namespace Pos.Client.Wpf.Windows.Shell
             w.ShowDialog();
         }
 
+        private void OpenWarehouses_Click(object sender, RoutedEventArgs e)
+        {
+            var w = App.Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.WarehousesWindow>();
+            w.Owner = this;
+            w.ShowDialog();
+        }
+
+        private void OpenSamples_Click(object sender, RoutedEventArgs e)
+        {
+            var w = new Sample();
+            w.Owner = this;
+            w.ShowDialog();
+        }
         
 
     }

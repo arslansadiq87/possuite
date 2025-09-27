@@ -172,7 +172,7 @@
         <!-- ===== TOTALS / ACTIONS ===== -->
         <DockPanel Grid.Row="3" LastChildFill="False">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <Button x:Name="BtnCancel" Content="Cancel" Width="110" Click="BtnCancel_Click" Style="{StaticResource ModernButton}"/>
+                <Button x:Name="BtnCancel" Content="Cancel" Width="110" Click="BtnCancel_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
@@ -209,7 +209,7 @@
                     <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}" FontWeight="Bold"/>
                 </StackPanel>
 
-                <Button x:Name="BtnSave" Content="Save Return" Width="150" Click="BtnSave_Click" Style="{StaticResource ModernButton}"/>
+                <Button x:Name="BtnSave" Content="Save Return" Width="150" Click="BtnSave_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
             </StackPanel>
         </DockPanel>
     </Grid>

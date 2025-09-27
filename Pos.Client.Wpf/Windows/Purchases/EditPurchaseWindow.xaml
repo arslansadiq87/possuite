@@ -173,8 +173,8 @@ TextChanged="OtherChargesBox_TextChanged" Margin="0,0,0,16" Grid.RowSpan="2"/>
                         </Grid>
                         <Grid Grid.Row="1">
                             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
-                                <Button Content="Save (F9)" Margin="0,0,8,0" Click="Save_Click" Width="150" Height="40" Style="{StaticResource ModernButton}" />
-                                <Button Content="Cancel (Esc)" Click="Cancel_Click" Width="150" Height="40" Style="{StaticResource ModernButton}"/>
+                                <Button Content="Save (F9)" Margin="0,0,8,0" Click="Save_Click" Width="150" Height="40" Style="{StaticResource Btn.GlobalPrimary}" />
+                                <Button Content="Cancel (Esc)" Click="Cancel_Click" Width="150" Height="40" Style="{StaticResource Btn.GlobalPrimary}"/>
                             </StackPanel>
                         </Grid>
                     </Grid>

@@ -58,8 +58,9 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditBrandWindow>();
             sc.AddTransient<CategoriesWindow>();
             sc.AddTransient<EditCategoryWindow>();
+            sc.AddTransient<WarehousesWindow>();
+            sc.AddTransient<EditWarehouseWindow>();
 
-                       
 
             Services = sc.BuildServiceProvider();
 

@@ -11,8 +11,10 @@
             <Separator/>
             <Button Content="Products  &amp; Items" Click="OpenProductsItems_Click"/>
             <Button Content="Outlets/Counters" Click="OpenOutletsCounters_Click"/>
+            <Button Content="Warehouse" Click="OpenWarehouses_Click"/>
             <Button Content="Users" Click="OpenUsers_Click"/>
             <Button Content="Customers &amp; Suppliers" Click="OpenParties_Click"/>
+            <Button Content="Sample" Click="OpenSamples_Click"/>
             <Separator/>
         </ToolBar>
 

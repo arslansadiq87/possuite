@@ -45,12 +45,14 @@
     </Window.CommandBindings>
 
     <Grid Margin="12">
+              
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-
+        
+        
         <!-- Top bar: search + date + dropdown filter -->
         <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
             <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -107,7 +109,7 @@
             </Grid>
 
             <Button Content="Search _F2" Width="120" Height="28" Margin="12,0,0,0"
-                    Click="Search_Click"/>
+                    Click="Search_Click" Style="{StaticResource Btn.GlobalSecondary}"/>
         </StackPanel>
 
         <!-- Middle: list | details (same layout as Sales) -->
@@ -265,7 +267,7 @@
 
                 <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="ItemId" Binding="{Binding ItemId}" Width="70"/>
+                        
                         <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120"/>
                         <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"/>
                         <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="60"/>
@@ -276,34 +278,36 @@
             </Grid>
         </Grid>
 
-        <!-- Bottom bar: actions -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <Button x:Name="BtnHeld" Content="_Held (F8)" Width="140" Height="34" Margin="0,0,8,0"
-                    Click="BtnHeld_Click" Style="{StaticResource ModernButton}" Visibility="Collapsed"/>
+        <Border Grid.Row="2" BorderBrush="#DDD" Padding="0,8,0,0">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <Button x:Name="BtnHeld" Content="_Held (F8)" Width="140" Height="34" Margin="0,0,8,0"
+                           Click="BtnHeld_Click" Style="{StaticResource Btn.GlobalPrimary}" Visibility="Collapsed"/>
+                    <!-- Return doc actions (when a selected row is a Purchase Return) -->
+                    <Button x:Name="BtnAmendReturn" Content="_Amend Return (F4)" Width="150" Height="34" Margin="0,0,8,0"
+                            Click="AmendReturn_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+                    <Button x:Name="BtnVoidReturn"  Content="_Void Return (F3)"  Width="150" Height="34" Margin="0,0,8,0"
+                            Click="VoidReturn_Click"  Style="{StaticResource Btn.GlobalPrimary}"/>
+                    <!-- Base purchase actions -->
+                    <Button x:Name="BtnAmend"   Content="_Amend (Rev) (F2)" Width="150" Height="34" Margin="0,0,8,0"
+                            Click="Amend_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+                    <Button x:Name="BtnVoidPurchase" Content="_Void Purchase(F9)" Width="150" Height="34" Margin="0,0,8,0"
+                            Click="VoidPurchase_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+                    <!-- Returns to supplier -->
+                    <Button x:Name="BtnReturnWith" Content="Ret_urn Invoice(F8)" Width="150" Height="34" Margin="0,0,8,0"
+                            Click="ReturnWith_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+                    <Button x:Name="BtnReturnWithout" Content="Ret. w/o Invoice(F7)" Width="150" Height="34"
+                            Click="ReturnWithout_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+                    <!-- Receive finalization -->
+                    <Button x:Name="BtnReceive" Content="_Receive (F6)" Width="150" Height="34" Margin="8,0,0,0"
+                            Click="Receive_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+                </StackPanel>
+                <TextBlock VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
 
-            <!-- Return doc actions (when a selected row is a Purchase Return) -->
-            <Button x:Name="BtnAmendReturn" Content="_Amend Return (F4)" Width="150" Height="34" Margin="0,0,8,0"
-                    Click="AmendReturn_Click" Style="{StaticResource ModernButton}"/>
-            <Button x:Name="BtnVoidReturn"  Content="_Void Return (F3)"  Width="150" Height="34" Margin="0,0,8,0"
-                    Click="VoidReturn_Click"  Style="{StaticResource ModernButton}"/>
-
-            <!-- Base purchase actions -->
-            <Button x:Name="BtnAmend"   Content="_Amend (Rev) (F2)" Width="150" Height="34" Margin="0,0,8,0"
-                    Click="Amend_Click" Style="{StaticResource ModernButton}"/>
-            <Button x:Name="BtnVoidPurchase" Content="_Void Purchase(F9)" Width="150" Height="34" Margin="0,0,8,0"
-                    Click="VoidPurchase_Click" Style="{StaticResource ModernButton}"/>
-
-            <!-- Returns to supplier -->
-            <Button x:Name="BtnReturnWith" Content="Ret_urn Invoice(F8)" Width="150" Height="34" Margin="0,0,8,0"
-                    Click="ReturnWith_Click" Style="{StaticResource ModernButton}"/>
-
-            <Button x:Name="BtnReturnWithout" Content="Ret. w/o Invoice(F7)" Width="150" Height="34"
-                    Click="ReturnWithout_Click" Style="{StaticResource ModernButton}"/>
-
-            <!-- Receive finalization -->
-            <Button x:Name="BtnReceive" Content="_Receive (F6)" Width="150" Height="34" Margin="8,0,0,0"
-                    Click="Receive_Click" Style="{StaticResource ModernButton}"/>
-        </StackPanel>
+      
+      
 
     </Grid>
 </Window>

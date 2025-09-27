@@ -98,18 +98,22 @@ namespace Pos.Persistence
                 .IsUnique();
 
             // ---------- Purchases ----------
+            // ---------- Purchases ----------
             b.Entity<Purchase>(e =>
             {
                 e.HasKey(x => x.Id);
 
+                // Supplier/Party
                 e.HasOne<Party>()
                  .WithMany()
                  .HasForeignKey(x => x.PartyId)
                  .OnDelete(DeleteBehavior.Restrict);
 
+                // Target type enums
                 e.Property(x => x.Status).HasConversion<int>();
                 e.Property(x => x.TargetType).HasConversion<int>();
 
+                // Document fields
                 e.Property(x => x.VendorInvoiceNo).HasMaxLength(100);
                 e.Property(x => x.DocNo).HasMaxLength(50);
 
@@ -124,6 +128,7 @@ namespace Pos.Persistence
                 e.HasIndex(x => x.Status);
                 e.HasIndex(x => x.DocNo);
 
+                // Lines / Payments
                 e.HasMany(x => x.Lines)
                  .WithOne()
                  .HasForeignKey(l => l.PurchaseId)
@@ -133,6 +138,8 @@ namespace Pos.Persistence
                  .WithOne(p => p.Purchase!)
                  .HasForeignKey(p => p.PurchaseId)
                  .OnDelete(DeleteBehavior.Cascade);
+
+                // Self references (revisions / returns)
                 e.HasOne(x => x.RefPurchase)
                  .WithMany()
                  .HasForeignKey(x => x.RefPurchaseId)
@@ -147,7 +154,25 @@ namespace Pos.Persistence
                  .WithMany()
                  .HasForeignKey(x => x.RevisedToPurchaseId)
                  .OnDelete(DeleteBehavior.Restrict);
+
+                // 🔹 NEW: Target Outlet (nullable; used when TargetType == Outlet)
+                e.HasOne<Outlet>()
+                 .WithMany()
+                 .HasForeignKey(x => x.OutletId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                // 🔹 NEW: Target Warehouse (nullable; used when TargetType == Warehouse)
+                e.HasOne<Warehouse>()
+                 .WithMany()
+                 .HasForeignKey(x => x.WarehouseId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                // 🔹 NEW: Safety check — exactly one target must be set, matching TargetType
+                e.HasCheckConstraint("CK_Purchase_Target",
+                    "( [TargetType] = 1 AND [OutletId] IS NOT NULL AND [WarehouseId] IS NULL ) OR " +
+                    "( [TargetType] = 2 AND [WarehouseId] IS NOT NULL AND [OutletId] IS NULL )");
             });
+
 
             b.Entity<PurchaseLine>(e =>
             {
@@ -185,14 +210,14 @@ namespace Pos.Persistence
             b.Entity<Brand>().HasIndex(x => x.Name).IsUnique();
             b.Entity<Category>().HasIndex(x => x.Name).IsUnique();
 
-            // ---------- Warehouses ----------
-            b.Entity<Warehouse>(e =>
-            {
-                e.HasKey(x => x.Id);
-                e.Property(x => x.Name).IsRequired().HasMaxLength(200);
-                e.HasIndex(x => x.Name);
-                e.HasIndex(x => x.IsActive);
-            });
+            //// ---------- Warehouses ----------
+            //b.Entity<Warehouse>(e =>
+            //{
+            //    e.HasKey(x => x.Id);
+            //    e.Property(x => x.Name).IsRequired().HasMaxLength(200);
+            //    e.HasIndex(x => x.Name);
+            //    e.HasIndex(x => x.IsActive);
+            //});
 
             // ---------- Cash Ledger ----------
             b.Entity<CashLedger>(e =>
@@ -316,6 +341,33 @@ namespace Pos.Persistence
             {
                 e.Property(x => x.Amount).HasPrecision(18, 2);
             });
+
+            // ---------- Warehouses ----------
+            b.Entity<Warehouse>(e =>
+            {
+                e.ToTable("Warehouses");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.Code).IsRequired().HasMaxLength(16);
+                e.Property(x => x.Name).IsRequired().HasMaxLength(128);
+
+                // BaseEntity members already exist in the table model
+                e.Property(x => x.PublicId).IsRequired();
+                e.Property(x => x.RowVersion).IsRowVersion();
+                e.Property(x => x.CreatedAtUtc).IsRequired();
+
+                // Indexes
+                e.HasIndex(x => x.Code).IsUnique();
+                e.HasIndex(x => x.PublicId).IsUnique();
+                e.HasIndex(x => new { x.IsActive, x.Name });
+
+                // Optional metadata lengths
+                e.Property(x => x.AddressLine).HasMaxLength(200);
+                e.Property(x => x.City).HasMaxLength(100);
+                e.Property(x => x.Phone).HasMaxLength(50);
+                e.Property(x => x.Note).HasMaxLength(500);
+            });
+
 
 
         }

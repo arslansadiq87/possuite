@@ -103,7 +103,7 @@
 
                 <Button Content="Add" Click="AddButton_Click"
                         Margin="8,0,0,0" Height="28" Width="55"
-                        Style="{StaticResource ModernButton}"/>
+                        Style="{StaticResource Btn.GlobalPrimary}"/>
             </StackPanel>
 
             <!-- RIGHT: Cashier → Salesman (mirrors sale) -->
@@ -251,9 +251,9 @@
                 <!-- Row 1: Buttons -->
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                     <Button Content="Clear (F5)" Height="40" Width="150" Margin="12,0,0,0"
-                            Click="ClearButton_Click" Style="{StaticResource ModernButton}"/>
+                            Click="ClearButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                     <Button Content="Refund (F9)" Height="40" Width="150" Margin="12,0,0,0"
-                            Click="RefundButton_Click" Style="{StaticResource ModernButton}"/>
+                            Click="RefundButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                     <Button Content="Close" Height="40" Width="120" Margin="12,0,0,0"
                             IsCancel="True" />
                 </StackPanel>

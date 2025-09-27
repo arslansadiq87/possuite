@@ -12,19 +12,19 @@
             <TextBox x:Name="SearchBox" Width="240" Height="28" VerticalContentAlignment="Center"
                      TextChanged="SearchBox_TextChanged"
                      PreviewKeyDown="SearchBox_PreviewKeyDown"
-                     ToolTip="Type to filter; ↑/↓ to navigate"/>
+                     ToolTip="Type to filter; ↑/↓ to navigate" Style="{StaticResource Txt.Search}"/>
             <Separator Width="16" Opacity="0"/>
 
             <!-- Keep BOTH buttons with mnemonics -->
             <!-- By Item -->
             <Button Width="150" Height="28" Margin="0,0,8,0"
-        Click="ByItem_Click" Style="{StaticResource ModernButton}">
+        Click="ByItem_Click" Style="{StaticResource Btn.GlobalPrimary}">
                 <AccessText Text="By _Item (Alt+I)"/>
             </Button>
 
             <!-- By Product -->
             <Button Width="150" Height="28"
-        Click="ByProduct_Click" Style="{StaticResource ModernButton}">
+        Click="ByProduct_Click" Style="{StaticResource Btn.GlobalPrimary}">
                 <AccessText Text="By _Product (Alt+P)"/>
             </Button>
         </StackPanel>

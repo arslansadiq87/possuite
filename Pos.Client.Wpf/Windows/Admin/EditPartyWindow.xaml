@@ -69,8 +69,8 @@
         <!-- Footer -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <TextBlock x:Name="ErrorText" Foreground="IndianRed" Margin="0,0,16,0" VerticalAlignment="Center"/>
-            <Button Content="Save (Ctrl+S)" Click="Save_Click" Margin="0,0,6,0"/>
-            <Button Content="Cancel (Esc)" Click="Cancel_Click"/>
+            <Button Content="Save (Ctrl+S)" Click="Save_Click" Margin="0,0,6,0" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button Content="Cancel (Esc)" Click="Cancel_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
         </StackPanel>
     </Grid>
 </Window>

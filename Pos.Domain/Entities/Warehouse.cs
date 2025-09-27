@@ -3,13 +3,16 @@ using Pos.Domain.Abstractions;
 
 namespace Pos.Domain.Entities
 {
-    public class Warehouse : BaseEntity
+    public sealed class Warehouse : BaseEntity
     {
+        public string Code { get; set; } = "";   // e.g. MAIN, WH-N
         public string Name { get; set; } = "";
         public bool IsActive { get; set; } = true;
 
-        // (optional) Audit – add if your BaseEntity is required here
-        // public DateTime CreatedAtUtc { get; set; }
-        // public DateTime? UpdatedAtUtc { get; set; }
+        // Optional metadata (handy in reports/transfers)
+        public string? AddressLine { get; set; }
+        public string? City { get; set; }
+        public string? Phone { get; set; }
+        public string? Note { get; set; }
     }
 }

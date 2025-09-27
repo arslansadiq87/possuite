@@ -53,7 +53,7 @@
              Width="320" Height="28"
              VerticalContentAlignment="Center"
              TextChanged="ScanText_TextChanged"
-             PreviewKeyDown="ScanText_PreviewKeyDown" />
+             PreviewKeyDown="ScanText_PreviewKeyDown" Style="{StaticResource Txt.Search}"/>
                     <Popup x:Name="ScanPopup"
            PlacementTarget="{Binding ElementName=ScanText}"
            Placement="Bottom"
@@ -82,7 +82,7 @@
                 </Grid>
                 <Button Content="Add" Click="AddButton_Click"
           Margin="8,0,0,0" Height="28" Width="55"
-          Style="{StaticResource ModernButton}"/>
+          Style="{StaticResource Btn.GlobalPrimary}"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
                 <TextBlock Text="Cashier:" VerticalAlignment="Center" Margin="16,0,6,0"/>
@@ -96,8 +96,8 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Grid.Column="2" HorizontalAlignment="Right">
-                <Button x:Name="OpenTillBtn"  Content="Open Till"    Click="OpenTill_Click"  Height="28" Margin="8,0,0,0" Style="{StaticResource ModernButton}"/>
-                <Button x:Name="CloseTillBtn" Content="Close Till" Click="CloseTill_Click" Height="28" Margin="8,0,0,0" Style="{StaticResource ModernButton}"/>
+                <Button x:Name="OpenTillBtn"  Content="Open Till"    Click="OpenTill_Click"  Height="28" Margin="8,0,0,0" Style="{StaticResource Btn.GlobalPrimary}"/>
+                <Button x:Name="CloseTillBtn" Content="Close Till" Click="CloseTill_Click" Height="28" Margin="8,0,0,0" Style="{StaticResource Btn.GlobalPrimary}"/>
             </StackPanel>
         </Grid>
 
@@ -232,15 +232,15 @@
                 </Grid>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                     <Button Content="Till Summary (F10)" Height="40" Width="150" Margin="12,0,0,0"
-                        Click="ShowTillSummary_Click" Style="{StaticResource ModernButton}"/>
+                        Click="ShowTillSummary_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                     <Button Content="Clear(F5)/Hold(F8)" Height="40" Width="150" Margin="12,0,0,0"
-                    Click="ClearHoldButton_Click" Style="{StaticResource ModernButton}"/>
+                    Click="ClearHoldButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                     <Button Content="Invoices (F7)" Height="40" Width="150" Margin="12,0,0,0"
-                    Click="OpenInvoiceCenter_Click" Style="{StaticResource ModernButton}"/>
+                    Click="OpenInvoiceCenter_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                     <Button Content="Pay (F9)" Height="40" Width="150" Margin="12,0,0,0"
-                    Click="PayButton_Click" Style="{StaticResource ModernButton}"/>
+                    Click="PayButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                     <Button Content="Stock (F6)" Height="40" Width="150" Margin="12,0,0,0"
-                    Click="StockReport_Click" Style="{StaticResource ModernButton}"/>
+                    Click="StockReport_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                 </StackPanel>
             </Grid>
         </Border>

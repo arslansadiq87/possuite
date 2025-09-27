@@ -12,11 +12,11 @@
         <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,8">
             <TextBlock Text="Users" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" Style="{StaticResource ModernTextBlock}"/>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                <Button Content="Refresh" Click="Refresh_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
-                <Button Content="Add" Click="Add_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
-                <Button Content="Edit" Click="Edit_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
-                <Button Content="Delete" Click="Delete_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource ModernButton}"/>
-                <Button Content="Outlet Assignments" Click="Assignments_Click" Margin="8,0,0,0" Width="150" Style="{StaticResource ModernButton}"/>
+                <Button Content="Refresh" Click="Refresh_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource Btn.GlobalPrimary}"/>
+                <Button Content="Add" Click="Add_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource Btn.GlobalPrimary}"/>
+                <Button Content="Edit" Click="Edit_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource Btn.GlobalPrimary}"/>
+                <Button Content="Delete" Click="Delete_Click" Margin="8,0,0,0" Width="70" Style="{StaticResource Btn.GlobalPrimary}"/>
+                <Button Content="Outlet Assignments" Click="Assignments_Click" Margin="8,0,0,0" Width="150" Style="{StaticResource Btn.GlobalPrimary}"/>
             </StackPanel>
         </DockPanel>
 

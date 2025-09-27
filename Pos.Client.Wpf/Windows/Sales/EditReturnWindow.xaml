@@ -33,8 +33,8 @@
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
             <TextBlock Text="Reason:" VerticalAlignment="Center" Margin="0,0,6,0"/>
             <TextBox x:Name="ReasonBox" Width="260" Height="28" VerticalContentAlignment="Center" Margin="0,0,12,0"/>
-            <Button Content="Cancel" Width="110" Height="32" Margin="0,0,8,0" IsCancel="True" Style="{StaticResource ModernButton}"/>
-            <Button Content="Save Amendment" Width="170" Height="32" Click="Save_Click" IsDefault="True" Style="{StaticResource ModernButton}"/>
+            <Button Content="Cancel" Width="110" Height="32" Margin="0,0,8,0" IsCancel="True" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button Content="Save Amendment" Width="170" Height="32" Click="Save_Click" IsDefault="True" Style="{StaticResource Btn.GlobalPrimary}"/>
         </StackPanel>
     </Grid>
 </Window>

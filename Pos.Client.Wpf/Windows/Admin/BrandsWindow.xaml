@@ -9,15 +9,15 @@
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource ModernTextBlock}"/>
             <TextBox x:Name="SearchBox" Width="240" Margin="0,0,8,0" 
-                     TextChanged="SearchBox_TextChanged" Style="{StaticResource ModernTextBox}"/>
-            <Button Content="Add" Width="90" Margin="0,0,8,0" Click="Add_Click" Style="{StaticResource ModernButton}"/>
-            <Button x:Name="EditBtn" Content="Edit" Width="90" Margin="0,0,8,0" Click="Edit_Click" Style="{StaticResource ModernButton}"/>
+                     TextChanged="SearchBox_TextChanged" Style="{StaticResource Txt.Search}"/>
+            <Button Content="Add" Width="90" Margin="0,0,8,0" Click="Add_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button x:Name="EditBtn" Content="Edit" Width="90" Margin="0,0,8,0" Click="Edit_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
 
             <!-- Only one of these will be visible at a time -->
             <Button x:Name="DisableBtn" Content="Disable" Width="90" Margin="0,0,8,0"
-            Visibility="Collapsed" Click="Disable_Click" Style="{StaticResource ModernButton}"/>
+            Visibility="Collapsed" Click="Disable_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
             <Button x:Name="EnableBtn"  Content="Enable"  Width="90" Margin="0,0,8,0"
-            Visibility="Collapsed" Click="Enable_Click" Style="{StaticResource ModernButton}"/>
+            Visibility="Collapsed" Click="Enable_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
             <CheckBox x:Name="ShowInactive" Content="Show inactive" Margin="16,0,0,0"
                       Checked="FilterChanged" Unchecked="FilterChanged" Style="{StaticResource ModernCheckBox}"/>
         </StackPanel>

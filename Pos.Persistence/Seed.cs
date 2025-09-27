@@ -1,6 +1,8 @@
 ﻿// Pos.Persistence/Seed.cs
 using System;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
+
 // REMOVE: using System.Security.Cryptography;
 using Pos.Domain.Entities;                 // for User, Item, Product, StockEntry, etc.
 // If you still have a Pos.Domain.UserRole, alias to avoid ambiguity:
@@ -38,6 +40,7 @@ namespace Pos.Persistence
             EnsureOpeningStock(db, outletId: 1, openingQty: 50, now);
 
             EnsureOutlets(db);
+            EnsureWarehouse(db);
 
         }
 
@@ -427,6 +430,36 @@ namespace Pos.Persistence
             });
 
             db.SaveChanges();
+        }
+
+        public static void EnsureWarehouse(PosClientDbContext db)
+        {
+            // Make sure DB is created/migrated before seeding (optional if you do this elsewhere)
+            db.Database.Migrate();
+
+            // If no warehouses at all, create one
+            if (!db.Warehouses.AsNoTracking().Any())
+            {
+                var wh = new Warehouse
+                {
+                    Name = "Main Warehouse",
+                    IsActive = true,
+                    CreatedAtUtc = DateTime.UtcNow,
+                    // BaseEntity.PublicId is auto
+                };
+                db.Warehouses.Add(wh);
+                db.SaveChanges();
+                return;
+            }
+
+            // If warehouses exist but none is active, flip the first to active (safety net)
+            if (!db.Warehouses.AsNoTracking().Any(w => w.IsActive))
+            {
+                var first = db.Warehouses.OrderBy(w => w.Id).First();
+                first.IsActive = true;
+                first.UpdatedAtUtc = DateTime.UtcNow;
+                db.SaveChanges();
+            }
         }
 
     }

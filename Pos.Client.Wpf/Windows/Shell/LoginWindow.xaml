@@ -18,19 +18,19 @@
         <TextBox x:Name="UserBox"
                  Grid.Row="1" Margin="0,0,0,12"
                  TabIndex="0"
-                 KeyDown="UserBox_KeyDown" Style="{StaticResource ModernTextBox}"/>
+                 KeyDown="UserBox_KeyDown" Style="{StaticResource Txt.Outlined}"/>
 
         <TextBlock Text="Password" Grid.Row="2" Margin="0,0,0,4" Style="{StaticResource ModernTextBlock}"/>
         <PasswordBox x:Name="PassBox"
                      Grid.Row="3" Margin="0,0,0,12"
                      TabIndex="1"
-                     KeyDown="PassBox_KeyDown" Style="{StaticResource ModernPasswordBox}"/>
+                     KeyDown="PassBox_KeyDown" Style="{StaticResource Txt.Password}"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="LoginBtn"
                     Content="Login" Width="100" Height="32"
                     IsDefault="True"
-                    Click="Login_Click" Style="{StaticResource ModernButton}"/>
+                    Click="Login_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
         </StackPanel>
     </Grid>
 </Window>

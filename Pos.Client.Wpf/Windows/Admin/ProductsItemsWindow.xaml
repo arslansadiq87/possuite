@@ -32,12 +32,12 @@
 
             <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource ModernTextBlock}"/>
             <TextBox   Grid.Column="1" x:Name="SearchBox" Height="28" VerticalContentAlignment="Center"
-               ToolTip="Product name, brand, SKU, or item barcode/name" Style="{StaticResource ModernTextBox}"/>
-            <Button    Grid.Column="2" Content="Find"     Width="80" Margin="8,0,0,0" Click="Find_Click" Style="{StaticResource ModernButton}"/>
-            <Button    Grid.Column="3" Content="Refresh"  Width="90" Margin="8,0,0,0" Click="Refresh_Click" Style="{StaticResource ModernButton}"/>
+               ToolTip="Product name, brand, SKU, or item barcode/name" Style="{StaticResource Txt.Search}"/>
+            <Button    Grid.Column="2" Content="Find"     Width="80" Margin="8,0,0,0" Click="Find_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button    Grid.Column="3" Content="Refresh"  Width="90" Margin="8,0,0,0" Click="Refresh_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
             <!-- column 4 is the stretch spacer -->
-            <Button    Grid.Column="5" Content="Brands"   Width="90" Margin="8,0,0,0" Click="Brands_Click" Style="{StaticResource ModernButton}"/>
-            <Button    Grid.Column="6" Content="Categories"   Width="90" Margin="8,0,0,0" Click="Categories_Click" Style="{StaticResource ModernButton}"/>
+            <Button    Grid.Column="5" Content="Brands"   Width="90" Margin="8,0,0,0" Click="Brands_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button    Grid.Column="6" Content="Categories"   Width="90" Margin="8,0,0,0" Click="Categories_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
         </Grid>
 
 
@@ -209,7 +209,7 @@
 
         <!-- Footer -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Close" Width="110" IsCancel="True" Style="{StaticResource ModernButton}"/>
+            <Button Content="Close" Width="110" IsCancel="True" Style="{StaticResource Btn.GlobalPrimary}"/>
         </StackPanel>
     </Grid>
 </Window>

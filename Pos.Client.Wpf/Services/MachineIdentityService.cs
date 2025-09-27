@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 
+//Pos.Client.Wpf/Services/MachineIdentityService.cs
 namespace Pos.Client.Wpf.Services
 {
     public interface IMachineIdentityService

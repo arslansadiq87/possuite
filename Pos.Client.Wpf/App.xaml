@@ -8,6 +8,10 @@
                 <ResourceDictionary Source="Resources/Styles.xaml"/>
                 
             </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="Btn.GlobalPrimary" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button"/>
+            <Style x:Key="Btn.GlobalSecondary" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button"/>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>
