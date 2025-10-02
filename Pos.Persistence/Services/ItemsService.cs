@@ -16,20 +16,37 @@ namespace Pos.Persistence.Services
         {
             term = (term ?? string.Empty).Trim();
 
-            IQueryable<Item> q = _db.Items.AsNoTracking();
+            // NOTE: Include is optional for filtering; EF will translate .Any() to a JOIN.
+            // Keep Include if you want Barcodes loaded in the results.
+            IQueryable<Item> q = _db.Items
+                .AsNoTracking()
+                .Include(i => i.Barcodes); // <-- remove this line if you don't need barcodes loaded
 
             if (!string.IsNullOrEmpty(term))
             {
                 var like = $"%{term}%";
+
                 q = q.Where(i =>
                     EF.Functions.Like(i.Sku, like) ||
-                    EF.Functions.Like(i.Barcode, like) ||
-                    EF.Functions.Like(i.Name, like));
+                    EF.Functions.Like(i.Name, like) ||
+                    i.Barcodes.Any(b => EF.Functions.Like(b.Code, like))   // <-- search in ItemBarcodes
+                );
             }
 
             return q.OrderBy(i => i.Name)
                     .Take(take)
                     .ToListAsync();
+        }
+
+        public Task<Item?> GetBySkuOrBarcodeAsync(string codeOrSku)
+        {
+            codeOrSku = (codeOrSku ?? string.Empty).Trim();
+
+            return _db.Items
+                .AsNoTracking()
+                .Include(i => i.Barcodes)
+                .Where(i => i.Sku == codeOrSku || i.Barcodes.Any(b => b.Code == codeOrSku))
+                .FirstOrDefaultAsync();
         }
 
         /// <summary>

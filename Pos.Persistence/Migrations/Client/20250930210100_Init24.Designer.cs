@@ -2,17 +2,20 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations
+namespace Pos.Persistence.Migrations.Client
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250930210100_Init24")]
+    partial class Init24
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -301,6 +304,10 @@ namespace Pos.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Barcode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("BrandId")
                         .HasColumnType("INTEGER");
 
@@ -384,6 +391,10 @@ namespace Pos.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Barcode")
+                        .IsUnique()
+                        .HasFilter("[Barcode] IS NOT NULL");
+
                     b.HasIndex("BrandId");
 
                     b.HasIndex("CategoryId");
@@ -392,7 +403,7 @@ namespace Pos.Persistence.Migrations
 
                     b.HasIndex("Sku")
                         .IsUnique()
-                        .HasFilter("length(trim(Sku)) > 0");
+                        .HasFilter("[Sku] IS NOT NULL");
 
                     b.ToTable("Items");
                 });
@@ -437,9 +448,7 @@ namespace Pos.Persistence.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.HasIndex("ItemId")
-                        .IsUnique()
-                        .HasFilter("IsPrimary = 1");
+                    b.HasIndex("ItemId");
 
                     b.ToTable("ItemBarcodes");
                 });

@@ -2,17 +2,20 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations
+namespace Pos.Persistence.Migrations.Client
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250930202545_Init23")]
+    partial class Init23
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -301,6 +304,10 @@ namespace Pos.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Barcode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("BrandId")
                         .HasColumnType("INTEGER");
 
@@ -384,6 +391,10 @@ namespace Pos.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Barcode")
+                        .IsUnique()
+                        .HasFilter("[Barcode] IS NOT NULL");
+
                     b.HasIndex("BrandId");
 
                     b.HasIndex("CategoryId");
@@ -392,56 +403,9 @@ namespace Pos.Persistence.Migrations
 
                     b.HasIndex("Sku")
                         .IsUnique()
-                        .HasFilter("length(trim(Sku)) > 0");
+                        .HasFilter("[Sku] IS NOT NULL");
 
                     b.ToTable("Items");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.ItemBarcode", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsPrimary")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ItemId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Label")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("QuantityPerScan")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Symbology")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.HasIndex("ItemId")
-                        .IsUnique()
-                        .HasFilter("IsPrimary = 1");
-
-                    b.ToTable("ItemBarcodes");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Outlet", b =>
@@ -1623,17 +1587,6 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Product");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.ItemBarcode", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.Item", "Item")
-                        .WithMany("Barcodes")
-                        .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Item");
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.PartyLedger", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
@@ -1850,11 +1803,6 @@ namespace Pos.Persistence.Migrations
             modelBuilder.Entity("Pos.Domain.Entities.Counter", b =>
                 {
                     b.Navigation("CounterBindings");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.Item", b =>
-                {
-                    b.Navigation("Barcodes");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Outlet", b =>

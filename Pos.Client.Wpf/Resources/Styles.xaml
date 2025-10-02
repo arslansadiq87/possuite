@@ -55,6 +55,8 @@
     <Thickness x:Key="Btn.Padding">12,6</Thickness>
     <CornerRadius x:Key="Btn.Radius">0</CornerRadius>
     <Thickness x:Key="Btn.BorderThickness">1</Thickness>
+    <sys:Double x:Key="Icon.Size">18</sys:Double>
+
 
     <!-- Input-specific brushes (you can tweak) -->
     <SolidColorBrush x:Key="Clr.InputBG"        Color="#FFFFFFFF"/>
@@ -87,6 +89,58 @@
     <sys:Double x:Key="LblSize.Body">14</sys:Double>
     <sys:Double x:Key="LblSize.Small">12</sys:Double>
 
+    <!-- ========= Brushes ========= -->
+    <SolidColorBrush x:Key="Badge.Active"   Color="#4CAF50"/>
+    <SolidColorBrush x:Key="Badge.Inactive" Color="#9E9E9E"/>
+    <SolidColorBrush x:Key="BadgeBorder"    Color="#33000000"/>
+    <SolidColorBrush x:Key="Badge.Text"     Color="#FFFFFFFF"/>
+
+    <SolidColorBrush x:Key="Txt.Muted"      Color="#666666"/>
+
+    <SolidColorBrush x:Key="Chip.Background" Color="#30FFFFFF"/>
+    <SolidColorBrush x:Key="Chip.Border"     Color="#30FFFFFF"/>
+    <SolidColorBrush x:Key="Chip.Foreground" Color="#4CAF50"/>
+
+    
+    <!-- ========= Text styles ========= -->
+    <Style x:Key="Txt.MutedSmall" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource Txt.Muted}"/>
+        <Setter Property="FontSize"   Value="12"/>
+        <Setter Property="TextWrapping" Value="NoWrap"/>
+    </Style>
+
+    <!-- ========= Reusable DataGrid look (like InvoiceCenter) ========= -->
+    <Style x:Key="Grid.ListCompact" TargetType="DataGrid">
+        <Setter Property="HeadersVisibility" Value="Column"/>
+        <Setter Property="RowHeaderWidth"    Value="0"/>
+        <Setter Property="CanUserAddRows"    Value="False"/>
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="FontSize"         Value="13"/>
+        <Setter Property="AutoGenerateColumns" Value="False"/>
+    </Style>
+
+    <!-- ========= Badge styles ========= -->
+    <Style x:Key="Badge.Base" TargetType="Border">
+        <Setter Property="CornerRadius"    Value="4"/>
+        <Setter Property="Padding"         Value="3,0"/>
+        <Setter Property="Margin"          Value="8,0,0,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="BorderBrush"     Value="{StaticResource BadgeBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Background"      Value="#F3F3F3"/>
+    </Style>
+
+    <Style x:Key="Badge.ActiveInactive" TargetType="Border" BasedOn="{StaticResource Badge.Base}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                <Setter Property="Background" Value="{StaticResource Badge.Active}"/>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsActive}" Value="False">
+                <Setter Property="Background" Value="{StaticResource Badge.Inactive}"/>
+                <Setter Property="Opacity"    Value="0.95"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
 
 
     <Style x:Key="Btn.Base" TargetType="Button">
@@ -192,7 +246,30 @@
         </Style.Triggers>
     </Style>
 
-    <Style x:Key="Btn.Icon" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button">
+    <!-- 1) Reusable icon+text template (icon from Button.Tag, text from Button.Content) -->
+    <DataTemplate x:Key="Tpl.BtnIconLeft">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Image Source="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Tag}"
+               Width="{DynamicResource Icon.Size}"
+               Height="{DynamicResource Icon.Size}"
+               Margin="0,0,8,0"
+               Stretch="Uniform"/>
+            <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="Tpl.BtnIconRight">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{Binding}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <Image Source="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Tag}"
+               Width="{DynamicResource Icon.Size}"
+               Height="{DynamicResource Icon.Size}"
+               Stretch="Uniform"/>
+        </StackPanel>
+    </DataTemplate>
+
+    
+    <Style x:Key="Btn.IconText" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button">
         <Setter Property="Width"  Value="36"/>
         <Setter Property="Height" Value="36"/>
         <Setter Property="Padding" Value="0"/>
@@ -206,6 +283,71 @@
                 </DataTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Icon-only button -->
+    <Style x:Key="Btn.Icon" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button">
+        <Setter Property="Width"  Value="36"/>
+        <Setter Property="Height" Value="36"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <!-- If Content is an ImageSource (e.g., DrawingImage), show it -->
+                <DataTemplate>
+                    <Image Source="{Binding}"
+                       Width="{DynamicResource Icon.Size}"
+                       Height="{DynamicResource Icon.Size}"
+                       Stretch="Uniform"/>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Icon + text: base composition -->
+    <Style x:Key="Btn.IconLeft.Base" TargetType="Button">
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Icon from Button.Tag -->
+                        <Image Source="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Tag}"
+                           Width="{DynamicResource Icon.Size}"
+                           Height="{DynamicResource Icon.Size}"
+                           Margin="0,0,8,0"
+                           Stretch="Uniform"/>
+                        <!-- Text from Button.Content -->
+                        <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Variants with icon+text layout baked in -->
+    <!-- 2) Variants that include icon+text layout -->
+    <Style x:Key="Btn.Primary.IconLeft"  BasedOn="{StaticResource Btn.Primary}"  TargetType="Button">
+        <Setter Property="ContentTemplate" Value="{StaticResource Tpl.BtnIconLeft}"/>
+    </Style>
+
+    <Style x:Key="Btn.Outlined.IconLeft" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button">
+        <Setter Property="ContentTemplate" Value="{StaticResource Tpl.BtnIconLeft}"/>
+    </Style>
+
+    <Style x:Key="Btn.Danger.IconLeft"   BasedOn="{StaticResource Btn.Danger}"   TargetType="Button">
+        <Setter Property="ContentTemplate" Value="{StaticResource Tpl.BtnIconLeft}"/>
+    </Style>
+
+    <Style x:Key="Btn.Primary.IconRight"  BasedOn="{StaticResource Btn.Primary}"  TargetType="Button">
+        <Setter Property="ContentTemplate" Value="{StaticResource Tpl.BtnIconRight}"/>
+    </Style>
+
+    <Style x:Key="Btn.Outlined.IconRight" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button">
+        <Setter Property="ContentTemplate" Value="{StaticResource Tpl.BtnIconRight}"/>
+    </Style>
+
+    <Style x:Key="Btn.Danger.IconRight"   BasedOn="{StaticResource Btn.Danger}"   TargetType="Button">
+        <Setter Property="ContentTemplate" Value="{StaticResource Tpl.BtnIconRight}"/>
     </Style>
 
     <Style x:Key="Btn.Tile" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button">

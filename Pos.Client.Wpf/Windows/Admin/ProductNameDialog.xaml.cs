@@ -68,5 +68,28 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             DialogResult = true;
         }
+
+        // Called by the Products window when editing an existing product
+        public void Prefill(string name, int? brandId, int? categoryId)
+        {
+            // Fill name
+            NameBox.Text = name ?? "";
+
+            // These lines rely on SelectedValuePath="Id" in XAML
+            if (brandId.HasValue)
+                BrandCombo.SelectedValue = brandId.Value;
+            else
+                BrandCombo.SelectedIndex = -1;
+
+            if (categoryId.HasValue)
+                CategoryCombo.SelectedValue = categoryId.Value;
+            else
+                CategoryCombo.SelectedIndex = -1;
+
+            // Optional UX: focus the name field and select text
+            NameBox.Focus();
+            NameBox.SelectAll();
+        }
+
     }
 }

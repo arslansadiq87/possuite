@@ -1,106 +1,355 @@
 ﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.VariantBatchDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Add Variants" Width="540" Height="460" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+        x:Name="Root"  
+        Title="Add Products - Items - Variants" Width="1024" Height="720"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Loaded="VariantBatchDialog_Loaded">
 
-        <StackPanel>
-            <TextBlock x:Name="ProductText" FontWeight="Bold" Margin="0,0,0,8"/>
+    <DockPanel Margin="12">
+        <!-- TOP TOOLBAR -->
+        <ToolBar DockPanel.Dock="Top" Style="{StaticResource ModernToolBar.Compact}" ToolBarTray.IsLocked="True">
+            <Button x:Name="SaveAddBtn" Content="Save &amp; Add another" Click="SaveAndAddAnother_Click" />
+            <Button x:Name="SaveBtn"     Content="Save &amp; Close"   Margin="6,0,0,0" Click="Save_Click" />
+            <Button Content="Cancel" Margin="6,0,0,0" Click="Cancel_Click"/>
+            <Separator/>
+            
+        </ToolBar>
 
+        <!-- BODY -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- 0: Axes -->
+                <RowDefinition Height="Auto"/>
+                <!-- 1: Price & Tax -->
+                <RowDefinition Height="Auto"/>
+                <!-- 2: SKU / Barcodes -->
+                <RowDefinition Height="*"/>
+                <!-- 3: Discount + Preview -->
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0">
+                <TextBlock x:Name="ProductText" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                <!-- Standalone Name Row (hidden when a product is provided) -->
+                
+                <Grid x:Name="StandaloneNameRow" Grid.Row="0" Margin="0,8,0,8" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Item Name" VerticalAlignment="Center"/>
+                    <TextBox x:Name="NameBox" Grid.Column="1" Style="{StaticResource Txt.Outlined}"/>
+                </Grid>
+                
+            </StackPanel>
             <!-- Axes -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="160"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <GroupBox x:Name="AxesGroup" Header="Variant Axes" Padding="8" Margin="0,0,0,12" Grid.Row="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <!-- Row 0: SEQUENTIAL inline values container (shown only in Sequential via code) -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Row 1: BATCH Axis 1 values (comma-separated) -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Row 2: BATCH Axis 2 values (comma-separated) -->
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <TextBlock Grid.Column="0" Grid.Row="0"
-                   Text="Axis 1 Name" VerticalAlignment="Center"/>
-                <TextBox   Grid.Column="1" Grid.Row="0"
-                   x:Name="Axis1NameBox" Margin="8,0,0,0"/>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Grid.Row="1"
-                   Text="Axis 1 Values (comma-separated)" VerticalAlignment="Center" Margin="0,8,0,0"/>
-                <TextBox   Grid.Column="1" Grid.Row="1"
-                   x:Name="Axis1ValuesBox" Margin="8,8,0,0"/>
+                    <!-- SEQUENTIAL inline name + value panel (HideBatchValuesRows will set this Visible) -->
+                    <Grid x:Name="AxisSingleValuesPanel" Grid.Row="0" Grid.ColumnSpan="4" Visibility="Visible">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="35"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="35"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                       
+                        <TextBlock Grid.Column="0" Text="Axis 1 Name" VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="1" x:Name="Axis1NameBox" Margin="0,0,8,0" Style="{StaticResource Txt.Outlined}"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="2"
-                   Text="Axis 2 Name" VerticalAlignment="Center" Margin="0,8,0,0"/>
-                <TextBox   Grid.Column="1" Grid.Row="2"
-                   x:Name="Axis2NameBox" Margin="8,8,0,0"/>
+                        <TextBlock Grid.Column="2" Text="Value" VerticalAlignment="Center" Margin="0,0,0,0"/>
+                        <TextBox   Grid.Column="3" x:Name="Axis1SingleBox" Margin="0,0,8,0" Style="{StaticResource Txt.Outlined}"/>
 
-                <TextBlock Grid.Column="0" Grid.Row="3"
-                   Text="Axis 2 Values (comma-separated)" VerticalAlignment="Center" Margin="0,8,0,0"/>
-                <TextBox   Grid.Column="1" Grid.Row="3"
-                   x:Name="Axis2ValuesBox" Margin="8,8,0,0"/>
-            </Grid>
+                        <TextBlock Grid.Column="4" Grid.Row="1" Text="Axis 2 Name" VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="5" Margin="0,0,8,0" Grid.Row="1" x:Name="Axis2NameBox" Style="{StaticResource Txt.Outlined}"/>
 
-            <Separator Margin="0,12,0,12"/>
+                        <TextBlock Grid.Column="6" Grid.Row="1" Text="Value" VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="7" Margin="0,0,0,0" Grid.Row="1" x:Name="Axis2SingleBox" Style="{StaticResource Txt.Outlined}"/>
+                    </Grid>
 
-            <!-- Default Price / Tax -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="140"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="140"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+                    <!-- BATCH: Axis 1 values -->
+                    <Grid x:Name="Axis1ValuesPanel" Grid.Row="1" Grid.ColumnSpan="4" Margin="0,8,0,0" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Axis 1 Values (comma-separated)" VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="1" x:Name="Axis1ValuesBox" Margin="8,0,0,0" Style="{StaticResource Txt.Outlined}"/>
+                    </Grid>
 
-                <TextBlock Grid.Column="0" Text="Default Price" VerticalAlignment="Center"/>
-                <TextBox   Grid.Column="1" x:Name="PriceBox" Margin="8,0,0,0" Text="0"/>
+                    <!-- BATCH: Axis 2 values -->
+                    <Grid x:Name="Axis2ValuesPanel" Grid.Row="2" Grid.ColumnSpan="4" Margin="0,8,0,0"  Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Axis 2 Values (comma-separated)" VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="1" x:Name="Axis2ValuesBox" Margin="8,0,0,0" Style="{StaticResource Txt.Outlined}"/>
+                    </Grid>
+                </Grid>
+            </GroupBox>
 
-                <TextBlock Grid.Column="2" Text="Tax %" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                <TextBox   Grid.Column="3" x:Name="TaxPctBox" Margin="8,0,0,0" Text="0"/>
-            </Grid>
+            <!-- Price & Tax Defaults -->
+            <GroupBox Header="Price - Tax Defaults - Discounts - State" Padding="8" Margin="0,0,0,12" Grid.Row="2">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-            <!-- Tax Code / Inclusive -->
-            <Grid Margin="0,8,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="140"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="140"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Default Price" VerticalAlignment="Center"/>
+                    <TextBox   Grid.Column="1" x:Name="PriceBox" Margin="8,0,0,0" Text="0" Style="{StaticResource Txt.Outlined}"/>
 
-                <TextBlock Grid.Column="0" Text="Tax Code" VerticalAlignment="Center"/>
-                <TextBox   Grid.Column="1" x:Name="TaxCodeBox" Margin="8,0,0,0" Text="STD"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Tax %" VerticalAlignment="Center" Margin="0,0,0,0"/>
+                    <TextBox   Grid.Row="1" Grid.Column="1" x:Name="TaxPctBox" Margin="8,8,0,0" Text="0" Style="{StaticResource Txt.Outlined}"/>
 
-                <CheckBox  Grid.Column="2" x:Name="TaxInclusiveBox" Content="Tax Inclusive"
-                   Grid.ColumnSpan="2" VerticalAlignment="Center" Margin="8,0,0,0"/>
-            </Grid>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Tax Code" Margin="55,8,0,0" VerticalAlignment="Center"/>
+                    <TextBox   Grid.Row="1" Grid.Column="3" x:Name="TaxCodeBox" Margin="8,8,0,0" Text="STD" Style="{StaticResource Txt.Outlined}"/>
 
-            <!-- Discounts -->
-            <Grid Margin="0,8,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="140"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="140"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+                    <CheckBox  Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" x:Name="TaxInclusiveBox"
+                     Content="Tax Inclusive" Margin="8,8,0,0" Style="{StaticResource ModernCheckBox}"/>
 
-                <TextBlock Grid.Column="0" Text="Default Disc %" VerticalAlignment="Center"/>
-                <TextBox   Grid.Column="1" x:Name="DiscPctBox" Margin="8,0,0,0"/>
 
-                <TextBlock Grid.Column="2" Text="Default Disc Amt" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                <TextBox   Grid.Column="3" x:Name="DiscAmtBox" Margin="8,0,0,0"/>
-            </Grid>
-        </StackPanel>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Default Disc %" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                    <TextBox   Grid.Row="2" Grid.Column="1" x:Name="DiscPctBox" Margin="8,8,0,0" Style="{StaticResource Txt.Outlined}"/>
 
-        
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="Default Disc Amt" VerticalAlignment="Center" Margin="55,8,0,0"/>
+                    <TextBox   Grid.Row="2" Grid.Column="3" x:Name="DiscAmtBox" Margin="8,8,0,0" Style="{StaticResource Txt.Outlined}"/>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Create Variants" Width="140" Margin="0,0,8,0" Click="Create_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-            <Button Content="Cancel" Width="100" Click="Cancel_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-        </StackPanel>
-    </Grid>
+                    <!-- Row 1: checkbox (spans all columns) -->
+                    <CheckBox  Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"
+Margin="0,8,0,0"
+x:Name="ActiveBox"
+Content="Mark new variants as Active"
+IsChecked="True" Style="{StaticResource ModernCheckBox}"/>
+                </Grid>
+            </GroupBox>
+
+            <!-- SKU / Barcodes -->
+            <GroupBox Header="SKU / Barcodes" Padding="8" Margin="0,0,0,12" Grid.Row="3">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <!-- SKU row -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Barcode autogen controls -->
+                        <RowDefinition Height="*"/>
+                        <!-- Barcodes grid -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Add barcode row -->
+                    </Grid.RowDefinitions>
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Row 0: SKU -->
+                    <Grid Grid.Row="0" Grid.ColumnSpan="4" Margin="0,0,0,0" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <!-- Auto SKU checkbox -->
+                            <ColumnDefinition Width="16"/>
+                            <!-- spacer -->
+                            <ColumnDefinition Width="Auto"/>
+                            <!-- SKU Prefix label -->
+                            <ColumnDefinition Width="140"/>
+                            <!-- SKU Prefix textbox -->
+                            <ColumnDefinition Width="16"/>
+                            <!-- spacer -->
+                            <ColumnDefinition Width="Auto"/>
+                            <!-- Start # label -->
+                            <ColumnDefinition Width="80"/>
+                            <!-- Start # textbox -->
+                            <ColumnDefinition Width="*"/>
+                            <!-- stretch filler -->
+                        </Grid.ColumnDefinitions>
+
+                        <CheckBox Grid.Column="0"
+              x:Name="AutoSkuBox"
+              Content="Auto-generate SKUs"
+              IsChecked="True"
+              VerticalAlignment="Center" Style="{StaticResource ModernCheckBox}"/>
+
+                        <TextBlock Grid.Column="2"
+               Text="SKU Prefix"
+               VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="3"
+               x:Name="SkuPrefixBox"
+               Margin="8,0,0,0"
+               Text="ITEM" Style="{StaticResource Txt.Outlined}"/>
+
+                        <TextBlock Grid.Column="5"
+               Text="Start #"
+               VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="6"
+               x:Name="SkuStartBox"
+               Margin="8,0,0,0"
+               Text="1" Style="{StaticResource Txt.Outlined}"/>
+                    </Grid>
+
+                    <!-- Row 1: Barcode autogen options (single row) -->
+                    <Grid Grid.Row="1" Grid.ColumnSpan="4" Margin="0,8,0,0" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <!-- Checkbox -->
+                            <ColumnDefinition Width="50"/>
+                            <!-- Spacer -->
+                            <ColumnDefinition Width="Auto"/>
+                            <!-- Symbology label -->
+                            <ColumnDefinition Width="*"/>
+                            <!-- Symbology dropdown -->
+                            <ColumnDefinition Width="20"/>
+                            <!-- Spacer -->
+                            <ColumnDefinition Width="Auto"/>
+                            <!-- Prefix label -->
+                            <ColumnDefinition Width="*"/>
+                            <!-- Prefix box -->
+                            <ColumnDefinition Width="20"/>
+                            <!-- Spacer -->
+                            <ColumnDefinition Width="Auto"/>
+                            <!-- Start label -->
+                            <ColumnDefinition Width="0.5*"/>
+                            
+                            <!-- Stretch filler -->
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Checkbox -->
+                        <CheckBox Grid.Column="0" x:Name="AutoBarcodeBox" Grid.ColumnSpan="2"
+              Content="Auto-generate Primary Barcode"
+              VerticalAlignment="Center" Style="{StaticResource ModernCheckBox}"/>
+
+                        <!-- Symbology -->
+                        <TextBlock Grid.Column="2" Text="Symbology" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="3" x:Name="BarcodeSymbologyBox"
+               SelectedIndex="0" Margin="8,0,0,0">
+                            <ComboBoxItem Content="EAN-13" Tag="Ean13" />
+                            <ComboBoxItem Content="EAN-8"  Tag="Ean8"  />
+                            <ComboBoxItem Content="UPC-A"  Tag="UpcA"  />
+                            <ComboBoxItem Content="Code 128" Tag="Code128" />
+                        </ComboBox>
+
+                        <!-- Prefix -->
+                        <TextBlock Grid.Column="5" Text="Prefix/Base" VerticalAlignment="Center"/>
+                        <TextBox   Grid.Column="6" x:Name="BarcodePrefixBox" Text="978000" Margin="8,0,0,0" Style="{StaticResource Txt.Outlined}"/>
+
+                        <!-- Start -->
+                        <TextBlock Grid.Column="8" Text="Start #" VerticalAlignment="Center" Margin="55,0,0,0"/>
+                        <TextBox   Grid.Column="9" x:Name="BarcodeStartBox" Text="1" Margin="8,0,0,0" Style="{StaticResource Txt.Outlined}"/>
+                    </Grid>
+
+                    <!-- Row 2: Barcodes grid -->
+                    <DataGrid Grid.Row="2" x:Name="BarcodesGrid"
+          Margin="0,12,0,0" Grid.ColumnSpan="4"
+          AutoGenerateColumns="False"
+          CanUserAddRows="False"
+          CanUserDeleteRows="True"
+          IsReadOnly="False"
+          Height="180"
+          SelectionUnit="FullRow"
+          Style="{StaticResource ModernDataGrid}">
+                        <DataGrid.Columns>
+                            <!-- Code -->
+                            <DataGridTextColumn x:Name="ColCode"
+                        Header="Code"
+                        Binding="{Binding Code, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                        Width="*"/>
+
+                            <!-- Label (optional) -->
+                            <DataGridTextColumn x:Name="ColLabel"
+                        Header="Label"
+                        Binding="{Binding Label, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                        Width="120"/>
+
+                            <!-- Type (Combo) – use ElementStyle/EditingElementStyle to reliably bind ItemsSource -->
+                            <DataGridComboBoxColumn x:Name="ColSymbology"
+                            Header="Type"
+                            SelectedItemBinding="{Binding Symbology, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                            Width="120">
+                                <DataGridComboBoxColumn.ElementStyle>
+                                    <Style TargetType="ComboBox">
+                                        <Setter Property="ItemsSource" Value="{Binding ElementName=Root, Path=BarcodeTypes}"/>
+                                        <Setter Property="IsHitTestVisible" Value="False"/>
+                                        <Setter Property="Focusable" Value="False"/>
+                                    </Style>
+                                </DataGridComboBoxColumn.ElementStyle>
+                                <DataGridComboBoxColumn.EditingElementStyle>
+                                    <Style TargetType="ComboBox">
+                                        <Setter Property="ItemsSource" Value="{Binding ElementName=Root, Path=BarcodeTypes}"/>
+                                        <Setter Property="IsEditable" Value="False"/>
+                                    </Style>
+                                </DataGridComboBoxColumn.EditingElementStyle>
+                            </DataGridComboBoxColumn>
+
+                            <!-- Qty/Scan -->
+                            <DataGridTextColumn x:Name="ColQty"
+                        Header="Qty/Scan"
+                        Binding="{Binding QuantityPerScan, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, ValidatesOnDataErrors=True}"
+                        Width="90"/>
+
+                            <!-- Primary -->
+                            <DataGridCheckBoxColumn x:Name="ColPrimary"
+                            Header="Primary"
+                            Binding="{Binding IsPrimary, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                            Width="80"/>
+
+                            <!-- Row delete button -->
+                            <DataGridTemplateColumn Header=" " Width="48">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="🗑"
+                        ToolTip="Delete barcode"
+                        Padding="4"
+                        Click="RowDeleteButton_Click"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+
+                    </DataGrid>
+
+                    <!-- Row 3: Add buttons -->
+                    <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,0">
+                        <Button Content="Add Manual Barcode" Click="AddManualBarcode_Click" Height="32" Width="150" Style="{StaticResource Btn.Primary}"/>
+                        <Button Content="Generate Primary" Margin="8,0,0,0" Click="GeneratePrimaryBarcode_Click" Height="32" Width="150" Style="{StaticResource Btn.Primary}"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- Discount + Active + PREVIEW GRID -->
+            
+        </Grid>
+    </DockPanel>
 </Window>

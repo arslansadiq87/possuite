@@ -215,8 +215,16 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void LoadItemIndex()
         {
             using var db = new PosClientDbContext(_dbOptions);
+
             var list =
                 (from i in db.Items.AsNoTracking()
+                 let primaryBarcode =
+                     db.ItemBarcodes
+                       .Where(b => b.ItemId == i.Id)
+                       .OrderByDescending(b => b.IsPrimary)   // prefer primary
+                       .ThenBy(b => b.Id)                      // stable fallback
+                       .Select(b => b.Code)
+                       .FirstOrDefault()
                  join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                  from p in gp.DefaultIfEmpty()
                  orderby i.Name
@@ -224,7 +232,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                      i.Id,
                      i.Name,
                      i.Sku,
-                     i.Barcode,
+                     primaryBarcode ?? "",        // <-- was i.Barcode
                      i.Price,
                      i.TaxCode,
                      i.DefaultTaxRatePct,
@@ -239,6 +247,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             DataContextItemIndex.Clear();
             foreach (var it in list) DataContextItemIndex.Add(it);
         }
+
 
         private bool ScanFilter(object o)
         {
@@ -352,29 +361,56 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
 
             // 4) DB fallback
+            // 4) DB fallback (now checks ItemBarcodes instead of Items.Barcode)
             if (pick is null && text.Length > 0)
             {
                 using var db = new PosClientDbContext(_dbOptions);
-                var q =
-                    from i in db.Items.AsNoTracking()
-                    join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
-                    from p in gp.DefaultIfEmpty()
-                    where i.Barcode == text
-                       || i.Sku == text
-                       || EF.Functions.Like(EF.Functions.Collate(i.Name, "NOCASE"), text + "%")
-                       || (i.Variant1Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant1Value, "NOCASE"), text + "%"))
-                       || (i.Variant2Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant2Value, "NOCASE"), text + "%"))
-                       || (p != null && EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), text + "%"))
-                    orderby i.Name
-                    select new ItemIndexDto(
-                        i.Id, i.Name, i.Sku, i.Barcode, i.Price, i.TaxCode,
-                        i.DefaultTaxRatePct, i.TaxInclusive, i.DefaultDiscountPct, i.DefaultDiscountAmt,
-                        p != null ? p.Name : null,
-                        i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value);
 
-                var dbItem = q.FirstOrDefault();
-                if (dbItem is not null) { DataContextItemIndex.Add(dbItem); pick = dbItem; }
+                var dbItem =
+                    (from i in db.Items.AsNoTracking()
+                     let primaryBarcode =
+                         db.ItemBarcodes
+                           .Where(b => b.ItemId == i.Id)
+                           .OrderByDescending(b => b.IsPrimary)
+                           .ThenBy(b => b.Id)
+                           .Select(b => b.Code)
+                           .FirstOrDefault()
+                     join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
+                     from p in gp.DefaultIfEmpty()
+                     where
+                         // exact barcode hit on ANY barcode for the item
+                         db.ItemBarcodes.Any(b => b.ItemId == i.Id && b.Code == text)
+                         // or exact SKU
+                         || i.Sku == text
+                         // or starts-with on names/variants/product
+                         || EF.Functions.Like(EF.Functions.Collate(i.Name, "NOCASE"), text + "%")
+                         || (i.Variant1Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant1Value, "NOCASE"), text + "%"))
+                         || (i.Variant2Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant2Value, "NOCASE"), text + "%"))
+                         || (p != null && EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), text + "%"))
+                     orderby i.Name
+                     select new ItemIndexDto(
+                         i.Id,
+                         i.Name,
+                         i.Sku,
+                         primaryBarcode ?? "",   // present a primary (or first) barcode in the UI
+                         i.Price,
+                         i.TaxCode,
+                         i.DefaultTaxRatePct,
+                         i.TaxInclusive,
+                         i.DefaultDiscountPct,
+                         i.DefaultDiscountAmt,
+                         p != null ? p.Name : null,
+                         i.Variant1Name, i.Variant1Value,
+                         i.Variant2Name, i.Variant2Value
+                     )).FirstOrDefault();
+
+                if (dbItem is not null)
+                {
+                    DataContextItemIndex.Add(dbItem);
+                    pick = dbItem;
+                }
             }
+
 
             if (pick is null) { MessageBox.Show("Item not found."); ScanText.Focus(); return; }
 

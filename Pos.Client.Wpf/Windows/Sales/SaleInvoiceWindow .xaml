@@ -1,5 +1,5 @@
 ﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.SaleInvoiceWindow"
-        x:Name="MainWindowRoot"
+        x:Name="MainWindowRoot" WindowStartupLocation="CenterOwner"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="POS — Sales" Height="768" Width="1024">

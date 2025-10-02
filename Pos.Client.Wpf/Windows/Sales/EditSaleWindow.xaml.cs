@@ -20,7 +20,8 @@ namespace Pos.Client.Wpf.Windows.Sales
     {
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly int _saleId;
-
+        private readonly Dictionary<string, ItemIndexDto> _barcodeIndex =
+    new(StringComparer.OrdinalIgnoreCase);
         // Loaded original sale snapshot (used for deltas)
         private Sale _orig = null!;
         private System.Collections.Generic.List<SaleLine> _origLines = null!;
@@ -220,32 +221,75 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             using var db = new PosClientDbContext(_dbOptions);
 
+            // Primary barcode per item
+            var primaryByItemId = db.ItemBarcodes
+                .AsNoTracking()
+                .Where(b => b.IsPrimary)
+                .Select(b => new { b.ItemId, b.Code })
+                .ToList()
+                .GroupBy(x => x.ItemId)
+                .ToDictionary(g => g.Key, g => g.First().Code);
+
+            // Items + product names
             var list =
                 (from i in db.Items.AsNoTracking()
                  join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                  from p in gp.DefaultIfEmpty()
                  orderby i.Name
-                 select new ItemIndexDto(
-                     i.Id, i.Name, i.Sku, i.Barcode, i.Price, i.TaxCode,
-                     i.DefaultTaxRatePct, i.TaxInclusive, i.DefaultDiscountPct, i.DefaultDiscountAmt,
-                     p != null ? p.Name : null,
-                     i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value
-                 )).ToList();
+                 select new
+                 {
+                     i.Id,
+                     i.Name,
+                     i.Sku,
+                     i.Price,
+                     i.TaxCode,
+                     i.DefaultTaxRatePct,
+                     i.TaxInclusive,
+                     i.DefaultDiscountPct,
+                     i.DefaultDiscountAmt,
+                     ProductName = p != null ? p.Name : null,
+                     i.Variant1Name,
+                     i.Variant1Value,
+                     i.Variant2Name,
+                     i.Variant2Value
+                 }).ToList();
 
             DataContextItemIndex.Clear();
-            foreach (var it in list) DataContextItemIndex.Add(it);
 
-            // fill missing SKU/name for existing lines
+            foreach (var it in list)
+            {
+                var primary = primaryByItemId.TryGetValue(it.Id, out var code) ? code : "";
+                DataContextItemIndex.Add(new ItemIndexDto(
+                    it.Id, it.Name, it.Sku, primary, it.Price, it.TaxCode,
+                    it.DefaultTaxRatePct, it.TaxInclusive, it.DefaultDiscountPct, it.DefaultDiscountAmt,
+                    it.ProductName,
+                    it.Variant1Name, it.Variant1Value, it.Variant2Name, it.Variant2Value
+                ));
+            }
+
+            // Build fast barcode -> item index with ALL barcodes (primary + alternates)
+            _barcodeIndex.Clear();
+            var dtoById = DataContextItemIndex.ToDictionary(x => x.Id);
+            var allCodes = db.ItemBarcodes
+                .AsNoTracking()
+                .Select(b => new { b.ItemId, b.Code })
+                .ToList();
+
+            foreach (var bc in allCodes)
+                if (dtoById.TryGetValue(bc.ItemId, out var dto) && !string.IsNullOrWhiteSpace(bc.Code))
+                    _barcodeIndex[bc.Code] = dto;
+
+            // fill missing SKU/name for existing cart lines
             foreach (var cl in _cart)
             {
-                var meta = DataContextItemIndex.FirstOrDefault(x => x.Id == cl.ItemId);
-                if (meta != null)
+                if (dtoById.TryGetValue(cl.ItemId, out var meta))
                 {
                     cl.Sku = meta.Sku;
                     cl.DisplayName = meta.DisplayName;
                 }
             }
         }
+
 
         private bool ScanFilter(object o)
         {
@@ -349,40 +393,77 @@ namespace Pos.Client.Wpf.Windows.Sales
             var text = ScanText.Text?.Trim() ?? string.Empty;
             ItemIndexDto? pick = null;
 
-            if (ScanPopup.IsOpen && ScanList.SelectedItem is ItemIndexDto sel) pick = sel;
+            if (ScanPopup.IsOpen && ScanList.SelectedItem is ItemIndexDto sel)
+                pick = sel;
 
+            // 1) Exact barcode hit from memory index
+            if (pick is null && text.Length > 0 && _barcodeIndex.TryGetValue(text, out var viaBarcode))
+                pick = viaBarcode;
+
+            // 2) Exact SKU (memory)
             if (pick is null && text.Length > 0)
-            {
-                pick = DataContextItemIndex.FirstOrDefault(i => i.Barcode == text)
-                    ?? DataContextItemIndex.FirstOrDefault(i => i.Sku == text);
-            }
+                pick = DataContextItemIndex.FirstOrDefault(i => string.Equals(i.Sku, text, StringComparison.OrdinalIgnoreCase));
+
+            // 3) Prefix on display/name (memory)
             if (pick is null && text.Length > 0)
-            {
                 pick = DataContextItemIndex.FirstOrDefault(i =>
-                    (i.DisplayName ?? i.Name).StartsWith(text, StringComparison.OrdinalIgnoreCase));
-            }
+                    ((i.DisplayName ?? i.Name) ?? string.Empty).StartsWith(text, StringComparison.OrdinalIgnoreCase));
+
+            // 4) DB lookup (includes barcodes table)
             if (pick is null && text.Length > 0)
             {
                 using var db = new PosClientDbContext(_dbOptions);
+
                 var q =
                     from i in db.Items.AsNoTracking()
                     join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                     from p in gp.DefaultIfEmpty()
-                    where i.Barcode == text
+                    where db.ItemBarcodes.Any(b => b.ItemId == i.Id && b.Code == text)
                        || i.Sku == text
                        || EF.Functions.Like(EF.Functions.Collate(i.Name, "NOCASE"), text + "%")
                        || (i.Variant1Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant1Value, "NOCASE"), text + "%"))
                        || (i.Variant2Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant2Value, "NOCASE"), text + "%"))
                        || (p != null && EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), text + "%"))
                     orderby i.Name
-                    select new ItemIndexDto(
-                        i.Id, i.Name, i.Sku, i.Barcode, i.Price, i.TaxCode,
-                        i.DefaultTaxRatePct, i.TaxInclusive, i.DefaultDiscountPct, i.DefaultDiscountAmt,
-                        p != null ? p.Name : null,
-                        i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value);
+                    select new
+                    {
+                        i.Id,
+                        i.Name,
+                        i.Sku,
+                        i.Price,
+                        i.TaxCode,
+                        i.DefaultTaxRatePct,
+                        i.TaxInclusive,
+                        i.DefaultDiscountPct,
+                        i.DefaultDiscountAmt,
+                        ProductName = p != null ? p.Name : null,
+                        i.Variant1Name,
+                        i.Variant1Value,
+                        i.Variant2Name,
+                        i.Variant2Value
+                    };
 
-                var dbItem = q.FirstOrDefault();
-                if (dbItem is not null) { DataContextItemIndex.Add(dbItem); pick = dbItem; }
+                var found = q.FirstOrDefault();
+                if (found is not null)
+                {
+                    // get primary barcode for display
+                    var primary = db.ItemBarcodes.AsNoTracking()
+                        .Where(b => b.ItemId == found.Id && b.IsPrimary)
+                        .Select(b => b.Code)
+                        .FirstOrDefault() ?? "";
+
+                    var dbItem = new ItemIndexDto(
+                        found.Id, found.Name, found.Sku, primary, found.Price, found.TaxCode,
+                        found.DefaultTaxRatePct, found.TaxInclusive, found.DefaultDiscountPct, found.DefaultDiscountAmt,
+                        found.ProductName,
+                        found.Variant1Name, found.Variant1Value, found.Variant2Name, found.Variant2Value);
+
+                    // cache into memory (list + barcode index for this scanned code)
+                    DataContextItemIndex.Add(dbItem);
+                    _barcodeIndex[text] = dbItem;
+
+                    pick = dbItem;
+                }
             }
 
             if (pick is null) { MessageBox.Show("Item not found."); ScanText.Focus(); return; }
@@ -390,6 +471,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             AddItemToCart(pick);
             ClearScan();
         }
+
 
         private void AddItemToCart(ItemIndexDto item)
         {

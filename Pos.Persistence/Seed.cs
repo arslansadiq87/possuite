@@ -138,7 +138,6 @@ namespace Pos.Persistence
             {
                 Sku = "SKU-1001",
                 Name = "Biscuit Pack",
-                Barcode = "1001",
                 Price = 150m,
                 UpdatedAt = now,
                 TaxCode = "STD",
@@ -146,13 +145,12 @@ namespace Pos.Persistence
                 TaxInclusive = false,
                 DefaultDiscountPct = 0m,
                 DefaultDiscountAmt = 0m
-            });
+            }, primaryBarcode: "1001");
 
             UpsertItem(db, new Item
             {
                 Sku = "SKU-1002",
                 Name = "Mineral Water 500ml",
-                Barcode = "1002",
                 Price = 60m,
                 UpdatedAt = now,
                 TaxCode = "STD",
@@ -160,13 +158,12 @@ namespace Pos.Persistence
                 TaxInclusive = false,
                 DefaultDiscountPct = 0m,
                 DefaultDiscountAmt = 0m
-            });
+            }, primaryBarcode: "1002");
 
             UpsertItem(db, new Item
             {
                 Sku = "SKU-1003",
                 Name = "Chocolate Bar",
-                Barcode = "1003",
                 Price = 220m,
                 UpdatedAt = now,
                 TaxCode = "STD",
@@ -174,10 +171,11 @@ namespace Pos.Persistence
                 TaxInclusive = false,
                 DefaultDiscountPct = 5m,
                 DefaultDiscountAmt = null
-            });
+            }, primaryBarcode: "1003");
 
             db.SaveChanges();
         }
+
 
         // -------------------------------------------------
         // 2) Product + Variants (Items as variant SKUs)
@@ -230,7 +228,6 @@ namespace Pos.Persistence
                     ProductId = product.Id,
                     Sku = v.Sku,
                     Name = productName,
-                    Barcode = v.Barcode,
                     Price = v.Price,
                     UpdatedAt = now,
 
@@ -244,8 +241,7 @@ namespace Pos.Persistence
                     Variant1Value = v.S,
                     Variant2Name = colorName,
                     Variant2Value = v.C
-                    // BrandId/CategoryId optional on Items (can inherit from Product)
-                });
+                }, primaryBarcode: v.Barcode);
             }
 
             db.SaveChanges();
@@ -305,7 +301,6 @@ namespace Pos.Persistence
                     ProductId = product.Id,
                     Sku = v.Sku,
                     Name = productName,
-                    Barcode = v.Barcode,
                     Price = v.Price,
                     UpdatedAt = now,
 
@@ -319,7 +314,8 @@ namespace Pos.Persistence
                     Variant1Value = v.W,
                     Variant2Name = colorName,
                     Variant2Value = v.C
-                });
+                }, primaryBarcode: v.Barcode);
+
             }
 
             db.SaveChanges();
@@ -375,34 +371,97 @@ namespace Pos.Persistence
         }
 
         // ----------------------------------------
-        // Helper: Upsert Item by unique SKU
+        // Helper: Upsert Item by unique SKU (+ optional primary barcode)
         // ----------------------------------------
-        private static void UpsertItem(PosClientDbContext db, Item incoming)
+        private static void UpsertItem(PosClientDbContext db, Item incoming, string? primaryBarcode = null)
         {
+            // Get existing by SKU (no need to Include; we will query barcodes separately)
             var existing = db.Items.FirstOrDefault(i => i.Sku == incoming.Sku);
             if (existing == null)
             {
-                db.Items.Add(incoming);
+                // Attach as new
+                existing = incoming;
+                db.Items.Add(existing);
+            }
+            else
+            {
+                // Update scalar fields
+                existing.Name = incoming.Name;
+                existing.Price = incoming.Price;
+                existing.UpdatedAt = incoming.UpdatedAt;
+
+                existing.TaxCode = incoming.TaxCode;
+                existing.DefaultTaxRatePct = incoming.DefaultTaxRatePct;
+                existing.TaxInclusive = incoming.TaxInclusive;
+                existing.DefaultDiscountPct = incoming.DefaultDiscountPct;
+                existing.DefaultDiscountAmt = incoming.DefaultDiscountAmt;
+
+                existing.ProductId = incoming.ProductId;
+                existing.Variant1Name = incoming.Variant1Name;
+                existing.Variant1Value = incoming.Variant1Value;
+                existing.Variant2Name = incoming.Variant2Name;
+                existing.Variant2Value = incoming.Variant2Value;
+            }
+
+            // Ensure primary barcode (in ItemBarcodes) if provided
+            if (!string.IsNullOrWhiteSpace(primaryBarcode))
+            {
+                EnsurePrimaryBarcode(db, existing, primaryBarcode!.Trim());
+            }
+        }
+
+        private static void EnsurePrimaryBarcode(
+    PosClientDbContext db,
+    Item item,
+    string code,
+    BarcodeSymbology symbology = BarcodeSymbology.Ean13,
+    int qtyPerScan = 1,
+    string? label = null)
+        {
+            // If this code already exists globally on another item, skip to avoid UNIQUE violation.
+            var global = db.ItemBarcodes.AsNoTracking().FirstOrDefault(b => b.Code == code);
+            if (global != null && global.ItemId != item.Id)
+            {
+                // You can log/trace here if desired; we silently skip to keep seeding idempotent.
                 return;
             }
 
-            existing.Name = incoming.Name;
-            existing.Barcode = incoming.Barcode;
-            existing.Price = incoming.Price;
-            existing.UpdatedAt = incoming.UpdatedAt;
+            // Find barcode on this item
+            var onThisItem = db.ItemBarcodes.FirstOrDefault(b => b.ItemId == item.Id && b.Code == code);
+            if (onThisItem == null)
+            {
+                // Create it as primary
+                db.ItemBarcodes.Add(new ItemBarcode
+                {
+                    Item = item,
+                    Code = code,
+                    Symbology = symbology,
+                    QuantityPerScan = Math.Max(1, qtyPerScan),
+                    IsPrimary = true,
+                    Label = string.IsNullOrWhiteSpace(label) ? null : label,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                // Already present on this item—just mark as primary
+                onThisItem.IsPrimary = true;
+                onThisItem.UpdatedAt = DateTime.UtcNow;
+            }
 
-            existing.TaxCode = incoming.TaxCode;
-            existing.DefaultTaxRatePct = incoming.DefaultTaxRatePct;
-            existing.TaxInclusive = incoming.TaxInclusive;
-            existing.DefaultDiscountPct = incoming.DefaultDiscountPct;
-            existing.DefaultDiscountAmt = incoming.DefaultDiscountAmt;
+            // Make sure no other barcode of this item is primary
+            var others = db.ItemBarcodes
+                .Where(b => b.ItemId == item.Id && b.Code != code && b.IsPrimary)
+                .ToList();
 
-            existing.ProductId = incoming.ProductId;
-            existing.Variant1Name = incoming.Variant1Name;
-            existing.Variant1Value = incoming.Variant1Value;
-            existing.Variant2Name = incoming.Variant2Name;
-            existing.Variant2Value = incoming.Variant2Value;
+            foreach (var b in others)
+            {
+                b.IsPrimary = false;
+                b.UpdatedAt = DateTime.UtcNow;
+            }
         }
+
 
         private static void EnsureSuppliers(PosClientDbContext db)
         {

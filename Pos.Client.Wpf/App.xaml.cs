@@ -187,5 +187,8 @@ namespace Pos.Client.Wpf
 
             this.ShutdownMode = oldMode; // e.g. back to OnMainWindowClose
         }
+
+        
+
     }
 }

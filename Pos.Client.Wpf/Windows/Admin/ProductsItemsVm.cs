@@ -60,4 +60,43 @@ public partial class ProductsItemsVm : ObservableObject
         Selected = new Product { Name = "New Product", IsActive = true };
         Products.Add(Selected);
     }
+    public async Task AddVariantsAsync(Product product, IEnumerable<Item> items)
+    {
+        if (product is null) return;
+
+        await using var db = await _dbf.CreateDbContextAsync();
+
+        // Ensure Product is tracked (save if new)
+        if (product.Id == 0)
+        {
+            db.Products.Add(product);
+            await db.SaveChangesAsync();
+        }
+
+        // Attach generated items with the product id
+        var now = DateTime.UtcNow;
+        foreach (var it in items)
+        {
+            it.ProductId = product.Id;
+            it.Product = null;
+            it.UpdatedAt = now;
+            db.Items.Add(it); // assuming DbSet<Item> Items exists
+        }
+
+        // Optional: server-side uniqueness checks can still fail; catching here for UX
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            // TODO: inspect inner exception for unique index violations on SKU/Barcode
+            System.Windows.MessageBox.Show("Failed to save one or more variants (possible duplicate SKU/Barcode). " +
+                                           "Details: " + ex.Message);
+        }
+
+        // Refresh the selected product’s variants in the UI
+        await LoadAsync();
+        Selected = Products.FirstOrDefault(p => p.Id == product.Id);
+    }
 }

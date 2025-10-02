@@ -1,7 +1,8 @@
 ﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Outlets - Counters" Height="540" Width="920" WindowStartupLocation="CenterOwner">
+        Title="Outlets — Counters" Height="720" Width="1024"
+        WindowStartupLocation="CenterOwner">
     <Grid Margin="12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="2*"/>
@@ -14,62 +15,295 @@
 
         <!-- Header -->
         <DockPanel Grid.Row="0" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,0,0,8">
-            <TextBlock Text="Outlets - Counters" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" >
-                <Button Content="Refresh" Margin="8,0,0,0" Click="Refresh_Click"  Style="{StaticResource Btn.GlobalPrimary}"/>
+            <TextBlock Text="Outlets — Counters" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                <Button Content="{StaticResource Icon.RefreshArrow}"
+                        Margin="0,0,8,0" Width="90" Height="28"
+                        Click="Refresh_Click"
+                        Style="{StaticResource Btn.Icon}"/>
             </StackPanel>
         </DockPanel>
 
         <!-- Outlets -->
         <GroupBox Grid.Row="1" Grid.Column="0" Header="Outlets" Margin="0,0,8,0">
             <DockPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,6">
-                    <Button Content="Add" Click="AddOutlet_Click" Margin="0,0,6,0"  Width="80" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button Content="Edit" Click="EditOutlet_Click" Margin="0,0,6,0"  Width="80" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button Content="Delete" Click="DeleteOutlet_Click"  Width="80" Style="{StaticResource Btn.GlobalPrimary}"/>
-                </StackPanel>
-                <DataGrid x:Name="OutletsGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                          SelectionChanged="OutletsGrid_SelectionChanged"  FontSize="16" FontWeight="DemiBold">
+
+                <!-- Search row (top) -->
+                <!-- Outlets search row (top) -->
+                <DockPanel x:Name="OutletSearchRow" DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="OutletSearchBox"
+             Width="220"
+             VerticalAlignment="Center"
+             ToolTip="Search code, name, address"
+             TextChanged="OutletSearchBox_TextChanged"/>
+                </DockPanel>
+
+
+                <!-- Toolbar (below search) -->
+                <ToolBar DockPanel.Dock="Top"
+             Style="{StaticResource ModernToolBar.Compact}"
+             ToolBarTray.IsLocked="True">
+                    <Button Content="Add"   Click="AddOutlet_Click"  Margin="0,0,6,0" Width="90"/>
+
+                    <Button Content="Edit"  Click="EditOutlet_Click" Margin="0,0,6,0" Width="90">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=OutletsGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <Separator/>
+
+                    <Button Content="Delete" Click="DeleteOutlet_Click" Width="90">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=OutletsGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </ToolBar>
+
+
+
+                <!-- Grid (compact, two-line cells like InvoiceCenter) -->
+                <DataGrid x:Name="OutletsGrid"
+                          Style="{StaticResource Grid.ListCompact}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          SelectionChanged="OutletsGrid_SelectionChanged">
+
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="80"/>
-                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
-                        <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="70"/>
-                        <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="2*"/>
+                        <!-- Compact “Outlet” column -->
+                        <DataGridTemplateColumn Header="Outlet" Width="*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2,0,2">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Line 1: CODE — NAME   [Active/Inactive] -->
+                                        <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="0">
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Code}"/>
+                                            <TextBlock Text=" — "/>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Name}"/>
+                                            <Border Style="{StaticResource Badge.ActiveInactive}">
+                                                <TextBlock FontSize="11" Margin="4,0,4,0" Foreground="{StaticResource Badge.Text}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="Inactive"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                    <Setter Property="Text" Value="Active"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+
+                                        </StackPanel>
+
+                                        <!-- Line 2: Address -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                                   Style="{StaticResource Txt.MutedSmall}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding Address}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- (Optional) separate sortable code column
+                        <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="95"/> -->
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
         </GroupBox>
 
         <!-- Counters -->
-        <!-- Counters -->
         <GroupBox Grid.Row="1" Grid.Column="1" Header="Counters (of selected Outlet)">
             <DockPanel>
-                <!-- TOOLBAR -->
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,6">
-                    <Button Content="Add" Click="AddCounter_Click" Margin="0,0,6,0"  Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button Content="Edit" Click="EditCounter_Click" Margin="0,0,6,0"  Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button Content="Delete" Click="DeleteCounter_Click" Margin="0,0,6,0"  Style="{StaticResource Btn.GlobalPrimary}"/>
 
-                    <!-- NEW: Assign / Unassign This PC -->
-                    <Separator Width="8" />
+                <!-- Search row (top) -->
+                <!-- Counters search row (top) -->
+                <DockPanel x:Name="CounterSearchRow" DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="CounterSearchBox"
+             Width="220"
+             VerticalAlignment="Center"
+             ToolTip="Search name or assigned machine"
+             TextChanged="CounterSearchBox_TextChanged"/>
+                </DockPanel>
+
+
+                <!-- Toolbar (below search) -->
+                <ToolBar DockPanel.Dock="Top"
+             Style="{StaticResource ModernToolBar.Compact}"
+             ToolBarTray.IsLocked="True">
+
+                    <!-- Add visible only when an outlet is selected -->
+                    <Button Content="Add" Click="AddCounter_Click" Margin="0,0,6,0" Width="90">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=OutletsGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <!-- Edit/Delete visible only when a counter is selected -->
+                    <Button Content="Edit" Click="EditCounter_Click" Margin="0,0,6,0" Width="90">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=CountersGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <Button Content="Delete" Click="DeleteCounter_Click" Margin="0,0,6,0" Width="90">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=CountersGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <Separator/>
+
+                    <!-- Assign/Unassign visible only when a counter is selected -->
+                    <!-- Assign button -->
                     <Button Content="Assign This PC"
-                        Click="AssignThisPc_Click"
-                        Margin="0,0,6,0"
-                        ToolTip="Bind this machine to the selected counter"  Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button Content="Unassign This PC"
-                        Click="UnassignThisPc_Click"
-                        ToolTip="Remove this machine's binding (free the counter)" Style="{StaticResource Btn.GlobalPrimary}"/>
-                </StackPanel>
+        Click="AssignThisPc_Click"
+        Margin="0,0,6,0" Width="120"
+        ToolTip="Bind this machine to the selected counter">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <!-- default: collapsed -->
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <!-- show when a row is selected AND it's unassigned -->
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=CountersGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedItem.AssignedTo, ElementName=CountersGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedItem.AssignedTo, ElementName=CountersGrid}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
 
-                <!-- GRID -->
-                <DataGrid x:Name="CountersGrid" AutoGenerateColumns="False" IsReadOnly="True"  FontSize="16" FontWeight="DemiBold">
+                    <!-- Unassign button -->
+                    <Button Content="Unassign This PC"
+        Click="UnassignThisPc_Click"
+        Width="120"
+        ToolTip="Remove this machine's binding (free the counter)">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <!-- default: visible, then collapse on 'no selection' or 'unassigned' -->
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=CountersGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedItem.AssignedTo, ElementName=CountersGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding SelectedItem.AssignedTo, ElementName=CountersGrid}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                </ToolBar>
+
+                <!-- Grid stays last so it fills -->
+                <DataGrid x:Name="CountersGrid"
+          Style="{StaticResource Grid.ListCompact}"
+          AutoGenerateColumns="False"
+          IsReadOnly="True">
+
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Counter" Binding="{Binding Name}" Width="*"/>
-                        <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="70"/>
-                        <DataGridTextColumn Header="Assigned To" Binding="{Binding AssignedTo}" Width="*"/>
+                        <DataGridTemplateColumn Header="Counter" Width="*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2,0,2">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Line 1: NAME   [Active/Inactive] -->
+                                        <StackPanel Orientation="Horizontal" Grid.Row="0">
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Name}"/>
+                                            <Border Style="{StaticResource Badge.ActiveInactive}">
+                                                <TextBlock FontSize="11" Margin="4,0,4,0" Foreground="{StaticResource Badge.Text}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="Inactive"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                    <Setter Property="Text" Value="Active"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Line 2: Assigned to: {Machine or Unassigned} -->
+                                        <TextBlock Grid.Row="1" Style="{StaticResource Txt.MutedSmall}">
+                            <Run Text="Assigned to: "/>
+                            <Run Text="{Binding AssignedTo, TargetNullValue=Unassigned, FallbackValue=Unassigned}"/>
+                                        </TextBlock>
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
+
+
             </DockPanel>
+
         </GroupBox>
 
     </Grid>

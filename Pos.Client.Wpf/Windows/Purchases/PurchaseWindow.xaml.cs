@@ -980,25 +980,35 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void BtnAddItem_Click(object sender, RoutedEventArgs e)
         {
             Item? pick = ItemList.SelectedItem as Item;
+
             if (pick == null && _itemResults.Count == 1)
                 pick = _itemResults[0];
+
             if (pick == null && !string.IsNullOrWhiteSpace(ItemSearchText.Text))
             {
                 var t = ItemSearchText.Text.Trim();
+
+                // Ensure _itemResults contains Barcodes; if it's populated from EF, include .Include(i => i.Barcodes)
                 pick = _itemResults.FirstOrDefault(i =>
-                          string.Equals(i.Sku, t, StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(i.Barcode, t, StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(i.Name, t, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(i.Sku, t, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(i.Name, t, StringComparison.OrdinalIgnoreCase) ||
+                    (i.Barcodes != null && i.Barcodes.Any(b => string.Equals(b.Code, t, StringComparison.OrdinalIgnoreCase)))
+                );
             }
+
             if (pick == null)
             {
                 MessageBox.Show("Type to search and pick an item (Enter), or click Add after selecting.");
                 return;
             }
+
+            // If AddItemToLines expects a barcode string, use the primary from the collection:
+            // var primary = pick.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
+            //               ?? pick.Barcodes?.FirstOrDefault()?.Code ?? "";
+
             AddItemToLines(pick);
             FinishItemAdd();
         }
-
 
 
         private async void BtnNewItem_Click(object sender, RoutedEventArgs e)
@@ -1007,11 +1017,28 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (dlg.ShowDialog() == true)
             {
                 var now = DateTime.UtcNow;
+
+                // Build barcode list (primary if provided)
+                var barcodes = new List<ItemBarcode>();
+                var code = (dlg.BarcodeVal ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(code))
+                {
+                    barcodes.Add(new ItemBarcode
+                    {
+                        Code = code,
+                        Symbology = BarcodeSymbology.Ean13, // or map from dialog if you expose it
+                        QuantityPerScan = 1,
+                        IsPrimary = true,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                }
+
                 var item = new Pos.Domain.Entities.Item
                 {
                     Sku = dlg.Sku,
                     Name = dlg.NameVal,
-                    Barcode = dlg.BarcodeVal,                 
+                    // Barcode = dlg.BarcodeVal, // ❌ legacy – remove
                     Price = dlg.PriceVal,
                     UpdatedAt = now,
                     TaxCode = dlg.TaxCodeVal,
@@ -1023,11 +1050,29 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     Variant1Value = dlg.Variant1ValueVal,
                     Variant2Name = dlg.Variant2NameVal,
                     Variant2Value = dlg.Variant2ValueVal,
-                    ProductId = null
+                    ProductId = null,
+                    Barcodes = barcodes
                 };
-                item = await _itemsSvc.CreateAsync(item);
-                AddItemToLines(item);
-                FinishItemAdd();
+
+                try
+                {
+                    item = await _itemsSvc.CreateAsync(item); // must save children (Barcodes) too
+
+                    // If AddItemToLines/UI needs the barcode string, pick primary:
+                    // var primary = item.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
+                    //               ?? item.Barcodes?.FirstOrDefault()?.Code ?? "";
+
+                    AddItemToLines(item);
+                    FinishItemAdd();
+                }
+                catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+                {
+                    // Most common cause: barcode duplicate (unique index on ItemBarcodes.Code)
+                    MessageBox.Show(
+                        ex.InnerException?.Message?.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true
+                            ? "This barcode already exists. Please use a unique code."
+                            : "Couldn’t save item. " + ex.Message);
+                }
             }
         }
 

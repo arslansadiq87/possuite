@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain.Models;
-
+using Pos.Domain.Utils;
 
 namespace Pos.Persistence.Services
 {
@@ -15,22 +15,32 @@ namespace Pos.Persistence.Services
         public Task<List<Product>> SearchProductsAsync(string? term, int take = 100)
         {
             term = (term ?? "").Trim();
-            var q = _db.Products.AsNoTracking().Include(p => p.Brand).Where(p => p.IsActive);
+
+            // Eager-load both Brand and Category so the ListBox ItemTemplate can bind Brand.Name / Category.Name
+            var q = _db.Products
+                .AsNoTracking()
+                .Include(p => p.Brand)
+                .Include(p => p.Category)
+                .Where(p => p.IsActive);
 
             if (!string.IsNullOrWhiteSpace(term))
             {
                 var like = $"%{term}%";
                 q = q.Where(p =>
                     EF.Functions.Like(p.Name, like) ||
-                    (p.Brand != null && EF.Functions.Like(p.Brand.Name, like))
+                    (p.Brand != null && EF.Functions.Like(p.Brand.Name, like)) ||
+                    (p.Category != null && EF.Functions.Like(p.Category.Name, like))
                 );
             }
 
+            // Null-safe sorting by Name, then Brand, then Category
             return q.OrderBy(p => p.Name)
-                    .ThenBy(p => p.Brand!.Name)
+                    .ThenBy(p => p.Brand != null ? p.Brand.Name : "")
+                    .ThenBy(p => p.Category != null ? p.Category.Name : "")
                     .Take(take)
                     .ToListAsync();
         }
+
 
 
         public async Task<Product> CreateProductAsync(string name, int? brandId = null, int? categoryId = null)
@@ -69,7 +79,11 @@ namespace Pos.Persistence.Services
                     Sku = i.Sku,
                     Name = i.Name,
                     ProductName = i.Product!.Name,
-                    Barcode = i.Barcode,
+                    // ⬇️ primary-first, else any
+                    Barcode = i.Barcodes
+                                .OrderByDescending(b => b.IsPrimary)
+                                .Select(b => b.Code)
+                                .FirstOrDefault(),
                     Price = i.Price,
                     Variant1Name = i.Variant1Name,
                     Variant1Value = i.Variant1Value,
@@ -89,14 +103,19 @@ namespace Pos.Persistence.Services
                 .ToListAsync();
         }
 
+
         public async Task<List<ItemVariantRow>> SearchStandaloneItemRowsAsync(string term)
         {
-            var q = _db.Items
-                .Where(i => i.ProductId == null);
+            var q = _db.Items.Where(i => i.ProductId == null);
 
             if (!string.IsNullOrWhiteSpace(term))
             {
-                q = q.Where(i => i.Name.Contains(term) || i.Sku.Contains(term) || i.Barcode.Contains(term));
+                var like = $"%{term}%";
+                q = q.Where(i =>
+                    EF.Functions.Like(i.Name, like) ||
+                    EF.Functions.Like(i.Sku, like) ||
+                    i.Barcodes.Any(b => EF.Functions.Like(b.Code, like))   // ⬅️ search barcodes
+                );
             }
 
             return await q
@@ -109,7 +128,11 @@ namespace Pos.Persistence.Services
                     Sku = i.Sku,
                     Name = i.Name,
                     ProductName = null,
-                    Barcode = i.Barcode,
+                    // ⬇️ primary-first, else any
+                    Barcode = i.Barcodes
+                                .OrderByDescending(b => b.IsPrimary)
+                                .Select(b => b.Code)
+                                .FirstOrDefault(),
                     Price = i.Price,
                     Variant1Name = i.Variant1Name,
                     Variant1Value = i.Variant1Value,
@@ -132,6 +155,7 @@ namespace Pos.Persistence.Services
 
 
 
+
         public async Task<Item> CreateItemAsync(Item i)
         {
             i.UpdatedAt = DateTime.UtcNow;
@@ -145,7 +169,7 @@ namespace Pos.Persistence.Services
             var e = await _db.Items.FirstAsync(x => x.Id == updated.Id);
             e.Sku = updated.Sku;
             e.Name = updated.Name;
-            e.Barcode = updated.Barcode;
+            // e.Barcode = updated.Barcode;   // ⬅️ remove
             e.Price = updated.Price;
             e.UpdatedAt = DateTime.UtcNow;
 
@@ -163,6 +187,7 @@ namespace Pos.Persistence.Services
             await _db.SaveChangesAsync();
             return e;
         }
+
 
         // Bulk add: Cartesian of axis1 x axis2 values → items
         public async Task<List<Item>> BulkCreateVariantsAsync(
@@ -190,7 +215,6 @@ namespace Pos.Persistence.Services
                         ProductId = productId,
                         Sku = sku,
                         Name = name,
-                        Barcode = "",                    // optional to fill later
                         Price = price,
                         UpdatedAt = now,
 
@@ -224,11 +248,13 @@ namespace Pos.Persistence.Services
                 q = q.Where(i =>
                     EF.Functions.Like(i.Name, like) ||
                     EF.Functions.Like(i.Sku, like) ||
-                    EF.Functions.Like(i.Barcode, like));
+                    i.Barcodes.Any(b => EF.Functions.Like(b.Code, like))   // ⬅️ was i.Barcode
+                );
             }
 
             return q.OrderBy(i => i.Name).Take(take).ToListAsync();
         }
+
 
 
         private static string MakeSku(string baseName, string v1, string v2)
@@ -306,33 +332,186 @@ namespace Pos.Persistence.Services
         // Standalone item versions
         public async Task<(bool canDelete, string? reason)> CanHardDeleteItemAsync(int itemId)
         {
+            bool hasStock = await _db.StockEntries.AnyAsync(se => se.ItemId == itemId);
+            if (hasStock) return (false, "Item has stock history.");
+
             bool hasSales = await _db.SaleLines.AnyAsync(sl => sl.ItemId == itemId);
             if (hasSales) return (false, "Item has sales.");
 
             bool hasPurchases = await _db.PurchaseLines.AnyAsync(pl => pl.ItemId == itemId);
             if (hasPurchases) return (false, "Item has purchases.");
 
-            bool hasStock = await _db.StockEntries.AnyAsync(se => se.ItemId == itemId);
-            if (hasStock) return (false, "Item has stock history.");
             return (true, null);
         }
 
         public async Task DeleteItemAsync(int itemId)
         {
-            var entity = await _db.Items.FirstAsync(i => i.Id == itemId);
-            _db.Items.Remove(entity);
+            var (can, reason) = await CanHardDeleteItemAsync(itemId);
+            if (!can) throw new InvalidOperationException("Cannot delete item: " + reason);
+
+            var it = await _db.Items.FirstAsync(x => x.Id == itemId);
+            _db.Items.Remove(it);
             await _db.SaveChangesAsync();
         }
 
         public async Task VoidItemAsync(int itemId, string user)
         {
-            var it = await _db.Items.FirstAsync(i => i.Id == itemId);
-            it.IsActive = false;
+            var it = await _db.Items.FirstAsync(x => x.Id == itemId);
+            if (it.IsVoided) return;
+
             it.IsVoided = true;
+            it.IsActive = false;
             it.VoidedAtUtc = DateTime.UtcNow;
             it.VoidedBy = user;
+            it.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
         }
+
+        public async Task<Product> UpdateProductAsync(int productId, string name, int? brandId, int? categoryId)
+        {
+            var p = await _db.Products.FirstAsync(x => x.Id == productId);
+
+            p.Name = (name ?? "").Trim();
+            p.BrandId = brandId;
+            p.CategoryId = categoryId;
+            p.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            // Return with fresh navs for UI (Brand/Category chips in the Products list)
+            await _db.Entry(p).Reference(x => x.Brand).LoadAsync();
+            await _db.Entry(p).Reference(x => x.Category).LoadAsync();
+
+            return p;
+        }
+
+        public async Task<ItemBarcode> AddBarcodeAsync(int itemId, string code, BarcodeSymbology sym, int qtyPerScan = 1, bool isPrimary = false, string? label = null)
+        {
+            code = (code ?? "").Trim();
+            if (string.IsNullOrEmpty(code)) throw new ArgumentException("Barcode cannot be empty.");
+
+            // Ensure unique code
+            bool exists = await _db.ItemBarcodes.AnyAsync(x => x.Code == code);
+            if (exists) throw new InvalidOperationException("Barcode already exists.");
+
+            var entity = new ItemBarcode
+            {
+                ItemId = itemId,
+                Code = code,
+                Symbology = sym,
+                QuantityPerScan = Math.Max(1, qtyPerScan),
+                IsPrimary = isPrimary,
+                Label = string.IsNullOrWhiteSpace(label) ? null : label,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            if (isPrimary)
+            {
+                // Demote all others
+                var others = _db.ItemBarcodes.Where(bc => bc.ItemId == itemId && bc.IsPrimary);
+                await others.ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPrimary, false));
+            }
+
+            _db.ItemBarcodes.Add(entity);
+            await _db.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<(Item item, int qty)> ResolveScanAsync(string scannedCode)
+        {
+            scannedCode = (scannedCode ?? "").Trim();
+            if (string.IsNullOrEmpty(scannedCode)) throw new ArgumentException("Code is empty.");
+
+            var hit = await _db.ItemBarcodes
+                .Where(x => x.Code == scannedCode /* && x.IsActive */) // keep IsActive if your model has it
+                .Select(x => new { x.Item, x.QuantityPerScan })
+                .FirstOrDefaultAsync();
+
+            if (hit != null) return (hit.Item, Math.Max(1, hit.QuantityPerScan));
+
+            // Legacy fallback removed since Items.Barcode is dropped.
+            throw new KeyNotFoundException("Barcode not found.");
+        }
+
+        public sealed class BarcodeConflict
+        {
+            public required string Code { get; init; }
+            public int ItemId { get; init; }
+            public int? ProductId { get; init; }
+            public string? ProductName { get; init; }
+            public required string ItemName { get; init; }
+        }
+
+
+        // Returns the owner of a code, excluding a specific item (for edit scenarios)
+        public async Task<(bool Taken, string? ProductName, string? ItemName, int? ProductId, int ItemId)>
+    TryGetBarcodeOwnerAsync(string code, int? excludeItemId = null)
+        {
+            if (string.IsNullOrWhiteSpace(code)) return (false, null, null, null, 0);
+            code = code.Trim();
+
+            var q = _db.ItemBarcodes
+                .Include(b => b.Item).ThenInclude(i => i.Product)
+                .Where(b => b.Code == code);
+
+            if (excludeItemId is int eid) q = q.Where(b => b.ItemId != eid);
+
+            var o = await q.Select(b => new
+            {
+                b.ItemId,
+                ProductId = (int?)b.Item.ProductId,
+                ProductName = b.Item.Product != null ? b.Item.Product.Name : null,
+                ItemName = b.Item.Name
+            }).FirstOrDefaultAsync();
+
+            return o is null
+                ? (false, null, null, null, 0)
+                : (true, o.ProductName, o.ItemName, o.ProductId, o.ItemId);
+        }
+
+
+        // Find conflicts for many codes at once (exclude an item when editing)
+        public async Task<List<BarcodeConflict>> FindBarcodeConflictsAsync(
+    IEnumerable<string> codes, int? excludeItemId = null)
+        {
+            var list = codes.Where(s => !string.IsNullOrWhiteSpace(s))
+                            .Select(s => s.Trim())
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+            if (list.Count == 0) return new();
+
+            var q = _db.ItemBarcodes
+                .Include(b => b.Item).ThenInclude(i => i.Product)
+                .Where(b => list.Contains(b.Code));
+            if (excludeItemId is int eid) q = q.Where(b => b.ItemId != eid);
+
+            return await q.Select(b => new BarcodeConflict
+            {
+                Code = b.Code,
+                ItemId = b.ItemId,
+                ProductId = b.Item.ProductId,
+                ProductName = b.Item.Product != null ? b.Item.Product.Name : null,
+                ItemName = b.Item.Name
+            }).ToListAsync();
+        }
+
+
+        // Generate a unique code based on symbology/prefix/sequence
+
+        public async Task<(string Code, int AdvancedBy)> GenerateUniqueBarcodeAsync(
+            BarcodeSymbology sym, string prefix, int startSeq, int maxTries = 10000)
+        {
+            for (int i = 0; i < maxTries; i++)
+            {
+                var candidate = BarcodeUtil.GenerateBySymbology(sym, prefix, startSeq + i);
+                var owner = await TryGetBarcodeOwnerAsync(candidate);
+                if (!owner.Taken)
+                    return (candidate, i + 1);
+            }
+            throw new InvalidOperationException("Could not generate a unique barcode. Adjust Prefix/Start.");
+        }
+
 
     }
 }

@@ -30,7 +30,7 @@ namespace Pos.Client.Wpf.Windows.Shell
         private void NewSale_Click(object s, RoutedEventArgs e)
         {
             var win = App.Services.GetRequiredService<SaleInvoiceWindow>();
-            win.Owner = this;
+            //win.Owner = this;
             win.Show();
         }
 
@@ -44,7 +44,7 @@ namespace Pos.Client.Wpf.Windows.Shell
 
         private void OpenProductsItems_Click(object s, RoutedEventArgs e)
         {
-            var w = new Pos.Client.Wpf.Windows.Admin.ProductsItemsWindow();
+            var w = new Pos.Client.Wpf.Windows.Admin.ProductsItemsWindow() { Owner = this };
             w.ShowDialog();
         }
         

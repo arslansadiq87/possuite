@@ -1,22 +1,23 @@
-﻿// Pos.Client.Wpf/Windows/Admin/OutletsCountersWindow.cs
+﻿// Pos.Client.Wpf/Windows/Admin/OutletsCountersWindow.xaml.cs
 using System;
 using System.Linq;
-using System.Windows;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Client.Wpf.Windows.Common;
-using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OutletsCountersWindow : Window
     {
-        
-
         // Lightweight DTOs for safe binding
         private sealed class OutletRow
         {
@@ -25,7 +26,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             public string Name { get; init; } = "";
             public string? Address { get; init; }
             public bool IsActive { get; init; }
-
         }
 
         private sealed class CounterRow
@@ -34,23 +34,36 @@ namespace Pos.Client.Wpf.Windows.Admin
             public int OutletId { get; init; }
             public string Name { get; init; } = "";
             public bool IsActive { get; init; }
-            public string? AssignedTo { get; init; }  // NEW
-
+            public string? AssignedTo { get; init; }
         }
 
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
 
-        // Keep the last selected outlet id to re-select after refresh
+        // Selection memory
         private int? _selectedOutletId;
+
+        // Views for in-memory filtering
+        private ICollectionView? _outletView;
+        private ICollectionView? _counterView;
 
         public OutletsCountersWindow(IDbContextFactory<PosClientDbContext> dbf)
         {
             InitializeComponent();
             _dbf = dbf;
-            Loaded += (_, __) => SafeLoadOutlets();
+
+            Loaded += (_, __) =>
+            {
+                SafeLoadOutlets();
+                // monitor layout/size so we can show/hide search rows based on scrollability
+                OutletsGrid.SizeChanged += (_, __2) => UpdateOutletSearchRowVisibility();
+                OutletsGrid.LayoutUpdated += (_, __2) => UpdateOutletSearchRowVisibility();
+                CountersGrid.SizeChanged += (_, __2) => UpdateCounterSearchRowVisibility();
+                CountersGrid.LayoutUpdated += (_, __2) => UpdateCounterSearchRowVisibility();
+            };
         }
 
-        // ---------- Loaders ----------
+        // -------------------- Data loading --------------------
+
         private void SafeLoadOutlets()
         {
             try
@@ -80,7 +93,11 @@ namespace Pos.Client.Wpf.Windows.Admin
         private void UsersafeBindOutlets(List<OutletRow> outlets)
         {
             OutletsGrid.ItemsSource = outlets;
-            // restore selection if possible
+
+            _outletView = CollectionViewSource.GetDefaultView(OutletsGrid.ItemsSource);
+            _outletView.Filter = OutletFilter;
+
+            // restore selection
             if (_selectedOutletId is int id)
             {
                 var again = outlets.FirstOrDefault(o => o.Id == id);
@@ -91,8 +108,12 @@ namespace Pos.Client.Wpf.Windows.Admin
                 else
                 {
                     CountersGrid.ItemsSource = null;
+                    _counterView = null;
                 }
             }
+
+            _outletView.Refresh();
+            UpdateOutletSearchRowVisibility();
         }
 
         private void SafeLoadCounters(int outletId)
@@ -109,7 +130,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         OutletId = c.OutletId,
                         Name = c.Name,
                         IsActive = c.IsActive,
-                        // NEW: show machine name if bound
                         AssignedTo = db.CounterBindings
                             .Where(b => b.CounterId == c.Id)
                             .Select(b => b.MachineName)
@@ -119,6 +139,11 @@ namespace Pos.Client.Wpf.Windows.Admin
 
                 CountersGrid.ItemsSource = counters;
 
+                _counterView = CollectionViewSource.GetDefaultView(CountersGrid.ItemsSource);
+                _counterView.Filter = CounterFilter;
+                _counterView.Refresh();              // ensure filter re-evaluates with cleared query
+
+                UpdateCounterSearchRowVisibility();
             }
             catch (Exception ex)
             {
@@ -127,45 +152,101 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // ---------- UI Events ----------
-        private void OutletsGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+
+        // -------------------- Filters & search --------------------
+
+        private bool OutletFilter(object obj)
+        {
+            if (obj is not OutletRow row) return false;
+            var q = OutletSearchBox?.Text?.Trim();
+            if (string.IsNullOrEmpty(q)) return true;
+
+            q = q.ToLowerInvariant();
+            return (row.Code?.ToLowerInvariant().Contains(q) == true)
+                || (row.Name?.ToLowerInvariant().Contains(q) == true)
+                || (row.Address?.ToLowerInvariant().Contains(q) == true)
+                || (row.IsActive && "active".Contains(q))
+                || (!row.IsActive && "inactive".Contains(q));
+        }
+
+        private void OutletSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _outletView?.Refresh();
+            UpdateOutletSearchRowVisibility();
+        }
+
+        private bool CounterFilter(object obj)
+        {
+            if (obj is not CounterRow row) return false;
+            var q = CounterSearchBox?.Text?.Trim();
+            if (string.IsNullOrEmpty(q)) return true;
+
+            q = q.ToLowerInvariant();
+            return (row.Name?.ToLowerInvariant().Contains(q) == true)
+                || (row.AssignedTo?.ToLowerInvariant().Contains(q) == true)
+                || (row.IsActive && "active".Contains(q))
+                || (!row.IsActive && "inactive".Contains(q));
+        }
+
+        private void CounterSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _counterView?.Refresh();
+            UpdateCounterSearchRowVisibility();
+        }
+
+        // -------------------- Selection & refresh --------------------
+
+        private void OutletsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
             {
                 var row = OutletsGrid.SelectedItem as OutletRow;
                 _selectedOutletId = row?.Id;
+
+                // ✨ Clear any previous counter search so new outlet’s counters show up
+                if (CounterSearchBox != null && CounterSearchBox.Text?.Length > 0)
+                    CounterSearchBox.Text = string.Empty;
+
                 CountersGrid.ItemsSource = null;
+                _counterView = null;
+
                 if (_selectedOutletId is int id)
                 {
                     SafeLoadCounters(id);
                 }
+                else
+                {
+                    UpdateCounterSearchRowVisibility(); // no counters
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Selection error:\n\n" + ex.Message, "Outlets", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Selection error:\n\n" + ex.Message, "Outlets",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
+
         private void Refresh_Click(object sender, RoutedEventArgs e) => SafeLoadOutlets();
 
-        // ---------- Outlet CRUD ----------
+        // -------------------- Outlet CRUD --------------------
+
         private void AddOutlet_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var o = new Outlet { Code = "NEW", Name = "New Outlet", IsActive = true };
-                if (EditOutletDialog(ref o))
+                var dlg = new EditOutletWindow(_dbf); // create mode
+                dlg.Owner = this;
+                if (dlg.ShowDialog() == true)
                 {
-                    using var db = _dbf.CreateDbContext();
-                    db.Outlets.Add(o);
-                    db.SaveChanges();
-                    _selectedOutletId = o.Id;
+                    _selectedOutletId = dlg.SavedOutletId;
                     SafeLoadOutlets();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to add outlet:\n\n" + ex.Message, "Outlets", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to add outlet:\n\n" + ex.Message, "Outlets",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -179,36 +260,21 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return;
                 }
 
-                // load original entity
-                using var db = _dbf.CreateDbContext();
-                var dbO = db.Outlets.Find(sel.Id);
-                if (dbO == null) { MessageBox.Show("Outlet not found."); return; }
-
-                var copy = new Outlet
+                var dlg = new EditOutletWindow(_dbf, sel.Id); // edit mode
+                dlg.Owner = this;
+                if (dlg.ShowDialog() == true)
                 {
-                    Id = dbO.Id,
-                    Code = dbO.Code,
-                    Name = dbO.Name,
-                    Address = dbO.Address,
-                    IsActive = dbO.IsActive
-                };
-
-                if (EditOutletDialog(ref copy))
-                {
-                    dbO.Code = copy.Code;
-                    dbO.Name = copy.Name;
-                    dbO.Address = copy.Address;
-                    dbO.IsActive = copy.IsActive;
-                    db.SaveChanges();
-                    _selectedOutletId = dbO.Id;
+                    _selectedOutletId = dlg.SavedOutletId;
                     SafeLoadOutlets();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to edit outlet:\n\n" + ex.Message, "Outlets", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to edit outlet:\n\n" + ex.Message, "Outlets",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
         private void DeleteOutlet_Click(object sender, RoutedEventArgs e)
         {
@@ -225,7 +291,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return;
 
                 using var db = _dbf.CreateDbContext();
-                var dbO = db.Outlets.Include(o => o.Counters).FirstOrDefault(o => o.Id == sel.Id);
+                var dbO = db.Outlets.Include(o => o.Counters)
+                                    .FirstOrDefault(o => o.Id == sel.Id);
                 if (dbO == null) { MessageBox.Show("Outlet not found."); return; }
 
                 if (dbO.Counters.Any())
@@ -241,11 +308,13 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to delete outlet:\n\n" + ex.Message, "Outlets", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to delete outlet:\n\n" + ex.Message, "Outlets",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        // ---------- Counter CRUD ----------
+        // -------------------- Counter CRUD --------------------
+
         private void AddCounter_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -256,18 +325,17 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return;
                 }
 
-                var c = new Counter { OutletId = outletId, Name = "New Counter", IsActive = true };
-                if (EditCounterDialog(ref c))
+                var dlg = new EditCounterWindow(_dbf, outletId) { Owner = this }; // CREATE
+                dlg.Owner = this;
+                if (dlg.ShowDialog() == true)
                 {
-                    using var db = _dbf.CreateDbContext();
-                    db.Counters.Add(c);
-                    db.SaveChanges();
                     SafeLoadCounters(outletId);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to add counter:\n\n" + ex.Message, "Counters", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to add counter:\n\n" + ex.Message, "Counters",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -287,25 +355,20 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return;
                 }
 
-                using var db = _dbf.CreateDbContext();
-                var dbC = db.Counters.Find(row.Id);
-                if (dbC == null) { MessageBox.Show("Counter not found."); return; }
-
-                var copy = new Counter { Id = dbC.Id, OutletId = dbC.OutletId, Name = dbC.Name, IsActive = dbC.IsActive };
-
-                if (EditCounterDialog(ref copy))
+                var dlg = new EditCounterWindow(_dbf, row.Id) { Owner = this }; // EDIT
+                dlg.Owner = this;
+                if (dlg.ShowDialog() == true)
                 {
-                    dbC.Name = copy.Name;
-                    dbC.IsActive = copy.IsActive;
-                    db.SaveChanges();
                     SafeLoadCounters(outletId);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to edit counter:\n\n" + ex.Message, "Counters", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to edit counter:\n\n" + ex.Message, "Counters",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
         private void DeleteCounter_Click(object sender, RoutedEventArgs e)
         {
@@ -337,59 +400,40 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to delete counter:\n\n" + ex.Message, "Counters", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to delete counter:\n\n" + ex.Message, "Counters",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        // ---------- Tiny inline editors ----------
-        private bool EditOutletDialog(ref Outlet o)
-        {
-            var dlg = new SimplePromptWindow(
-                "Edit Outlet",
-                ("Code", o.Code),
-                ("Name", o.Name),
-                ("Address", o.Address ?? ""),
-                ("Active", o.IsActive)
-            );
-
-            if (dlg.ShowDialog() == true)
-            {
-                o.Code = dlg.GetText("Code");
-                o.Name = dlg.GetText("Name");
-                o.Address = dlg.GetText("Address");
-                o.IsActive = dlg.GetBool("Active");
-                return true;
-            }
-            return false;
-        }
-
-        private bool EditCounterDialog(ref Counter c)
-        {
-            var dlg = new SimplePromptWindow("Edit Counter", ("Name", c.Name), ("Active", c.IsActive));
-            if (dlg.ShowDialog() == true)
-            {
-                c.Name = dlg.GetText("Name");
-                c.IsActive = dlg.GetBool("Active");
-                return true;
-            }
-            return false;
-        }
+        // -------------------- Assign / Unassign This PC --------------------
 
         private void AssignThisPc_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (_selectedOutletId is not int outletId) { MessageBox.Show("Select an outlet first."); return; }
-                if (CountersGrid.SelectedItem is not CounterRow row) { MessageBox.Show("Select a counter."); return; }
+                if (_selectedOutletId is not int outletId)
+                {
+                    MessageBox.Show("Select an outlet first.");
+                    return;
+                }
+
+                if (CountersGrid.SelectedItem is not CounterRow row)
+                {
+                    MessageBox.Show("Select a counter.");
+                    return;
+                }
 
                 var binder = App.Services.GetRequiredService<CounterBindingService>();
                 binder.AssignThisPcToCounter(outletId, row.Id);
+
                 SafeLoadCounters(outletId);
-                MessageBox.Show("This PC is now assigned to the selected counter.", "Binding", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("This PC is now assigned to the selected counter.",
+                    "Binding", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to assign this PC:\n\n" + ex.Message, "Binding", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to assign this PC:\n\n" + ex.Message, "Binding",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -400,16 +444,77 @@ namespace Pos.Client.Wpf.Windows.Admin
                 var binder = App.Services.GetRequiredService<CounterBindingService>();
                 binder.UnassignThisPc();
 
-                if (_selectedOutletId is int outletId) SafeLoadCounters(outletId);
+                if (_selectedOutletId is int outletId)
+                    SafeLoadCounters(outletId);
 
-                MessageBox.Show("This PC has been unassigned.", "Binding", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("This PC has been unassigned.", "Binding",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to unassign:\n\n" + ex.Message, "Binding", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Failed to unassign:\n\n" + ex.Message, "Binding",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
+        // -------------------- Simple inline editors --------------------
 
+        
+
+        // -------------------- Search row visibility logic --------------------
+        // Show search row only when:
+        // 1) there are rows AND
+        // 2) the DataGrid is vertically scrollable (more rows than visible)
+
+        private void UpdateOutletSearchRowVisibility()
+        {
+            try
+            {
+                if (OutletSearchRow == null || OutletsGrid == null) return;
+
+                bool hasRows = OutletsGrid.Items != null && OutletsGrid.Items.Count > 0;
+                bool isScrollable = IsGridVerticallyScrollable(OutletsGrid);
+                OutletSearchRow.Visibility = (hasRows && isScrollable) ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch { /* ignore */ }
+        }
+
+        private void UpdateCounterSearchRowVisibility()
+        {
+            try
+            {
+                if (CounterSearchRow == null || CountersGrid == null) return;
+
+                bool hasRows = CountersGrid.Items != null && CountersGrid.Items.Count > 0;
+                bool isScrollable = IsGridVerticallyScrollable(CountersGrid);
+                CounterSearchRow.Visibility = (hasRows && isScrollable) ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch { /* ignore */ }
+        }
+
+        private static bool IsGridVerticallyScrollable(DataGrid grid)
+        {
+            var sv = FindScrollViewer(grid);
+            if (sv == null) return false;
+
+            // Either a visible vertical scrollbar, or a positive scrollable height
+            return sv.ComputedVerticalScrollBarVisibility == Visibility.Visible
+                   || sv.ScrollableHeight > 0;
+        }
+
+        private static ScrollViewer? FindScrollViewer(DependencyObject root)
+        {
+            if (root == null) return null;
+
+            if (root is ScrollViewer sv) return sv;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                var result = FindScrollViewer(child);
+                if (result != null) return result;
+            }
+            return null;
+        }
     }
 }

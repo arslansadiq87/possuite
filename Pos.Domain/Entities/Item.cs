@@ -8,7 +8,6 @@ namespace Pos.Domain.Entities
     {
         public string Sku { get; set; } = "";
         public string Name { get; set; } = "";
-        public string Barcode { get; set; } = "";
         public decimal Price { get; set; }
         public DateTime UpdatedAt { get; set; }
 
@@ -41,5 +40,7 @@ namespace Pos.Domain.Entities
 
         public int? CategoryId { get; set; }
         public Category? Category { get; set; }
+        public ICollection<ItemBarcode> Barcodes { get; set; } = new List<ItemBarcode>();
+
     }
 }

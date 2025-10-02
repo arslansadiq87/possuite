@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
@@ -22,12 +23,11 @@ namespace Pos.Client.Wpf.Windows.Admin
             InitializeComponent();
 
             _design = DesignerProperties.GetIsInDesignMode(this);
-            if (_design) return; // allow XAML designer to load without services
+            if (_design) return; // let designer load
 
             _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-            Loaded += (_, __) => LoadRows();
-
             _editWarehouseFactory = () => App.Services.GetRequiredService<EditWarehouseWindow>();
+
             Loaded += (_, __) => LoadRows();
         }
 
@@ -48,21 +48,25 @@ namespace Pos.Client.Wpf.Windows.Admin
                     q = q.Where(w => w.IsActive);
 
                 if (!string.IsNullOrWhiteSpace(term))
+                {
                     q = q.Where(w =>
-                        w.Name.ToLower().Contains(term) ||
+                        (w.Name ?? "").ToLower().Contains(term) ||
                         (w.Code ?? "").ToLower().Contains(term) ||
                         (w.City ?? "").ToLower().Contains(term) ||
-                        (w.Phone ?? "").ToLower().Contains(term));
+                        (w.Phone ?? "").ToLower().Contains(term) ||
+                        (w.Note ?? "").ToLower().Contains(term));
+                }
 
                 var rows = q.OrderByDescending(w => w.IsActive)
                             .ThenBy(w => w.Name)
                             .Take(1000)
                             .ToList();
 
-                System.Diagnostics.Debug.WriteLine($"[WarehousesWindow] rows={rows.Count} db={db.Database.GetDbConnection().Database}");
-
                 WarehousesGrid.ItemsSource = rows;
+
                 UpdateActionButtons();
+                // after items bind, decide if search should show
+                UpdateSearchRowVisibility();
             }
             catch (Exception ex)
             {
@@ -75,14 +79,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void UpdateActionButtons()
         {
-            if (!Ready)
-            {
-                EditBtn.Visibility = Visibility.Collapsed;
-                EnableBtn.Visibility = Visibility.Collapsed;
-                DisableBtn.Visibility = Visibility.Collapsed;
-                return;
-            }
-
             var row = Selected();
             if (row is null)
             {
@@ -92,7 +88,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 return;
             }
 
-            // Inline editing is always allowed; keep Edit visible
             EditBtn.Visibility = Visibility.Visible;
 
             if (row.IsActive)
@@ -107,26 +102,70 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
+        // --- Search row visibility: only when vertical scrollbar is visible
+
+        private void UpdateSearchRowVisibility()
+        {
+            var sv = FindDescendant<ScrollViewer>(WarehousesGrid);
+            if (sv == null)
+            {
+                SearchRow.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            // If the grid needs a vertical scrollbar, show search; else hide it
+            SearchRow.Visibility = sv.ComputedVerticalScrollBarVisibility == Visibility.Visible
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void WarehousesGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateSearchRowVisibility();
+        }
+
+        private void WarehousesGrid_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Loaded can fire before ItemsSource; schedule a layout pass
+            WarehousesGrid.Dispatcher.InvokeAsync(UpdateSearchRowVisibility);
+        }
+
+        // --- Generic visual tree helper
+        private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
+        {
+            if (root == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T t) return t;
+                var sub = FindDescendant<T>(child);
+                if (sub != null) return sub;
+            }
+            return null;
+        }
+
         // --- Events
 
         private void Grid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (Ready) UpdateActionButtons();
+            UpdateActionButtons();
         }
 
         private void SearchBox_TextChanged(object s, TextChangedEventArgs e)
         {
-            if (Ready) LoadRows();
+            // Only effective when visible; harmless otherwise
+            LoadRows();
         }
 
         private void FilterChanged(object s, RoutedEventArgs e)
         {
-            if (Ready) LoadRows();
+            LoadRows();
         }
 
         private void Grid_MouseDoubleClick(object s, MouseButtonEventArgs e)
         {
-            if (Ready) Edit_Click(s, e);
+            Edit_Click(s, e);
         }
 
         private void Add_Click(object sender, RoutedEventArgs e)
@@ -139,10 +178,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (dlg.ShowDialog() == true) LoadRows();
         }
 
-
         private void Edit_Click(object? sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
             var row = Selected(); if (row is null) return;
 
             var dlg = _editWarehouseFactory!();
@@ -153,7 +190,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void Disable_Click(object sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
             var row = Selected(); if (row is null) return;
 
             if (MessageBox.Show($"Disable warehouse “{row.Name}”?", "Confirm",
@@ -170,7 +206,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void Enable_Click(object sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
             var row = Selected(); if (row is null) return;
 
             using var db = _dbf!.CreateDbContext();
@@ -181,7 +216,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             LoadRows();
         }
-               
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {

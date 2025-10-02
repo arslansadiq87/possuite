@@ -30,6 +30,11 @@ namespace Pos.Domain.Models
         public decimal? DefaultDiscountAmt { get; init; }
 
         public System.DateTime UpdatedAt { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsVoided { get; set; }
+        public DateTime? VoidedAtUtc { get; set; }
+        public string? VoidedBy { get; set; }
+
 
         public string DisplayName =>
             Pos.Domain.Formatting.ProductNameComposer.Compose(

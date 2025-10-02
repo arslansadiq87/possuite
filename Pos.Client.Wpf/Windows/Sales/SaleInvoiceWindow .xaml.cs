@@ -580,29 +580,45 @@ ComputeTotalsSnapshot()
         private void LoadItemIndex()
         {
             using var db = new PosClientDbContext(_dbOptions);
+
             var list =
                 (from i in db.Items.AsNoTracking()
                  join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
-                 from p in gp.DefaultIfEmpty()                   // <-- left join, p may be null
+                 from p in gp.DefaultIfEmpty()
+
+                     // Pull PRIMARY first; if none, fall back to any barcode for display
+                 let primaryBarcode =
+                     db.ItemBarcodes
+                       .Where(b => b.ItemId == i.Id && b.IsPrimary)
+                       .Select(b => b.Code)
+                       .FirstOrDefault()
+                 let anyBarcode =
+                     db.ItemBarcodes
+                       .Where(b => b.ItemId == i.Id)
+                       .Select(b => b.Code)
+                       .FirstOrDefault()
+
                  orderby i.Name
                  select new ItemIndexDto(
                      i.Id,
-                     i.Name,                                     // string
-                     i.Sku,                                      // string
-                     i.Barcode,                                  // string
-                     i.Price,                                    // decimal
-                     i.TaxCode,                                  // string?
-                     i.DefaultTaxRatePct,                        // decimal
-                     i.TaxInclusive,                             // bool
-                     i.DefaultDiscountPct,                       // decimal?
-                     i.DefaultDiscountAmt,                       // decimal?
-                     p != null ? p.Name : null,                  // ProductName (string?)
-                     i.Variant1Name, i.Variant1Value,            // string? string?
-                     i.Variant2Name, i.Variant2Value             // string? string?
+                     i.Name,
+                     i.Sku,
+                     primaryBarcode ?? anyBarcode ?? "", // <- replaces i.Barcode
+                     i.Price,
+                     i.TaxCode,
+                     i.DefaultTaxRatePct,
+                     i.TaxInclusive,
+                     i.DefaultDiscountPct,
+                     i.DefaultDiscountAmt,
+                     p != null ? p.Name : null,
+                     i.Variant1Name, i.Variant1Value,
+                     i.Variant2Name, i.Variant2Value
                  )).ToList();
+
             DataContextItemIndex.Clear();
             foreach (var it in list) DataContextItemIndex.Add(it);
         }
+
 
         // ===== Till helpers =====
         private TillSession? GetOpenTill(PosClientDbContext db)
@@ -759,28 +775,56 @@ ComputeTotalsSnapshot()
             }
             // 4) DB fallback (copy your existing query body here; only change
             //    'ScanBox.Text' -> 'text' and keep the projection to ItemIndexDto)
+            // 4) DB fallback (now matches ANY barcode via ItemBarcodes)
             if (pick is null && text.Length > 0)
             {
                 using var db = new PosClientDbContext(_dbOptions);
+
                 var q =
                     from i in db.Items.AsNoTracking()
                     join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                     from p in gp.DefaultIfEmpty()
-                    where i.Barcode == text
-                       || i.Sku == text
-                       || EF.Functions.Like(EF.Functions.Collate(i.Name, "NOCASE"), text + "%")
-                       || (i.Variant1Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant1Value, "NOCASE"), text + "%"))
-                       || (i.Variant2Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant2Value, "NOCASE"), text + "%"))
-                       || (p != null && EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), text + "%"))
+
+                    where
+                        // exact barcode match against any barcode for the item
+                        db.ItemBarcodes.Any(b => b.ItemId == i.Id && b.Code == text)
+                        // or SKU match
+                        || i.Sku == text
+                        // or starts-with on item/variant/product names (case-insensitive)
+                        || EF.Functions.Like(EF.Functions.Collate(i.Name, "NOCASE"), text + "%")
+                        || (i.Variant1Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant1Value, "NOCASE"), text + "%"))
+                        || (i.Variant2Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant2Value, "NOCASE"), text + "%"))
+                        || (p != null && EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), text + "%"))
+
                     orderby i.Name
+
+                    // project PRIMARY barcode (or any) into DTO.Barcode for UI
                     select new ItemIndexDto(
-                        i.Id, i.Name, i.Sku, i.Barcode, i.Price, i.TaxCode,
-                        i.DefaultTaxRatePct, i.TaxInclusive, i.DefaultDiscountPct, i.DefaultDiscountAmt,
+                        i.Id,
+                        i.Name,
+                        i.Sku,
+                        db.ItemBarcodes.Where(b => b.ItemId == i.Id && b.IsPrimary).Select(b => b.Code).FirstOrDefault()
+                        ?? db.ItemBarcodes.Where(b => b.ItemId == i.Id).Select(b => b.Code).FirstOrDefault()
+                        ?? "",
+                        i.Price,
+                        i.TaxCode,
+                        i.DefaultTaxRatePct,
+                        i.TaxInclusive,
+                        i.DefaultDiscountPct,
+                        i.DefaultDiscountAmt,
                         p != null ? p.Name : null,
-                        i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value);
+                        i.Variant1Name, i.Variant1Value,
+                        i.Variant2Name, i.Variant2Value
+                    );
+
                 var dbItem = q.FirstOrDefault();
-                if (dbItem is not null) { DataContextItemIndex.Add(dbItem); pick = dbItem; }
+                if (dbItem is not null)
+                {
+                    DataContextItemIndex.Add(dbItem);
+                    pick = dbItem;
+                }
             }
+
             if (pick is null)
             {
                 MessageBox.Show("Item not found.");

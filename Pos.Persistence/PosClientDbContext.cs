@@ -1,4 +1,5 @@
 ﻿// Pos.Persistence/PosClientDbContext.cs
+using System.Reflection.Emit;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 
@@ -12,6 +13,8 @@ namespace Pos.Persistence
         public DbSet<Brand> Brands => Set<Brand>();
         public DbSet<Category> Categories => Set<Category>();
         public DbSet<Item> Items { get; set; }
+        public DbSet<ItemBarcode> ItemBarcodes => Set<ItemBarcode>();
+
         public DbSet<Product> Products { get; set; }
        
         public DbSet<Sale> Sales { get; set; }
@@ -53,7 +56,64 @@ namespace Pos.Persistence
             // ---------- Users ----------
             b.Entity<User>()
                 .HasIndex(u => u.Username)
-                .IsUnique();
+            .IsUnique();
+
+
+            // ---- Items (no legacy Barcode index) ----
+            b.Entity<Item>(e =>
+            {
+                // Unique SKU but allow many EMPTY SKUs (so new items can start blank)
+                // Provider-specific filtered unique index
+                string? skuFilter =
+                    Database.IsSqlite() ? "length(trim(Sku)) > 0" :
+                    Database.IsSqlServer() ? "[Sku] IS NOT NULL AND LTRIM(RTRIM([Sku])) <> ''" :
+                    Database.IsNpgsql() ? "\"Sku\" IS NOT NULL AND btrim(\"Sku\") <> ''" :
+                    null;
+
+                var skuIdx = e.HasIndex(x => x.Sku).IsUnique();
+                if (!string.IsNullOrWhiteSpace(skuFilter))
+                    skuIdx.HasFilter(skuFilter);
+
+                // ⛔ Do NOT configure any Barcode index here — the column is removed.
+            });
+
+
+            b.Entity<Product>(e =>
+            {
+                e.HasIndex(x => x.Name); // optional, for search
+            });
+
+            // ---- ItemBarcodes (where barcodes live now) ----
+            b.Entity<ItemBarcode>(e =>
+            {
+                e.Property(x => x.Code)
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    // Uncomment next line if you want case-insensitive uniqueness on SQLite:
+                    // .UseCollation("NOCASE")
+                    ;
+
+                // Unique barcode strings globally
+                e.HasIndex(x => x.Code).IsUnique();
+
+                e.HasOne(x => x.Item)
+                 .WithMany(i => i.Barcodes)
+                 .HasForeignKey(x => x.ItemId)
+                 .OnDelete(DeleteBehavior.Cascade);
+
+                // At most ONE primary barcode per item (filtered unique index)
+                string provider = Database.ProviderName ?? string.Empty;
+                string? primaryFilter =
+                    provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) ? "IsPrimary = 1" :
+                    provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase) ? "[IsPrimary] = 1" :
+                    provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ? "\"IsPrimary\" = TRUE" :
+                    null;
+
+                var ixPrimary = e.HasIndex(x => x.ItemId).IsUnique();
+                if (!string.IsNullOrWhiteSpace(primaryFilter))
+                    ixPrimary.HasFilter(primaryFilter);
+            });
+
 
             // ---------- Sales ----------
             b.Entity<Sale>()
@@ -210,16 +270,7 @@ namespace Pos.Persistence
             b.Entity<Brand>().HasIndex(x => x.Name).IsUnique();
             b.Entity<Category>().HasIndex(x => x.Name).IsUnique();
 
-            //// ---------- Warehouses ----------
-            //b.Entity<Warehouse>(e =>
-            //{
-            //    e.HasKey(x => x.Id);
-            //    e.Property(x => x.Name).IsRequired().HasMaxLength(200);
-            //    e.HasIndex(x => x.Name);
-            //    e.HasIndex(x => x.IsActive);
-            //});
-
-            // ---------- Cash Ledger ----------
+                      // ---------- Cash Ledger ----------
             b.Entity<CashLedger>(e =>
             {
                 e.HasKey(x => x.Id);
