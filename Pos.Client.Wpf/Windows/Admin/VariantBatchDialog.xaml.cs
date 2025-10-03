@@ -240,8 +240,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                 Variant1Value = string.IsNullOrWhiteSpace(Axis1Single) ? null : Axis1Single,
                 Variant2Name = string.IsNullOrWhiteSpace(Axis2NameBox.Text) ? null : Axis2NameBox.Text.Trim(),
                 Variant2Value = string.IsNullOrWhiteSpace(Axis2Single) ? null : Axis2Single,
-                BrandId = null,
-                CategoryId = null,
+                BrandId = IsStandaloneMode ? (int?)BrandBox.SelectedValue : _product?.BrandId,
+                CategoryId = IsStandaloneMode ? (int?)CategoryBox.SelectedValue : _product?.CategoryId,
                 IsActive = MarkActive,
                 IsVoided = false,
                 VoidedAtUtc = null,
@@ -448,8 +448,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Variant1Value = string.IsNullOrWhiteSpace(v1Val) ? null : v1Val,
                     Variant2Name = string.IsNullOrWhiteSpace(v2Name) ? null : v2Name,
                     Variant2Value = string.IsNullOrWhiteSpace(v2Val) ? null : v2Val,
-                    BrandId = null,
-                    CategoryId = null,
+                    BrandId = IsStandaloneMode ? (int?)BrandBox.SelectedValue : _product?.BrandId,
+                    CategoryId = IsStandaloneMode ? (int?)CategoryBox.SelectedValue : _product?.CategoryId,
                     IsActive = ActiveBox.IsChecked == true,
                     IsVoided = false,
                     VoidedAtUtc = null,
@@ -760,8 +760,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                         Variant1Value = string.IsNullOrWhiteSpace(v1) ? null : v1,
                         Variant2Name = string.IsNullOrWhiteSpace(Axis2Name) ? null : Axis2Name,
                         Variant2Value = string.IsNullOrWhiteSpace(v2) ? null : v2,
-                        BrandId = null,
-                        CategoryId = null,
+                        BrandId = IsStandaloneMode ? (int?)BrandBox.SelectedValue : _product?.BrandId,
+                        CategoryId = IsStandaloneMode ? (int?)CategoryBox.SelectedValue : _product?.CategoryId,
                         IsActive = MarkActive,
                         IsVoided = false,
                         VoidedAtUtc = null,
@@ -1250,6 +1250,16 @@ namespace Pos.Client.Wpf.Windows.Admin
             // ✅ After window is ready, compute a safe next SKU number based on existing data
             Loaded += async (_, __) =>
             {
+                await using var db = await _dbf.CreateDbContextAsync();
+
+                // Load brands
+                var brands = await db.Brands.Where(b => b.IsActive).OrderBy(b => b.Name).ToListAsync();
+                BrandBox.ItemsSource = brands;
+
+                // Load categories
+                var cats = await db.Categories.OrderBy(c => c.Name).ToListAsync();
+                CategoryBox.ItemsSource = cats;
+
                 _seqSku = await GetNextSkuSequenceAsync(SkuPrefix, SkuStart);
                 // (Optional) reflect the computed start back into the textbox
                 SkuStartBox.Text = _seqSku.ToString(CultureInfo.InvariantCulture);

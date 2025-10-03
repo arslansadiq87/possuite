@@ -39,6 +39,7 @@
     <SolidColorBrush x:Key="Clr.Danger+H"  Color="#D32F2F"/>
     <SolidColorBrush x:Key="Clr.Danger+P"  Color="#C62828"/>
     <SolidColorBrush x:Key="Clr.OnDanger"  Color="#FFFFFFFF"/>
+    
 
     <!-- Soft fills for hover/pressed on outline/ghost -->
     <SolidColorBrush x:Key="Clr.PrimarySoft+H" Color="#1A4CAF50"/>
@@ -49,6 +50,15 @@
     <SolidColorBrush x:Key="Clr.DisabledFG" Color="#FFBDBDBD"/>
     <SolidColorBrush x:Key="Clr.DisabledBG" Color="#14FFFFFF"/>
     <SolidColorBrush x:Key="Clr.DisabledBR" Color="#33FFFFFF"/>
+
+    <SolidColorBrush x:Key="Chip.Background" Color="#EEEEEE"/>
+    <SolidColorBrush x:Key="Chip.Border" Color="#CCCCCC"/>
+    <SolidColorBrush x:Key="Chip.Foreground" Color="#333333"/>
+
+    <SolidColorBrush x:Key="Chip.SelectedBackground" Color="#007ACC"/>
+    <SolidColorBrush x:Key="Chip.SelectedBorder" Color="#005A9E"/>
+    <SolidColorBrush x:Key="Chip.SelectedForeground" Color="White"/>
+
 
     <!-- ===== Size & shape tokens ===== -->
     <sys:Double x:Key="Btn.FontSize">14</sys:Double>
@@ -97,10 +107,7 @@
 
     <SolidColorBrush x:Key="Txt.Muted"      Color="#666666"/>
 
-    <SolidColorBrush x:Key="Chip.Background" Color="#30FFFFFF"/>
-    <SolidColorBrush x:Key="Chip.Border"     Color="#30FFFFFF"/>
-    <SolidColorBrush x:Key="Chip.Foreground" Color="#4CAF50"/>
-
+  
     
     <!-- ========= Text styles ========= -->
     <Style x:Key="Txt.MutedSmall" TargetType="TextBlock">

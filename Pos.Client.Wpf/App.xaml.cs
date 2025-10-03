@@ -37,6 +37,7 @@ namespace Pos.Client.Wpf
             // 3) App services
             sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
+            //sc.AddSingleton<CurrentUserService>();
 
             // NEW: machine/counter DI (you added these earlier)
             sc.AddSingleton<IMachineIdentityService, MachineIdentityService>();
@@ -61,6 +62,12 @@ namespace Pos.Client.Wpf
             sc.AddTransient<WarehousesWindow>();
             sc.AddTransient<EditWarehouseWindow>();
 
+            //sc.AddTransient<UsersWindow>(sp =>
+            //{
+            //    var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            //    var cu = sp.GetRequiredService<CurrentUserService>().CurrentUser;
+            //    return new UsersWindow(dbf, cu);
+            //});
 
             Services = sc.BuildServiceProvider();
 

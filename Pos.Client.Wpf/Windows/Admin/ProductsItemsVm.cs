@@ -10,12 +10,12 @@ namespace Pos.Client.Wpf.Windows.Admin;
 
 public partial class ProductsItemsVm : ObservableObject
 {
-    private readonly IDbContextFactory<AppDbContext> _dbf;
+    private readonly IDbContextFactory<PosClientDbContext> _dbf;
     public ObservableCollection<Product> Products { get; } = new();
 
     [ObservableProperty] private Product? selected;
 
-    public ProductsItemsVm(IDbContextFactory<AppDbContext> dbf) => _dbf = dbf;
+    public ProductsItemsVm(IDbContextFactory<PosClientDbContext> dbf) => _dbf = dbf;
 
     [RelayCommand]
     public async Task LoadAsync()

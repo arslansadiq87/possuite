@@ -32,16 +32,27 @@
             <StackPanel Grid.Row="0">
                 <TextBlock x:Name="ProductText" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,8,0,0"/>
                 <!-- Standalone Name Row (hidden when a product is provided) -->
-                
                 <Grid x:Name="StandaloneNameRow" Grid.Row="0" Margin="0,8,0,8" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Item Name" VerticalAlignment="Center"/>
-                    <TextBox x:Name="NameBox" Grid.Column="1" Style="{StaticResource Txt.Outlined}"/>
+                    
+                    <TextBlock Text="Item Name" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox x:Name="NameBox" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource Txt.Outlined}"/>
+                    <!-- Brand -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Brand" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="BrandBox" Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" DisplayMemberPath="Name" SelectedValuePath="Id"/>
+                    <!-- Category -->
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="Category" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="CategoryBox" Grid.Row="2" Grid.Column="3" Margin="0,8,0,0" DisplayMemberPath="Name" SelectedValuePath="Id"/>
                 </Grid>
-                
             </StackPanel>
             <!-- Axes -->
             <GroupBox x:Name="AxesGroup" Header="Variant Axes" Padding="8" Margin="0,0,0,12" Grid.Row="1">

@@ -2,11 +2,13 @@
 using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Pos.Domain;
+
 
 // REMOVE: using System.Security.Cryptography;
 using Pos.Domain.Entities;                 // for User, Item, Product, StockEntry, etc.
 // If you still have a Pos.Domain.UserRole, alias to avoid ambiguity:
-using UserRoleEnum = Pos.Domain.UserRole;
+//using UserRoleEnum = Pos.Domain.UserRole;
 
 namespace Pos.Persistence
 {
@@ -110,17 +112,18 @@ namespace Pos.Persistence
             {
                 Username = "admin",
                 DisplayName = "Admin",
-                Role = UserRoleEnum.Admin,
+                Role = UserRole.Admin,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("1234"), // string hash
                 IsActive = true,
-                CreatedAtUtc = DateTime.UtcNow
+                CreatedAtUtc = DateTime.UtcNow,
+                IsGlobalAdmin = true,
             });
 
             db.Users.Add(new User
             {
                 Username = "ali",
                 DisplayName = "Ali (Salesman)",
-                Role = UserRoleEnum.Salesman,
+                Role = UserRole.Salesman,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("1111"), // string hash
                 IsActive = true,
                 CreatedAtUtc = DateTime.UtcNow

@@ -210,15 +210,17 @@
         ToolTip="Bind this machine to the selected counter">
                         <Button.Style>
                             <Style TargetType="Button">
-                                <!-- default: collapsed -->
+                                <!-- default collapsed -->
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <!-- show when a row is selected AND it's unassigned -->
+                                    <!-- Hide when no counter is selected -->
                                     <DataTrigger Binding="{Binding SelectedItem, ElementName=CountersGrid}" Value="{x:Null}">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                     </DataTrigger>
+
+                                    <!-- Show when the selected counter is UNASSIGNED -->
                                     <DataTrigger Binding="{Binding SelectedItem.AssignedTo, ElementName=CountersGrid}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding SelectedItem.AssignedTo, ElementName=CountersGrid}" Value="">
                                         <Setter Property="Visibility" Value="Visible"/>
@@ -227,6 +229,7 @@
                             </Style>
                         </Button.Style>
                     </Button>
+
 
                     <!-- Unassign button -->
                     <Button Content="Unassign This PC"
