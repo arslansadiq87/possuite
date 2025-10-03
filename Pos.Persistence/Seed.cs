@@ -27,24 +27,22 @@ namespace Pos.Persistence
             var now = DateTime.UtcNow;
             FixDuplicateProducts(db);
 
-            // 0) Users (one-time default admin + salesman if Users is empty)
             EnsureUsers(db);
-            // 0.1) Suppliers  ✅ add this
             EnsureSuppliers(db);
-            // 1) Your existing items
-            EnsureBasicItems(db, now);
 
-            // 2) Your existing products/variants
-            EnsureProductWithVariants(db, now);
-            EnsureProductWithVariants_Jeans(db, now);  // NEW: Jeans
-
-            // 3) Your existing opening stock
-            EnsureOpeningStock(db, outletId: 1, openingQty: 50, now);
-
+            // create locations first
             EnsureOutlets(db);
             EnsureWarehouse(db);
 
+            // then items/products
+            EnsureBasicItems(db, now);
+            EnsureProductWithVariants(db, now);
+            EnsureProductWithVariants_Jeans(db, now);
+
+            // finally opening stock (uses new header+lines model)
+            EnsureOpeningStock_UsingHeader(db, outletId: 1, openingQty: 50m, now);
         }
+
 
         // ------------------------------
         // 0) USERS  (BCrypt string hashes)
@@ -328,36 +326,84 @@ namespace Pos.Persistence
         // ---------------------------------------------------------
         // 3) Opening Stock — add only for items that lack any stock
         // ---------------------------------------------------------
-        private static void EnsureOpeningStock(PosClientDbContext db, int outletId, int openingQty, DateTime now)
+        private static void EnsureOpeningStock_UsingHeader(PosClientDbContext db, int outletId, decimal openingQty, DateTime now)
         {
-            var itemIdsWithStock = db.StockEntries
-                .Where(se => se.OutletId == outletId)
+            // If nothing to do, bail
+            if (!db.Items.AsNoTracking().Any()) return;
+
+            // Make sure outlet exists
+            var outletExists = db.Outlets.AsNoTracking().Any(o => o.Id == outletId && o.IsActive);
+            if (!outletExists) return;
+
+            // Skip if we already have ANY Opening doc for this outlet (idempotent seed)
+            var alreadySeeded = db.StockDocs
+                .AsNoTracking()
+                .Any(d => d.DocType == StockDocType.Opening
+                       && d.LocationType == InventoryLocationType.Outlet
+                       && d.LocationId == outletId);
+            if (alreadySeeded) return;
+
+            // Resolve an Admin user for audit fields
+            var adminId = db.Users
+                .Where(u => u.Role == UserRole.Admin && u.IsActive)
+                .Select(u => u.Id)
+                .FirstOrDefault();
+            if (adminId == 0)
+                adminId = db.Users.Select(u => u.Id).FirstOrDefault(); // fallback
+
+            // Create header (Draft)
+            var doc = new StockDoc
+            {
+                DocType = StockDocType.Opening,
+                Status = StockDocStatus.Draft,
+                LocationType = InventoryLocationType.Outlet,
+                LocationId = outletId,
+                EffectiveDateUtc = now,
+                Note = "Seed: opening stock",
+                CreatedByUserId = adminId
+            };
+            db.StockDocs.Add(doc);
+            db.SaveChanges();
+
+            // Prepare lines for all items that currently have no movements at this outlet
+            var itemIdsWithAnyMovementHere = db.StockEntries
+                .AsNoTracking()
+                .Where(se => se.LocationType == InventoryLocationType.Outlet
+                          && se.LocationId == outletId)
                 .Select(se => se.ItemId)
                 .Distinct()
                 .ToHashSet();
 
-            var itemsNeedingStock = db.Items
-                .Where(i => !itemIdsWithStock.Contains(i.Id))
-                .Select(i => i.Id)
-                .ToList();
+            var items = db.Items.AsNoTracking().Select(i => new { i.Id, i.Price }).ToList();
 
-            if (itemsNeedingStock.Count == 0) return;
-
-            foreach (var itemId in itemsNeedingStock)
+            foreach (var it in items)
             {
+                if (itemIdsWithAnyMovementHere.Contains(it.Id)) continue;
+
                 db.StockEntries.Add(new StockEntry
                 {
-                    OutletId = outletId,
-                    ItemId = itemId,
-                    QtyChange = openingQty,
-                    RefType = "Adjust",
-                    RefId = null,
-                    Ts = now
+                    StockDocId = doc.Id,
+                    ItemId = it.Id,
+                    QtyChange = openingQty,          // decimal(18,4)
+                    UnitCost = (it.Price <= 0 ? 0m : it.Price), // seed cost from item price (4 dp OK)
+                    LocationType = InventoryLocationType.Outlet,
+                    LocationId = outletId,
+                    RefType = "Opening",
+                    RefId = doc.Id,
+                    Ts = doc.EffectiveDateUtc,
+                    Note = "Seed"
                 });
             }
 
             db.SaveChanges();
+
+            // Lock header (so it matches your rule “admin locks it”)
+            doc.Status = StockDocStatus.Locked;
+            doc.LockedByUserId = adminId;
+            doc.LockedAtUtc = DateTime.UtcNow;
+            db.SaveChanges();
         }
+
 
         private static void EnsureOutlets(PosClientDbContext db)
         {
@@ -497,17 +543,18 @@ namespace Pos.Persistence
         public static void EnsureWarehouse(PosClientDbContext db)
         {
             // Make sure DB is created/migrated before seeding (optional if you do this elsewhere)
-            db.Database.Migrate();
+            //db.Database.Migrate();
 
             // If no warehouses at all, create one
             if (!db.Warehouses.AsNoTracking().Any())
             {
                 var wh = new Warehouse
                 {
+                    Code = "MAIN",              // ✅ REQUIRED
                     Name = "Main Warehouse",
                     IsActive = true,
                     CreatedAtUtc = DateTime.UtcNow,
-                    // BaseEntity.PublicId is auto
+                    // RowVersion will be Array.Empty<byte>() automatically ✅
                 };
                 db.Warehouses.Add(wh);
                 db.SaveChanges();

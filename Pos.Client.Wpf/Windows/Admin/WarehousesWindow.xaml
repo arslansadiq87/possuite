@@ -49,6 +49,15 @@
                     Click="Disable_Click"
                     Visibility="Collapsed"/>
 
+            <Button x:Name="OpeningStockBtn"
+        Content="Opening Stock"
+        Width="130" Margin="6,0,0,0"
+        Click="OpeningStock_Click"
+        Visibility="Collapsed">
+                
+            </Button>
+
+
             <Separator/>
 
             <CheckBox x:Name="ShowInactive"
@@ -107,7 +116,7 @@
                                 <TextBlock Grid.Row="0" Grid.Column="1"
                                            Text="{Binding Code}"
                                            FontWeight="SemiBold"
-                                           Margin="8,0,0,0"
+                                           Margin="8,0,20,0"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"/>
 

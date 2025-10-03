@@ -15,4 +15,6 @@ namespace Pos.Domain
     }
 
     public enum SaleStatus { Draft = 0, Final = 1, Voided = 2, Revised = 3 }
+
+
 }

@@ -2,6 +2,7 @@
 using System.Reflection.Emit;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
+using Pos.Domain.Abstractions;
 
 
 namespace Pos.Persistence
@@ -35,6 +36,9 @@ namespace Pos.Persistence
         public DbSet<PartyLedger> PartyLedgers { get; set; } = null!;
         public DbSet<PartyBalance> PartyBalances { get; set; } = null!;
         public DbSet<SupplierCredit> SupplierCredits => Set<SupplierCredit>();
+        public DbSet<StockDoc> StockDocs { get; set; }
+
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -317,7 +321,7 @@ namespace Pos.Persistence
                 e.Property(x => x.Code).IsRequired().HasMaxLength(16);
                 e.Property(x => x.Name).IsRequired().HasMaxLength(128);
                 e.Property(x => x.PublicId).IsRequired();
-                e.Property(x => x.RowVersion).IsRowVersion();
+                //e.Property(x => x.RowVersion).IsRowVersion();
                 e.Property(x => x.CreatedAtUtc).IsRequired();
                 e.HasIndex(x => x.Code).IsUnique();
                 e.HasIndex(x => x.PublicId).IsUnique();
@@ -327,6 +331,53 @@ namespace Pos.Persistence
                 e.Property(x => x.Phone).HasMaxLength(50);
                 e.Property(x => x.Note).HasMaxLength(500);
             });
+            // In OnModelCreating:
+            b.Entity<StockEntry>(e =>
+            {
+                e.Property(x => x.QtyChange).HasColumnType("decimal(18,4)");
+                e.Property(x => x.UnitCost).HasColumnType("decimal(18,4)");
+
+                e.HasOne(x => x.StockDoc)
+                 .WithMany(d => d.Lines)
+                 .HasForeignKey(x => x.StockDocId)
+                 .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // optional: enum as int
+            b.Entity<StockDoc>()
+             .Property(x => x.DocType).HasConversion<int>();
+            b.Entity<StockDoc>()
+             .Property(x => x.Status).HasConversion<int>();
+            b.Entity<StockEntry>()
+             .Property(x => x.LocationType).HasConversion<int>();
+
+
+
+            // ---- Provider-aware RowVersion mapping for ALL BaseEntity types ----
+            var provider = Database.ProviderName ?? string.Empty;
+            foreach (var et in b.Model.GetEntityTypes())
+            {
+                if (typeof(BaseEntity).IsAssignableFrom(et.ClrType))
+                {
+                    var eb = b.Entity(et.ClrType);
+
+                    if (provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // SQL Server can use real rowversion/timestamp
+                        eb.Property<byte[]>("RowVersion").IsRowVersion();
+                    }
+                    else
+                    {
+                        // SQLite: treat RowVersion as a plain concurrency token
+                        // and ensure a non-null default at the DB level.
+                        eb.Property<byte[]>("RowVersion")
+                          .IsConcurrencyToken()
+                          .ValueGeneratedNever()
+                          .HasDefaultValueSql("X''"); // empty BLOB default
+                    }
+                }
+            }
+
         }
     }
 }

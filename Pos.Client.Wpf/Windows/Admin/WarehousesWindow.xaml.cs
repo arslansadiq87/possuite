@@ -7,6 +7,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Services;
+using Pos.Domain;
 using Pos.Domain.Entities;
 using Pos.Persistence;
 
@@ -85,11 +87,12 @@ namespace Pos.Client.Wpf.Windows.Admin
                 EditBtn.Visibility = Visibility.Collapsed;
                 EnableBtn.Visibility = Visibility.Collapsed;
                 DisableBtn.Visibility = Visibility.Collapsed;
+                OpeningStockBtn.Visibility = Visibility.Collapsed;
                 return;
             }
 
             EditBtn.Visibility = Visibility.Visible;
-
+            OpeningStockBtn.Visibility = Visibility.Visible;
             if (row.IsActive)
             {
                 DisableBtn.Visibility = Visibility.Visible;
@@ -222,5 +225,33 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (e.Key == Key.Escape) Close();
             else if (e.Key == Key.Enter) Edit_Click(sender, e);
         }
+
+        private void OpeningStock_Click(object sender, RoutedEventArgs e)
+        {
+            var wh = WarehousesGrid?.SelectedItem as Warehouse;
+            if (wh == null) return;
+
+            if (!IsCurrentUserAdmin())
+            {
+                MessageBox.Show("Only Admin can create or edit Opening Stock.", "Not allowed",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var dlg = new OpeningStockDialog(
+                InventoryLocationType.Warehouse,
+                wh.Id,
+                $"{wh.Code} - {wh.Name}");
+            dlg.Owner = this;
+            dlg.ShowDialog();
+        }
+
+        private static bool IsCurrentUserAdmin()
+        {
+            var s = AppState.Current;
+            if (s.CurrentUser != null) return s.CurrentUser.Role == UserRole.Admin;
+            return string.Equals(s.CurrentUserRole, "Admin", StringComparison.OrdinalIgnoreCase);
+        }
+
     }
 }

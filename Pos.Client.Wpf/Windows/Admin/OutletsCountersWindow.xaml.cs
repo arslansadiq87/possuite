@@ -13,6 +13,7 @@ using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Client.Wpf.Windows.Common;
 using Pos.Client.Wpf.Services;
+using Pos.Domain;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -515,6 +516,43 @@ namespace Pos.Client.Wpf.Windows.Admin
                 if (result != null) return result;
             }
             return null;
+        }
+
+        private void OpenOpeningStock_Click(object sender, RoutedEventArgs e)
+        {
+            // Prefer the selected row (gives you Code/Name), but fall back to _selectedOutletId
+            var row = OutletsGrid?.SelectedItem as OutletRow;
+            int id = row?.Id ?? (_selectedOutletId ?? 0);
+            if (id == 0) return;
+
+            if (!IsCurrentUserAdmin())
+            {
+                MessageBox.Show("Only Admin can create or edit Opening Stock.", "Not allowed",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Build the label. If row is null (e.g., selection cleared but id remains), fetch minimal info.
+            string label = row != null
+                ? $"{row.Code} - {row.Name}"
+                : $"Outlet #{id}";
+
+            var dlg = new OpeningStockDialog(
+                InventoryLocationType.Outlet,
+                id,
+                label);
+
+            dlg.Owner = this;
+            dlg.ShowDialog();
+        }
+
+
+
+        private static bool IsCurrentUserAdmin()
+        {
+            var s = AppState.Current;
+            if (s.CurrentUser != null) return s.CurrentUser.Role == UserRole.Admin;
+            return string.Equals(s.CurrentUserRole, "Admin", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

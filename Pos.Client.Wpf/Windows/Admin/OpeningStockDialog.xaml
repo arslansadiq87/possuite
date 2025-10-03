@@ -1,0 +1,169 @@
+﻿<!-- Pos.Client.Wpf/Windows/Admin/OpeningStockDialog.xaml -->
+<Window x:Class="Pos.Client.Wpf.Windows.Admin.OpeningStockDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Opening Stock" Width="980" Height="720"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </Window.Resources>
+    <Grid Margin="4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Scan/Search -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <!-- Lines grid -->
+            <RowDefinition Height="*"/>
+            <!-- Totals + destination + actions + payments -->
+            <RowDefinition Height="Auto"/>
+
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0">
+            <ToolBar 
+                 Style="{StaticResource ModernToolBar.Compact}"
+                 ToolBarTray.IsLocked="True">
+                <Menu>
+                    <MenuItem Header="Import &amp; Export">
+                        <MenuItem Header="Download Sample CSV" Click="DownloadSampleCsv_Click"/>
+                        <MenuItem Header="Import CSV" Click="ImportCsv_Click"/>
+                        <CheckBox x:Name="ReplaceAllBox" Content="Replace all on Save" IsChecked="True"/>
+                        <MenuItem Header="Lock (Admin)" Click="Lock_Click" IsEnabled="{Binding CanLock}" ToolTip="{Binding LockHint}"/>
+                        <MenuItem Header="Export Grid" Click="ExportGrid_Click"/>
+
+                        <MenuItem Header="Undo Last Import" Click="UndoImport_Click" IsEnabled="{Binding HasUndo}"/>
+                        <MenuItem Header="Fix first invalid" Click="FixFirstInvalid_Click" 
+                        Visibility="{Binding HasInvalid, Converter={StaticResource BoolToVisibility}}"/>
+                
+
+
+                    </MenuItem>
+                </Menu>
+
+
+                <Button Content="Save Draft" Click="SaveDraft_Click" Width="90"/>
+
+
+                <Separator/>
+                <Button Content="Delete Row" Click="DeleteRow_Click" Margin="6,0,0,0" Width="80"/>
+                <Button Content="Open Draft…" Click="OpenDraft_Click" Margin="6,0,0,0" Width="110"/>
+                <Button Content="Clone from Locked…" Click="CloneFromLocked_Click" Margin="6,0,0,0" Width="160"/>
+
+
+                <Button Content="Close" Click="Close_Click" Width="50"/>
+
+
+            </ToolBar>
+
+
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Border DockPanel.Dock="Top" Margin="12,4,12,4" Padding="0,0,0,6" BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="220"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="Location:" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding LocationDisplay}" Margin="6,0,16,0" VerticalAlignment="Center"/>
+
+                    <TextBlock Grid.Column="2" Text="Effective Date:" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <DatePicker Grid.Column="3"
+                SelectedDate="{Binding EffectiveDateLocal}"
+                VerticalAlignment="Center" Margin="6,0,0,0"/>
+                </Grid>
+            </Border>
+
+        </Grid>
+
+        
+            <!-- Search row (identical pattern to Purchase window) -->
+            <StackPanel Grid.Row="2" Margin="12,8,12,0" Orientation="Horizontal">
+                <TextBlock Text="Scan / Search Item:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <DockPanel>
+                    <TextBox x:Name="ItemSearchText"
+             Width="380"
+             TextChanged="ItemSearchText_TextChanged"
+             PreviewKeyDown="ItemSearchText_KeyDown"/>
+
+                    <!-- (Optional) New-item button; keep/remove as you like -->
+                    <!--<Button Content="+" Width="28" Height="28" Margin="6,0,0,0" ToolTip="New Item" Click="BtnNewItem_Click"/>-->
+
+                    <Button Content="Add" Width="60" Height="28" Margin="6,0,0,0"
+            ToolTip="Add selected item to lines" Click="BtnAddItem_Click"/>
+                </DockPanel>
+
+                <!-- Suggestions popup anchored to the TextBox -->
+                <Popup x:Name="ItemPopup"
+         PlacementTarget="{Binding ElementName=ItemSearchText}"
+         Placement="Bottom"
+         StaysOpen="True"
+         AllowsTransparency="True">
+                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
+            Width="{Binding ElementName=ItemSearchText, Path=ActualWidth}">
+                        <ListBox x:Name="ItemList"
+               MaxHeight="240"
+               MouseDoubleClick="ItemList_MouseDoubleClick"
+               PreviewKeyDown="ItemList_PreviewKeyDown">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" Width="220"/>
+                                        <TextBlock Text="{Binding Sku}" Width="90" Margin="12,0,0,0" Foreground="#666"/>
+                                        <TextBlock Text="{Binding Barcode}" Width="90" Margin="12,0,0,0" Foreground="#999"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+                </Popup>
+            </StackPanel>
+        
+
+        <!-- ======================= Lines grid ======================= -->
+        <DataGrid x:Name="Grid" Margin="4" AutoGenerateColumns="False" Grid.Row="3"
+                  ItemsSource="{Binding Rows}" CanUserAddRows="False"
+                  IsReadOnly="False" RowHeaderWidth="0"
+                  PreviewKeyDown="Grid_PreviewKeyDown">
+            <DataGrid.Resources>
+                <Style TargetType="DataGridCell">
+                    <Style.Triggers>
+                        <Trigger Property="Validation.HasError" Value="True">
+                            <Setter Property="BorderBrush" Value="IndianRed"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                            <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=(Validation.Errors)[0].ErrorContent}"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.Resources>
+
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="SKU" Width="140"
+            Binding="{Binding Sku, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+                <DataGridTextColumn Header="Item Name" Width="2*" IsReadOnly="True"
+            Binding="{Binding ItemName}"/>
+                <DataGridTextColumn Header="Qty" Width="110"
+            Binding="{Binding Qty, StringFormat=F4, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+                <DataGridTextColumn Header="Unit Cost" Width="120"
+            Binding="{Binding UnitCost, StringFormat=F4, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+                <DataGridTextColumn Header="Subtotal" Width="120" IsReadOnly="True"
+            Binding="{Binding Subtotal, StringFormat=F4}"/>
+                <DataGridTextColumn Header="Note" Width="*" Binding="{Binding Note, UpdateSourceTrigger=PropertyChanged}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+
+        <!-- =================== Bottom: Destination + Totals + Actions + Payments =================== -->
+        <StatusBar DockPanel.Dock="Bottom" Grid.Row="4">
+            <StatusBarItem>
+                <TextBlock Text="{Binding FooterSummary}"/>
+            </StatusBarItem>
+        </StatusBar>
+
+    </Grid>
+</Window>

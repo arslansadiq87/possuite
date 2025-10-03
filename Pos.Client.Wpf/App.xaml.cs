@@ -10,6 +10,10 @@ using Pos.Client.Wpf.Windows.Shell;   // << add
 using Pos.Client.Wpf.Windows.Sales;
 using Pos.Persistence;
 using Pos.Client.Wpf.Windows.Admin;
+using Microsoft.Extensions.Logging;
+using Pos.Persistence.Services;
+
+
 
 namespace Pos.Client.Wpf
 {
@@ -26,6 +30,7 @@ namespace Pos.Client.Wpf
             // 1) Connection string
             var cs = DbPath.ConnectionString;
             var dbFile = DbPath.Get();
+
 
             // 2) DbContextFactory (client DB)
             sc.AddDbContextFactory<PosClientDbContext>(o =>
@@ -61,6 +66,8 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditCategoryWindow>();
             sc.AddTransient<WarehousesWindow>();
             sc.AddTransient<EditWarehouseWindow>();
+            sc.AddScoped<Pos.Persistence.Services.IOpeningStockService, Pos.Persistence.Services.OpeningStockService>();
+            sc.AddScoped<CatalogService>();   // <-- register this
 
             //sc.AddTransient<UsersWindow>(sp =>
             //{
@@ -68,6 +75,13 @@ namespace Pos.Client.Wpf
             //    var cu = sp.GetRequiredService<CurrentUserService>().CurrentUser;
             //    return new UsersWindow(dbf, cu);
             //});
+            sc.AddLogging(b =>
+            {
+                b.ClearProviders();
+                b.AddDebug();   // shows in VS Output window
+                b.AddConsole(); // optional for console runs
+                b.SetMinimumLevel(LogLevel.Information);
+            });
 
             Services = sc.BuildServiceProvider();
 

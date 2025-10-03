@@ -1,0 +1,34 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.OpeningStockPickDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Opening Document" Width="700" Height="480"
+        WindowStartupLocation="CenterOwner">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Toolbar -->
+            <RowDefinition Height="*"/>
+            <!-- Grid + Editor -->
+            <RowDefinition Height="Auto"/>
+            <!-- Tip -->
+        </Grid.RowDefinitions>
+        
+        <TextBlock Grid.Row="0" DockPanel.Dock="Top" Margin="12" FontWeight="Bold"
+               Text="{Binding HeaderText}"/>
+        <DataGrid x:Name="Grid" Margin="12" AutoGenerateColumns="False" Grid.Row="1"
+              ItemsSource="{Binding Docs}" CanUserAddRows="False" IsReadOnly="True">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="80"/>
+                <DataGridTextColumn Header="Date (UTC)" Binding="{Binding EffectiveDateUtc}" Width="140"/>
+                <DataGridTextColumn Header="Lines" Binding="{Binding LineCount}" Width="80"/>
+                <DataGridTextColumn Header="Total Qty" Binding="{Binding TotalQty, StringFormat=F4}" Width="100"/>
+                <DataGridTextColumn Header="Total Value" Binding="{Binding TotalValue, StringFormat=F4}" Width="120"/>
+                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12">
+            <Button Content="Select" Click="Select_Click" Width="100" Margin="0,0,8,0"/>
+            <Button Content="Cancel" IsCancel="True" Width="100"/>
+        </StackPanel>
+    </Grid>
+</Window>

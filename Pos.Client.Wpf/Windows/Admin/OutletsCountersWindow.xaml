@@ -5,7 +5,7 @@
         WindowStartupLocation="CenterOwner">
     <Grid Margin="12">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="2.25*"/>
             <ColumnDefinition Width="3*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -44,9 +44,9 @@
                 <ToolBar DockPanel.Dock="Top"
              Style="{StaticResource ModernToolBar.Compact}"
              ToolBarTray.IsLocked="True">
-                    <Button Content="Add"   Click="AddOutlet_Click"  Margin="0,0,6,0" Width="90"/>
+                    <Button Content="Add"   Click="AddOutlet_Click"  Margin="0,0,6,0" Width="80"/>
 
-                    <Button Content="Edit"  Click="EditOutlet_Click" Margin="0,0,6,0" Width="90">
+                    <Button Content="Edit"  Click="EditOutlet_Click" Margin="0,0,6,0" Width="80">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Visibility" Value="Visible"/>
@@ -61,7 +61,7 @@
 
                     <Separator/>
 
-                    <Button Content="Delete" Click="DeleteOutlet_Click" Width="90">
+                    <Button Content="Delete" Click="DeleteOutlet_Click" Width="80">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Visibility" Value="Visible"/>
@@ -73,6 +73,24 @@
                             </Style>
                         </Button.Style>
                     </Button>
+
+                    <Button Content="Opening Stock"
+        Width="110"
+        ToolBar.OverflowMode="Never"
+        Click="OpenOpeningStock_Click">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedItem, ElementName=OutletsGrid}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+
                 </ToolBar>
 
 

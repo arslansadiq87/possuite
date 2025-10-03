@@ -79,28 +79,14 @@
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
                         <TextBlock Text="Scan / Search Item:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <DockPanel>
-                            <TextBox x:Name="ItemSearchText" Width="380"
-        TextChanged="ItemSearchText_TextChanged"
-        PreviewKeyDown="ItemSearchText_KeyDown"/>
-                            <Button Content="+" Width="28" Height="28" Margin="6,0,0,0"
-       ToolTip="New Item"
-       Click="BtnNewItem_Click"/>
-                            <Button Content="Add" Width="60" Height="28" Margin="6,0,0,0"
-       ToolTip="Add selected item to lines"
-       Click="BtnAddItem_Click"/>
+                            <TextBox x:Name="ItemSearchText" Width="380" TextChanged="ItemSearchText_TextChanged" PreviewKeyDown="ItemSearchText_KeyDown"/>
+                            <Button Content="+" Width="28" Height="28" Margin="6,0,0,0" ToolTip="New Item" Click="BtnNewItem_Click"/>
+                            <Button Content="Add" Width="60" Height="28" Margin="6,0,0,0" ToolTip="Add selected item to lines" Click="BtnAddItem_Click"/>
                         </DockPanel>
-
                         <!-- Suggestions popup -->
-                        <Popup x:Name="ItemPopup"
-  PlacementTarget="{Binding ElementName=ItemSearchText}"
-  Placement="Bottom"
-  StaysOpen="True"
-  AllowsTransparency="True">
-                            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
-       Width="{Binding ElementName=ItemSearchText, Path=ActualWidth}">
-                                <ListBox x:Name="ItemList"
-            MouseDoubleClick="ItemList_MouseDoubleClick"
-            MaxHeight="240">
+                        <Popup x:Name="ItemPopup" PlacementTarget="{Binding ElementName=ItemSearchText}" Placement="Bottom" StaysOpen="True" AllowsTransparency="True">
+                            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4" Width="{Binding ElementName=ItemSearchText, Path=ActualWidth}">
+                                <ListBox x:Name="ItemList" MouseDoubleClick="ItemList_MouseDoubleClick" MaxHeight="240">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal">
