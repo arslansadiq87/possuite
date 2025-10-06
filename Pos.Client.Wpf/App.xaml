@@ -7,17 +7,25 @@
         <ResourceDictionary>
             <!-- Only ResourceDictionary entries go here -->
             <ResourceDictionary.MergedDictionaries>
-                
+                <!-- Required by Fluent.Ribbon (v8+) -->
+                <ResourceDictionary Source="pack://application:,,,/Fluent;component/Themes/Generic.xaml" />
+                <!-- Theme (Light.Blue). You can change to Dark.Green, etc. -->
+                <ResourceDictionary Source="pack://application:,,,/Fluent;component/Themes/Themes/Light.Blue.xaml" />
+
                 <ResourceDictionary Source="Resources/Styles.xaml"/>
                 <ResourceDictionary Source="Resources/Icons.xaml"/>
                
             </ResourceDictionary.MergedDictionaries>
             <Style x:Key="Btn.GlobalPrimary" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button"/>
             <Style x:Key="Btn.GlobalSecondary" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button"/>
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             
+
+
             <!-- NEW: globally center all Windows relative to their Owner/MainWindow -->
         </ResourceDictionary>
-       
+        
+
     </Application.Resources>
     
 </Application>

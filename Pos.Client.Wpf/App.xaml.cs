@@ -26,7 +26,8 @@ namespace Pos.Client.Wpf
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            
+            ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
+
             var sc = new ServiceCollection();
 
             // 1) Connection string
@@ -42,9 +43,11 @@ namespace Pos.Client.Wpf
             );
 
             // 3) App services
+            sc.AddTransient<DashboardVm>();       // <-- add this
             sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
             //sc.AddSingleton<CurrentUserService>();
+            sc.AddSingleton<IWindowNavigator, WindowNavigator>();
 
             // NEW: machine/counter DI (you added these earlier)
             sc.AddSingleton<IMachineIdentityService, MachineIdentityService>();
@@ -208,9 +211,17 @@ namespace Pos.Client.Wpf
 
             // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-            var dash = Services.GetRequiredService<DashboardWindow>();
-            MainWindow = dash;
-            dash.Show();
+            //var dash = Services.GetRequiredService<DashboardWindow>();
+            //MainWindow = dash;
+            //dash.Show();
+
+            // using System.Windows;
+            // using Pos.Client.Wpf.Windows.Shell;
+
+            var shell = Services.GetRequiredService<DashboardWindow>(); // exact type
+            Application.Current.MainWindow = shell;                     // RibbonWindow : Window
+            shell.Show();
+
 
             this.ShutdownMode = oldMode; // e.g. back to OnMainWindowClose
         }

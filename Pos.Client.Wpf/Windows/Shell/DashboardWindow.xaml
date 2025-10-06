@@ -1,176 +1,127 @@
-﻿<Window x:Class="Pos.Client.Wpf.Windows.Shell.DashboardWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="POS — Dashboard" Height="720" Width="1024" WindowStartupLocation="CenterScreen">
-    <DockPanel>
-        <!-- Top toolbar (unchanged) -->
-        <ToolBar DockPanel.Dock="Top">
-            <Button Content="New Sale" Click="NewSale_Click"/>
+﻿<Fluent:RibbonWindow x:Class="Pos.Client.Wpf.Windows.Shell.DashboardWindow"
+                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                     xmlns:Fluent="urn:fluent-ribbon"
+                     mc:Ignorable="d"
+                     Title="POS — Dashboard"
+                     Width="1200"
+                     Height="800"
+                     WindowStartupLocation="CenterScreen">
+
+    <!-- ONE root content -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Ribbon -->
+        <Fluent:Ribbon Grid.Row="0">
+
+            <!-- Backstage (MUST wrap in BackstageTabControl) -->
+            <Fluent:Ribbon.Menu>
+                <Fluent:Backstage>
+                    <Fluent:BackstageTabControl>
+                        <Fluent:BackstageTabItem Header="Settings" KeyTip="S">
+                            <ScrollViewer Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Application Settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                                    <!-- Put your settings UI here -->
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Fluent:BackstageTabItem>
+
+                        <Fluent:BackstageTabItem Header="About" KeyTip="A">
+                            <StackPanel Margin="16">
+                                <TextBlock Text="PosSuite" FontSize="18" FontWeight="SemiBold"/>
+                                <TextBlock Text="Multi-outlet POS with offline-first sync" Margin="0,8,0,0"/>
+                                <Button Content="Exit" Width="110" Margin="0,12,0,0" Command="{Binding ExitCmd}"/>
+                            </StackPanel>
+                        </Fluent:BackstageTabItem>
+
+                        <!-- Optional: buttons directly inside the Backstage (valid) -->
+                        <!--<Fluent:Button Header="Theme: Blue" />-->
+                    </Fluent:BackstageTabControl>
+                </Fluent:Backstage>
+            </Fluent:Ribbon.Menu>
+
+            <!-- Quick Access (v11-correct) -->
+            <Fluent:Ribbon.QuickAccessItems>
+                <!-- Bind to existing controls or provide inline content -->
+                <Fluent:QuickAccessMenuItem Target="{Binding ElementName=BtnNewSale}" IsChecked="True"/>
+                <Fluent:QuickAccessMenuItem Target="{Binding ElementName=BtnReports}" IsChecked="True"/>
+            </Fluent:Ribbon.QuickAccessItems>
+
+            <!-- Contextual Tab Groups MUST be in this collection -->
+            <Fluent:Ribbon.ContextualGroups>
+                <Fluent:RibbonContextualTabGroup x:Name="transferGroup"
+                                         Header="Transfer"
+                                         Visibility="{Binding TransferTabVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </Fluent:Ribbon.ContextualGroups>
+
+            <!-- Normal tabs -->
+            <Fluent:RibbonTabItem Header="Home" KeyTip="H">
+                <Fluent:RibbonGroupBox Header="Sales">
+                    <Fluent:Button x:Name="BtnNewSale"
+                         Header="New Sale"
+                         KeyTip="N"
+                         Command="{Binding NewSaleCmd}"/>
+                    <Fluent:Button Header="Returns"
+                         Command="{Binding OpenReturnsCmd}"/>
+                </Fluent:RibbonGroupBox>
+
+                <Fluent:RibbonGroupBox Header="Inventory">
+                    <Fluent:Button Header="Purchase" Command="{Binding OpenPurchaseCmd}"/>
+                    <Fluent:Button Header="Transfer" Command="{Binding OpenTransferCmd}"/>
+                </Fluent:RibbonGroupBox>
+
+                <Fluent:RibbonGroupBox Header="Admin">
+                    <Fluent:Button Header="Products"          Command="{Binding OpenProductsCmd}"/>
+                    <Fluent:Button Header="Suppliers"         Command="{Binding OpenSuppliersCmd}"/>
+                    <Fluent:Button Header="Outlets/Counters"  Command="{Binding OpenOutletsCountersCmd}"/>
+                    <Fluent:Button Header="Users"             Command="{Binding OpenUsersCmd}"/>
+                </Fluent:RibbonGroupBox>
+
+                <Fluent:RibbonGroupBox Header="Reports">
+                    <Fluent:Button x:Name="BtnReports"
+                         Header="Open Reports"
+                         Command="{Binding OpenReportsCmd}"/>
+                </Fluent:RibbonGroupBox>
+            </Fluent:RibbonTabItem>
+
+            <!-- Contextual tab: associate via Group -->
+            <Fluent:RibbonTabItem Header="Transfer Tools" Group="{Binding Source={x:Reference transferGroup}}">
+                <Fluent:RibbonGroupBox Header="Receive">
+                    <Fluent:Button Header="Receive Dispatch" Command="{Binding ReceiveDispatchCmd}"/>
+                </Fluent:RibbonGroupBox>
+            </Fluent:RibbonTabItem>
+
+        </Fluent:Ribbon>
+
+        <!-- Content -->
+        <Border Grid.Row="1" CornerRadius="8" Padding="16" Margin="12"
+            Background="{DynamicResource ControlBackgroundBrush}">
+            <ContentPresenter Content="{Binding CurrentView}" />
+        </Border>
+
+        <!-- Status Bar -->
+        <Fluent:StatusBar Grid.Row="2">
+            <TextBlock Text="{Binding OutletName}" Margin="12,0"/>
             <Separator/>
-            <Button Content="New Purchase" Click="NewPurchase_Click"/>
+            <TextBlock Text="{Binding CounterName}" Margin="12,0"/>
             <Separator/>
-            <Button Content="Products  &amp; Items" Click="OpenProductsItems_Click"/>
-            <Button Content="Outlets/Counters" Click="OpenOutletsCounters_Click"/>
-            <Button Content="Warehouse" Click="OpenWarehouses_Click"/>
-            <Button Content="Users" Click="OpenUsers_Click"/>
-            <Button Content="Customers &amp; Suppliers" Click="OpenParties_Click"/>
-            <Button Content="Inventory Transfer" Click="NewTransfer_Click"/>
-            <Button Content="Sample" Click="OpenSamples_Click"/>
+            <TextBlock Text="{Binding CurrentUserName}" Margin="12,0"/>
             <Separator/>
-        </ToolBar>
-
-        <!-- NEW bottom status bar -->
-        <StatusBar DockPanel.Dock="Bottom" Background="#f2f6ff" Padding="6">
-            <StatusBarItem BorderThickness="0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Left: outlet / counter / till status (names) -->
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding OutletName}" FontWeight="SemiBold"/>
-                        <TextBlock Text=" · " />
-                        <TextBlock Text="{Binding CounterName}"/>
-                        <TextBlock Text=" · " />
-                        <TextBlock Text="{Binding TillStatus}"/>
-                    </StackPanel>
-
-                    <!-- Middle: connectivity -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0">
-                        <TextBlock Text="{Binding OnlineText}" />
-                        <TextBlock Text=" | " Margin="4,0"/>
-                        <TextBlock Text="{Binding LastSyncText}" />
-                    </StackPanel>
-
-                    <!-- Right: user (names only). IDs available on hover -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal"
-                        ToolTip="{Binding CurrentOutletId, StringFormat=OutletId: {0}}">
-                        <TextBlock Text="User: " FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding CurrentUserName}"/>
-
-                        <TextBlock Text="   •   Outlet: " FontWeight="SemiBold" Margin="8,0,0,0"/>
-                        <TextBlock Text="{Binding OutletName}"/>
-                        <TextBlock Text="   •   Counter: " FontWeight="SemiBold" Margin="8,0,0,0"/>
-                        <TextBlock Text="{Binding CounterName}"/>
-
-                    </StackPanel>
-                </Grid>
-            </StatusBarItem>
-        </StatusBar>
+            <TextBlock Text="{Binding OnlineText}" Margin="12,0"/>
+            <Separator/>
+            <TextBlock Text="{Binding LastSyncText}" Margin="12,0"/>
+            <Separator/>
+            <TextBlock Text="{Binding TillStatus}" Margin="12,0"/>
+        </Fluent:StatusBar>
 
 
-        <!-- Main content (unchanged, except we removed the old quick-info border at Grid.Row=2) -->
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="109*"/>
-                <ColumnDefinition Width="26*"/>
-            </Grid.ColumnDefinitions>
-
-            <ScrollViewer Grid.ColumnSpan="2">
-                <Grid Margin="16">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="10"/>
-                        <!-- removed the quick info row -->
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <!-- KPI Cards -->
-                    <UniformGrid Grid.Row="0" Columns="4" Margin="0,0,0,8">
-                        <!-- Today Sales -->
-                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
-                            <StackPanel>
-                                <TextBlock Text="Today Sales" Foreground="#5f6b7a" FontSize="12"/>
-                                <TextBlock Text="{Binding TodaySalesFormatted}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
-                                <TextBlock Text="{Binding TodaySalesInvoicesText}" Foreground="#8a94a6" FontSize="11"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Today Returns -->
-                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
-                            <StackPanel>
-                                <TextBlock Text="Today Returns" Foreground="#5f6b7a" FontSize="12"/>
-                                <TextBlock Text="{Binding TodayReturnsFormatted}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
-                                <TextBlock Text="{Binding TodayReturnsCountText}" Foreground="#8a94a6" FontSize="11"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Low stock -->
-                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
-                            <StackPanel>
-                                <TextBlock Text="Low Stock Items" Foreground="#5f6b7a" FontSize="12"/>
-                                <TextBlock Text="{Binding LowStockCount}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
-                                <TextBlock Text="below reorder level" Foreground="#8a94a6" FontSize="11"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Shift cash -->
-                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Padding="12" Background="White" Margin="6">
-                            <StackPanel>
-                                <TextBlock Text="Shift Cash" Foreground="#5f6b7a" FontSize="12"/>
-                                <TextBlock Text="{Binding ShiftCashFormatted}" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
-                                <TextBlock Text="{Binding ShiftHint}" Foreground="#8a94a6" FontSize="11"/>
-                            </StackPanel>
-                        </Border>
-                    </UniformGrid>
-
-                    <!-- Bottom grid: Recent sales + Low stock list -->
-                    <Grid Grid.Row="2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="10"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- Recent invoices -->
-                        <Border CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Background="White" Padding="8">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-                                <TextBlock Text="Recent Invoices" FontWeight="SemiBold" Margin="4,0,0,6"/>
-                                <DataGrid Grid.Row="1" ItemsSource="{Binding RecentInvoices}" AutoGenerateColumns="False"
-                                      CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="True">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="#" Binding="{Binding InvoiceNo}" Width="80"/>
-                                        <DataGridTextColumn Header="Customer" Binding="{Binding CustomerName}" Width="*"/>
-                                        <DataGridTextColumn Header="Total" Binding="{Binding TotalFormatted}" Width="100"/>
-                                        <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="120"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </Grid>
-                        </Border>
-
-                        <!-- spacer -->
-                        <Grid Grid.Column="1"/>
-
-                        <!-- Low stock -->
-                        <Border Grid.Column="2" CornerRadius="10" BorderBrush="#dde3ee" BorderThickness="1" Background="White" Padding="8">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-                                <TextBlock Text="Low Stock" FontWeight="SemiBold" Margin="4,0,0,6"/>
-                                <DataGrid Grid.Row="1" ItemsSource="{Binding LowStockItems}" AutoGenerateColumns="False"
-                                      CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="True">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="100"/>
-                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
-                                        <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="60"/>
-                                        <DataGridTextColumn Header="Reorder" Binding="{Binding ReorderLevel}" Width="80"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </Grid>
-                        </Border>
-                    </Grid>
-                </Grid>
-            </ScrollViewer>
-        </Grid>
-    </DockPanel>
-
-</Window>
+    </Grid>
+</Fluent:RibbonWindow>
