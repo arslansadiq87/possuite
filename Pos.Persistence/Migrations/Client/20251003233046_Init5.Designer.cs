@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations.Client
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251003233046_Init5")]
+    partial class Init5
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -1430,7 +1433,6 @@ namespace Pos.Persistence.Migrations.Client
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Note")
-                        .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("OutletId")
@@ -1447,7 +1449,6 @@ namespace Pos.Persistence.Migrations.Client
 
                     b.Property<string>("RefType")
                         .IsRequired()
-                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<byte[]>("RowVersion")
@@ -2011,15 +2012,6 @@ namespace Pos.Persistence.Migrations.Client
                     b.Navigation("RefSale");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.StockDocLine", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.StockDoc", null)
-                        .WithMany("TransferLines")
-                        .HasForeignKey("StockDocId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.StockEntry", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.StockDoc", "StockDoc")
@@ -2117,8 +2109,6 @@ namespace Pos.Persistence.Migrations.Client
             modelBuilder.Entity("Pos.Domain.Entities.StockDoc", b =>
                 {
                     b.Navigation("Lines");
-
-                    b.Navigation("TransferLines");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.User", b =>

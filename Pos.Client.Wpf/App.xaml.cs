@@ -12,6 +12,7 @@ using Pos.Persistence;
 using Pos.Client.Wpf.Windows.Admin;
 using Microsoft.Extensions.Logging;
 using Pos.Persistence.Services;
+using Pos.Persistence.Features.Transfers;
 
 
 
@@ -59,6 +60,8 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.PartiesWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.EditPartyWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.TransferEditorWindow>();
+
             // WINDOWS (register every window you resolve from DI)
             sc.AddTransient<BrandsWindow>();
             sc.AddTransient<EditBrandWindow>();
@@ -68,6 +71,8 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditWarehouseWindow>();
             sc.AddScoped<Pos.Persistence.Services.IOpeningStockService, Pos.Persistence.Services.OpeningStockService>();
             sc.AddScoped<CatalogService>();   // <-- register this
+            sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();
+            sc.AddScoped<ITransferQueries, TransferQueries>();
 
             //sc.AddTransient<UsersWindow>(sp =>
             //{

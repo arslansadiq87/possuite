@@ -6,6 +6,7 @@ using Pos.Client.Wpf.Windows.Sales;
 using Pos.Persistence;
 using Pos.Client.Wpf.Services;
 using Pos.Client.Wpf.Windows.Admin;
+using Pos.Client.Wpf.Windows.Inventory;
 
 namespace Pos.Client.Wpf.Windows.Shell
 {
@@ -83,7 +84,14 @@ namespace Pos.Client.Wpf.Windows.Shell
             w.Owner = this;
             w.ShowDialog();
         }
-        
+
+        private void NewTransfer_Click(object sender, RoutedEventArgs e)
+        {
+            var win = App.Services.GetRequiredService<TransferEditorWindow>();
+            win.Owner = this;
+            win.ShowDialog();
+        }
+
 
     }
 }

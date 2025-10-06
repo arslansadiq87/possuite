@@ -37,7 +37,7 @@ namespace Pos.Persistence
         public DbSet<PartyBalance> PartyBalances { get; set; } = null!;
         public DbSet<SupplierCredit> SupplierCredits => Set<SupplierCredit>();
         public DbSet<StockDoc> StockDocs { get; set; }
-
+        public DbSet<StockDocLine> StockDocLines { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -336,7 +336,8 @@ namespace Pos.Persistence
             {
                 e.Property(x => x.QtyChange).HasColumnType("decimal(18,4)");
                 e.Property(x => x.UnitCost).HasColumnType("decimal(18,4)");
-
+                e.Property(x => x.RefType).HasMaxLength(64);
+                e.Property(x => x.Note).HasMaxLength(256);
                 e.HasOne(x => x.StockDoc)
                  .WithMany(d => d.Lines)
                  .HasForeignKey(x => x.StockDocId)
@@ -351,6 +352,37 @@ namespace Pos.Persistence
             b.Entity<StockEntry>()
              .Property(x => x.LocationType).HasConversion<int>();
 
+            // --- StockDocLine ---
+            b.Entity<StockDocLine>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.Property(x => x.QtyExpected).HasColumnType("decimal(18,4)");
+                e.Property(x => x.QtyReceived).HasColumnType("decimal(18,4)");
+                e.Property(x => x.UnitCostExpected).HasColumnType("decimal(18,4)");
+
+                e.Property(x => x.SkuSnapshot).HasMaxLength(64);
+                e.Property(x => x.ItemNameSnapshot).HasMaxLength(256);
+                e.Property(x => x.Remarks).HasMaxLength(256);
+                e.Property(x => x.VarianceNote).HasMaxLength(256);
+
+                e.HasIndex(x => x.StockDocId);
+                e.HasIndex(x => new { x.ItemId, x.StockDocId });
+            });
+            // --- StockDoc (transfer extras) ---
+            b.Entity<StockDoc>(e =>
+            {
+                // TransferNo unique when present
+                e.HasIndex(x => x.TransferNo).IsUnique();
+
+                // relationship: StockDoc -> TransferLines (StockDocLine)
+                e.HasMany(d => d.TransferLines)
+                 .WithOne()
+                 .HasForeignKey(l => l.StockDocId)
+                 .OnDelete(DeleteBehavior.Cascade);
+
+                // NOTE: We keep your existing StockDoc -> Lines (StockEntry) relationship
+                // for Opening and other flows (it’s already implicit via StockEntry.StockDocId).
+            });
 
 
             // ---- Provider-aware RowVersion mapping for ALL BaseEntity types ----

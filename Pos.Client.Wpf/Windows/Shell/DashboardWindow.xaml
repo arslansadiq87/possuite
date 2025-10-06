@@ -14,6 +14,7 @@
             <Button Content="Warehouse" Click="OpenWarehouses_Click"/>
             <Button Content="Users" Click="OpenUsers_Click"/>
             <Button Content="Customers &amp; Suppliers" Click="OpenParties_Click"/>
+            <Button Content="Inventory Transfer" Click="NewTransfer_Click"/>
             <Button Content="Sample" Click="OpenSamples_Click"/>
             <Separator/>
         </ToolBar>
