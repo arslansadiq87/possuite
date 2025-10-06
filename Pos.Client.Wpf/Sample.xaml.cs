@@ -17,7 +17,7 @@ namespace Pos.Client.Wpf
     /// <summary>
     /// Interaction logic for Sample.xaml
     /// </summary>
-    public partial class Sample : Window
+    public partial class Sample : Fluent.RibbonWindow
     {
         public Sample()
         {

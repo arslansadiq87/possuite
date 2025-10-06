@@ -38,6 +38,20 @@ namespace Pos.Persistence.Features.Transfers
             DateTime effectiveDateUtc,
             int actedByUserId);
 
+        // Undo a mistaken dispatch (reverses OUT ledger, returns to Draft)
+        System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> UndoDispatchAsync(
+            int stockDocId,
+            DateTime effectiveDateUtc,
+            int actedByUserId,
+            string? reason = null);
+
+        // Undo a completed receive: remove IN ledger, return transfer to Dispatched
+        System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> UndoReceiveAsync(
+            int stockDocId,
+            DateTime effectiveDateUtc,
+            int actedByUserId,
+            string? reason = null);
+
         // Lock To (IN entries, partials/overage, finalize)
         System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> ReceiveAsync(
             int stockDocId,
@@ -46,5 +60,7 @@ namespace Pos.Persistence.Features.Transfers
             int actedByUserId);
 
         System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc?> GetAsync(int stockDocId);
+
+
     }
 }

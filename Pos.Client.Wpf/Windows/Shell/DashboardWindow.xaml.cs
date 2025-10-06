@@ -48,7 +48,7 @@ namespace Pos.Client.Wpf.Windows.Shell
             var w = new Pos.Client.Wpf.Windows.Admin.ProductsItemsWindow() { Owner = this };
             w.ShowDialog();
         }
-        
+
         private void OpenOutletsCounters_Click(object s, RoutedEventArgs e)
         {
             var w = App.Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
@@ -81,8 +81,9 @@ namespace Pos.Client.Wpf.Windows.Shell
         private void OpenSamples_Click(object sender, RoutedEventArgs e)
         {
             var w = new Sample();
-            w.Owner = this;
+            //w.owner = this;
             w.ShowDialog();
+
         }
 
         private void NewTransfer_Click(object sender, RoutedEventArgs e)

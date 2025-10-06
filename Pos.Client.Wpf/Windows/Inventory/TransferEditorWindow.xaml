@@ -34,22 +34,24 @@
         </ToolBar>
 
         <ToolBar DockPanel.Dock="Top">
-            <Button x:Name="BtnOpenDrafts" Content="Open Drafts…" Width="120" Margin="6,0,0,0" Click="BtnOpenDrafts_Click"/>
-            <Button x:Name="BtnOpenReceipts" Content="Open Receipts…" Width="130" Margin="6,0,0,0" Click="BtnOpenReceipts_Click"/>
-            <Button x:Name="BtnDispatch" Content="Dispatch" Width="100" Margin="6,0,0,0" Click="BtnDispatch_Click" IsEnabled="False"/>
-            <Button x:Name="BtnReceive" Content="Receive" Width="100" Margin="6,0,0,0" Click="BtnReceive_Click" IsEnabled="False"/>
-
+            <Button x:Name="BtnOpenDrafts" Content="Open Drafts" Width="90" Margin="6,0,0,0" Click="BtnOpenDrafts_Click"/>
+            <Button x:Name="BtnOpenReceipts" Content="Open Receipts" Width="100" Margin="6,0,0,0" Click="BtnOpenReceipts_Click"/>
+            <Button x:Name="BtnDispatch" Content="Dispatch" Width="90" Margin="6,0,0,0" Click="BtnDispatch_Click" IsEnabled="False"/>
+            <Button x:Name="BtnUndoDispatch" Content="Undo Dispatch" Width="100" Margin="6,0,0,0" Click="BtnUndoDispatch_Click" IsEnabled="False"/>
+            <Button x:Name="BtnReceive" Content="Receive" Width="90" Margin="6,0,0,0" Click="BtnReceive_Click" IsEnabled="False"/>
+            <Button x:Name="BtnUndoReceive" Content="Undo Receive" Width="90" Margin="6,0,0,0" Click="BtnUndoReceive_Click" IsEnabled="False"/>
             <Separator/>
-            <Button x:Name="BtnPrintDispatch" Content="Print Dispatch" Width="120" Click="BtnPrintDispatch_Click" IsEnabled="False"/>
-            <Button x:Name="BtnPrintReceive" Content="Print Receive" Width="120" Margin="6,0,0,0" Click="BtnPrintReceive_Click" IsEnabled="False"/>
-
+            <Button x:Name="BtnPrintDispatch" Content="Print Dispatch" Width="100" Click="BtnPrintDispatch_Click" IsEnabled="False"/>
+            <Button x:Name="BtnPrintReceive" Content="Print Receive" Width="90" Margin="6,0,0,0" Click="BtnPrintReceive_Click" IsEnabled="False"/>
+            <Separator/>
+            <Button x:Name="BtnClear" Content="Clear" Width="70" Margin="8,0,0,0" Click="BtnClear_Click"/>
             <Separator/>
             <TextBlock Text="Transfer No: " FontWeight="SemiBold" VerticalAlignment="Center"/>
             <TextBlock x:Name="TransferNoText" FontWeight="SemiBold" VerticalAlignment="Center"/>
         </ToolBar>
 
         <!-- Search/Add bar -->
-        <Border DockPanel.Dock="Top" Padding="10" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+        <Border x:Name="SearchAddBar" DockPanel.Dock="Top" Padding="10" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
             <!-- NEW: make it a Grid with two columns (left: search/add; right: availability) -->
             <Grid>
                 <Grid.ColumnDefinitions>

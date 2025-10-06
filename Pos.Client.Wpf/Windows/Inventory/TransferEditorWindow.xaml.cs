@@ -155,6 +155,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             TransferNoText.Text = _doc.TransferNo ?? "";
             UpdateUiState();
             RefreshRowHeaders();
+            PrefillReceiveAndFocusIfNeeded();
 
         }
 
@@ -165,6 +166,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
             FromPicker.IsEnabled = false;
             ToTypeBox.IsEnabled = false;
             ToPicker.IsEnabled = false;
+            PrefillReceiveAndFocusIfNeeded();
+
         }
         // --- Lines: add & save ----------------------------------------------
         private async void BtnAddLine_Click(object sender, RoutedEventArgs e) => await AddFromSearchAsync();
@@ -353,29 +356,46 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private void GridEditor_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key != Key.Enter) return;
-
-            e.Handled = true; // We'll control the navigation
+            e.Handled = true;
 
             var row = LinesGrid.CurrentItem as StockDocLine;
             if (row == null) return;
 
             var currentCol = LinesGrid.CurrentColumn;
 
+            // NEW: Receiving flow — Enter in Qty Received jumps to next row's Qty Received
+            if (currentCol == QtyReceivedColumn)
+            {
+                LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+                LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
+
+                int idx = _lines.IndexOf(row);
+                if (idx >= 0 && idx < _lines.Count - 1)
+                {
+                    var next = _lines[idx + 1];
+                    BeginEditOn(next, QtyReceivedColumn);
+                }
+                else
+                {
+                    // last row: stay on last cell, or move to VarianceNote if you prefer
+                    BeginEditOn(row, VarianceNoteColumn);
+                }
+                return;
+            }
+
+            // Existing behavior (Draft): QtyExpected → Remarks → Variance Note → back to Search
             if (currentCol == QtyExpectedColumn)
             {
-                // Move to Remarks
                 LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
                 BeginEditOn(row, RemarksColumn);
             }
             else if (currentCol == RemarksColumn)
             {
-                // Move to Variance Note
                 LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
                 BeginEditOn(row, VarianceNoteColumn);
             }
             else if (currentCol == VarianceNoteColumn)
             {
-                // Finish and go back to SearchBox
                 LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
                 LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
 
@@ -386,6 +406,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
         }
+
 
 
 
@@ -455,52 +476,60 @@ namespace Pos.Client.Wpf.Windows.Inventory
         // --- Dispatch & Receive ---------------------------------------------
         private async void BtnDispatch_Click(object sender, RoutedEventArgs e)
         {
-            if (_lines.Count == 0) { MessageBox.Show("Add at least one line before dispatch."); return; }
-
-            // Validate locations FIRST
-            var loc = EnsureValidLocationsOrThrow();
-            var fType = loc.fromType;
-            var tType = loc.toType;
-            var fId = loc.fromId;
-            var tId = loc.toId;
-
-            // Then validate quantities against the confirmed From location
-            if (!await ValidateAllLinesAgainstOnHandAsync(fType, fId)) return;
-
             try
             {
-                // Persist if needed
-                if (!HasPersistedDoc)
-                {
-                    var effLocal = EffectiveDate.SelectedDate ?? DateTime.Today;
-                    var effUtc = DateTime.SpecifyKind(effLocal, DateTimeKind.Local).ToUniversalTime();
+                // 0) Prevent re-entrancy
+                BtnDispatch.IsEnabled = false;
+                BtnSaveLines.IsEnabled = false;   // make sure this matches your Save Lines button name
 
-                    _doc = await _transfer.CreateDraftAsync(fType, fId, tType, tId, effUtc, _state.CurrentUser.Id);
+                // 1) Make (or get) Draft
+                var doc = await EnsureDraftAsync(); // your helper; keeps _doc and locks FROM pickers
+                if (doc.Id <= 0)
+                    throw new InvalidOperationException("Draft creation failed (doc.Id == 0).");
 
-                    var dtos = _lines.Select(l => new TransferLineDto
-                    {
-                        ItemId = l.ItemId,
-                        QtyExpected = l.QtyExpected,
-                        Remarks = l.Remarks
-                    }).ToList();
+                if (doc.Status != StockDocStatus.Draft)
+                    throw new InvalidOperationException("Only Draft transfers can be dispatched.");
 
-                    _doc = await _transfer.UpsertLinesAsync(_doc!.Id, dtos, replaceAll: true);
-                    DisableHeaderAfterDraft();
-                    await ReloadLinesAsync();
-                }
+                // 2) Save what is on the grid BEFORE dispatch
+                var lines = BuildUpsertLines(); // maps _lines -> List<TransferLineDto> using QtyExpected
+                if (lines.Count == 0)
+                    throw new InvalidOperationException("No valid lines to dispatch.");
 
-                // Dispatch the persisted doc
-                var effLocal2 = EffectiveDate.SelectedDate ?? DateTime.Today;
-                var effUtc2 = DateTime.SpecifyKind(effLocal2, DateTimeKind.Local).ToUniversalTime();
+                await _transfer.UpsertLinesAsync(doc.Id, lines, replaceAll: true);
 
-                _doc = await _transfer.DispatchAsync(_doc!.Id, effUtc2, _state.CurrentUser.Id);
-                await ReloadLinesAsync();
+                // 3) Dispatch with correct effective date and user
+                var dateLocal = (EffectiveDate?.SelectedDate ?? DateTime.Today).Date;   // <-- adjust control name if different
+                var effectiveUtc = DateTime.SpecifyKind(dateLocal, DateTimeKind.Local).ToUniversalTime();
+                var userId = _state.CurrentUser?.Id ?? 0;
+                if (userId <= 0) throw new InvalidOperationException("No signed-in user.");
+
+                await _transfer.DispatchAsync(doc.Id, effectiveUtc, userId);
+
+                // 4) (Optional) refresh the header from DB
+                // _doc = await _queries.GetAsync(doc.Id);
+
+                MessageBox.Show("Transfer dispatched.", "Success",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                ClearFormToNew();
+
             }
             catch (Exception ex)
             {
-                ShowError(ex);
+                var msg = ex.Message;
+                if (ex.InnerException != null)
+                    msg += "\n\nInner: " + ex.InnerException.Message;
+
+                MessageBox.Show(msg, "Dispatch failed",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                // Re-enable buttons; Dispatch stays enabled only if still Draft (optional)
+                BtnSaveLines.IsEnabled = true;
+                BtnDispatch.IsEnabled = true;
             }
         }
+
 
 
         private async void BtnReceive_Click(object sender, RoutedEventArgs e)
@@ -517,6 +546,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 var whenUtc = (_doc.ReceivedAtUtc ?? DateTime.UtcNow);
                 _doc = await _transfer.ReceiveAsync(_doc.Id, whenUtc, lines, _state.CurrentUser.Id);
                 await ReloadLinesAsync();
+                MessageBox.Show("Transfer received.", "Success",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+                ClearFormToNew();
+
+
             }
             catch (Exception ex)
             {
@@ -534,6 +568,10 @@ namespace Pos.Client.Wpf.Windows.Inventory
             BtnDispatch.IsEnabled = _lines.Count > 0 && (status == TransferStatus.Draft || _doc == null);
             BtnPrintDispatch.IsEnabled = hasDoc && status != TransferStatus.Draft;
             BtnPrintReceive.IsEnabled = hasDoc && status == TransferStatus.Received;
+            BtnUndoDispatch.IsEnabled = hasDoc && status == TransferStatus.Dispatched;
+            BtnUndoReceive.IsEnabled = hasDoc && status == TransferStatus.Received;
+
+
 
             var colExpected = LinesGrid.Columns.FirstOrDefault(c => (c as DataGridTextColumn)?.Header?.ToString() == "Qty Expected");
             var colReceived = QtyReceivedColumn;
@@ -548,6 +586,10 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
             // NEW: delete only visible while Draft (including staged, _doc == null)
             DeleteColumn.Visibility = (status == TransferStatus.Draft) ? Visibility.Visible : Visibility.Collapsed;
+            // NEW: show scan/search only for new/draft. Hide during receive (Dispatched/Received).
+            var showScan = (status == TransferStatus.Draft || _doc == null);
+            SearchAddBar.Visibility = showScan ? Visibility.Visible : Visibility.Collapsed;
+            PrefillReceiveAndFocusIfNeeded();
 
             TransferNoText.Text = hasDoc ? (_doc!.TransferNo ?? "") : "(not saved yet)";
         }
@@ -693,6 +735,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
             DisableHeaderAfterDraft();
             EffectiveDate.SelectedDate = _doc.EffectiveDateUtc.ToLocalTime().Date;
             UpdateUiState();
+            PrefillReceiveAndFocusIfNeeded();
+
         }
 
 
@@ -1139,6 +1183,214 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
 
+        // Creates a draft if one doesn't exist. Also validates From/To selections.
+        private async Task<StockDoc> EnsureDraftAsync()
+        {
+            if (HasPersistedDoc) return _doc!;
+
+            // Validate FROM / TO selections
+            if (FromTypeBox.SelectedItem is not ComboBoxItem fromTypeItem ||
+                ToTypeBox.SelectedItem is not ComboBoxItem toTypeItem ||
+                FromPicker.SelectedItem is null ||
+                ToPicker.SelectedItem is null)
+                throw new InvalidOperationException("Select valid FROM and TO locations first.");
+
+            // Resolve FROM type/id
+            var fromIsWarehouse = string.Equals(
+                (fromTypeItem.Content?.ToString() ?? "").Trim(),
+                "Warehouse", StringComparison.OrdinalIgnoreCase);
+
+            InventoryLocationType fromType = fromIsWarehouse
+                ? InventoryLocationType.Warehouse
+                : InventoryLocationType.Outlet;
+
+            int fromId = fromIsWarehouse
+                ? ((Warehouse)FromPicker.SelectedItem).Id
+                : ((Outlet)FromPicker.SelectedItem).Id;
+
+            // Resolve TO type/id (this screen is Warehouse -> Outlet; enforce Outlet)
+            var toIsWarehouse = string.Equals(
+                (toTypeItem.Content?.ToString() ?? "").Trim(),
+                "Warehouse", StringComparison.OrdinalIgnoreCase);
+
+            if (toIsWarehouse)
+                throw new InvalidOperationException("TO must be an Outlet for this transfer.");
+
+            var toType = InventoryLocationType.Outlet;
+            var toId = ((Outlet)ToPicker.SelectedItem).Id;
+
+            // ⬇️ Your service uses simple args; no request objects
+            // If your CreateDraftAsync has an overload with EffectiveDateUtc, pass DateTime.UtcNow as last arg.
+            var now = DateTime.UtcNow;
+            var userId = _state.CurrentUser?.Id ?? 0;
+            var draft = await _transfer.CreateDraftAsync(fromType, fromId, toType, toId, now, userId);
+            _doc = draft;
+
+
+            _doc = draft;
+
+            // Lock FROM once a draft exists (as per your UX rule)
+            FromTypeBox.IsEnabled = false;
+            FromPicker.IsEnabled = false;
+
+            return draft;
+        }
+
+
+        private List<TransferLineDto> BuildUpsertLines()
+        {
+            // Keep only valid lines: has ItemId and QtyExpected > 0
+            return _lines
+                .Where(l => l.ItemId > 0 && l.QtyExpected > 0m)
+                .Select(l => new TransferLineDto
+                {
+                    ItemId = l.ItemId,
+                    QtyExpected = l.QtyExpected
+                    // Add more fields here ONLY if your TransferLineDto actually has them
+                    // (e.g., UnitCost, Note, etc.)
+                })
+                .ToList();
+        }
+
+
+        // Resets the window to a fresh "new transfer" state
+        private void ClearFormToNew()
+        {
+            // forget current doc and staged lines
+            _doc = null;
+
+            // clear lines
+            _lines.Clear();
+            LinesGrid.ItemsSource = _lines;
+            LinesCountText.Text = "0";
+
+            // reset pickers and enable header controls
+            FromTypeBox.IsEnabled = true;
+            FromPicker.IsEnabled = true;
+            ToTypeBox.IsEnabled = true;
+            ToPicker.IsEnabled = true;
+
+            // default selections: From = Warehouse, To = Outlet
+            if (FromTypeBox.SelectedIndex != 0) FromTypeBox.SelectedIndex = 0; // Warehouse
+            BindPickerForType(FromTypeBox, FromPicker);
+
+            if (ToTypeBox.SelectedIndex != 1) ToTypeBox.SelectedIndex = 1;     // Outlet
+            BindPickerForType(ToTypeBox, ToPicker);
+
+            // reset date and UI bits
+            EffectiveDate.SelectedDate = DateTime.Today;
+            TransferNoText.Text = "(not saved yet)";
+            HideAvailablePanel();
+            AvailableBox.Text = "";
+            SearchPopup.IsOpen = false;
+            SearchBox.Clear();
+
+            // refresh grid visuals
+            UpdateUiState();
+            RefreshRowHeaders();
+
+            // focus back to search
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+        }
+
+        // Toolbar button -> manual clear
+        private void BtnClear_Click(object sender, RoutedEventArgs e)
+        {
+            // Optionally confirm if there are unsaved staged lines
+            if (!HasPersistedDoc && _lines.Count > 0)
+            {
+                var ans = MessageBox.Show("Clear current unsaved lines and start a new transfer?",
+                                          "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (ans != MessageBoxResult.Yes) return;
+            }
+            ClearFormToNew();
+        }
+
+        private void PrefillReceiveAndFocusIfNeeded()
+        {
+            if (_doc?.TransferStatus != TransferStatus.Dispatched) return;
+            if (_lines.Count == 0) return;
+
+            // Prefill only when null (so we don't overwrite any in-progress edits)
+            foreach (var l in _lines)
+                if (!l.QtyReceived.HasValue)
+                    l.QtyReceived = l.QtyExpected;
+
+            LinesGrid.Items.Refresh();
+
+            // auto-focus first row → Qty Received in edit mode
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var first = _lines[0];
+                BeginEditOn(first, QtyReceivedColumn);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        private async void BtnUndoDispatch_Click(object sender, RoutedEventArgs e)
+        {
+            if (_doc == null) return;
+
+            // Safety: block if any line has received qty
+            if (_doc.TransferStatus == TransferStatus.Received || _doc.ReceivedAtUtc.HasValue)
+            {
+                MessageBox.Show("This transfer has been received and cannot be undone.", "Not allowed",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                "Undo dispatch and return this transfer to Draft? Stock will be restored to the source location.",
+                "Confirm Undo", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                var reason = ""; // optionally prompt for text; keep blank if not needed
+                var when = DateTime.UtcNow;
+                _doc = await _transfer.UndoDispatchAsync(_doc.Id, when, _state.CurrentUser.Id, reason);
+                await ReloadLinesAsync();
+                UpdateUiState();
+                MessageBox.Show("Dispatch undone. The transfer is now in Draft and can be edited.", "Success",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+            }
+        }
+
+        private async void BtnUndoReceive_Click(object sender, RoutedEventArgs e)
+        {
+            if (_doc == null) return;
+
+            var confirm = MessageBox.Show(
+                "Undo receive and return this transfer to Dispatched? Stock will be removed from the destination.",
+                "Confirm Undo Receive", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                var when = DateTime.UtcNow;
+                var reason = ""; // optionally prompt
+                _doc = await _transfer.UndoReceiveAsync(_doc.Id, when, _state.CurrentUser.Id, reason);
+
+                await ReloadLinesAsync();
+                UpdateUiState();
+
+                // Since we're back to Dispatched, prefill & focus Qty Received again (your helper):
+                PrefillReceiveAndFocusIfNeeded();
+
+                MessageBox.Show("Receive undone. The transfer is now Dispatched and can be received again.", "Success",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+            }
+        }
 
 
     }

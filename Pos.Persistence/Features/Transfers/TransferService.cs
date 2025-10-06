@@ -13,8 +13,163 @@ namespace Pos.Persistence.Features.Transfers
         private readonly Pos.Persistence.PosClientDbContext _db;
 
         public TransferService(Pos.Persistence.PosClientDbContext db) => _db = db;
+        public async Task<StockDoc> UndoDispatchAsync(int stockDocId, DateTime effectiveDateUtc, int actedByUserId, string? reason = null)
+        {
+            var user = await GetUserAsync(actedByUserId);
+            EnsureCanManageTransfers(user);
+            var doc = await _db.StockDocs
+                               .Include(d => d.TransferLines)
+                               .FirstOrDefaultAsync(d => d.Id == stockDocId)
+                      ?? throw new InvalidOperationException("Transfer not found.");
+            EnsureDocIs(doc, StockDocType.Transfer);
+            if (doc.TransferStatus != TransferStatus.Dispatched)
+                throw new InvalidOperationException("Only Dispatched transfers can be undone.");
+            if (doc.ReceivedAtUtc.HasValue || doc.TransferStatus == TransferStatus.Received)
+                throw new InvalidOperationException("Cannot undo: transfer already received.");
+            // Reverse the OUT ledger that was posted at dispatch (audit-friendly)
+            var ts = effectiveDateUtc.ToUniversalTime();
+            // Create OUT ledger rows and snapshot costs onto TransferLines
+            foreach (var line in doc.TransferLines)
+            {
+                var cost = await ComputeMovingAverageCostAsync(
+                    line.ItemId, doc.LocationType, doc.LocationId, ts);
+                line.UnitCostExpected = cost; // snapshot for valuation & receive
+                _db.StockEntries.Add(new StockEntry
+                {
+                    StockDocId = doc.Id,
+                    ItemId = line.ItemId,
+                    LocationType = doc.LocationType,
+                    LocationId = doc.LocationId,
+                    QtyChange = -line.QtyExpected,   // OUT on dispatch
+                    UnitCost = cost,
+                    RefType = "TransferOut",
+                    RefId = doc.Id,
+                    Ts = ts,
+                    Note = line.Remarks
+                });
+            }
+
+
+
+            // Back to Draft so user can edit / re-dispatch
+            doc.TransferStatus = TransferStatus.Draft;
+            doc.UpdatedAtUtc = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return doc;
+        }
+
+        public async Task<StockDoc> UndoReceiveAsync(int stockDocId, DateTime effectiveDateUtc, int actedByUserId, string? reason = null)
+        {
+            var user = await GetUserAsync(actedByUserId);
+            EnsureCanManageTransfers(user);
+
+            var doc = await _db.StockDocs
+                               .Include(d => d.TransferLines)
+                               .FirstOrDefaultAsync(d => d.Id == stockDocId)
+                      ?? throw new InvalidOperationException("Transfer not found.");
+
+            EnsureDocIs(doc, StockDocType.Transfer);
+
+            if (doc.TransferStatus != TransferStatus.Received || !doc.ReceivedAtUtc.HasValue)
+                throw new InvalidOperationException("Only Received transfers can be undone.");
+
+            var ts = effectiveDateUtc.ToUniversalTime();
+
+            // 1) Guard: ensure removing the received qty won't make 'To' stock negative
+            // Compute, per item, the quantities we will remove (primary + overage).
+            var requiredRemovals = doc.TransferLines
+                .Select(l =>
+                {
+                    var rec = l.QtyReceived ?? 0m;
+                    var exp = l.QtyExpected;
+                    var primary = Math.Min(rec, exp);
+                    var over = Math.Max(rec - exp, 0m);
+                    return new { l.ItemId, RemoveQty = primary + over };
+                })
+                .Where(x => x.RemoveQty > 0m)
+                .ToList();
+
+            if (requiredRemovals.Count > 0)
+            {
+                foreach (var r in requiredRemovals)
+                {
+                    var onHandTo = await _db.StockEntries.AsNoTracking()
+                        .Where(se => se.ItemId == r.ItemId
+                                     && se.LocationType == doc.ToLocationType!.Value
+                                     && se.LocationId == doc.ToLocationId!.Value
+                                     && se.Ts <= ts)
+                        .SumAsync(se => (decimal?)se.QtyChange) ?? 0m;
+
+                    if (onHandTo - r.RemoveQty < 0m)
+                        throw new InvalidOperationException(
+                            $"Cannot undo receive: insufficient stock at destination for ItemId {r.ItemId}. " +
+                            $"On-hand {onHandTo:0.####}, need to remove {r.RemoveQty:0.####}.");
+                }
+            }
+
+            // 2) Add compensating OUT entries at the To location (reverse the earlier INs)
+            foreach (var line in doc.TransferLines)
+            {
+                var rec = line.QtyReceived ?? 0m;
+                if (rec <= 0m) continue;
+
+                var exp = line.QtyExpected;
+                var primary = Math.Min(rec, exp);
+                var over = Math.Max(rec - exp, 0m);
+
+                if (primary > 0m)
+                {
+                    _db.StockEntries.Add(new StockEntry
+                    {
+                        StockDocId = doc.Id,
+                        ItemId = line.ItemId,
+                        LocationType = doc.ToLocationType!.Value,
+                        LocationId = doc.ToLocationId!.Value,
+                        QtyChange = -primary,                         // reverse the IN
+                        UnitCost = line.UnitCostExpected ?? 0m,
+                        RefType = "TransferInUndo",
+                        RefId = doc.Id,
+                        Ts = ts,
+                        Note = string.IsNullOrWhiteSpace(reason) ? "Undo receive" : $"Undo receive: {reason}"
+                    });
+                }
+
+                if (over > 0m)
+                {
+                    _db.StockEntries.Add(new StockEntry
+                    {
+                        StockDocId = doc.Id,
+                        ItemId = line.ItemId,
+                        LocationType = doc.ToLocationType!.Value,
+                        LocationId = doc.ToLocationId!.Value,
+                        QtyChange = -over,                            // reverse the overage
+                        UnitCost = line.UnitCostExpected ?? 0m,
+                        RefType = "TransferOverageUndo",
+                        RefId = doc.Id,
+                        Ts = ts,
+                        Note = "Undo overage on receive"
+                    });
+                }
+
+                // Clear receive markers so it can be received again
+                line.QtyReceived = null;
+                line.VarianceNote = null;
+            }
+
+            // 3) Header back to Dispatched
+            doc.TransferStatus = TransferStatus.Dispatched;
+            doc.ReceivedAtUtc = null;
+            doc.UpdatedAtUtc = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return doc;
+        }
+
+
 
         // -------- Helpers ----------------------------------------------------
+
 
         private static void EnsureCanManageTransfers(User? user)
         {
@@ -235,28 +390,52 @@ namespace Pos.Persistence.Features.Transfers
             await EnsureNoNegativeAtDispatchAsync(doc, ts, doc.TransferLines.ToList());
 
             // Numbering per-From + year
-            if (string.IsNullOrWhiteSpace(doc.TransferNo))
-                doc.TransferNo = await GenerateTransferNoAsync(doc, ts);
-
-            // Create OUT ledger rows and snapshot costs onto TransferLines
-            foreach (var line in doc.TransferLines)
             {
-                var cost = await ComputeMovingAverageCostAsync(line.ItemId, doc.LocationType, doc.LocationId, ts);
-                line.UnitCostExpected = cost;
+                // Try the formatted generator first; if it collides, retry a few times.
+                const int maxAttempts = 5;
 
-                _db.StockEntries.Add(new StockEntry
+                for (int attempt = 0; attempt < maxAttempts; attempt++)
                 {
-                    StockDocId = doc.Id,
-                    ItemId = line.ItemId,
-                    LocationType = doc.LocationType,
-                    LocationId = doc.LocationId,
-                    QtyChange = -line.QtyExpected,
-                    UnitCost = cost,
-                    RefType = "TransferOut",
-                    RefId = doc.Id,
-                    Ts = ts,
-                    Note = line.Remarks
-                });
+                    if (string.IsNullOrWhiteSpace(doc.TransferNo))
+                    {
+                        // your existing formatted generator
+                        doc.TransferNo = await GenerateTransferNoAsync(doc, ts);
+                    }
+
+                    var exists = await _db.StockDocs
+                        .AsNoTracking()
+                        .AnyAsync(x => x.TransferNo == doc.TransferNo && x.Id != doc.Id);
+
+                    if (!exists)
+                        break; // unique -> proceed
+
+                    // collision -> clear and try again with a new value
+                    doc.TransferNo = null;
+
+                    // On the last attempt, fall back to a random unique candidate to guarantee progress.
+                    if (attempt == maxAttempts - 1)
+                    {
+                        string MakeCandidate()
+                            => $"TR-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Random.Shared.Next(100, 999)}";
+
+                        for (int j = 0; j < 5; j++)
+                        {
+                            var candidate = MakeCandidate();
+                            var candidateExists = await _db.StockDocs
+                                .AsNoTracking()
+                                .AnyAsync(x => x.TransferNo == candidate);
+
+                            if (!candidateExists)
+                            {
+                                doc.TransferNo = candidate;
+                                break;
+                            }
+                        }
+
+                        if (string.IsNullOrWhiteSpace(doc.TransferNo))
+                            throw new InvalidOperationException("Failed to allocate a unique TransferNo.");
+                    }
+                }
             }
 
             doc.TransferStatus = TransferStatus.Dispatched;
@@ -265,6 +444,7 @@ namespace Pos.Persistence.Features.Transfers
 
             await _db.SaveChangesAsync();
             return doc;
+
         }
 
         public async Task<StockDoc> ReceiveAsync(int stockDocId, DateTime receivedAtUtc, IReadOnlyList<ReceiveLineDto> lines, int actedByUserId)
@@ -293,13 +473,17 @@ namespace Pos.Persistence.Features.Transfers
                 if (!map.TryGetValue(r.LineId, out var line))
                     throw new InvalidOperationException($"Line {r.LineId} not found.");
 
+                // persist user input on the doc line
                 line.QtyReceived = r.QtyReceived;
                 line.VarianceNote = r.VarianceNote;
 
-                var inQty = r.QtyReceived;
+                // split received into primary (up to expected) and overage (beyond expected)
+                var inQty = Math.Max(r.QtyReceived, 0m);
+                var expect = Math.Max(line.QtyExpected, 0m);
+                var primary = Math.Min(inQty, expect);
+                var over = Math.Max(inQty - expect, 0m);
 
-                // Primary IN (can be zero)
-                if (inQty > 0m)
+                if (primary > 0m)
                 {
                     _db.StockEntries.Add(new StockEntry
                     {
@@ -307,7 +491,7 @@ namespace Pos.Persistence.Features.Transfers
                         ItemId = line.ItemId,
                         LocationType = doc.ToLocationType!.Value,
                         LocationId = doc.ToLocationId!.Value,
-                        QtyChange = inQty,
+                        QtyChange = primary,                               // IN up to expected
                         UnitCost = line.UnitCostExpected ?? 0m,
                         RefType = "TransferIn",
                         RefId = doc.Id,
@@ -316,8 +500,6 @@ namespace Pos.Persistence.Features.Transfers
                     });
                 }
 
-                // Overage: extra IN
-                var over = Math.Max(inQty - line.QtyExpected, 0m);
                 if (over > 0m)
                 {
                     _db.StockEntries.Add(new StockEntry
@@ -326,7 +508,7 @@ namespace Pos.Persistence.Features.Transfers
                         ItemId = line.ItemId,
                         LocationType = doc.ToLocationType!.Value,
                         LocationId = doc.ToLocationId!.Value,
-                        QtyChange = over,
+                        QtyChange = over,                                  // IN beyond expected
                         UnitCost = line.UnitCostExpected ?? 0m,
                         RefType = "TransferOverage",
                         RefId = doc.Id,
@@ -344,9 +526,12 @@ namespace Pos.Persistence.Features.Transfers
             return doc;
         }
 
+
         public Task<StockDoc?> GetAsync(int stockDocId)
             => _db.StockDocs
                   .Include(d => d.TransferLines)
                   .FirstOrDefaultAsync(d => d.Id == stockDocId);
+
+
     }
 }

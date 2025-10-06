@@ -13,6 +13,7 @@ using Pos.Client.Wpf.Windows.Admin;
 using Microsoft.Extensions.Logging;
 using Pos.Persistence.Services;
 using Pos.Persistence.Features.Transfers;
+using ControlzEx.Theming;
 
 
 
@@ -25,7 +26,7 @@ namespace Pos.Client.Wpf
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-
+            
             var sc = new ServiceCollection();
 
             // 1) Connection string

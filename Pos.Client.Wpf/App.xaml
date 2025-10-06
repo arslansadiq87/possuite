@@ -7,11 +7,14 @@
         <ResourceDictionary>
             <!-- Only ResourceDictionary entries go here -->
             <ResourceDictionary.MergedDictionaries>
+                
                 <ResourceDictionary Source="Resources/Styles.xaml"/>
                 <ResourceDictionary Source="Resources/Icons.xaml"/>
+               
             </ResourceDictionary.MergedDictionaries>
             <Style x:Key="Btn.GlobalPrimary" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button"/>
             <Style x:Key="Btn.GlobalSecondary" BasedOn="{StaticResource Btn.Outlined}" TargetType="Button"/>
+            
             <!-- NEW: globally center all Windows relative to their Owner/MainWindow -->
         </ResourceDictionary>
        

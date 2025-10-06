@@ -1,303 +1,105 @@
-﻿<Window x:Class="Pos.Client.Wpf.Sample"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:sys="clr-namespace:System;assembly=mscorlib"
-        xmlns:sc="clr-namespace:System.Collections;assembly=mscorlib"
-        Title="POS UI Patterns Showcase"
-        Width="1180" Height="820"
-        WindowStartupLocation="CenterOwner">
-
-    <Window.Resources>
-        <!-- Demo rows for the grid using DictionaryEntry (bind to Key/Value) -->
-        <x:Array x:Key="DemoRows" Type="{x:Type sc:DictionaryEntry}">
-            <sc:DictionaryEntry Key="P-1001" Value="Supplier 1"/>
-            <sc:DictionaryEntry Key="P-1002" Value="Supplier 2"/>
-            <sc:DictionaryEntry Key="P-1003" Value="Supplier 3"/>
-            <sc:DictionaryEntry Key="P-1004" Value="Supplier 4"/>
-            <sc:DictionaryEntry Key="P-1005" Value="Supplier 5"/>
-        </x:Array>
-
-        <!-- Light spacing styles -->
-        <Style TargetType="GroupBox">
-            <Setter Property="Margin" Value="0,0,0,12"/>
-        </Style>
-        <Style TargetType="Separator">
-            <Setter Property="Margin" Value="6,0"/>
-        </Style>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="10,6"/>
-        </Style>
-    </Window.Resources>
+﻿<fluent:RibbonWindow x:Class="Pos.Client.Wpf.Sample"
+                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:fluent="urn:fluent-ribbon"
+                     xmlns:ip="http://metro.mahapps.com/winfx/xaml/iconpacks"
+                     Title="POS Toolbar Sample"
+                     Width="1000" Height="650">
 
     <DockPanel>
-        <!-- Sticky Bottom Bar -->
-        <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="1,1,1,0" Padding="8">
-            <DockPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                    <Button Content="Finalize / Receive (F6)" Margin="6,0"/>
-                    <Button Content="Void (Del)" Margin="6,0"/>
-                </StackPanel>
-                <TextBlock Text="Sticky Bottom Bar — primary flow actions" VerticalAlignment="Center"/>
-            </DockPanel>
-        </Border>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="12">
+        <!-- Ribbon -->
+        <fluent:Ribbon DockPanel.Dock="Top">
 
-                <!-- 1) Ribbon (tabbed command bar) -->
-                <GroupBox Header="1) Ribbon (tabbed command bar)">
-                    <DockPanel>
-                        <Border BorderBrush="#DDD" BorderThickness="1" Padding="10" Margin="0,0,8,0">
-                            <StackPanel>
-                                <TextBlock Text="This placeholder shows where a Ribbon would go."/>
-                                <TextBlock Text="Use Fluent.Ribbon for a modern ribbon (no code-behind required once added)."
-                                           Foreground="#666" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                        <StackPanel>
-                            <TextBlock Text="Why" FontWeight="Bold"/>
-                            <TextBlock Text="Clear hierarchy for many actions. Use when you have multiple modules/tabs."/>
-                            <TextBlock Text="Tip: make destructive items red + confirmation." Margin="0,6,0,0"/>
-                        </StackPanel>
-                    </DockPanel>
-                </GroupBox>
+            <!-- Backstage (File menu) — NO BackstageButton -->
+            <fluent:Ribbon.Menu>
+                <fluent:Backstage>
+                    <!-- Tab page -->
+                    <fluent:BackstageTabItem Header="Settings">
+                        <Grid Margin="20">
+                            <TextBlock Text="Settings page" FontSize="18"/>
+                        </Grid>
+                    </fluent:BackstageTabItem>
 
-                <!-- 2) Compact Top Command Bar with Overflow -->
-                <GroupBox Header="2) Compact Top Command Bar with Overflow">
-                    <DockPanel>
-                        <ToolBar DockPanel.Dock="Top">
-                            <Button Content="Receive"/>
-                            <Button Content="Amend (Rev)"/>
+                    <!-- Simple non-tab item (link-like). If your version lacks BackstageItem, remove this line. -->
+                    
+                </fluent:Backstage>
+            </fluent:Ribbon.Menu>
 
-                            <!-- Split-like button via ToggleButton + Popup -->
-                            <ToggleButton x:Name="TgReturn" Content="Return ▾"/>
-                            <Popup PlacementTarget="{Binding ElementName=TgReturn}"
-                                   Placement="Bottom"
-                                   IsOpen="{Binding IsChecked, ElementName=TgReturn, Mode=TwoWay}"
-                                   StaysOpen="False"
-                                   AllowsTransparency="True">
-                                <Border Background="White" BorderBrush="#888" BorderThickness="1" Padding="4" CornerRadius="4">
-                                    <StackPanel>
-                                        <Button Content="With Invoice"/>
-                                        <Button Content="Without Invoice"/>
-                                    </StackPanel>
-                                </Border>
-                            </Popup>
+            <!-- Quick Access Toolbar -->
+            <fluent:Ribbon.QuickAccessItems>
+                <fluent:QuickAccessMenuItem Icon="Save" ToolTip="Save" Command="ApplicationCommands.Save"/>
+                <fluent:QuickAccessMenuItem Icon="Undo" ToolTip="Undo" Command="ApplicationCommands.Undo"/>
+            </fluent:Ribbon.QuickAccessItems>
 
-                            <Separator/>
+            <!-- TAB: Home -->
+            <fluent:RibbonTabItem Header="Home">
+                <fluent:RibbonGroupBox Header="Sales">
+                    <fluent:Button Header="New Sale" LargeIcon="Add"/>
+                    <fluent:Button Header="Return" Icon="Undo"/>
+                    <fluent:Button Header="Drafts" Icon="FolderOpen"/>
+                    <fluent:Button Header="History" Icon="Clock"/>
+                </fluent:RibbonGroupBox>
 
-                            <!-- Overflow (kebab) -->
-                            <ToggleButton x:Name="TgMore" Content="More ⋯"/>
-                            <Popup PlacementTarget="{Binding ElementName=TgMore}"
-                                   Placement="Bottom"
-                                   IsOpen="{Binding IsChecked, ElementName=TgMore, Mode=TwoWay}"
-                                   StaysOpen="False">
-                                <Border Background="White" BorderBrush="#888" BorderThickness="1" Padding="4" CornerRadius="4">
-                                    <StackPanel>
-                                        <Button Content="Void Purchase"/>
-                                        <Button Content="Held Drafts"/>
-                                    </StackPanel>
-                                </Border>
-                            </Popup>
+                <fluent:RibbonGroupBox Header="Inventory">
+                    <fluent:Button Header="Stock In" LargeIcon="Download"/>
+                    <fluent:Button Header="Stock Out" Icon="Upload"/>
+                    <fluent:Button Header="Transfer" Icon="Shuffle"/>
+                    <fluent:Button Header="Adjust" Icon="Edit"/>
+                </fluent:RibbonGroupBox>
 
-                            <Separator/>
-                            <Button Content="Search (F2)"/>
-                        </ToolBar>
+                <fluent:RibbonGroupBox Header="Reports">
+                    <fluent:Button Header="Sales Report" LargeIcon="ChartLine"/>
+                    <fluent:Button Header="Stock Report" Icon="List"/>
+                    <fluent:Button Header="Finance Report" Icon="Money"/>
+                </fluent:RibbonGroupBox>
 
-                        <TextBlock Text="Use a ToolBar with a small overflow popup when you have ~5–8 actions."
-                                   Margin="8,6,0,0" TextWrapping="Wrap"/>
-                    </DockPanel>
-                </GroupBox>
+                <fluent:RibbonGroupBox Header="Users">
+                    <fluent:Button Header="Salesmen">
+                        <fluent:Button.Icon>
+                            <ip:PackIconMaterial   Kind="AccountTie"/>
+                        </fluent:Button.Icon>
+                    </fluent:Button>
+                    <fluent:Button Header="Cashiers">
+                        <fluent:Button.Icon>
+                            <ip:PackIconMaterial   Kind="CashRegister"/>
+                        </fluent:Button.Icon>
+                    </fluent:Button>
+                    <fluent:Button Header="Managers">
+                        <fluent:Button.Icon>
+                            <ip:PackIconMaterial   Kind="AccountSupervisor"/>
+                        </fluent:Button.Icon>
+                    </fluent:Button>
+                </fluent:RibbonGroupBox>
+            </fluent:RibbonTabItem>
 
-                <!-- 3) Contextual Toolbar (changes with selection) -->
-                <GroupBox Header="3) Contextual Toolbar (changes with selection)">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <CheckBox x:Name="ChkIsReturnSelected" Content="Simulate: selected row is a RETURN"/>
-                            <CheckBox x:Name="ChkRowSelected" Content="Simulate: any row selected" Margin="24,0,0,0"/>
-                        </StackPanel>
+            <!-- TAB: Purchases -->
+            <fluent:RibbonTabItem Header="Purchases">
+                <fluent:RibbonGroupBox Header="Vendors">
+                    <fluent:Button Header="New Purchase" LargeIcon="CartPlus"/>
+                    <fluent:Button Header="Returns" Icon="CartArrowDown"/>
+                    <fluent:Button Header="Suppliers" Icon="TruckDelivery"/>
+                </fluent:RibbonGroupBox>
+            </fluent:RibbonTabItem>
 
-                        <ToolBar>
-                            <Button Content="Amend Return" IsEnabled="{Binding IsChecked, ElementName=ChkIsReturnSelected}"/>
-                            <Button Content="Void Return"  IsEnabled="{Binding IsChecked, ElementName=ChkIsReturnSelected}"/>
-                            <Separator/>
-                            <Button Content="Amend (Rev)"  IsEnabled="{Binding IsChecked, ElementName=ChkRowSelected}"/>
-                            <Button Content="Void Purchase" IsEnabled="{Binding IsChecked, ElementName=ChkRowSelected}"/>
-                        </ToolBar>
+            <!-- TAB: Warehouse -->
+            <fluent:RibbonTabItem Header="Warehouse">
+                <fluent:RibbonGroupBox Header="Operations">
+                    <fluent:Button Header="Transfer Stock" LargeIcon="SwapHorizontal"/>
+                    <fluent:Button Header="Receive" Icon="Download"/>
+                    <fluent:Button Header="Dispatch" Icon="Upload"/>
+                </fluent:RibbonGroupBox>
+            </fluent:RibbonTabItem>
 
-                        <TextBlock Text="Only enable actions that make sense for the current selection."
-                                   Margin="0,6,0,0"/>
-                    </StackPanel>
-                </GroupBox>
+        </fluent:Ribbon>
 
-                <!-- 4) Left Vertical Action Rail (touch-friendly) -->
-                <GroupBox Header="4) Left Vertical Action Rail (touch-friendly)">
-                    <DockPanel LastChildFill="True" Height="160">
-                        <Border DockPanel.Dock="Left" Background="#F7F7F7" Padding="8" Width="190">
-                            <StackPanel>
-                                <Button Content="Receive" Margin="0,0,0,6"/>
-                                <Button Content="Return With" Margin="0,0,0,6"/>
-                                <Button Content="Return Without" Margin="0,0,0,6"/>
-                                <Button Content="Void" Margin="0,0,0,6"/>
-                            </StackPanel>
-                        </Border>
-                        <Border BorderBrush="#DDD" BorderThickness="1" Margin="8,0,0,0">
-                            <Grid>
-                                <TextBlock Text="Main content area…" VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="#666"/>
-                            </Grid>
-                        </Border>
-                    </DockPanel>
-                </GroupBox>
-
-                <!-- 5) Right Action Drawer / Command Pane -->
-                <GroupBox Header="5) Right Action Drawer / Command Pane">
-                    <Grid Height="160">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="280"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,8,0">
-                            <TextBlock Text="Document preview / lines…" VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="#666"/>
-                        </Border>
-
-                        <Border Grid.Column="1" BorderBrush="#DDD" BorderThickness="1" Background="#FAFAFA" Padding="10">
-                            <StackPanel>
-                                <TextBlock Text="Summary" FontWeight="Bold" Margin="0,0,0,6"/>
-                                <TextBlock Text="Grand: 12,345.00" Margin="0,0,0,8"/>
-                                <Button Content="Receive (F6)" Margin="0,0,0,6"/>
-                                <Button Content="Return With"  Margin="0,0,0,6"/>
-                                <Button Content="Return Without" Margin="0,0,0,6"/>
-                                <Button Content="Void (Del)"/>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-                </GroupBox>
-
-                <!-- 6) Split Buttons for Variants (default + menu) -->
-                <GroupBox Header="6) Split Buttons for Variants (default + menu)">
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="Return" Margin="0,0,6,0"/>
-                        <ToggleButton x:Name="TgReturn2" Content="▾"/>
-                        <Popup PlacementTarget="{Binding ElementName=TgReturn2}"
-                               Placement="Bottom"
-                               IsOpen="{Binding IsChecked, ElementName=TgReturn2, Mode=TwoWay}"
-                               StaysOpen="False">
-                            <Border Background="White" BorderBrush="#888" BorderThickness="1" Padding="4" CornerRadius="4">
-                                <StackPanel>
-                                    <Button Content="With Invoice"/>
-                                    <Button Content="Without Invoice"/>
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                        <TextBlock Text=" Click 'Return' for default; caret for alternatives."
-                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <!-- 7) Inline Row Actions (kebab per row) -->
-                <GroupBox Header="7) Inline Row Actions (kebab menu per row)">
-                    <DataGrid AutoGenerateColumns="False" Height="200"
-                              ItemsSource="{StaticResource DemoRows}">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Doc #" Binding="{Binding Key}" Width="120"/>
-                            <DataGridTextColumn Header="Supplier" Binding="{Binding Value}" Width="*"/>
-                            <DataGridTemplateColumn Header="Actions" Width="100">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Content="⋯" Padding="6,2">
-                                            <Button.ContextMenu>
-                                                <ContextMenu>
-                                                    <MenuItem Header="Amend"/>
-                                                    <MenuItem Header="Void"/>
-                                                </ContextMenu>
-                                            </Button.ContextMenu>
-                                        </Button>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
-
-                <!-- 9) Command Palette (Toggle) -->
-                <GroupBox Header="9) Command Palette (Toggle)">
-                    <StackPanel>
-                        <ToggleButton x:Name="TgPalette" Content="Open Command Palette"/>
-                        <Popup Placement="Center"
-                               IsOpen="{Binding IsChecked, ElementName=TgPalette, Mode=TwoWay}"
-                               StaysOpen="False"
-                               AllowsTransparency="True">
-                            <Border Background="White" BorderBrush="#444" BorderThickness="1" CornerRadius="8" Padding="10" Width="520">
-                                <StackPanel>
-                                    <TextBox Height="30" Margin="0,0,0,8" />
-                                    <ListBox Height="220">
-                                        <ListBoxItem Content="Receive (F6)"/>
-                                        <ListBoxItem Content="Amend (Rev)"/>
-                                        <ListBoxItem Content="Return With"/>
-                                        <ListBoxItem Content="Return Without"/>
-                                        <ListBoxItem Content="Void Purchase"/>
-                                        <ListBoxItem Content="Held Drafts"/>
-                                        <ListBoxItem Content="Search (F2)"/>
-                                    </ListBox>
-                                    <TextBlock Text="Click outside or toggle the button to close."
-                                               Foreground="#666" Margin="0,6,0,0"/>
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                    </StackPanel>
-                </GroupBox>
-
-                <!-- 10) Segmented Controls / Toggle Groups -->
-                <GroupBox Header="10) Segmented Controls / Toggle Groups (mode switching)">
-                    <StackPanel>
-                        <UniformGrid Rows="1" Columns="3" Margin="0,0,0,8">
-                            <ToggleButton x:Name="TgPurchase" Content="Purchase" IsChecked="True" Margin="0,0,6,0"/>
-                            <ToggleButton x:Name="TgReturns"   Content="Return"               Margin="0,0,6,0"/>
-                            <ToggleButton x:Name="TgAmend"    Content="Amend"/>
-                        </UniformGrid>
-
-                        <!-- Show selected mode (XAML-only) -->
-                        <Border BorderBrush="#DDD" BorderThickness="1" Padding="12">
-                            <StackPanel>
-                                <TextBlock>
-                                    <TextBlock.Text>
-                                        <MultiBinding StringFormat="Mode: {0}">
-                                            <Binding ElementName="TgPurchase" Path="IsChecked"/>
-                                            <Binding ElementName="TgReturn"   Path="IsChecked"/>
-                                            <Binding ElementName="TgAmend"    Path="IsChecked"/>
-                                            <!-- Converter-less trick via priorities: -->
-                                        </MultiBinding>
-                                    </TextBlock.Text>
-                                </TextBlock>
-
-                                <!-- More explicit, simple display using Tag + Triggers -->
-                                <Border x:Name="ModeDisplay" Margin="0,6,0,0">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Tag" Value="Purchase"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsChecked, ElementName=TgReturn}" Value="True">
-                                                    <Setter Property="Tag" Value="Return"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding IsChecked, ElementName=TgAmend}" Value="True">
-                                                    <Setter Property="Tag" Value="Amend"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <TextBlock>
-                                        <TextBlock.Text>
-                                            <Binding RelativeSource="{RelativeSource AncestorType=Border}" Path="Tag" StringFormat="Mode: {0}"/>
-                                        </TextBlock.Text>
-                                    </TextBlock>
-                                </Border>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </GroupBox>
-
-            </StackPanel>
-        </ScrollViewer>
+        <!-- MAIN CONTENT -->
+        <Grid Background="#FAFAFA">
+            <TextBlock Text="Your main content here"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center"
+                       FontSize="24"
+                       Foreground="Gray"/>
+        </Grid>
     </DockPanel>
-</Window>
+</fluent:RibbonWindow>
