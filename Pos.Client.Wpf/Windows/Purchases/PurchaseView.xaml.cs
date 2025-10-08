@@ -20,7 +20,7 @@ using System.Linq;            // at top of PurchasesService.cs
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
-    public partial class PurchaseWindow : Window
+    public partial class PurchaseView : UserControl
     {
         private readonly PartyLookupService _partySvc;
         private bool _suppressSupplierPopup;
@@ -151,7 +151,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         .Options;
         // make the accessor resilient (no casts on null)
 
-        public PurchaseWindow()  // NEW
+        public PurchaseView()  // NEW
         {
             InitializeComponent();
             if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
@@ -192,7 +192,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
 
 
-        public PurchaseWindow(PosClientDbContext db) : this()  // CHANGED: chain to parameterless
+        public PurchaseView(PosClientDbContext db) : this()  // CHANGED: chain to parameterless
         {
             _db = db;
             _purchaseSvc = new PurchasesService(_db);
@@ -1013,7 +1013,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async void BtnNewItem_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new ItemQuickDialog { Owner = this };
+            var dlg = new ItemQuickDialog { };
             if (dlg.ShowDialog() == true)
             {
                 var now = DateTime.UtcNow;
@@ -1079,7 +1079,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async void BtnNewSupplier_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new SupplierQuickDialog { Owner = this };
+            var dlg = new SupplierQuickDialog { };
             if (dlg.ShowDialog() == true)
             {
                 var now = DateTime.UtcNow;
@@ -1110,9 +1110,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
-
-        private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
-
+                
         private ObservableCollection<PurchasePayment> _payments = new();
 
         private async Task RefreshPaymentsAsync()
@@ -1264,7 +1262,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async void InvoicesButton_Click(object sender, RoutedEventArgs e)
         {
-            var center = new PurchaseCenterWindow() { Owner = this }; // pass options
+            var center = new PurchaseCenterWindow() { }; // pass options
             var ok = center.ShowDialog() == true;
 
             if (ok && center.SelectedHeldPurchaseId.HasValue)

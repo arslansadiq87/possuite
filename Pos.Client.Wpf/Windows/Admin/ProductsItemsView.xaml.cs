@@ -18,7 +18,7 @@ using System.Globalization;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
-    public partial class ProductsItemsWindow : Window
+    public partial class ProductsItemsView : UserControl
     {
         // ----- services / db -----
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
@@ -54,7 +54,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         public ObservableCollection<Category> Categories => _categories;
         private ItemVariantRow? SelectedRow => VariantsGrid.SelectedItem as ItemVariantRow;
 
-        public ProductsItemsWindow()
+        public ProductsItemsView()
         {
             InitializeComponent();
             // IMPORTANT: let XAML bindings see Brands/Categories
@@ -269,7 +269,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void NewProduct_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new ProductNameDialog { Owner = this };
+            var dlg = new ProductNameDialog { };
             if (dlg.ShowDialog() != true) return;
 
             await OpenDbAsync();
@@ -286,7 +286,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Select a product first.");
                 return;
             }
-            var dlg = new ProductNameDialog { Owner = this };
+            var dlg = new ProductNameDialog { };
             dlg.Prefill(p.Name, p.BrandId, p.CategoryId); // ensure your dialog exposes a Prefill method
             if (dlg.ShowDialog() != true) return;
             await OpenDbAsync();
@@ -318,7 +318,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             SetRightGridMode(RightMode.Variants);
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.Sequential)
             {
-                Owner = this,
                 SaveImmediately = true, // <-- this makes "Save & Add another" call the saver below
                 SaveOneAsync = async (item) =>
                 {
@@ -406,7 +405,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             await OpenDbAsync();
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.Sequential)
             {
-                Owner = this,
+                //Owner = this,
                 SaveImmediately = true,
                 SaveOneAsync = async (item) =>
                 {
@@ -591,7 +590,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.EditSingle)
             {
-                Owner = this
+                //Owner = this
             };
             dlg.PrefillForEdit(entity);
             dlg.PrefillBarcodesForEdit(entity.Barcodes);
@@ -823,14 +822,14 @@ namespace Pos.Client.Wpf.Windows.Admin
         private void Brands_Click(object sender, RoutedEventArgs e)
         {
             var w = App.Services.GetRequiredService<BrandsWindow>();
-            w.Owner = this;
+            //w.Owner = this;
             w.ShowDialog();
         }
 
         private void Categories_Click(object sender, RoutedEventArgs e)
         {
             var w = App.Services.GetRequiredService<CategoriesWindow>();
-            w.Owner = this;
+            //w.Owner = this;
             w.ShowDialog();
         }
         private async void StandaloneList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1007,7 +1006,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.EditSingle)
             {
-                Owner = this
+                //Owner = this
             };
             var parentProduct = _selectedProduct ?? await _db.Products.FirstOrDefaultAsync(p => p.Id == entity.ProductId);
             if (parentProduct != null) dlg.PrefillProduct(parentProduct);

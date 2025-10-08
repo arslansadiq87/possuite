@@ -1,6 +1,7 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:att="clr-namespace:Pos.Client.Wpf.Attached">
 
     <sys:Double   x:Key="App.FontSize.DataGrid">16</sys:Double>
     <FontWeight   x:Key="App.FontWeight.DataGrid">SemiBold</FontWeight>
@@ -26,10 +27,10 @@
 
 
     <!-- ===== Color tokens ===== -->
-    <SolidColorBrush x:Key="Clr.Primary"   Color="#4CAF50"/>
-    <SolidColorBrush x:Key="Clr.Primary+H" Color="#43A047"/>
-    <SolidColorBrush x:Key="Clr.Primary+P" Color="#2E7D32"/>
-    <SolidColorBrush x:Key="Clr.OnPrimary" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="Clr.Primary"    Color="{DynamicResource Theme.PrimaryAccentColor}"/>
+    <SolidColorBrush x:Key="Clr.Primary+H" Color="{DynamicResource Fluent.Ribbon.Colors.Accent80}"/>
+    <SolidColorBrush x:Key="Clr.Primary+P" Color="{DynamicResource Fluent.Ribbon.Colors.Accent60}"/>
+    <SolidColorBrush x:Key="Clr.OnPrimary" Color="{DynamicResource Fluent.Ribbon.Colors.IdealForeground}"/>
 
     <SolidColorBrush x:Key="Clr.Neutral"   Color="#FF2C2C2C"/>
     <SolidColorBrush x:Key="Clr.Border"    Color="#19000000"/>
@@ -59,14 +60,12 @@
     <SolidColorBrush x:Key="Chip.SelectedBorder" Color="#005A9E"/>
     <SolidColorBrush x:Key="Chip.SelectedForeground" Color="White"/>
 
-
     <!-- ===== Size & shape tokens ===== -->
     <sys:Double x:Key="Btn.FontSize">14</sys:Double>
     <Thickness x:Key="Btn.Padding">12,6</Thickness>
     <CornerRadius x:Key="Btn.Radius">0</CornerRadius>
     <Thickness x:Key="Btn.BorderThickness">1</Thickness>
     <sys:Double x:Key="Icon.Size">18</sys:Double>
-
 
     <!-- Input-specific brushes (you can tweak) -->
     <SolidColorBrush x:Key="Clr.InputBG"        Color="#FFFFFFFF"/>
@@ -330,6 +329,71 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- Borderless, icon-only button -->
+    <Style x:Key="Btn.IconBare" TargetType="Button">
+        <!-- sizing & basics -->
+        <Setter Property="Width" Value="36"/>
+        <Setter Property="Height" Value="36"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <!-- remove default dotted focus rectangle -->
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+
+        <!-- show the icon (ImageSource/DrawingImage) if Content is a source -->
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <Image Source="{Binding}"
+                       Width="{Binding RelativeSource={RelativeSource AncestorType=Button},
+                                       Path=(att:IconProps.IconSize)}"
+                       Height="{Binding RelativeSource={RelativeSource AncestorType=Button},
+                                        Path=(att:IconProps.IconSize)}"
+                       Stretch="Uniform"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+
+        <!-- borderless template -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Root">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      RecognizesAccessKey="True"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- subtle hover: just a faint tint behind the icon (optional) -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <!-- Use a very soft tint; or keep Transparent if you want truly nothing -->
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Clr.PrimarySoft+H}"/>
+                        </Trigger>
+
+                        <!-- press feedback: tiny scale -->
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Root" Property="RenderTransform">
+                                <Setter.Value>
+                                    <ScaleTransform ScaleX="0.96" ScaleY="0.96"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+
+                        <!-- disabled: dim the content -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 
     <!-- Variants with icon+text layout baked in -->
     <!-- 2) Variants that include icon+text layout -->

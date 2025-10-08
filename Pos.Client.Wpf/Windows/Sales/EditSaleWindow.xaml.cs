@@ -13,6 +13,9 @@ using Pos.Domain.Formatting;
 using Pos.Domain.Pricing;
 using Pos.Persistence;
 using Pos.Client.Wpf.Models;
+using Microsoft.Extensions.DependencyInjection;   // GetRequiredService
+using Pos.Client.Wpf.Services;                    // IPaymentDialogService, PaymentResult
+
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -655,7 +658,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             => db.TillSessions.OrderByDescending(t => t.Id)
                .FirstOrDefault(t => t.OutletId == _orig.OutletId && t.CounterId == _orig.CounterId && t.CloseTs == null);
 
-        private void SaveRevision_Click(object? sender, RoutedEventArgs e)
+        private async void SaveRevision_Click(object? sender, RoutedEventArgs e)
         {
             if (!_cart.Any()) { MessageBox.Show("Cart is empty."); return; }
 
@@ -722,34 +725,40 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (salesmanIdLocal.HasValue && !db.Users.AsNoTracking().Any(u => u.Id == salesmanIdLocal.Value))
                 salesmanIdLocal = null;
 
-            // If there's a positive difference, collect extra payment with PayWindow
+            // If there's a positive difference, collect extra payment via overlay PayDialog
             decimal addCash = 0m, addCard = 0m;
             PaymentMethod payMethod = PaymentMethod.Cash;
             if (deltaGrand > 0.005m)
             {
-                // Pass difference numbers to PayWindow (invoice-level discount delta = new - old)
                 var deltaDisc = invDiscValue - _orig.InvoiceDiscountValue;
 
-                var pay = new PayWindow(
+                // ===== OPEN PAY DIALOG (overlay) =====
+                var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
+                var payResult = await paySvc.ShowAsync(
                     subtotal: Math.Abs(deltaSub),
                     discountValue: Math.Abs(deltaDisc),
                     tax: Math.Abs(deltaTax),
                     grandTotal: Math.Abs(deltaGrand),
                     items: _cart.Count,
-                    qty: _cart.Sum(l => l.Qty))
-                { Owner = this };
+                    qty: _cart.Sum(l => l.Qty),
+                    differenceMode: false,
+                    amountDelta: 0m,
+                    title: "Collect Difference");
 
-                var ok = pay.ShowDialog() == true && pay.Confirmed;
-                if (!ok) { ScanText.Focus(); return; }
+                if (!payResult.Confirmed) { ScanText.Focus(); return; }
 
-                addCash = pay.Cash;
-                addCard = pay.Card;
+                addCash = payResult.Cash;
+                addCard = payResult.Card;
+
                 if (addCash + addCard + 0.01m < Math.Abs(deltaGrand))
                 {
                     MessageBox.Show("Collected payment is less than difference due.");
                     return;
                 }
-                payMethod = (addCash > 0 && addCard > 0) ? PaymentMethod.Mixed : (addCash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
+
+                payMethod = (addCash > 0 && addCard > 0) ? PaymentMethod.Mixed
+                           : (addCash > 0) ? PaymentMethod.Cash
+                           : PaymentMethod.Card;
             }
 
             using var tx = db.Database.BeginTransaction();
@@ -877,6 +886,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             DialogResult = true;
             Close();
         }
+
 
         private void Revert_Click(object? sender, RoutedEventArgs e)
         {

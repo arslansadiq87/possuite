@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Pos.Domain.Entities;
 using Pos.Client.Wpf.Models;
 
-using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceWindow; // <-- to see CartLine from MainWindow namespace
+using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // <-- to see CartLine from MainWindow namespace
 
 namespace Pos.Client.Wpf.Printing
 {

@@ -15,14 +15,19 @@ using System.Windows.Data;                // CollectionViewSource
 using System.Windows.Threading;           // DispatcherTimer
 using System.Globalization;
 using Pos.Client.Wpf.Models;
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Services;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
+using Microsoft.Extensions.DependencyInjection; // for App.Services.GetRequiredService
 
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
-    public partial class SaleInvoiceWindow : Window
+    public partial class SaleInvoiceView : UserControl
     {
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
+        private readonly IDialogService _dialogs;
 
         // For demo: fixed outlet/counter
         private const int OutletId = 1;
@@ -68,10 +73,10 @@ namespace Pos.Client.Wpf.Windows.Sales
         // Track if we loaded a held draft (so we can mark it closed later)
         private int? _currentHeldSaleId = null;
 
-        public SaleInvoiceWindow()
+        public SaleInvoiceView(IDialogService dialogs)
         {
             InitializeComponent();
-
+            _dialogs = dialogs;
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
             ScanText.PreviewKeyDown += (s, e) =>
             {
@@ -189,39 +194,48 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         }
 
-        private void ShowTillSummary_Click(object? sender, RoutedEventArgs e)
+        private async void ShowTillSummary_Click(object? sender, RoutedEventArgs e)
         {
             using var db = new PosClientDbContext(_dbOptions);
             var open = GetOpenTill(db);
             if (open == null)
             {
-                MessageBox.Show("No open till session. Open the till first.", "Till Summary");
+                //MessageBox.Show("No open till session. Open the till first.", "Till Summary");
+                //return;
+                await _dialogs.AlertAsync(
+                    "No open till session. Open the till first.",
+                    "Till Summary");
                 return;
             }
-            var win = new TillSessionSummaryWindow(_dbOptions, open.Id, OutletId, CounterId) { Owner = this };
+            var win = new TillSessionSummaryWindow(_dbOptions, open.Id, OutletId, CounterId) { };
             win.ShowDialog();
         }
 
 
-        private void ClearHoldButton_Click(object sender, RoutedEventArgs e)
+        private async void ClearHoldButton_Click(object sender, RoutedEventArgs e)
         {
-            // Simple choice using MessageBox (Yes=Clear, No=Hold, Cancel=abort)
-            var result = MessageBox.Show(
+            var res = await _dialogs.ShowAsync(
                 "Choose an action:\n\nYes = CLEAR this invoice (reset form)\nNo = HOLD this invoice for later\nCancel = Do nothing",
                 "Clear or Hold?",
-                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                DialogButtons.YesNoCancel);
 
-            if (result == MessageBoxResult.Yes)
+            switch (res)
             {
-                ClearCurrentInvoice(confirm: true);
-            }
-            else if (result == MessageBoxResult.No)
-            {
-                HoldCurrentInvoiceQuick();
+                case DialogResult.Yes:
+                    ClearCurrentInvoice(confirm: true);
+                    break;
+
+                case DialogResult.No:
+                    HoldCurrentInvoiceQuick();
+                    break;
+
+                default:
+                    return;
             }
         }
 
-        private void ClearCurrentInvoice(bool confirm)
+
+        private async void ClearCurrentInvoice(bool confirm)
         {
             if (confirm)
             {
@@ -231,9 +245,13 @@ namespace Pos.Client.Wpf.Windows.Sales
                 }
                 else
                 {
-                    var ok = MessageBox.Show("Clear the current invoice (cart, discounts, customer fields)?",
-                                             "Confirm Clear", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
-                    if (ok != MessageBoxResult.OK) return;
+                    //var ok = MessageBox.Show("Clear the current invoice (cart, discounts, customer fields)?",
+                    //                         "Confirm Clear", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                    var ok = await _dialogs.ShowAsync(
+                        "Clear the current invoice (cart, discounts, customer fields)?",
+                        "Confirm Clear?",
+                        DialogButtons.OKCancel);
+                    if (ok != DialogResult.OK) return;
                 }
             }
 
@@ -877,7 +895,7 @@ ComputeTotalsSnapshot()
         }
 
 
-        private void PayButton_Click(object sender, RoutedEventArgs e)
+        private async void PayButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_cart.Any()) { MessageBox.Show("Cart is empty."); return; }
             using var db = new PosClientDbContext(_dbOptions);
@@ -917,16 +935,21 @@ ComputeTotalsSnapshot()
             var itemsCount = _cart.Count;
             var qtySum = _cart.Sum(l => l.Qty);
             // ===================== OPEN PAY WINDOW =====================
-            var pay = new PayWindow(subtotal, invDiscValue, taxtotal, grand, itemsCount, qtySum) { Owner = this };
-            var ok = pay.ShowDialog() == true && pay.Confirmed;
-            if (!ok)
+            // ===================== OPEN PAY DIALOG (overlay) =====================
+            var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
+            var payResult = await paySvc.ShowAsync(
+                subtotal, invDiscValue, taxtotal, grand, itemsCount, qtySum,
+                differenceMode: false, amountDelta: 0m, title: "Take Payment");
+
+            if (!payResult.Confirmed)
             {
                 // user cancelled; return focus to scan
                 ScanText.Focus();
                 return;
             }
-            var enteredCash = pay.Cash;
-            var enteredCard = pay.Card;
+            var enteredCash = payResult.Cash;
+            var enteredCard = payResult.Card;
+
             var paid = enteredCash + enteredCard;
             if (paid + 0.01m < grand) // safety check; PayWindow already enforces this
             {
@@ -1045,15 +1068,44 @@ ComputeTotalsSnapshot()
                     LineTax = line.LineTax,
                     LineTotal = line.LineTotal
                 });
+                //db.StockEntries.Add(new StockEntry
+                //{
+                //    OutletId = OutletId,
+                //    ItemId = line.ItemId,
+                //    QtyChange = -line.Qty,
+                //    RefType = "Sale",
+                //    RefId = sale.Id,
+                //    Ts = DateTime.UtcNow,
+                //    StockDocId = null
+
+                //});
                 db.StockEntries.Add(new StockEntry
                 {
+                    // NEW normalized location (use these going forward)
+                    LocationType = InventoryLocationType.Outlet,
+                    LocationId = OutletId,
+
+                    // Legacy mirror (ok to keep for now; plan to remove later)
                     OutletId = OutletId,
+
                     ItemId = line.ItemId,
-                    QtyChange = -line.Qty,
+
+                    // QtyChange is decimal; sale reduces stock
+                    QtyChange = -Convert.ToDecimal(line.Qty),
+
+                    // If you track cost at sale time, set UnitCost snapshot; else keep 0
+                    UnitCost = 0m,
+
                     RefType = "Sale",
                     RefId = sale.Id,
-                    Ts = DateTime.UtcNow
+
+                    // IMPORTANT: no StockDocId for sales
+                    StockDocId = null,
+
+                    Ts = DateTime.UtcNow,
+                    Note = null
                 });
+
             }
             db.SaveChanges();
             tx.Commit();
@@ -1133,7 +1185,7 @@ ComputeTotalsSnapshot()
 
         private void StockReport_Click(object sender, RoutedEventArgs e)
         {
-            new StockReportWindow { Owner = this }.ShowDialog();
+            new StockReportWindow { }.ShowDialog();
         }
 
         private static void RecalcLineShared(CartLine l)
@@ -1180,7 +1232,7 @@ ComputeTotalsSnapshot()
             using var db = new PosClientDbContext(_dbOptions);
             var open = GetOpenTill(db);
             if (open == null) { MessageBox.Show("Till is CLOSED. Open till first."); return; }
-            var win = new InvoiceCenterWindow(OutletId, CounterId) { Owner = this };
+            var win = new InvoiceCenterWindow(OutletId, CounterId) { };
             if (win.ShowDialog() == true)
             {
                 // If a held invoice was chosen there, resume it here

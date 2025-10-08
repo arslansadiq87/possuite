@@ -341,8 +341,20 @@ namespace Pos.Persistence
                 e.HasOne(x => x.StockDoc)
                  .WithMany(d => d.Lines)
                  .HasForeignKey(x => x.StockDocId)
-                 .OnDelete(DeleteBehavior.Restrict);
+                 .OnDelete(DeleteBehavior.Restrict)
+                 .IsRequired(false); // <-- important
             });
+
+            b.Entity<StockEntry>().HasCheckConstraint(
+                "CK_StockEntry_StockDoc_Requirement",
+                // When RefType is Opening/TransferOut/TransferIn => StockDocId MUST be NOT NULL
+                // Otherwise (Sale, Purchase, etc.) it MAY be NULL
+                "CASE " +
+                " WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL " +
+                " ELSE 1 " +
+                "END"
+            );
+
 
             // optional: enum as int
             b.Entity<StockDoc>()

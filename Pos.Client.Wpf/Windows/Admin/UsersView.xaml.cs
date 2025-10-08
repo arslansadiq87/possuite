@@ -23,7 +23,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     }
 
     // Row model for outlet assignment editor
-      public partial class UsersWindow : Window
+      public partial class UsersView : UserControl
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly ObservableCollection<OutletAssignRow> _outletRows = new();
@@ -52,7 +52,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _ => "Cashier"
         };
         
-        public UsersWindow(IDbContextFactory<PosClientDbContext> dbf, AppState state)
+        public UsersView(IDbContextFactory<PosClientDbContext> dbf, AppState state)
         {
             InitializeComponent();
             _dbf = dbf;
@@ -211,7 +211,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
 
             // keep your existing assignments dialog
-            var dlg = new UserOutletAssignmentsWindow(_dbf, sel.Id) { Owner = this };
+            var dlg = new UserOutletAssignmentsWindow(_dbf, sel.Id) { };
             dlg.ShowDialog();
         }
 

@@ -65,7 +65,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             // Aggregate lines per doc
             var lines = await db.StockEntries.AsNoTracking()
-                .Where(se => docIds.Contains(se.StockDocId))
+                .Where(se => se.StockDocId.HasValue && docIds.Contains(se.StockDocId.Value))
                 .GroupBy(se => se.StockDocId)
                 .Select(g => new
                 {

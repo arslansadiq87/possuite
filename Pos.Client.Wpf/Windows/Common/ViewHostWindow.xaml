@@ -1,0 +1,8 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Common.ViewHostWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Host" Width="1000" Height="700"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True">
+    <ContentPresenter x:Name="ContentHost"/>
+</Window>

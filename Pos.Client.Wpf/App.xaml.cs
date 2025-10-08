@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Pos.Persistence.Services;
 using Pos.Persistence.Features.Transfers;
 using ControlzEx.Theming;
+using Pos.Client.Wpf.Windows.Inventory;
 
 
 
@@ -28,13 +29,18 @@ namespace Pos.Client.Wpf
             base.OnStartup(e);
             ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
 
+            //ThemeManager.Current.ThemeSyncMode = ThemeSyncMode.SyncAll;  // or SyncWithAppMode / SyncWithAccent
+            //ThemeManager.Current.SyncTheme();
+            //ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
+            // 3) Keep every open window in lock-step:
+            
+            
             var sc = new ServiceCollection();
+
 
             // 1) Connection string
             var cs = DbPath.ConnectionString;
             var dbFile = DbPath.Get();
-
-
             // 2) DbContextFactory (client DB)
             sc.AddDbContextFactory<PosClientDbContext>(o =>
                 o.UseSqlite(cs)
@@ -42,12 +48,23 @@ namespace Pos.Client.Wpf
                  .LogTo(msg => Debug.WriteLine(msg))
             );
 
+            sc.AddTransient<Windows.Shell.DashboardVm>();
+            sc.AddTransient<Windows.Shell.DashboardWindow>();
+
+            // View navigation
+            sc.AddSingleton<IViewNavigator, ViewNavigator>();
+            sc.AddSingleton<IWindowNavigator, WindowNavigator>();
+            sc.AddSingleton<IDialogService, DialogService>();
+            sc.AddSingleton<IPaymentDialogService, PaymentDialogService>();
+            
+
             // 3) App services
-            sc.AddTransient<DashboardVm>();       // <-- add this
+
             sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
+
             //sc.AddSingleton<CurrentUserService>();
-            sc.AddSingleton<IWindowNavigator, WindowNavigator>();
+
 
             // NEW: machine/counter DI (you added these earlier)
             sc.AddSingleton<IMachineIdentityService, MachineIdentityService>();
@@ -55,16 +72,19 @@ namespace Pos.Client.Wpf
 
             // 4) Windows (register them so we can resolve via DI)
             sc.AddTransient<LoginWindow>();
-            sc.AddTransient<DashboardWindow>();
-            sc.AddTransient<SaleInvoiceWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UsersWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
+            
+            // Views
+            sc.AddTransient<SaleInvoiceView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UsersView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UserOutletAssignmentsWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.ProductsItemsWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.PartiesWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.ProductsItemsView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.PartiesView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.EditPartyWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.TransferEditorWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.TransferView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Sales.PayDialog>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
 
             // WINDOWS (register every window you resolve from DI)
             sc.AddTransient<BrandsWindow>();
@@ -156,32 +176,37 @@ namespace Pos.Client.Wpf
 
                 if (binding == null)
                 {
-                    // No owner — the login window is gone and MainWindow isn't set yet.
-                    var manage = Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>();
-                    manage.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-                    manage.ShowInTaskbar = true; // since there's no main window yet
+                    // Resolve the usercontrol and host window
+                    var view = Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>();
+                    var host = Services.GetRequiredService<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
+
+                    host.Title = "Outlets & Counters";
+                    host.SetView(view);
+                    host.ShowInTaskbar = true;
 
                     MessageBox.Show(
                         "This PC is not assigned to any counter yet.\n\n" +
-                        "Open the outlet, select a counter, and click 'Assign This PC'. Then close the window.",
+                        "Open the outlet, select a counter, and click 'Assign This PC'. Then close this window.",
                         "Counter Assignment Required",
                         MessageBoxButton.OK, MessageBoxImage.Information);
 
+                    // If you added the close event, wire it:
+                    view.RequestClose += (_, __) => { host.DialogResult = true; host.Close(); };
+
+                    // Show modally
                     try
                     {
-                        // Show modally to block until user closes it
-                        manage.ShowDialog();
+                        host.ShowDialog();
                     }
                     catch (ArgumentException aex)
                     {
-                        // Safety: if anything odd happens showing the dialog, surface the reason
-                        MessageBox.Show("Could not open Outlets & Counters window:\n\n" + aex.Message,
+                        MessageBox.Show("Could not open Outlets & Counters dialog:\n\n" + aex.Message,
                                         "Window Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         Shutdown();
                         return;
                     }
 
-                    // Try again after the window closes
+                    // Retry binding after the dialog closes
                     binding = binder.GetCurrentBinding();
                     if (binding == null)
                     {
@@ -196,7 +221,7 @@ namespace Pos.Client.Wpf
                 }
 
                 // Success: lock AppState to bound outlet+counter
-                var st = Services.GetRequiredService<AppState>(); // or AppState.Current
+                var st = Services.GetRequiredService<AppState>();
                 st.CurrentOutletId = binding.OutletId;
                 st.CurrentCounterId = binding.CounterId;
             }
@@ -209,6 +234,7 @@ namespace Pos.Client.Wpf
             }
 
 
+
             // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
             //var dash = Services.GetRequiredService<DashboardWindow>();
@@ -218,10 +244,12 @@ namespace Pos.Client.Wpf
             // using System.Windows;
             // using Pos.Client.Wpf.Windows.Shell;
 
-            var shell = Services.GetRequiredService<DashboardWindow>(); // exact type
-            Application.Current.MainWindow = shell;                     // RibbonWindow : Window
+            //var shell = Services.GetRequiredService<DashboardWindow>(); // exact type
+            //Application.Current.MainWindow = shell;                     // RibbonWindow : Window
+            //shell.Show();
+            var shell = Services.GetRequiredService<Windows.Shell.DashboardWindow>();
+            Application.Current.MainWindow = shell;
             shell.Show();
-
 
             this.ShutdownMode = oldMode; // e.g. back to OnMainWindowClose
         }

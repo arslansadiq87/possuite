@@ -17,8 +17,10 @@ using Pos.Domain;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
-    public partial class OutletsCountersWindow : Window
+    public partial class OutletsCountersView : UserControl
     {
+        public event EventHandler? RequestClose;
+
         // Lightweight DTOs for safe binding
         private sealed class OutletRow
         {
@@ -47,7 +49,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         private ICollectionView? _outletView;
         private ICollectionView? _counterView;
 
-        public OutletsCountersWindow(IDbContextFactory<PosClientDbContext> dbf)
+        public OutletsCountersView(IDbContextFactory<PosClientDbContext> dbf)
         {
             InitializeComponent();
             _dbf = dbf;
@@ -237,7 +239,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             try
             {
                 var dlg = new EditOutletWindow(_dbf); // create mode
-                dlg.Owner = this;
+                //dlg.Owner = this;
                 if (dlg.ShowDialog() == true)
                 {
                     _selectedOutletId = dlg.SavedOutletId;
@@ -262,7 +264,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
 
                 var dlg = new EditOutletWindow(_dbf, sel.Id); // edit mode
-                dlg.Owner = this;
+                //dlg.Owner = this;
                 if (dlg.ShowDialog() == true)
                 {
                     _selectedOutletId = dlg.SavedOutletId;
@@ -326,8 +328,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return;
                 }
 
-                var dlg = new EditCounterWindow(_dbf, outletId) { Owner = this }; // CREATE
-                dlg.Owner = this;
+                var dlg = new EditCounterWindow(_dbf, outletId) { }; // CREATE
+                //dlg.Owner = this;
                 if (dlg.ShowDialog() == true)
                 {
                     SafeLoadCounters(outletId);
@@ -356,8 +358,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return;
                 }
 
-                var dlg = new EditCounterWindow(_dbf, row.Id) { Owner = this }; // EDIT
-                dlg.Owner = this;
+                var dlg = new EditCounterWindow(_dbf, row.Id) { }; // EDIT
+                //dlg.Owner = this;
                 if (dlg.ShowDialog() == true)
                 {
                     SafeLoadCounters(outletId);
@@ -542,7 +544,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 id,
                 label);
 
-            dlg.Owner = this;
+            //dlg.Owner = this;
             dlg.ShowDialog();
         }
 
@@ -553,6 +555,11 @@ namespace Pos.Client.Wpf.Windows.Admin
             var s = AppState.Current;
             if (s.CurrentUser != null) return s.CurrentUser.Role == UserRole.Admin;
             return string.Equals(s.CurrentUserRole, "Admin", StringComparison.OrdinalIgnoreCase);
+        }
+
+        void OnAssigned()
+        {
+            RequestClose?.Invoke(this, EventArgs.Empty);
         }
     }
 }

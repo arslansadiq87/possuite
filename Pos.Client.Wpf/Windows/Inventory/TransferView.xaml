@@ -1,13 +1,18 @@
-﻿<Window x:Class="Pos.Client.Wpf.Windows.Inventory.TransferEditorWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:conv="clr-namespace:Pos.Client.Wpf.Converters"
-        xmlns:sys="clr-namespace:System;assembly=mscorlib"
-        Title="Stock Transfer" Width="1100" Height="760"
-        WindowStartupLocation="CenterOwner">
-    <Window.Resources>
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Inventory.TransferView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Pos.Client.Wpf.Converters"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignWidth="1100" d:DesignHeight="760">
+
+    <!-- Window.Resources -> UserControl.Resources -->
+    <UserControl.Resources>
         <conv:QtyVarianceConverter x:Key="QtyVarianceConverter"/>
-    </Window.Resources>
+    </UserControl.Resources>
+
     <DockPanel>
 
         <!-- Top bar -->
@@ -30,7 +35,6 @@
             <ComboBox x:Name="ToPicker" Width="220" DisplayMemberPath="Name" SelectedValuePath="Id" Margin="0,0,12,0"/>
             <TextBlock Text="Dispatch Date:" Margin="0,0,6,0" VerticalAlignment="Center"/>
             <DatePicker x:Name="EffectiveDate" Width="140"/>
-            
         </ToolBar>
 
         <ToolBar DockPanel.Dock="Top">
@@ -52,32 +56,31 @@
 
         <!-- Search/Add bar -->
         <Border x:Name="SearchAddBar" DockPanel.Dock="Top" Padding="10" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
-            <!-- NEW: make it a Grid with two columns (left: search/add; right: availability) -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- LEFT side: unchanged (your search/add) -->
+                <!-- LEFT side: search/add -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Scan / Search:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <Grid>
                         <TextBox x:Name="SearchBox"
-                         Width="360" Height="28"
-                         VerticalContentAlignment="Center"
-                         TextChanged="SearchBox_TextChanged"
-                         PreviewKeyDown="SearchBox_PreviewKeyDown" Style="{StaticResource Txt.Search}"/>
+                                 Width="360" Height="28"
+                                 VerticalContentAlignment="Center"
+                                 TextChanged="SearchBox_TextChanged"
+                                 PreviewKeyDown="SearchBox_PreviewKeyDown"/>
                         <Popup x:Name="SearchPopup"
-                       PlacementTarget="{Binding ElementName=SearchBox}"
-                       Placement="Bottom"
-                       StaysOpen="False"
-                       AllowsTransparency="True">
+                               PlacementTarget="{Binding ElementName=SearchBox}"
+                               Placement="Bottom"
+                               StaysOpen="False"
+                               AllowsTransparency="True">
                             <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
-                            Padding="4" MinWidth="{Binding ElementName=SearchBox, Path=ActualWidth}">
+                                    Padding="4" MinWidth="{Binding ElementName=SearchBox, Path=ActualWidth}">
                                 <ListBox x:Name="SearchList"
-                                 MouseDoubleClick="SearchList_MouseDoubleClick"
-                                 PreviewKeyDown="SearchList_PreviewKeyDown">
+                                         MouseDoubleClick="SearchList_MouseDoubleClick"
+                                         PreviewKeyDown="SearchList_PreviewKeyDown">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal">
@@ -99,24 +102,20 @@
                     <Button x:Name="BtnSaveLines" Content="Save Lines" Width="110" Click="BtnSaveLines_Click" Margin="8,0,0,0"/>
                 </StackPanel>
 
-                <!-- RIGHT side: live Available info -->
+                <!-- RIGHT side: live availability -->
                 <StackPanel x:Name="AvailablePanel"
-            Grid.Column="1"
-            Orientation="Horizontal"
-            VerticalAlignment="Center"
-            Visibility="Collapsed">
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
                     <TextBlock x:Name="AvailableLabel" Text="Available: " Margin="16,0,4,0"
-               VerticalAlignment="Center" FontWeight="SemiBold"/>
+                               VerticalAlignment="Center" FontWeight="SemiBold"/>
                     <TextBox x:Name="AvailableBox" Width="110" IsReadOnly="True"
-             HorizontalContentAlignment="Right"
-             ToolTip="On-hand at the selected From location for the current item."/>
+                             HorizontalContentAlignment="Right"
+                             ToolTip="On-hand at the selected From location for the current item."/>
                 </StackPanel>
-
             </Grid>
         </Border>
-
-
-
 
         <!-- Grid -->
         <Grid Margin="10">
@@ -126,38 +125,29 @@
             </Grid.RowDefinitions>
 
             <DataGrid x:Name="LinesGrid"
-              AutoGenerateColumns="False"
-              CanUserAddRows="False"
-              CanUserDeleteRows="True"
-              IsReadOnly="False"
-              HeadersVisibility="Column,Row"
-              LoadingRow="LinesGrid_LoadingRow"
-              RowEditEnding="LinesGrid_RowEditEnding"
-              SelectionChanged="LinesGrid_SelectionChanged"
-              CellEditEnding="LinesGrid_CellEditEnding"
-              PreparingCellForEdit="LinesGrid_PreparingCellForEdit">
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="True"
+                      IsReadOnly="False"
+                      HeadersVisibility="Column,Row"
+                      AlternationCount="1000000"
+                      LoadingRow="LinesGrid_LoadingRow"
+                      RowEditEnding="LinesGrid_RowEditEnding"
+                      SelectionChanged="LinesGrid_SelectionChanged"
+                      CellEditEnding="LinesGrid_CellEditEnding"
+                      PreparingCellForEdit="LinesGrid_PreparingCellForEdit">
 
                 <DataGrid.RowHeaderTemplate>
-                    <!-- Row serial # (1-based) -->
+                    <!-- Row serial # (1-based when you add +1; or use AlternationIndex directly if you already offset it in code) -->
                     <DataTemplate>
                         <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=AlternationIndex}"
-                           
-                           HorizontalAlignment="Center"/>
+                                   HorizontalAlignment="Center"/>
                     </DataTemplate>
                 </DataGrid.RowHeaderTemplate>
-                <DataGrid.Resources>
-                    <!-- Make AlternationIndex count large so it never wraps -->
-                    <Style TargetType="DataGrid">
-                        <Setter Property="AlternationCount" Value="1000000"/>
-                    </Style>
-                </DataGrid.Resources>
 
                 <DataGrid.Columns>
-
-                    <!-- (REMOVED the old '#' column) -->
-
                     <DataGridTextColumn Header="SKU" Width="120" IsReadOnly="True"
-                                Binding="{Binding SkuSnapshot}" Visibility="Collapsed"/>
+                                        Binding="{Binding SkuSnapshot}" Visibility="Collapsed"/>
 
                     <DataGridTemplateColumn Header="Item" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
@@ -170,11 +160,11 @@
                     </DataGridTemplateColumn>
 
                     <DataGridTextColumn x:Name="QtyExpectedColumn"
-                                Header="Qty Expected" Width="110"
-                                Binding="{Binding QtyExpected, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.####}}"/>
+                                        Header="Qty Expected" Width="110"
+                                        Binding="{Binding QtyExpected, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.####}}"/>
 
                     <DataGridTextColumn x:Name="QtyReceivedColumn" Header="Qty Received" Width="120"
-                                Binding="{Binding QtyReceived, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.####}}"/>
+                                        Binding="{Binding QtyReceived, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.####}}"/>
 
                     <DataGridTemplateColumn x:Name="ShortColumn" Header="Short" Width="100" IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
@@ -207,20 +197,18 @@
                     </DataGridTemplateColumn>
 
                     <DataGridTextColumn Header="Cost" Width="80" IsReadOnly="True"
-                                Binding="{Binding UnitCostExpected, StringFormat={}{0:0.####}}"/>
+                                        Binding="{Binding UnitCostExpected, StringFormat={}{0:0.####}}"/>
 
                     <DataGridTextColumn x:Name="RemarksColumn" Header="Remarks" Width="200"
-                                Binding="{Binding Remarks, UpdateSourceTrigger=PropertyChanged}"/>
+                                        Binding="{Binding Remarks, UpdateSourceTrigger=PropertyChanged}"/>
 
                     <DataGridTextColumn x:Name="VarianceNoteColumn" Header="Variance Note" Width="200"
-                                Binding="{Binding VarianceNote, UpdateSourceTrigger=PropertyChanged}"/>
+                                        Binding="{Binding VarianceNote, UpdateSourceTrigger=PropertyChanged}"/>
 
-                    <!-- NEW: Delete column (only visible while Draft; we toggle in UpdateUiState) -->
                     <DataGridTemplateColumn x:Name="DeleteColumn" Header="" Width="60">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="Delete" Padding="6,2"
-                                Click="DeleteLine_Click"/>
+                                <Button Content="Delete" Padding="6,2" Click="DeleteLine_Click"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -231,10 +219,9 @@
             <!-- Footer totals -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                 <TextBlock Text="Lines:"/>
-                <TextBlock x:Name="LinesCountText" FontWeight="SemiBold"/>
+                <TextBlock x:Name="LinesCountText" FontWeight="SemiBold" Margin="6,0,0,0"/>
             </StackPanel>
         </Grid>
 
-
     </DockPanel>
-</Window>
+</UserControl>

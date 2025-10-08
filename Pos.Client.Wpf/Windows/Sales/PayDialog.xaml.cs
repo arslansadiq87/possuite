@@ -1,68 +1,81 @@
-﻿//Pos.Client.Wpf/PayWindow.xaml.cs
+﻿using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Pos.Client.Wpf.Services;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
-    public partial class PayWindow : Window
+    public partial class PayDialog : UserControl
     {
-        private readonly decimal _subtotal;
-        private readonly decimal _discountValue;
-        private readonly decimal _tax;
-        private readonly decimal _grandTotal;
-        private readonly int _items;
-        private readonly int _qty;
+        // State
+        private decimal _subtotal, _discountValue, _tax, _grand;
+        private int _items, _qty;
+        private bool _differenceMode;
+        private decimal _amountDelta;
 
-        // “difference mode” (amendments/returns) — settle a delta instead of the full grand total
-        private bool _differenceMode = false;   // true = settle delta only
-        private decimal _amountDelta = 0m;      // +collect, -refund
-
-        // First-input-replaces flags
         private bool _cashFirst = true;
         private bool _cardFirst = true;
-
-        // Active target for keypad
         private TextBox? _active;
 
-        public decimal Cash { get; private set; }
-        public decimal Card { get; private set; }
-        public bool Confirmed { get; private set; }
+        private static readonly Regex _numRx = new(@"^[0-9.]$", RegexOptions.Compiled);
 
-        // If in difference mode, target is |delta|; otherwise full grand total
-        private decimal TargetAmount => _differenceMode ? Math.Abs(_amountDelta) : _grandTotal;
+        // Result
+        private TaskCompletionSource<PaymentResult>? _tcs;
 
-        // ===== Constructors =====
-
-        /// <summary>
-        /// Normal (full-invoice) mode.
-        /// </summary>
-        public PayWindow(decimal subtotal, decimal discountValue, decimal tax,
-                         decimal grandTotal, int items, int qty)
+        public PayDialog()
         {
             InitializeComponent();
+        }
+
+        public Task<PaymentResult> InitializeAndShowAsync(
+            decimal subtotal, decimal discountValue, decimal tax, decimal grandTotal,
+            int items, int qty, bool differenceMode, decimal amountDelta, string? title,
+            Action closeOverlay)
+        {
+            _tcs = new TaskCompletionSource<PaymentResult>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _subtotal = subtotal;
             _discountValue = discountValue;
             _tax = tax;
-            _grandTotal = grandTotal;
+            _grand = grandTotal;
             _items = items;
             _qty = qty;
+            _differenceMode = differenceMode;
+            _amountDelta = amountDelta;
 
-            // Bind summary (normal mode shows full invoice figures)
-            SubtotalText.Text = _subtotal.ToString("0.00");
-            DiscountText.Text = "-" + _discountValue.ToString("0.00");
-            TaxText.Text = _tax.ToString("0.00");
-            GrandText.Text = _grandTotal.ToString("0.00");
+            TitleBlock.Text = string.IsNullOrWhiteSpace(title) ? "Finalize Payment" : title!;
             ItemsText.Text = _items.ToString();
             QtyText.Text = _qty.ToString();
 
-            // Prefill cash with invoice amount
-            CashBox.Text = _grandTotal.ToString("0.00");
-            CardBox.Text = "0";
+            SubtotalText.Text = _subtotal.ToString("0.00");
+            DiscountText.Text = "-" + _discountValue.ToString("0.00");
+            TaxText.Text = _tax.ToString("0.00");
 
+            var target = TargetAmount;
+            GrandText.Text = target.ToString("0.00");
+
+            if (_differenceMode)
+            {
+                TitleBlock.Text = (_amountDelta >= 0m) ? $"Collect {target:0.00}" : $"Refund {target:0.00}";
+            }
+
+            // Prefill tender
+            if (target == 0m)
+            {
+                _tcs.TrySetResult(new PaymentResult { Confirmed = true, Cash = 0m, Card = 0m });
+                closeOverlay();
+                return _tcs.Task;
+            }
+
+            CashBox.Text = target.ToString("0.00");
+            CardBox.Text = "0";
+            _cashFirst = _cardFirst = false;
+
+            // focus
             Loaded += (_, __) =>
             {
                 _active = CashBox;
@@ -71,55 +84,25 @@ namespace Pos.Client.Wpf.Windows.Sales
                 Recompute();
             };
 
-            // Optional: prevent paste of non-numeric (keeps things tidy)
+            // disallow non-numeric paste
             DataObject.AddPastingHandler(CashBox, OnPasteNumericOnly);
             DataObject.AddPastingHandler(CardBox, OnPasteNumericOnly);
+
+            return _tcs.Task;
         }
 
-        /// <summary>
-        /// Difference mode (amend/return) — settle only the delta (amountDelta).
-        /// </summary>
-        public PayWindow(decimal subtotal, decimal discountValue, decimal tax,
-                         decimal grandTotal, int items, int qty,
-                         bool differenceMode, decimal amountDelta)
-            : this(subtotal, discountValue, tax, grandTotal, items, qty)
-        {
-            _differenceMode = differenceMode;
-            _amountDelta = amountDelta;
-
-            var target = TargetAmount;
-            Title = (_amountDelta >= 0m) ? $"Collect {target:0.00}" : $"Refund {target:0.00}";
-            GrandText.Text = target.ToString("0.00");
-            if (target == 0m)
-            {
-                // No settlement needed
-                CashBox.Text = "0";
-                CardBox.Text = "0";
-                Confirmed = true;
-                DialogResult = true;
-                Close();
-                return;
-            }
-            // Prefill tender to the exact delta; user can split if needed
-            CashBox.Text = target.ToString("0.00");
-            CardBox.Text = "0";
-            _cashFirst = _cardFirst = false;
-            Recompute(); // recompute due/change based on TargetAmount
-        }
-
-        // ===== Helpers =====
-        private static readonly Regex _numRx = new(@"^[0-9.]$", RegexOptions.Compiled);
+        private decimal TargetAmount => _differenceMode ? Math.Abs(_amountDelta) : _grand;
 
         private void Recompute()
         {
             decimal.TryParse(CashBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var c1);
             decimal.TryParse(CardBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var c2);
 
-            Cash = c1 < 0 ? 0 : c1;
-            Card = c2 < 0 ? 0 : c2;
-
+            var cash = c1 < 0 ? 0 : c1;
+            var card = c2 < 0 ? 0 : c2;
             var target = TargetAmount;
-            var paid = Cash + Card;
+
+            var paid = cash + card;
             var due = Math.Max(0m, target - paid);
             var change = Math.Max(0m, paid - target);
 
@@ -127,6 +110,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             ChangeText.Text = change.ToString("0.00");
         }
 
+        // Input helpers
         private void OnPasteNumericOnly(object sender, DataObjectPastingEventArgs e)
         {
             if (!e.SourceDataObject.GetDataPresent(DataFormats.Text)) { e.CancelCommand(); return; }
@@ -135,16 +119,13 @@ namespace Pos.Client.Wpf.Windows.Sales
                 e.CancelCommand();
         }
 
-        // ===== TextBox events =====
         private void NumericOnly(object sender, TextCompositionEventArgs e)
         {
             if (!_numRx.IsMatch(e.Text)) { e.Handled = true; return; }
-
             var tb = (TextBox)sender;
-            // On first key after focus, replace the prefilled text
             if ((tb == CashBox && _cashFirst) || (tb == CardBox && _cardFirst))
             {
-                tb.Text = e.Text == "." ? "0." : e.Text; // sensible start
+                tb.Text = e.Text == "." ? "0." : e.Text;
                 tb.CaretIndex = tb.Text.Length;
                 e.Handled = true;
                 if (tb == CashBox) _cashFirst = false;
@@ -161,19 +142,16 @@ namespace Pos.Client.Wpf.Windows.Sales
             _active = CashBox;
             CashBox.SelectAll();
         }
-
         private void CardBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
             _active = CardBox;
             CardBox.SelectAll();
         }
 
-        // ===== Keypad =====
         private void Pad_Click(object sender, RoutedEventArgs e)
         {
             _active ??= CashBox;
-            var btn = (Button)sender;
-            var ch = btn.Content?.ToString();
+            var ch = (string)((Button)sender).Content;
 
             if (ch == "⌫")
             {
@@ -182,10 +160,9 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             else
             {
-                // First input after focus replaces prefill
                 if ((_active == CashBox && _cashFirst) || (_active == CardBox && _cardFirst))
                 {
-                    _active.Text = ch == "." ? "0." : ch!;
+                    _active.Text = ch == "." ? "0." : ch;
                     if (_active == CashBox) _cashFirst = false;
                     if (_active == CardBox) _cardFirst = false;
                 }
@@ -206,27 +183,24 @@ namespace Pos.Client.Wpf.Windows.Sales
             Recompute();
         }
 
-        // ===== Convenience buttons =====
         private void ExactCash_Click(object sender, RoutedEventArgs e)
         {
-            var target = TargetAmount;
-            CashBox.Text = target.ToString("0.00");
+            var t = TargetAmount;
+            CashBox.Text = t.ToString("0.00");
             CardBox.Text = "0";
             _cashFirst = _cardFirst = false;
             _active = CashBox;
             Recompute();
         }
-
         private void ExactCard_Click(object sender, RoutedEventArgs e)
         {
-            var target = TargetAmount;
-            CardBox.Text = target.ToString("0.00");
+            var t = TargetAmount;
+            CardBox.Text = t.ToString("0.00");
             CashBox.Text = "0";
             _cashFirst = _cardFirst = false;
             _active = CardBox;
             Recompute();
         }
-
         private void ClearCash_Click(object sender, RoutedEventArgs e)
         {
             CashBox.Text = "0";
@@ -236,7 +210,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             CashBox.SelectAll();
             Recompute();
         }
-
         private void ClearCard_Click(object sender, RoutedEventArgs e)
         {
             CardBox.Text = "0";
@@ -246,7 +219,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             CardBox.SelectAll();
             Recompute();
         }
-
         private void ClearBoth_Click(object sender, RoutedEventArgs e)
         {
             CashBox.Text = "0";
@@ -258,50 +230,43 @@ namespace Pos.Client.Wpf.Windows.Sales
             Recompute();
         }
 
-        // ===== Confirm / Cancel & shortcuts =====
         private void Confirm_Click(object sender, RoutedEventArgs e)
         {
+            decimal.TryParse(CashBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var cash);
+            decimal.TryParse(CardBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var card);
+            var target = Math.Round(TargetAmount, 2);
+            var tendered = Math.Round(cash + card, 2);
+
             if (_differenceMode)
             {
-                // Must settle the delta exactly (no under/over)
-                var required = Math.Round(TargetAmount, 2);
-                var tendered = Math.Round(Cash + Card, 2);
-
-                if (tendered != required)
+                if (tendered != target)
                 {
-                    MessageBox.Show($"Please enter exactly {required:0.00} split across Cash/Card.");
+                    MessageBox.Show($"Please enter exactly {target:0.00} split across Cash/Card.");
                     return;
                 }
-
-                Confirmed = true;
-                DialogResult = true;
-                Close();
-                return;
             }
-
-            // Normal (full invoice) mode: allow tiny 0.01 under due to rounding
-            if (Cash + Card + 0.01m < _grandTotal)
+            else
             {
-                MessageBox.Show("Payment is less than total.");
-                return;
+                if (tendered + 0.01m < target)
+                {
+                    MessageBox.Show("Payment is less than total.");
+                    return;
+                }
             }
-            Confirmed = true;
-            DialogResult = true;
-            Close();
+
+            _tcs?.TrySetResult(new PaymentResult { Confirmed = true, Cash = cash, Card = card });
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            Confirmed = false;
-            DialogResult = false;
-            Close();
+            _tcs?.TrySetResult(new PaymentResult { Confirmed = false, Cash = 0m, Card = 0m });
         }
 
         private DateTime _lastEsc = DateTime.MinValue;
         private int _escCount = 0;
         private const int EscChordMs = 450;
 
-        private void Window_KeyDown(object sender, KeyEventArgs e)
+        private void Root_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.F9 || e.Key == Key.Enter)
             {
@@ -314,8 +279,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if ((now - _lastEsc).TotalMilliseconds <= EscChordMs) _escCount++;
                 else _escCount = 1;
                 _lastEsc = now;
-
-                // In this window, single Esc cancels; MainWindow handles double-Esc refocus.
                 Cancel_Click(sender, e);
                 e.Handled = true;
             }

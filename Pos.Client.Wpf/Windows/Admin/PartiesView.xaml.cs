@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,7 +12,7 @@ using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
-    public partial class PartiesWindow : Window
+    public partial class PartiesView : UserControl
     {
         private IDbContextFactory<PosClientDbContext>? _dbf;
         private Func<EditPartyWindow>? _editFactory;
@@ -31,7 +32,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private ObservableCollection<PartyRowVM> _rows = new();
 
-        public PartiesWindow()
+        public PartiesView()
         {
             InitializeComponent();
 
@@ -102,7 +103,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         private void New_Click(object sender, RoutedEventArgs e)
         {
             var w = _editFactory!();
-            w.Owner = this;
+            //w.Owner = this;
             if (w.ShowDialog() == true) RefreshRows();
         }
 
@@ -110,18 +111,18 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             if (Grid.SelectedItem is not PartyRowVM row) return;
             var w = _editFactory!();
-            w.Owner = this;
+            //w.Owner = this;
             w.LoadParty(row.Id);
             if (w.ShowDialog() == true) RefreshRows();
         }
 
         private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e) => Edit_Click(sender, e);
 
-        private void Close_Click(object sender, RoutedEventArgs e) => Close();
+        //private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape) Close();
+            //if (e.Key == Key.Escape) Close();
             if (e.Key == Key.N && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) New_Click(sender, e);
             if (e.Key == Key.Enter) Edit_Click(sender, e);
         }

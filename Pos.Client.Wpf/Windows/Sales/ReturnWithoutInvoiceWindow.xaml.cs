@@ -15,6 +15,8 @@ using Pos.Domain.Pricing;
 using Pos.Persistence;
 using Pos.Domain.Services;
 using Pos.Client.Wpf.Models;
+using Microsoft.Extensions.DependencyInjection; // for GetRequiredService
+using Pos.Client.Wpf.Services;                 // for IPaymentDialogService, PaymentResult
 
 
 namespace Pos.Client.Wpf.Windows.Sales
@@ -619,7 +621,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             ScanText.Focus();
         }
 
-        private void RefundButton_Click(object sender, RoutedEventArgs e)
+        private async void RefundButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_cart.Any()) { MessageBox.Show("Nothing to return — cart is empty."); return; }
 
@@ -689,18 +691,30 @@ namespace Pos.Client.Wpf.Windows.Sales
                 !db.Users.AsNoTracking().Any(u => u.Id == salesmanIdLocal.Value))
                 salesmanIdLocal = null;
 
-            // Pay window (refund split)
-            var pay = new Pos.Client.Wpf.Windows.Sales.PayWindow(subtotal, invDiscValue, tax, grand, itemsCount, qtySum)
-            { Owner = this };
-            var ok = pay.ShowDialog() == true && pay.Confirmed;
-            if (!ok) { ScanText.Focus(); return; }
+            // Pay dialog (overlay, refund split)
+            var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
+            var payResult = await paySvc.ShowAsync(
+                subtotal, invDiscValue, tax, grand, itemsCount, qtySum,
+                differenceMode: false,      // refund the full amount; set true only for delta-settlement flows
+                amountDelta: 0m,
+                title: "Refund"
+            );
 
-            var refundCash = pay.Cash;
-            var refundCard = pay.Card;
+            if (!payResult.Confirmed)
+            {
+                ScanText.Focus();
+                return;
+            }
+
+            var refundCash = payResult.Cash;
+            var refundCard = payResult.Card;
+
             if (refundCash + refundCard + 0.01m < grand)
             {
-                MessageBox.Show("Refund split is less than total."); return;
+                MessageBox.Show("Refund split is less than total.");
+                return;
             }
+
 
             var paymentMethod =
                 (refundCash > 0 && refundCard > 0) ? PaymentMethod.Mixed :

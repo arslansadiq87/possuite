@@ -1,21 +1,36 @@
-﻿using System.Windows;
-using Fluent;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Services;
 
 namespace Pos.Client.Wpf.Windows.Shell
 {
-    public partial class DashboardWindow : RibbonWindow
+    public partial class DashboardWindow
     {
-        public DashboardWindow(DashboardVm vm)
+        private readonly DashboardVm _vm;
+        private readonly IViewNavigator _views;
+
+        public DashboardWindow(DashboardVm vm, IViewNavigator views)
         {
             InitializeComponent();
-            DataContext = vm;
-            Loaded += OnLoaded;
-        }
+            _vm = vm;
+            _views = views;
+            DataContext = _vm;
 
-        private async void OnLoaded(object? sender, RoutedEventArgs e)
-        {
-            if (DataContext is DashboardVm vm)
-                await vm.RefreshAsync();
+            Loaded += (_, __) =>
+            {
+                _views.Attach(_vm);
+                // Optional: land on a default view (e.g., Reports or a Home view)
+                // _views.SetRoot<Windows.Reports.ReportsView>();
+                _ = _vm.RefreshAsync();
+            };
+
+            PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == System.Windows.Input.Key.Escape && _vm.IsOverlayOpen)
+                {
+                    _views.HideOverlay();
+                    e.Handled = true;
+                }
+            };
         }
     }
 }

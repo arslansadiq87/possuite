@@ -15,11 +15,13 @@ using System.Windows.Input;
 using Pos.Domain.Formatting;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+
 
 
 namespace Pos.Client.Wpf.Windows.Inventory
 {
-    public partial class TransferEditorWindow : Window
+    public partial class TransferView : UserControl
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly ITransferService _transfer;
@@ -40,7 +42,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private void SearchBox_GotFocus(object sender, RoutedEventArgs e) => HideAvailablePanel();
 
 
-        public TransferEditorWindow(
+        public TransferView(
             IDbContextFactory<PosClientDbContext> dbf,
             ITransferService transfer,
             ITransferQueries queries,
@@ -77,7 +79,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             if (!allowed)
             {
                 MessageBox.Show("You do not have permission to manage transfers.", "Access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
-                Close();
+                //Close();
                 return;
             }
 
@@ -901,7 +903,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             {
                 var picker = new TransferPickerWindow(App.Services, _dbf, _queries, _state, TransferPickerWindow.PickerMode.Drafts)
                 {
-                    Owner = this
+                    //Owner = this
                 };
                 if (picker.ShowDialog() == true && picker.SelectedTransferId.HasValue)
                     await LoadDocAsync(picker.SelectedTransferId.Value);
@@ -915,7 +917,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             {
                 var picker = new TransferPickerWindow(App.Services, _dbf, _queries, _state, TransferPickerWindow.PickerMode.Receipts)
                 {
-                    Owner = this
+                    //Owner = this
                 };
                 if (picker.ShowDialog() == true && picker.SelectedTransferId.HasValue)
                     await LoadDocAsync(picker.SelectedTransferId.Value);

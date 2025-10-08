@@ -10,6 +10,9 @@ using Pos.Domain;
 using Pos.Domain.Entities;
 using Pos.Domain.Pricing;           // PricingMath
 using Pos.Persistence;
+using Microsoft.Extensions.DependencyInjection;   // GetRequiredService
+using Pos.Client.Wpf.Services;                    // IPaymentDialogService, PaymentResult
+
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -163,186 +166,203 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
-        {
-            var reason = ReasonBox.Text?.Trim();
-            if (string.IsNullOrWhiteSpace(reason))
+        
+        private async void Save_Click(object sender, RoutedEventArgs e)
             {
-                MessageBox.Show("Enter a reason."); return;
-            }
-
-            var any = _rows.Any(r => r.ReturnQty > 0);
-            if (!any) { MessageBox.Show("No quantities entered to return."); return; }
-
-            using var db = new PosClientDbContext(_opts);
-            using var tx = db.Database.BeginTransaction();
-
-            var orig = db.Sales.AsNoTracking().First(s => s.Id == _origSaleId);
-
-            // Re-read original lines to get official sold qty
-            var origByItem = db.SaleLines.AsNoTracking()
-                .Where(l => l.SaleId == _origSaleId)
-                .GroupBy(l => l.ItemId)
-                .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty)); // sold qty is positive
-
-            // Recompute "already returned so far" INSIDE the transaction to prevent races
-            var priorNow = (
-                from s in db.Sales.AsNoTracking()
-                where s.IsReturn && s.OriginalSaleId == _origSaleId && s.Status != SaleStatus.Voided
-                join l in db.SaleLines.AsNoTracking() on s.Id equals l.SaleId
-                group l by l.ItemId into g
-                select new { ItemId = g.Key, Qty = g.Sum(x => Math.Abs(x.Qty)) }
-            ).ToDictionary(x => x.ItemId, x => x.Qty);
-
-            // Validate each requested return does not exceed the available NOW
-            foreach (var r in _rows.Where(x => x.ReturnQty > 0))
-            {
-                var sold = origByItem.TryGetValue(r.ItemId, out var sQty) ? sQty : 0;
-                var already = priorNow.TryGetValue(r.ItemId, out var pQty) ? pQty : 0;
-                var availNow = Math.Max(0, sold - already);
-
-                if (r.ReturnQty > availNow)
+                var reason = ReasonBox.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(reason))
                 {
-                    MessageBox.Show(
-                        $"Item {r.Sku} — trying to return {r.ReturnQty}, but only {availNow} is available to return.",
-                        "Return exceeds available");
-                    tx.Rollback();
-                    return;
+                    MessageBox.Show("Enter a reason."); return;
                 }
-            }
 
-            // Allocate new invoice number for the return
-            var seq = db.CounterSequences.SingleOrDefault(x => x.CounterId == orig.CounterId)
-                ?? db.CounterSequences.Add(new CounterSequence { CounterId = orig.CounterId, NextInvoiceNumber = 1 }).Entity;
-            db.SaveChanges();
-            var allocatedInvoiceNo = seq.NextInvoiceNumber;
-            seq.NextInvoiceNumber++;
-            db.SaveChanges();
+                var any = _rows.Any(r => r.ReturnQty > 0);
+                if (!any) { MessageBox.Show("No quantities entered to return."); return; }
 
-            // Recompute magnitude totals using clamped ReturnQty
-            RecalcTotals();
-            var amounts = _rows.Select(r =>
-                PricingMath.CalcLine(new LineInput(
-                    Qty: r.ReturnQty,
-                    UnitPrice: r.UnitPrice,
-                    DiscountPct: r.DiscountPct,
-                    DiscountAmt: r.DiscountAmt,
-                    TaxRatePct: r.TaxRatePct,
-                    TaxInclusive: r.TaxInclusive)))
-                .ToList();
+                using var db = new PosClientDbContext(_opts);
 
-            var magSubtotal = amounts.Sum(a => a.LineNet);
-            var magTax = amounts.Sum(a => a.LineTax);
-            var magGrand = magSubtotal + magTax;
+                // ---- READ-ONLY: original sale + sold quantities (no transaction) ----
+                var orig = db.Sales.AsNoTracking().First(s => s.Id == _origSaleId);
 
-            if (magGrand <= 0m) { MessageBox.Show("Nothing to return."); return; }
+                var origByItem = db.SaleLines.AsNoTracking()
+                    .Where(l => l.SaleId == _origSaleId)
+                    .GroupBy(l => l.ItemId)
+                    .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty)); // sold qty is positive
 
-            // Refund exactly the delta
-            var pay = new Pos.Client.Wpf.Windows.Sales.PayWindow(
-                subtotal: magSubtotal,
-                discountValue: 0m,
-                tax: magTax,
-                grandTotal: magGrand,
-                items: _rows.Count(r => r.ReturnQty > 0),
-                qty: _rows.Sum(r => r.ReturnQty),
-                differenceMode: true,
-                amountDelta: -magGrand   // refund
-            )
-            { Owner = this };
-
-            var ok = pay.ShowDialog() == true && pay.Confirmed;
-            if (!ok) { tx.Rollback(); return; }
-
-            // Create the return sale (negative totals), linked to original
-            var ret = new Sale
-            {
-                Ts = DateTime.UtcNow,
-                OutletId = orig.OutletId,
-                CounterId = orig.CounterId,
-                TillSessionId = orig.TillSessionId,
-
-                IsReturn = true,
-                OriginalSaleId = _origSaleId,
-                Status = SaleStatus.Final,
-                Revision = 0,
-                InvoiceNumber = allocatedInvoiceNo,
-
-                Subtotal = -magSubtotal,
-                TaxTotal = -magTax,
-                Total = -magGrand,
-
-                CashierId = orig.CashierId,
-                SalesmanId = orig.SalesmanId,
-
-                CustomerKind = orig.CustomerKind,
-                CustomerId = orig.CustomerId,
-                CustomerName = orig.CustomerName,
-                CustomerPhone = orig.CustomerPhone,
-
-                CashAmount = -pay.Cash,   // negative = refund
-                CardAmount = -pay.Card,
-                PaymentMethod =
-                    (pay.Cash > 0 && pay.Card > 0) ? PaymentMethod.Mixed :
-                    (pay.Cash > 0) ? PaymentMethod.Cash : PaymentMethod.Card,
-
-                Note = reason
-            };
-            db.Sales.Add(ret);
-            db.SaveChanges();
-
-            // Lines (negative qty) + stock add-back
-            foreach (var r in _rows.Where(x => x.ReturnQty > 0))
-            {
-                var a = PricingMath.CalcLine(new LineInput(
-                    Qty: r.ReturnQty,
-                    UnitPrice: r.UnitPrice,
-                    DiscountPct: r.DiscountPct,
-                    DiscountAmt: r.DiscountAmt,
-                    TaxRatePct: r.TaxRatePct,
-                    TaxInclusive: r.TaxInclusive));
-
-                db.SaleLines.Add(new SaleLine
+                // Optional: quick pre-check outside tx (can be skipped; final check happens later in tx)
+                foreach (var r in _rows.Where(x => x.ReturnQty > 0))
                 {
-                    SaleId = ret.Id,
-                    ItemId = r.ItemId,
-                    Qty = -r.ReturnQty,                // negative on return
-                    UnitPrice = r.UnitPrice,
-                    DiscountPct = r.DiscountPct,
-                    DiscountAmt = r.DiscountAmt,
-                    TaxCode = null,
-                    TaxRatePct = r.TaxRatePct,
-                    TaxInclusive = r.TaxInclusive,
-                    UnitNet = -(a.UnitNet),
-                    LineNet = -(a.LineNet),
-                    LineTax = -(a.LineTax),
-                    LineTotal = -(a.LineTotal)
-                });
+                    var sold = origByItem.TryGetValue(r.ItemId, out var sQty) ? sQty : 0;
+                    if (r.ReturnQty > sold)
+                    {
+                        MessageBox.Show($"Item {r.Sku} — trying to return {r.ReturnQty}, but only {sold} were sold.", "Invalid return");
+                        return;
+                    }
+                }
 
-                db.StockEntries.Add(new StockEntry
+                // ---- Compute intended refund magnitude (no transaction) ----
+                RecalcTotals();
+                var amounts = _rows.Select(r =>
+                    PricingMath.CalcLine(new LineInput(
+                        Qty: r.ReturnQty,
+                        UnitPrice: r.UnitPrice,
+                        DiscountPct: r.DiscountPct,
+                        DiscountAmt: r.DiscountAmt,
+                        TaxRatePct: r.TaxRatePct,
+                        TaxInclusive: r.TaxInclusive)))
+                    .ToList();
+
+                var magSubtotal = amounts.Sum(a => a.LineNet);
+                var magTax = amounts.Sum(a => a.LineTax);
+                var magGrand = magSubtotal + magTax;
+
+                if (magGrand <= 0m) { MessageBox.Show("Nothing to return."); return; }
+
+                // ---- Ask cashier for refund split (overlay dialog) ----
+                var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
+                var payResult = await paySvc.ShowAsync(
+                    subtotal: magSubtotal,
+                    discountValue: 0m,
+                    tax: magTax,
+                    grandTotal: magGrand,
+                    items: _rows.Count(r => r.ReturnQty > 0),
+                    qty: _rows.Sum(r => r.ReturnQty),
+                    differenceMode: true,
+                    amountDelta: -magGrand,      // refund
+                    title: "Refund Payment"
+                );
+
+                if (!payResult.Confirmed) return; // user cancelled; nothing to do
+
+                // =====================================================================
+                // START TRANSACTION *after* user confirmed, to minimize lock time
+                // =====================================================================
+                using var tx = db.Database.BeginTransaction();
+
+                // ---- RE-READ "already returned so far" INSIDE TX to prevent races ----
+                var priorNow = (
+                    from s in db.Sales.AsNoTracking()
+                    where s.IsReturn && s.OriginalSaleId == _origSaleId && s.Status != SaleStatus.Voided
+                    join l in db.SaleLines.AsNoTracking() on s.Id equals l.SaleId
+                    group l by l.ItemId into g
+                    select new { ItemId = g.Key, Qty = g.Sum(x => Math.Abs(x.Qty)) }
+                ).ToDictionary(x => x.ItemId, x => x.Qty);
+
+                // ---- FINAL VALIDATION INSIDE TX ----
+                foreach (var r in _rows.Where(x => x.ReturnQty > 0))
                 {
-                    OutletId = ret.OutletId,
-                    ItemId = r.ItemId,
-                    QtyChange = +r.ReturnQty,         // add back to stock
-                    RefType = "SaleReturn",
-                    RefId = ret.Id,
-                    Ts = DateTime.UtcNow
-                });
-            }
+                    var sold = origByItem.TryGetValue(r.ItemId, out var sQty) ? sQty : 0;
+                    var already = priorNow.TryGetValue(r.ItemId, out var pQty) ? pQty : 0;
+                    var availNow = Math.Max(0, sold - already);
 
-            db.SaveChanges();
-            tx.Commit();
+                    if (r.ReturnQty > availNow)
+                    {
+                        MessageBox.Show(
+                            $"Item {r.Sku} — trying to return {r.ReturnQty}, but only {availNow} is available to return now.",
+                            "Return exceeds available");
+                        tx.Rollback();
+                        return;
+                    }
+                }
 
-            Confirmed = true;
-            RefundMagnitude = magGrand;
+                // ---- Allocate invoice number INSIDE TX ----
+                var seq = db.CounterSequences.SingleOrDefault(x => x.CounterId == orig.CounterId)
+                    ?? db.CounterSequences.Add(new CounterSequence { CounterId = orig.CounterId, NextInvoiceNumber = 1 }).Entity;
+                db.SaveChanges();
+                var allocatedInvoiceNo = seq.NextInvoiceNumber;
+                seq.NextInvoiceNumber++;
+                db.SaveChanges();
 
-            try
-            {
-                // Optional: print your return receipt
-                // ReceiptPrinter.PrintSaleAmended(ret, Array.Empty<CartLine>(), "RETURN");
-            }
-            catch { /* ignore print errors */ }
+                // ---- Create the return sale (negative totals), linked to original ----
+                var ret = new Sale
+                {
+                    Ts = DateTime.UtcNow,
+                    OutletId = orig.OutletId,
+                    CounterId = orig.CounterId,
+                    TillSessionId = orig.TillSessionId,
 
-            DialogResult = true;
+                    IsReturn = true,
+                    OriginalSaleId = _origSaleId,
+                    Status = SaleStatus.Final,
+                    Revision = 0,
+                    InvoiceNumber = allocatedInvoiceNo,
+
+                    Subtotal = -magSubtotal,
+                    TaxTotal = -magTax,
+                    Total = -magGrand,
+
+                    CashierId = orig.CashierId,
+                    SalesmanId = orig.SalesmanId,
+
+                    CustomerKind = orig.CustomerKind,
+                    CustomerId = orig.CustomerId,
+                    CustomerName = orig.CustomerName,
+                    CustomerPhone = orig.CustomerPhone,
+
+                    CashAmount = -payResult.Cash,   // negative = refund
+                    CardAmount = -payResult.Card,
+                    PaymentMethod =
+                        (payResult.Cash > 0 && payResult.Card > 0) ? PaymentMethod.Mixed :
+                        (payResult.Cash > 0) ? PaymentMethod.Cash : PaymentMethod.Card,
+
+                    Note = reason
+                };
+                db.Sales.Add(ret);
+                db.SaveChanges();
+
+                // ---- Lines (negative qty) + stock add-back ----
+                foreach (var r in _rows.Where(x => x.ReturnQty > 0))
+                {
+                    var a = PricingMath.CalcLine(new LineInput(
+                        Qty: r.ReturnQty,
+                        UnitPrice: r.UnitPrice,
+                        DiscountPct: r.DiscountPct,
+                        DiscountAmt: r.DiscountAmt,
+                        TaxRatePct: r.TaxRatePct,
+                        TaxInclusive: r.TaxInclusive));
+
+                    db.SaleLines.Add(new SaleLine
+                    {
+                        SaleId = ret.Id,
+                        ItemId = r.ItemId,
+                        Qty = -r.ReturnQty,                // negative on return
+                        UnitPrice = r.UnitPrice,
+                        DiscountPct = r.DiscountPct,
+                        DiscountAmt = r.DiscountAmt,
+                        TaxCode = null,
+                        TaxRatePct = r.TaxRatePct,
+                        TaxInclusive = r.TaxInclusive,
+                        UnitNet = -(a.UnitNet),
+                        LineNet = -(a.LineNet),
+                        LineTax = -(a.LineTax),
+                        LineTotal = -(a.LineTotal)
+                    });
+
+                    db.StockEntries.Add(new StockEntry
+                    {
+                        OutletId = ret.OutletId,
+                        ItemId = r.ItemId,
+                        QtyChange = +r.ReturnQty,         // add back to stock
+                        RefType = "SaleReturn",
+                        RefId = ret.Id,
+                        Ts = DateTime.UtcNow
+                    });
+                }
+
+                db.SaveChanges();
+                tx.Commit();
+
+                Confirmed = true;
+                RefundMagnitude = magGrand;
+
+                try
+                {
+                    // Optional: print your return receipt
+                    // ReceiptPrinter.PrintSaleAmended(ret, Array.Empty<CartLine>(), "RETURN");
+                }
+                catch { /* ignore print errors */ }
+
+                DialogResult = true;
         }
-    }
+
+}
 }

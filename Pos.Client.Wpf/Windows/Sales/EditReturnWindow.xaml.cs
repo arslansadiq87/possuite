@@ -10,6 +10,9 @@ using Pos.Domain;
 using Pos.Domain.Entities;
 using Pos.Domain.Pricing;
 using Pos.Persistence;
+using Microsoft.Extensions.DependencyInjection;    // GetRequiredService
+using Pos.Client.Wpf.Services;                     // IPaymentDialogService, PaymentResult
+
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -173,7 +176,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
+        private async void Save_Click(object sender, RoutedEventArgs e)
         {
             if (_old == null) return;
             var reason = ReasonBox.Text?.Trim();
@@ -333,10 +336,12 @@ namespace Pos.Client.Wpf.Windows.Sales
             db.SaveChanges();
 
             // PAYMENT DELTA (signed totals)
-            var amountDelta = amended.Total - latest.Total; // signed
+            var amountDelta = amended.Total - latest.Total; // signed (+collect / -refund)
             if (amountDelta != 0m)
             {
-                var pay = new PayWindow(
+                // Use in-shell overlay pay dialog
+                var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
+                var payResult = await paySvc.ShowAsync(
                     subtotal: Math.Abs(amended.Subtotal),
                     discountValue: 0m,
                     tax: Math.Abs(amended.TaxTotal),
@@ -344,24 +349,28 @@ namespace Pos.Client.Wpf.Windows.Sales
                     items: _rows.Count,
                     qty: _rows.Sum(x => x.ReturnQty),
                     differenceMode: true,
-                    amountDelta: amountDelta
-                )
-                { Owner = this };
+                    amountDelta: amountDelta,
+                    title: (amountDelta >= 0m) ? "Collect Difference" : "Refund Difference"
+                );
 
-                var ok = pay.ShowDialog() == true && pay.Confirmed;
-                if (!ok) { tx.Rollback(); MessageBox.Show("Amendment cancelled."); return; }
+                if (!payResult.Confirmed)
+                {
+                    tx.Rollback();
+                    MessageBox.Show("Amendment cancelled.");
+                    return;
+                }
 
-                amended.CashAmount =
-                    (pay.Cash > 0 ? (amountDelta >= 0 ? pay.Cash : -pay.Cash) : 0m);
-                amended.CardAmount =
-                    (pay.Card > 0 ? (amountDelta >= 0 ? pay.Card : -pay.Card) : 0m);
+                // Sign cash/card by delta direction (+ collect, - refund)
+                amended.CashAmount = (payResult.Cash > 0 ? (amountDelta >= 0 ? payResult.Cash : -payResult.Cash) : 0m);
+                amended.CardAmount = (payResult.Card > 0 ? (amountDelta >= 0 ? payResult.Card : -payResult.Card) : 0m);
 
                 amended.PaymentMethod =
-                    (pay.Cash > 0 && pay.Card > 0) ? PaymentMethod.Mixed :
-                    (pay.Cash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
+                    (payResult.Cash > 0 && payResult.Card > 0) ? PaymentMethod.Mixed :
+                    (payResult.Cash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
 
                 db.SaveChanges();
             }
+
 
             tx.Commit();
             Confirmed = true;

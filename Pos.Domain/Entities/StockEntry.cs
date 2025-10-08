@@ -20,7 +20,7 @@ public class StockEntry : BaseEntity
     public int LocationId { get; set; }
 
     // Header link (canonical)
-    public int StockDocId { get; set; }
+    public int? StockDocId { get; set; }
     public StockDoc? StockDoc { get; set; }
 
     // Keep your existing refs for compatibility
