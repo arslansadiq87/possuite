@@ -7,30 +7,42 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Client.Wpf.Services;
 using Pos.Client.Wpf.Windows.Shell; // for ViewTab
 using Pos.Persistence;
+using System;                        // for Action
+
+
 
 namespace Pos.Client.Wpf.Windows.Shell;
 
 public sealed class DashboardVm : ObservableObject
 {
+    private readonly ITillService _till;
+
     // ---------- Services ----------
     private readonly IDbContextFactory<PosClientDbContext> _dbf;
     private readonly AppState _st;
     private readonly IWindowNavigator _nav;
     private readonly IViewNavigator _views;     // single-shell view navigation (now tab-aware)
     private readonly IDialogService _dialogs;   // overlay-based confirms, etc.
+    // keep your existing TillStatus string property — do NOT switch to [ObservableProperty]
+    private bool _isTillOpen;
+    public bool IsTillOpen { get => _isTillOpen; set => SetProperty(ref _isTillOpen, value); }
+
 
     public DashboardVm(
         IDbContextFactory<PosClientDbContext> dbf,
         AppState st,
         IWindowNavigator nav,
         IViewNavigator views,
-        IDialogService dialogs)                  // NEW: actually injected now
+        IDialogService dialogs,
+            ITillService till)                 // <-- NEW
     {
         _dbf = dbf;
         _st = st;
         _nav = nav;
         _views = views;
         _dialogs = dialogs;
+        _till = till;                      // <-- NEW
+
 
         // ---------- Defaults ----------
         OutletName = "-";
@@ -50,26 +62,28 @@ public sealed class DashboardVm : ObservableObject
 
         // ---------- Commands ----------
         ExitCmd = new RelayCommand(() => Application.Current.Shutdown());
-
         // Open modules as TABS (for views we already have)
         NewSaleCmd = new RelayCommand(OpenSalesTab);
         OpenReturnsCmd = new AsyncRelayCommand(() => NotImplementedAsync("Returns (stub)"));
+        OpenSaleCenterCmd = new RelayCommand(OpenSaleCenterCmdTab);
         OpenPurchaseCmd = new RelayCommand(OpenPurchaseTab);
+        OpenPurchaseInvoiceCenterCmd = new RelayCommand(OpenInvoiceCenterPurchaseTab);
         OpenTransferCmd = new RelayCommand(OpenTransferTab);
         OpenProductsCmd = new RelayCommand(OpenProductsTab);
         OpenPartiesCmd = new RelayCommand(OpenPartiesTab);
         OpenOutletsCountersCmd = new RelayCommand(OpenOutletCountersTab);
+        OpenWarehousesCmd = new RelayCommand(OpenWarehousesTab);
+        OpenStockCheckCmd = new RelayCommand(StockCheckTab);
         // Keep this one as a WINDOW for now (if you haven't converted to a view yet)
         //OpenOutletsCountersCmd = new RelayCommand(() => _nav.Open<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>());
         //OpenOutletsCountersCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>());
-
         OpenUsersCmd = new RelayCommand(OpenUsersTab);
         //OpenReportsCmd = new RelayCommand(OpenReportsTab);
-
+        // NEW till commands
+        OpenTillCmd = new AsyncRelayCommand(OpenTillAsync);
+        CloseTillCmd = new AsyncRelayCommand(CloseTillAsync);
         ReceiveDispatchCmd = new AsyncRelayCommand(() => NotImplementedAsync("Transfer receive (stub)"));
-
         CloseOverlayCmd = new RelayCommand(() => { IsOverlayOpen = false; OverlayView = null; });
-
         // Tab management
         CloseActiveTabCmd = new RelayCommand(_views.CloseActiveTab);
         CloseAllTabsCmd = new RelayCommand(CloseAllTabs);
@@ -78,6 +92,7 @@ public sealed class DashboardVm : ObservableObject
         CloseRightCmd = new RelayCommand(CloseRightTabs);
 
         RefreshCmd = new AsyncRelayCommand(RefreshAsync);
+        SyncTillUi();                      // <-- NEW
     }
 
     private async Task NotImplementedAsync(string feature)
@@ -172,11 +187,14 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand ExitCmd { get; }
     public IRelayCommand NewSaleCmd { get; }
     public IRelayCommand OpenReturnsCmd { get; }
+    public IRelayCommand OpenSaleCenterCmd { get; }
     public IRelayCommand OpenPurchaseCmd { get; }
+    public IRelayCommand OpenPurchaseInvoiceCenterCmd { get; }
     public IRelayCommand OpenTransferCmd { get; }
     public IRelayCommand OpenProductsCmd { get; }
     public IRelayCommand OpenPartiesCmd { get; }
     public IRelayCommand OpenOutletsCountersCmd { get; }
+    public IRelayCommand OpenWarehousesCmd { get; }
     public IRelayCommand OpenUsersCmd { get; }
     public IRelayCommand OpenReportsCmd { get; }
     public IRelayCommand ReceiveDispatchCmd { get; }
@@ -186,7 +204,14 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand CloseOthersCmd { get; }
     public IRelayCommand CloseLeftCmd { get; }
     public IRelayCommand CloseRightCmd { get; }
+
+    public IRelayCommand OpenStockCheckCmd { get; }
     public IAsyncRelayCommand RefreshCmd { get; }
+    // NEW commands
+    public IAsyncRelayCommand OpenTillCmd { get; }
+    public IAsyncRelayCommand CloseTillCmd { get; }
+    // Notify views if you want (optional hook from window/tabs)
+    public event Action? TillChanged;
 
     // ---------- Openers => Tabs ----------
     private void OpenTransferTab()
@@ -195,8 +220,14 @@ public sealed class DashboardVm : ObservableObject
     private void OpenSalesTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Sales.SaleInvoiceView>("Sales", "Sales");
 
+    private void OpenSaleCenterCmdTab()
+        => _views.OpenTab<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>("Sale Center", "Sale Center");
+
     private void OpenPurchaseTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Purchases.PurchaseView>("Purchases", "Purchase");
+
+    private void OpenInvoiceCenterPurchaseTab()
+        => _views.OpenTab<Pos.Client.Wpf.Windows.Purchases.PurchaseCenterView>("Purchase Center", "Purchase Center");
 
     private void OpenProductsTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.ProductsItemsView>("Products", "Products");
@@ -207,13 +238,18 @@ public sealed class DashboardVm : ObservableObject
     private void OpenOutletCountersTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>("Outlets", "Outlets");
 
+    private void OpenWarehousesTab()
+        => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.WarehousesView>("Warehouses", "Warehouses");
+
     private void OpenUsersTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.UsersView>("Users", "Users");
 
+    private void StockCheckTab()
+        => _views.OpenTab<Pos.Client.Wpf.Windows.Sales.StockReportView>("Stock Check", "Stock Check");
     //private void OpenReportsTab()
     //    => _views.OpenTab<Pos.Client.Wpf.Windows.Reports.ReportsView>("Reports", "Reports");
 
-    // ---------- Bulk tab ops ----------
+    // ---------- Bulk tab ops ----------a
     private async void CloseAllTabs()
     {
         if (Tabs.Count == 0) return;
@@ -273,5 +309,31 @@ public sealed class DashboardVm : ObservableObject
 
         // notify if you show username in the bar
         OnPropertyChanged(nameof(CurrentUserName));
+        SyncTillUi();                      // <-- NEW
     }
+
+    private void SyncTillUi()
+    {
+        TillStatus = _till.GetStatusText();
+        IsTillOpen = _till.IsTillOpen();
+    }
+
+    private async Task OpenTillAsync()
+    {
+        if (await _till.OpenTillAsync())
+        {
+            SyncTillUi();
+            TillChanged?.Invoke();
+        }
+    }
+
+    private async Task CloseTillAsync()
+    {
+        if (await _till.CloseTillAsync())
+        {
+            SyncTillUi();
+            TillChanged?.Invoke();
+        }
+    }
+
 }

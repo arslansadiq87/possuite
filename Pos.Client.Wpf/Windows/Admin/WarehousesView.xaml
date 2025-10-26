@@ -1,9 +1,8 @@
-﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.WarehousesWindow"
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Admin.WarehousesView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Warehouses" Height="720" Width="1024"
-        WindowStartupLocation="CenterOwner"
-        KeyDown="Window_KeyDown">
+        Loaded="UserControl_Loaded"
+        PreviewKeyDown="Root_PreviewKeyDown">
     <DockPanel>
 
         <!-- Search row (auto-hidden unless grid has vertical scrollbar) -->
@@ -143,4 +142,4 @@
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>
-</Window>
+</UserControl>

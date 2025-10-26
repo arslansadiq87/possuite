@@ -1,11 +1,10 @@
-﻿<Window x:Class="Pos.Client.Wpf.Windows.Sales.InvoiceCenterWindow"
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Sales.InvoiceCenterView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Pos.Client.Wpf"
-        Title="Invoice Center — Edit &amp; Returns" Height="680" Width="1000"
-        WindowStartupLocation="CenterOwner">
+        >
 
-    <Window.Resources>
+    <UserControl.Resources>
         <!-- Define commands here so XAML can always see them -->
         <RoutedUICommand x:Key="CmdAmendReturn"   Text="Amend Return"/>
         <RoutedUICommand x:Key="CmdVoidReturn"    Text="Void Return"/>
@@ -37,11 +36,11 @@
         <SolidColorBrush x:Key="BadgeVoided"  Color="#E0E0E0"/>
         <SolidColorBrush x:Key="ReturnIconBrush" Color="#C2185B"/>
 
-    </Window.Resources>
+    </UserControl.Resources>
 
 
     <!-- Keyboard: global shortcuts -->
-    <Window.InputBindings>
+    <UserControl.InputBindings>
         <KeyBinding Key="F2" Command="{x:Static ApplicationCommands.Find}" />
         <KeyBinding Key="A" Modifiers="Alt"     Command="{StaticResource CmdAmendReturn}" />
         <KeyBinding Key="V" Modifiers="Alt"     Command="{StaticResource CmdVoidReturn}" />
@@ -52,10 +51,10 @@
         <KeyBinding Key="F8" Command="{StaticResource CmdHeld}" />
 
 
-    </Window.InputBindings>
+    </UserControl.InputBindings>
 
     <!-- Keyboard: command wiring -->
-    <Window.CommandBindings>
+    <UserControl.CommandBindings>
         <CommandBinding Command="{x:Static ApplicationCommands.Find}" Executed="Search_Executed"/>
         <CommandBinding Command="{StaticResource CmdAmendReturn}"   Executed="AmendReturn_Executed"/>
         <CommandBinding Command="{StaticResource CmdVoidReturn}"    Executed="VoidReturn_Executed"/>
@@ -65,7 +64,7 @@
         <CommandBinding Command="{StaticResource CmdVoidSale}" Executed="VoidSale_Executed"/>
         <CommandBinding Command="{StaticResource CmdHeld}" Executed="Held_Executed"/>
 
-    </Window.CommandBindings>
+    </UserControl.CommandBindings>
 
     <Grid Margin="12">
         <Grid.RowDefinitions>
@@ -182,7 +181,7 @@
                         <Setter Property="BorderBrush" Value="{StaticResource BadgeBorder}"/>
                         <Setter Property="BorderThickness" Value="1"/>
                         <Setter Property="Background" Value="#F3F3F3"/>
-
+                        
                         <!-- change color by Status -->
                         <Style.Triggers>
                             <!-- Final -> green -->
@@ -345,4 +344,4 @@
                     Click="ReturnWithoutInvoice_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
         </StackPanel>
     </Grid>
-</Window>
+</UserControl>

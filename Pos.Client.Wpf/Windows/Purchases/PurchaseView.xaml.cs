@@ -232,7 +232,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             this.PreviewKeyDown += (s, e) =>
             {
-                if (e.Key == Key.F7) { InvoicesButton_Click(s, e); e.Handled = true; return; }
+                //if (e.Key == Key.F7) { InvoicesButton_Click(s, e); e.Handled = true; return; }
                 if (e.Key == Key.F5) { ClearCurrentPurchase(confirm: true); e.Handled = true; return; }
                 if (e.Key == Key.F8) { _ = HoldCurrentPurchaseQuickAsync(); e.Handled = true; return; }
                 if (e.Key == Key.F9) { BtnSaveFinal_Click(s, e); e.Handled = true; return; }
@@ -1260,16 +1260,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
             SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
         }
 
-        private async void InvoicesButton_Click(object sender, RoutedEventArgs e)
-        {
-            var center = new PurchaseCenterWindow() { }; // pass options
-            var ok = center.ShowDialog() == true;
+        //private async void InvoicesButton_Click(object sender, RoutedEventArgs e)
+        //{
+        //    var center = new PurchaseCenterView() { }; // pass options
+        //    var ok = center.ShowDialog() == true;
 
-            if (ok && center.SelectedHeldPurchaseId.HasValue)
-            {
-                await ResumeHeldAsync(center.SelectedHeldPurchaseId.Value);
-            }
-        }
+        //    if (ok && center.SelectedHeldPurchaseId.HasValue)
+        //    {
+        //        await ResumeHeldAsync(center.SelectedHeldPurchaseId.Value);
+        //    }
+        //}
 
         private async Task ResumeHeldAsync(int id)
         {

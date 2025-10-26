@@ -8,7 +8,7 @@ using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
-    public partial class StockReportWindow : Window
+    public partial class StockReportView : UserControl
     {
         private readonly DbContextOptions<PosClientDbContext> _opts;
         private const int OutletId = 1;
@@ -36,7 +36,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             public int OnHand { get; set; }
         }
 
-        public StockReportWindow()
+        public StockReportView()
         {
             InitializeComponent();
 
@@ -213,19 +213,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         // Global: double-Esc to close; Up/Down selects; any alphanumeric focuses SearchBox
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
-            {
-                var now = DateTime.UtcNow;
-                if (_lastEscDown.HasValue && (now - _lastEscDown.Value).TotalMilliseconds <= 600)
-                {
-                    Close();
-                    return;
-                }
-                _lastEscDown = now;
-                e.Handled = true; // swallow single Esc
-                return;
-            }
-
             if (e.Key == Key.Up) { MoveSelection(-1); e.Handled = true; }
             else if (e.Key == Key.Down) { MoveSelection(+1); e.Handled = true; }
         }

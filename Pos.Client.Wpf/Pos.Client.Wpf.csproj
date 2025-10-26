@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <Compile Remove="Contracts\IScanFocusable.cs" />
     <Compile Remove="Services\CurrentUserService.cs" />
   </ItemGroup>
 

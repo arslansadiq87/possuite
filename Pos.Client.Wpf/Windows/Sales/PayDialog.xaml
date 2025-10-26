@@ -1,7 +1,7 @@
 ﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Sales.PayDialog"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             MinWidth="720" MinHeight="520">
+             MinWidth="688" MinHeight="520">
     <Grid Margin="8" KeyDown="Root_KeyDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>

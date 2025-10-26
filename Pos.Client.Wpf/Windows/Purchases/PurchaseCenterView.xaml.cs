@@ -9,11 +9,12 @@ using Pos.Domain.Entities;
 using Pos.Domain.Formatting;         // for ProductNameComposer
 using Pos.Persistence;
 using Pos.Persistence.Services;
-using Pos.Client.Wpf.Services;       // AppState / AppCtx
+using Pos.Client.Wpf.Services;
+using System.Windows.Controls;       // AppState / AppCtx
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
-    public partial class PurchaseCenterWindow : Window
+    public partial class PurchaseCenterView : UserControl
     {
         public int? SelectedHeldPurchaseId { get; private set; }  // bubble selection back to caller
         private readonly DbContextOptions<PosClientDbContext> _opts;
@@ -49,12 +50,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly ObservableCollection<UiPurchaseRow> _purchases = new();
         private readonly ObservableCollection<UiLineRow> _lines = new();
 
-        public PurchaseCenterWindow()
+        public PurchaseCenterView()
         {
             InitializeComponent();
 
             // Double-Esc to close (same feel as Sales center)
-            this.PreviewKeyDown += PurchaseCenterWindow_PreviewKeyDown;
+            //this.PreviewKeyDown += PurchaseCenterWindow_PreviewKeyDown;
 
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
@@ -74,20 +75,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
         }
 
         private DateTime? _lastEscDown;
-        private void PurchaseCenterWindow_PreviewKeyDown(object? sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Escape)
-            {
-                var now = DateTime.UtcNow;
-                if (_lastEscDown.HasValue && (now - _lastEscDown.Value).TotalMilliseconds <= 600)
-                {
-                    Close();
-                    return;
-                }
-                _lastEscDown = now;
-                e.Handled = true;
-            }
-        }
+        //private void PurchaseCenterWindow_PreviewKeyDown(object? sender, KeyEventArgs e)
+        //{
+        //    if (e.Key == Key.Escape)
+        //    {
+        //        var now = DateTime.UtcNow;
+        //        if (_lastEscDown.HasValue && (now - _lastEscDown.Value).TotalMilliseconds <= 600)
+        //        {
+        //            Close();
+        //            return;
+        //        }
+        //        _lastEscDown = now;
+        //        e.Handled = true;
+        //    }
+        //}
 
         // ===== Top bar: filter summary / actions =====
         private void ApplyFilter_Click(object sender, RoutedEventArgs e)
@@ -338,7 +339,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (sel.IsReturn) { MessageBox.Show("Use 'Amend Return' for returns."); return; }
             if (sel.Status != nameof(PurchaseStatus.Final)) { MessageBox.Show("Only FINAL purchases can be amended."); return; }
 
-            var win = new EditPurchaseWindow(sel.PurchaseId) { Owner = this };
+            var win = new EditPurchaseWindow(sel.PurchaseId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true || win.Confirmed)
             {
                 MessageBox.Show($"Amended to Revision {win.NewRevision}.");
@@ -362,7 +363,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 // “Return With” base purchase flow:
                 // If you already have a PurchaseReturnWindow, open it here; otherwise keep this placeholder.
                 // Example:
-                var retWin = new PurchaseReturnWindow(refPurchaseId: sel.PurchaseId) { Owner = this };
+                var retWin = new PurchaseReturnWindow(refPurchaseId: sel.PurchaseId) { Owner = Window.GetWindow(this) };
                 if (retWin.ShowDialog() == true) { LoadPurchases(); return; }
 
                 //MessageBox.Show($"Return With base purchase {sel.DocNoOrId} — TODO: open return window.");
@@ -475,15 +476,19 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async void OpenHeldPicker()
         {
-            var picker = new HeldPurchasesWindow(_opts) { Owner = this };
+            var picker = new HeldPurchasesWindow(_opts) { Owner = Window.GetWindow(this) };
 
             // If user picked a draft, bubble the ID up to the caller (PurchaseWindow),
             // close Held picker AND close Invoice Center itself.
             if (picker.ShowDialog() == true && picker.SelectedPurchaseId.HasValue)
             {
                 this.SelectedHeldPurchaseId = picker.SelectedPurchaseId;
-                this.DialogResult = true;  // continue flow in caller
-                this.Close();
+                var owner = Window.GetWindow(this);   // the Window hosting this view
+                if (owner != null)
+                {
+                    owner.DialogResult = true;        // signal OK to the caller
+                    owner.Close();                    // close the dialog window
+                }
                 return;
             }
 
@@ -513,7 +518,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (sel == null) { MessageBox.Show("Select a return."); return; }
             if (!sel.IsReturn) { MessageBox.Show("Pick a return to amend."); return; }
             // TODO: open your PurchaseReturnWindow in amend mode:
-            var win = new PurchaseReturnWindow(returnId: sel.PurchaseId) { Owner = this };
+            var win = new PurchaseReturnWindow(returnId: sel.PurchaseId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true) LoadPurchases();
             //MessageBox.Show($"Amend Return {sel.DocNoOrId} — TODO: open return window.");
         }

@@ -134,18 +134,20 @@
 
 
         <!-- ======================= Lines grid ======================= -->
-        <DataGrid x:Name="LinesGrid" Grid.Row="2" FontSize="16" FontWeight="DemiBold"
+        <DataGrid x:Name="LinesGrid" Grid.Row="2" FontSize="16" FontWeight="DemiBold" Style="{StaticResource ModernDataGrid}"
           AutoGenerateColumns="False"
           CanUserAddRows="False"
           CanUserDeleteRows="True"
           SelectionMode="Extended"
           SelectionUnit="FullRow"
           Margin="0,0,0,4">
+            
             <DataGrid.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="Delete selected row(s)" Click="DeleteSelectedMenu_Click"/>
                 </ContextMenu>
             </DataGrid.ContextMenu>
+
 
             <DataGrid.Columns>
 
@@ -364,7 +366,7 @@ TextChanged="OtherChargesBox_TextChanged" Margin="0,0,0,16" Grid.RowSpan="2"/>
                                 <Button Content="Clear(F5)/Hold(F8)" Width="150" Height="40" Margin="0,0,8,0"
                                     Click="ClearHoldButton_Click"
                                     Style="{StaticResource Btn.GlobalPrimary}"/>
-                                <Button Content="Invoices (F7)" Width="150" Height="40"  Margin="0,0,8,0" Click="InvoicesButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+                                <!--<Button Content="Invoices (F7)" Width="150" Height="40"  Margin="0,0,8,0" Click="InvoicesButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>-->
                                 <Button x:Name="BtnSave" Content="Save Draft" Width="150" Height="40" Click="BtnSaveFinal_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                             </StackPanel>
                         </Grid>

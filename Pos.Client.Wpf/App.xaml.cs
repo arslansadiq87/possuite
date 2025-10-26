@@ -56,12 +56,13 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<IWindowNavigator, WindowNavigator>();
             sc.AddSingleton<IDialogService, DialogService>();
             sc.AddSingleton<IPaymentDialogService, PaymentDialogService>();
-            
+            sc.AddSingleton<ITillService, TillService>();
 
             // 3) App services
 
             sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
+            
 
             //sc.AddSingleton<CurrentUserService>();
 
@@ -80,18 +81,22 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UserOutletAssignmentsWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.ProductsItemsView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.PartiesView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.EditPartyWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.TransferView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.PayDialog>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Sales.StockReportView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
+            sc.AddTransient<WarehousesView>();
 
             // WINDOWS (register every window you resolve from DI)
             sc.AddTransient<BrandsWindow>();
             sc.AddTransient<EditBrandWindow>();
             sc.AddTransient<CategoriesWindow>();
             sc.AddTransient<EditCategoryWindow>();
-            sc.AddTransient<WarehousesWindow>();
+            
             sc.AddTransient<EditWarehouseWindow>();
             sc.AddScoped<Pos.Persistence.Services.IOpeningStockService, Pos.Persistence.Services.OpeningStockService>();
             sc.AddScoped<CatalogService>();   // <-- register this

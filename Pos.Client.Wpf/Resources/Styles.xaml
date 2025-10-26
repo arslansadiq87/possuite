@@ -19,6 +19,18 @@
     <Style TargetType="DataGridCell">
         <Setter Property="FontSize"   Value="{DynamicResource App.FontSize.DataGrid}"/>
         <Setter Property="FontWeight" Value="{DynamicResource App.FontWeight.DataGrid}"/>
+        
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Style.Triggers>
+            <!-- when a cell is selected, don't overpaint the row -->
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="Transparent"/>
+            </Trigger>
+
+            
+        </Style.Triggers>
+        
     </Style>
     <Style TargetType="DataGridRow">
         <Setter Property="FontSize"   Value="{DynamicResource App.FontSize.DataGrid}"/>
@@ -765,8 +777,33 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Reusable row style that used to live inside ModernDataGrid -->
+    <Style x:Key="RowStyle.Modern" TargetType="DataGridRow">
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Style.Triggers>
+            <Trigger Property="AlternationIndex" Value="1">
+                <Setter Property="Background" Value="#FAFAFA"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#F5F5F5"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="#4CAF50"/>
+                <Setter Property="BorderBrush" Value="#4CAF50"/>
+                <Setter Property="BorderThickness" Value="3,0,0,0"/>
+                <Setter Property="Foreground" Value="#111"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- Subtle / Minimal DataGrid -->
     <Style x:Key="ModernDataGrid" TargetType="DataGrid">
+        <Style.Resources>
+            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"                 Color="#111111"/>
+            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#111111"/>
+        </Style.Resources>
         <!-- Base -->
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Foreground" Value="Black"/>
@@ -844,12 +881,23 @@
                     <Setter Property="Padding" Value="8,4"/>
                     <Setter Property="BorderThickness" Value="0"/>
                     <Setter Property="SnapsToDevicePixels" Value="True"/>
+                    
                     <Style.Triggers>
                         <!-- Selected cell (keep it subtle) -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Background" Value="#EAF5ED"/>
-                            <Setter Property="Foreground" Value="#111"/>
+                            <Setter Property="Foreground" Value="#111111"/>
                         </Trigger>
+                        <!-- 🔽 ADD THIS: selected cell when focus is elsewhere (row selected but another cell is editing) -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="True"/>
+                                <Condition Property="IsKeyboardFocusWithin" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter Property="Foreground" Value="#111111"/>
+                        </MultiTrigger>
+                        <!-- 🔼 END ADD -->
+
                         <!-- Keyboard focus: thin green outline, no fill change -->
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter Property="BorderThickness" Value="0"/>
@@ -1161,8 +1209,17 @@
         </Setter>
     </Style>
 
-    
 
+
+    <!-- Selected row visual -->
+    <SolidColorBrush x:Key="RowSelectedBackground" Color="Green"/>
+    <!-- light blue -->
+    <SolidColorBrush x:Key="RowSelectedBorder" Color="Green"/>
+    <!-- primary border -->
+    <SolidColorBrush x:Key="RowHoverBackground" Color="Green"/>
+    <!-- hover tint -->
+
+  
 
 
 

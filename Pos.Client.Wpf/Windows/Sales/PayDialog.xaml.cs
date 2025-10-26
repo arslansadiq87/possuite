@@ -20,8 +20,10 @@ namespace Pos.Client.Wpf.Windows.Sales
         private bool _cashFirst = true;
         private bool _cardFirst = true;
         private TextBox? _active;
+        private Action? _closeOverlay;
 
         private static readonly Regex _numRx = new(@"^[0-9.]$", RegexOptions.Compiled);
+        
 
         // Result
         private TaskCompletionSource<PaymentResult>? _tcs;
@@ -37,6 +39,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             Action closeOverlay)
         {
             _tcs = new TaskCompletionSource<PaymentResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _closeOverlay = closeOverlay;  // <— store it for OK/Cancel
 
             _subtotal = subtotal;
             _discountValue = discountValue;
@@ -67,7 +70,8 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (target == 0m)
             {
                 _tcs.TrySetResult(new PaymentResult { Confirmed = true, Cash = 0m, Card = 0m });
-                closeOverlay();
+                _closeOverlay?.Invoke();   // was: closeOverlay();
+                //closeOverlay();
                 return _tcs.Task;
             }
 
@@ -254,12 +258,14 @@ namespace Pos.Client.Wpf.Windows.Sales
                 }
             }
 
-            _tcs?.TrySetResult(new PaymentResult { Confirmed = true, Cash = cash, Card = card });
+            //_tcs?.TrySetResult(new PaymentResult { Confirmed = true, Cash = cash, Card = card });
+            CompleteAndClose(true, cash, card);
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            _tcs?.TrySetResult(new PaymentResult { Confirmed = false, Cash = 0m, Card = 0m });
+            //_tcs?.TrySetResult(new PaymentResult { Confirmed = false, Cash = 0m, Card = 0m });
+            CompleteAndClose(false, 0m, 0m);
         }
 
         private DateTime _lastEsc = DateTime.MinValue;
@@ -268,20 +274,44 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private void Root_KeyDown(object sender, KeyEventArgs e)
         {
+            // Pay (Enter/F9)
             if (e.Key == Key.F9 || e.Key == Key.Enter)
             {
                 Confirm_Click(sender, e);
                 e.Handled = true;
+                return;
             }
-            else if (e.Key == Key.Escape)
+
+            // Cancel via double-Escape (press Esc twice quickly)
+            if (e.Key == Key.Escape)
             {
                 var now = DateTime.UtcNow;
-                if ((now - _lastEsc).TotalMilliseconds <= EscChordMs) _escCount++;
-                else _escCount = 1;
+                _escCount = (now - _lastEsc).TotalMilliseconds <= EscChordMs ? _escCount + 1 : 1;
                 _lastEsc = now;
-                Cancel_Click(sender, e);
-                e.Handled = true;
+
+                e.Handled = true; // swallow both Esc presses
+
+                if (_escCount >= 2)    // only cancel on the 2nd Esc
+                {
+                    _escCount = 0;     // reset for next chord
+                    Cancel_Click(sender, e); // will CompleteAndClose(...)
+                }
             }
         }
+
+
+        // add anywhere inside the class
+        private bool _done;
+
+        private void CompleteAndClose(bool confirmed, decimal cash, decimal card)
+        {
+            if (_tcs == null || _tcs.Task.IsCompleted) return;
+            if (_done || _tcs == null || _tcs.Task.IsCompleted) return;
+            _done = true;
+            _tcs.TrySetResult(new PaymentResult { Confirmed = confirmed, Cash = cash, Card = card });
+            _closeOverlay?.Invoke();  // <— this actually hides the dialog
+        }
+
+
     }
 }

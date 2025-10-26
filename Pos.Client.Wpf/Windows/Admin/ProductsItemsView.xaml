@@ -435,7 +435,7 @@
                               BeginningEdit="VariantsGrid_BeginningEdit"
                               SelectionChanged="VariantsGrid_SelectionChanged">
                         <DataGrid.RowStyle>
-                            <Style TargetType="DataGridRow">
+                            <Style TargetType="DataGridRow" BasedOn="{StaticResource RowStyle.Modern}">
                                 <!-- default -->
                                 <Setter Property="Opacity" Value="1"/>
                                 <Setter Property="Foreground" Value="{DynamicResource Chip.Foreground}"/>
@@ -459,6 +459,7 @@
                                 </Style.Triggers>
                             </Style>
                         </DataGrid.RowStyle>
+                        
                         <DataGrid.Columns>
                             <DataGridTextColumn x:Name="ColSku" Header="SKU"
                             Binding="{Binding Sku, UpdateSourceTrigger=PropertyChanged}" Width="140"/>

@@ -9,23 +9,25 @@ using Pos.Persistence;
 using Pos.Persistence.Services;
 using Pos.Domain.Formatting; // <-- add this
 using Pos.Domain.Services;
+using System.Windows.Controls;
+using Pos.Client.Wpf.Services;
 
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
-    public partial class InvoiceCenterWindow : Window
+    public partial class InvoiceCenterView : UserControl
     {
         private readonly int _outletId;
         private readonly int _counterId;
         private readonly DbContextOptions<PosClientDbContext> _opts;
         private readonly InvoiceService _svc;
         // Global commands for shortcuts
-        public static readonly RoutedUICommand CmdAmendReturn = new("Amend Return", "CmdAmendReturn", typeof(InvoiceCenterWindow));
-        public static readonly RoutedUICommand CmdVoidReturn = new("Void Return", "CmdVoidReturn", typeof(InvoiceCenterWindow));
-        public static readonly RoutedUICommand CmdAmend = new("Amend", "CmdAmend", typeof(InvoiceCenterWindow));
-        public static readonly RoutedUICommand CmdReturnWith = new("Return With", "CmdReturnWith", typeof(InvoiceCenterWindow));
-        public static readonly RoutedUICommand CmdReturnWithout = new("Return Without", "CmdReturnWithout", typeof(InvoiceCenterWindow));
-        public static readonly RoutedUICommand CmdVoidSale = new("Void Sale", "CmdVoidSale", typeof(InvoiceCenterWindow));
+        public static readonly RoutedUICommand CmdAmendReturn = new("Amend Return", "CmdAmendReturn", typeof(InvoiceCenterView));
+        public static readonly RoutedUICommand CmdVoidReturn = new("Void Return", "CmdVoidReturn", typeof(InvoiceCenterView));
+        public static readonly RoutedUICommand CmdAmend = new("Amend", "CmdAmend", typeof(InvoiceCenterView));
+        public static readonly RoutedUICommand CmdReturnWith = new("Return With", "CmdReturnWith", typeof(InvoiceCenterView));
+        public static readonly RoutedUICommand CmdReturnWithout = new("Return Without", "CmdReturnWithout", typeof(InvoiceCenterView));
+        public static readonly RoutedUICommand CmdVoidSale = new("Void Sale", "CmdVoidSale", typeof(InvoiceCenterView));
         private DateTime? _lastEscDown;
         public int? SelectedHeldSaleId { get; private set; } = null;
 
@@ -58,11 +60,11 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly ObservableCollection<UiInvoiceRow> _invoices = new();
         private readonly ObservableCollection<UiLineRow> _lines = new();
 
-        public InvoiceCenterWindow(int outletId, int counterId)
+        public InvoiceCenterView(int outletId, int counterId)
         {
             InitializeComponent();
             // Double-Esc to close
-            this.PreviewKeyDown += InvoiceCenterWindow_PreviewKeyDown;
+            //this.PreviewKeyDown += InvoiceCenterWindow_PreviewKeyDown;
             _outletId = outletId; _counterId = counterId;
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
@@ -84,6 +86,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateFilterSummary();
             LoadInvoices();
             //UpdateHeldButtonVisibility();
+        }
+
+        public InvoiceCenterView()
+       : this(AppState.Current.CurrentOutletId, AppState.Current.CurrentCounterId)
+        {
         }
 
 
@@ -111,32 +118,38 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private void OpenHeldPicker()
         {
-            var picker = new HeldPickerWindow(_opts, _outletId, _counterId) { Owner = this };
+            var picker = new HeldPickerWindow(_opts, _outletId, _counterId) { Owner = Window.GetWindow(this) };
             if (picker.ShowDialog() == true && picker.SelectedSaleId.HasValue)
             {
-                SelectedHeldSaleId = picker.SelectedSaleId.Value;
-                // Close Invoice Center and return control to MainWindow (which will call ResumeHeld)
-                DialogResult = true;
-                Close();
-            }
-        }
+                this.SelectedHeldSaleId = picker.SelectedSaleId;
 
-
-
-        private void InvoiceCenterWindow_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Escape)
-            {
-                var now = DateTime.UtcNow;
-                if (_lastEscDown.HasValue && (now - _lastEscDown.Value).TotalMilliseconds <= 600)
+                var owner = Window.GetWindow(this);   // the Window hosting this view
+                if (owner != null)
                 {
-                    Close();
-                    return;
+                    owner.DialogResult = true;        // signal OK to the caller
+                    owner.Close();                    // close the dialog window
                 }
-                _lastEscDown = now;
-                e.Handled = true; // swallow single Esc
+                return;
             }
+           
         }
+
+
+
+        //private void InvoiceCenterWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        //{
+        //    if (e.Key == Key.Escape)
+        //    {
+        //        var now = DateTime.UtcNow;
+        //        if (_lastEscDown.HasValue && (now - _lastEscDown.Value).TotalMilliseconds <= 600)
+        //        {
+        //            Close();
+        //            return;
+        //        }
+        //        _lastEscDown = now;
+        //        e.Handled = true; // swallow single Esc
+        //    }
+        //}
 
         // Filter popup buttons
         private void ApplyFilter_Click(object sender, RoutedEventArgs e)
@@ -364,7 +377,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (InvoicesGrid.SelectedItem is not UiInvoiceRow sel) { MessageBox.Show("Select an invoice."); return; }
             if (sel.IsReturn) { MessageBox.Show("Returns cannot be amended."); return; }
             if (sel.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL invoices can be amended."); return; }
-            var win = new Pos.Client.Wpf.Windows.Sales.EditSaleWindow(sel.SaleId) { Owner = this };
+            var win = new Pos.Client.Wpf.Windows.Sales.EditSaleWindow(sel.SaleId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true && win.Confirmed)
             {
                 MessageBox.Show($"Amended to Revision {win.NewRevision}.");
@@ -377,7 +390,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (InvoicesGrid.SelectedItem is not UiInvoiceRow sel) { MessageBox.Show("Select an invoice."); return; }
             if (sel.IsReturn) { MessageBox.Show("This is already a return."); return; }
             if (sel.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL invoices can be returned."); return; }
-            var win = new ReturnFromInvoiceWindow(sel.SaleId) { Owner = this };
+            var win = new ReturnFromInvoiceWindow(sel.SaleId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true && win.Confirmed)
             {
                 MessageBox.Show($"Return saved. Credit: {win.RefundMagnitude:0.00}");
@@ -406,7 +419,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             counterId: _counterId,
             _unusedTill: null,
             _unusedUser: 0)
-            { Owner = this };
+            { Owner = Window.GetWindow(this) };
             if (w.ShowDialog() == true)
                 LoadInvoices();
         }
@@ -423,7 +436,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (sel == null) { MessageBox.Show("Select an invoice."); return; }
             if (!sel.IsReturn) { MessageBox.Show("This action is for return invoices only."); return; }
             if (sel.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL documents can be amended."); return; }
-            var win = new Pos.Client.Wpf.Windows.Sales.EditReturnWindow(sel.SaleId) { Owner = this };
+            var win = new Pos.Client.Wpf.Windows.Sales.EditReturnWindow(sel.SaleId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true && win.Confirmed)
             {
                 MessageBox.Show($"Return amended (Rev {win.NewRevision}).");

@@ -67,25 +67,25 @@
             <!-- Normal tabs -->
             <Fluent:RibbonTabItem Header="Home" KeyTip="H">
                 <Fluent:RibbonGroupBox Header="Sales" >
-                
-                <Fluent:Button x:Name="BtnNewSale"
-                         Header="New&#160;Sale"
-                         KeyTip="N"
-                         Command="{Binding NewSaleCmd}"
-                         Icon="{StaticResource Icon.Add}"/>
-                    <Fluent:Button Header="Returns"
-                         Command="{Binding OpenReturnsCmd}"/>
+
+                    <Fluent:Button x:Name="BtnNewSale" IsTabStop="False" Header="New&#160;Sale"
+                         KeyTip="N" Command="{Binding NewSaleCmd}" Icon="{StaticResource Icon.Add}"/>
+                    <Fluent:Button Header="Returns" Command="{Binding OpenReturnsCmd}"/>
+                    <Fluent:Button Header="Sale Center" Command="{Binding OpenSaleCenterCmd}"/>
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Inventory">
                     <Fluent:Button Header="Purchase" Command="{Binding OpenPurchaseCmd}"/>
+                    <Fluent:Button Header="Purchase Center" Command="{Binding OpenPurchaseInvoiceCenterCmd}"/>
                     <Fluent:Button Header="Transfer" Command="{Binding OpenTransferCmd}"/>
+                    <Fluent:Button Header="Stock" Command="{Binding OpenStockCheckCmd}"/>
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Admin">
                     <Fluent:Button Header="Products"          Command="{Binding OpenProductsCmd}"/>
                     <Fluent:Button Header="Parties"         Command="{Binding OpenPartiesCmd}"/>
                     <Fluent:Button Header="Outlets/Counters"  Command="{Binding OpenOutletsCountersCmd}"/>
+                    <Fluent:Button Header="Warehouses"  Command="{Binding OpenWarehousesCmd}"/>
                     <Fluent:Button Header="Users"             Command="{Binding OpenUsersCmd}"/>
                 </Fluent:RibbonGroupBox>
 
@@ -94,6 +94,38 @@
                          Header="Open&#160;Reports"
                          Command="{Binding OpenReportsCmd}"/>
                 </Fluent:RibbonGroupBox>
+
+                <Fluent:RibbonGroupBox Header="Till">
+                    <Fluent:Button Header="Open Till"
+                 Command="{Binding OpenTillCmd}">
+                        <Fluent:Button.Style>
+                            <Style TargetType="{x:Type Fluent:Button}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsTillOpen}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Fluent:Button.Style>
+                    </Fluent:Button>
+
+                    <Fluent:Button Header="Close Till"
+                 Command="{Binding CloseTillCmd}">
+                        <Fluent:Button.Style>
+                            <Style TargetType="{x:Type Fluent:Button}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsTillOpen}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Fluent:Button.Style>
+                    </Fluent:Button>
+                </Fluent:RibbonGroupBox>
+
+
             </Fluent:RibbonTabItem>
 
             <!-- Contextual tab: associate via Group -->
@@ -111,6 +143,7 @@
         Background="{DynamicResource ControlBackgroundBrush}">
             <!-- Center host: Tabbed documents -->
             <TabControl x:Name="DocumentTabs"
+                FocusManager.IsFocusScope="True"
                 ItemsSource="{Binding Tabs}"
                 SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
                 Margin="0"
@@ -147,13 +180,13 @@
                         <Setter Property="ContextMenu">
                             <Setter.Value>
                                 <ContextMenu>
-                                    <MenuItem Header="Close" Command="{Binding DataContext.CloseActiveTabCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                    <MenuItem Header="Close" Command="{Binding PlacementTarget.DataContext.CloseActiveTabCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
                                     <Separator/>
-                                    <MenuItem Header="Close Others" Command="{Binding DataContext.CloseOthersCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                    <MenuItem Header="Close Tabs to the Left" Command="{Binding DataContext.CloseLeftCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                    <MenuItem Header="Close Tabs to the Right" Command="{Binding DataContext.CloseRightCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                    <MenuItem Header="Close Others" Command="{Binding PlacementTarget.DataContext.CloseOthersCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                    <MenuItem Header="Close Tabs to the Left" Command="{Binding PlacementTarget.DataContext.CloseLeftCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                    <MenuItem Header="Close Tabs to the Right" Command="{Binding PlacementTarget.DataContext.CloseRightCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
                                     <Separator/>
-                                    <MenuItem Header="Close All" Command="{Binding DataContext.CloseAllTabsCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                    <MenuItem Header="Close All" Command="{Binding PlacementTarget.DataContext.CloseAllTabsCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
                                 </ContextMenu>
                             </Setter.Value>
                         </Setter>
@@ -164,26 +197,54 @@
 
 
         <!-- Status Bar -->
-        <Fluent:StatusBar Grid.Row="2">
-            <TextBlock Text="{Binding OutletName}" Margin="12,0"/>
-            <Separator/>
-            <TextBlock Text="{Binding CounterName}" Margin="12,0"/>
-            <Separator/>
-            <TextBlock Text="{Binding CurrentUserName}" Margin="12,0"/>
-            <Separator/>
-            <TextBlock Text="{Binding OnlineText}" Margin="12,0"/>
-            <Separator/>
-            <TextBlock Text="{Binding LastSyncText}" Margin="12,0"/>
-            <Separator/>
-            <TextBlock Text="{Binding TillStatus}" Margin="12,0"/>
+        <Fluent:StatusBar Grid.Row="2" MinHeight="28" Padding="8,0">
+            <!-- Ensure DockPanel behavior like classic WPF StatusBar -->
+            <Fluent:StatusBar.ItemContainerStyle>
+                <Style TargetType="{x:Type Fluent:StatusBarItem}">
+                    <Setter Property="VerticalAlignment" Value="Center"/>
+                    <Setter Property="Padding" Value="8,0"/>
+                </Style>
+            </Fluent:StatusBar.ItemContainerStyle>
+            <Fluent:StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <DockPanel LastChildFill="False"/>
+                </ItemsPanelTemplate>
+            </Fluent:StatusBar.ItemsPanel>
+
+            <!-- RIGHT cluster (dock first) -->
+            <Fluent:StatusBarItem DockPanel.Dock="Right" Padding="8,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding OnlineText}" Margin="8,0" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
+                    <TextBlock Text="{Binding LastSyncText}" Margin="8,0" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
+                    <TextBlock Text="{Binding TillStatus}" Margin="8,0" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Fluent:StatusBarItem>
+
+            <!-- LEFT cluster (default dock = Left) -->
+            <Fluent:StatusBarItem Padding="8,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding OutletName}" Margin="8,0"/>
+                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
+                    <TextBlock Text="{Binding CounterName}" Margin="8,0"/>
+                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
+                    <TextBlock Text="{Binding CurrentUserName}" Margin="8,0"/>
+                </StackPanel>
+            </Fluent:StatusBarItem>
         </Fluent:StatusBar>
+
+
+
+
 
         <!-- Overlay Layer: place this right before the closing </Grid> -->
         <Grid x:Name="OverlayLayer"
       Grid.RowSpan="3"
       Panel.ZIndex="999"
       Visibility="{Binding IsOverlayOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
-      Focusable="True"
+      Focusable="False"
+      IsVisibleChanged="OverlayLayer_IsVisibleChanged"
       Background="#80000000">
 
             <Grid>
@@ -199,14 +260,16 @@
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Row="1" Grid.Column="1"
-                CornerRadius="12"
-                Padding="16"
-                Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-                MinWidth="420" MaxWidth="720"
-                SnapsToDevicePixels="True"
-                Effect="{DynamicResource ShadowEffect}">
+                    CornerRadius="12"
+                    Padding="16"
+                    Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                    MinWidth="420" MaxWidth="720"
+                    SnapsToDevicePixels="True"
+                    Effect="{DynamicResource ShadowEffect}">
+
                     <ContentPresenter Content="{Binding OverlayView}"/>
                 </Border>
+
             </Grid>
         </Grid>
 
@@ -215,3 +278,4 @@
 
     </Grid>
 </Fluent:RibbonWindow>
+

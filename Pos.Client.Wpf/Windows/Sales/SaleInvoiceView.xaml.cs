@@ -18,8 +18,8 @@ using Pos.Client.Wpf.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
-using Microsoft.Extensions.DependencyInjection; // for App.Services.GetRequiredService
-
+using Microsoft.Extensions.DependencyInjection;
+//using Pos.Client.Wpf.Contracts; // for App.Services.GetRequiredService
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -89,15 +89,13 @@ namespace Pos.Client.Wpf.Windows.Sales
                     // Also restore the user’s typed text after the selection change
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        if (ScanText.Template?.FindName("PART_EditableTextBox", ScanText) is TextBox tb)
+                        if (ScanText.Text != _typedQuery)
                         {
-                            if (tb.Text != _typedQuery)
-                            {
-                                tb.Text = _typedQuery;
-                                tb.CaretIndex = tb.Text.Length;
-                                tb.SelectionLength = 0;
-                            }
+                            ScanText.Text = _typedQuery;
+                            ScanText.CaretIndex = ScanText.Text.Length;
+                            ScanText.SelectionLength = 0;
                         }
+                        
                     }), DispatcherPriority.Background);
                 }
             };
@@ -121,75 +119,22 @@ namespace Pos.Client.Wpf.Windows.Sales
             // Show cashier & load salesman list (if you have a Users table)
             CashierNameText.Text = cashierDisplay;
             LoadSalesmen();
+            AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), /*handledEventsToo:*/ true);
 
-            // Keyboard shortcuts
-            this.PreviewKeyDown += (s, e) =>
-            {
-                // Existing shortcuts:
-                if (e.Key == Key.F9) { PayButton_Click(s, e); e.Handled = true; return; }
-                if (e.Key == Key.Delete)
-                {
-                    if (CartGrid.SelectedItem is CartLine l) { _cart.Remove(l); UpdateTotal(); }
-                    return;
-                }
-                if (e.Key == Key.F6) { StockReport_Click(s, e); return; }
-
-                // NEW: double ESC focuses ScanBox from anywhere
-                if (e.Key == Key.F7) { OpenInvoiceCenter_Click(s, e); e.Handled = true; return; }
-
-                // Clear current invoice (no dialog)
-                if (e.Key == Key.F5) { ClearCurrentInvoice(confirm: true); e.Handled = true; return; }
-
-                // Hold current invoice quickly (with a tag prompt)
-                if (e.Key == Key.F8) { HoldCurrentInvoiceQuick(); e.Handled = true; return; }
-
-                // F10 is treated as a system key; catch both paths
-                if (e.Key == Key.F10 || e.SystemKey == Key.F10 || (e.Key == Key.System && e.SystemKey == Key.F10))
-                {
-                    ShowTillSummary_Click(s, e);
-                    e.Handled = true;   // prevent menu activation
-                    return;
-                }
-
-                if (e.Key == Key.Escape)
-                {
-                    var now = DateTime.UtcNow;
-                    if ((now - _lastEsc).TotalMilliseconds <= EscChordMs) _escCount++;
-                    else _escCount = 1;
-                    _lastEsc = now;
-                    if (_escCount >= 2)
-                    {
-                        _escCount = 0;
-                        if (ScanText.IsFocused)
-                        {
-                            ScanText.Clear();
-                        }
-                        else
-                        {
-                            ScanText.Focus();
-                            if (ScanText.Template?.FindName("PART_EditableTextBox", ScanText) is TextBox tb)
-                            {
-                                tb.CaretIndex = tb.Text?.Length ?? 0;
-                            }
-                        }
-                        e.Handled = true;
-                    }
-                }
-            };
-
-
-            // Start with default footer
+                        // Start with default footer
             FooterBox.Text = _invoiceFooter;
 
             // Customer fields disabled for walk-in
             CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
             Loaded += (_, __) =>
             {
-                UpdateTillStatusUi();
                 UpdateInvoicePreview();
                 UpdateInvoiceDateNow();
                 // Sync once when everything exists
-                ScanText.Focus();
+                if (Window.GetWindow(this) is Window w)
+                    w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
+
+                FocusScanTextCaretToEnd();
             };
 
         }
@@ -642,21 +587,7 @@ ComputeTotalsSnapshot()
         private TillSession? GetOpenTill(PosClientDbContext db)
                 => db.TillSessions.OrderByDescending(t => t.Id)
                        .FirstOrDefault(t => t.OutletId == OutletId && t.CounterId == CounterId && t.CloseTs == null);
-
-        private void UpdateTillStatusUi()
-        {
-            using var db = new PosClientDbContext(_dbOptions);
-            var open = GetOpenTill(db);
-
-            TillStatusText.Text = open == null
-                ? "Closed"
-                : $"OPEN (Id={open.Id}, Opened {open.OpenTs:HH:mm})";
-            // Show only one button at a time
-            bool isOpen = open != null;
-            if (OpenTillBtn != null) OpenTillBtn.Visibility = isOpen ? Visibility.Collapsed : Visibility.Visible;
-            if (CloseTillBtn != null) CloseTillBtn.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-        }
-
+              
         private void InvoiceDiscountChanged(object sender, TextChangedEventArgs e)
         {
             decimal.TryParse(InvDiscPctBox.Text, out _invDiscPct);
@@ -683,7 +614,6 @@ ComputeTotalsSnapshot()
             };
             db.TillSessions.Add(session);
             db.SaveChanges();
-            UpdateTillStatusUi();
             MessageBox.Show($"Till opened. Id={session.Id}", "Till");
         }
 
@@ -738,7 +668,6 @@ ComputeTotalsSnapshot()
             z.AppendLine($"Declared Cash : {declaredCash:0.00}");
             z.AppendLine($"Over/Short    : {overShort:+0.00;-0.00;0.00}");
             MessageBox.Show(z.ToString(), "Z Report");
-            UpdateTillStatusUi();
         }
 
         private void AddButton_Click(object sender, RoutedEventArgs e) => AddFromScanBox();
@@ -934,8 +863,8 @@ ComputeTotalsSnapshot()
             if (grand <= 0m) { MessageBox.Show("Total must be greater than 0."); return; }
             var itemsCount = _cart.Count;
             var qtySum = _cart.Sum(l => l.Qty);
-            // ===================== OPEN PAY WINDOW =====================
             // ===================== OPEN PAY DIALOG (overlay) =====================
+            
             var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
             var payResult = await paySvc.ShowAsync(
                 subtotal, invDiscValue, taxtotal, grand, itemsCount, qtySum,
@@ -943,10 +872,19 @@ ComputeTotalsSnapshot()
 
             if (!payResult.Confirmed)
             {
-                // user cancelled; return focus to scan
-                ScanText.Focus();
+                RestoreFocusToScan();
                 return;
             }
+
+
+            //if (!payResult.Confirmed)
+            //{
+            //    (Window.GetWindow(this) as Pos.Client.Wpf.Windows.Shell.DashboardWindow)
+            //        ?.FocusActiveTabAndScan();
+            //    return;
+            //}
+
+
             var enteredCash = payResult.Cash;
             var enteredCard = payResult.Card;
 
@@ -1183,10 +1121,10 @@ ComputeTotalsSnapshot()
             }
         }
 
-        private void StockReport_Click(object sender, RoutedEventArgs e)
-        {
-            new StockReportWindow { }.ShowDialog();
-        }
+        //private void StockReport_Click(object sender, RoutedEventArgs e)
+        //{
+        //    new StockReportWindow { }.ShowDialog();
+        //}
 
         private static void RecalcLineShared(CartLine l)
         {
@@ -1227,21 +1165,21 @@ ComputeTotalsSnapshot()
 
 
 
-        private void OpenInvoiceCenter_Click(object sender, RoutedEventArgs e)
-        {
-            using var db = new PosClientDbContext(_dbOptions);
-            var open = GetOpenTill(db);
-            if (open == null) { MessageBox.Show("Till is CLOSED. Open till first."); return; }
-            var win = new InvoiceCenterWindow(OutletId, CounterId) { };
-            if (win.ShowDialog() == true)
-            {
-                // If a held invoice was chosen there, resume it here
-                if (win.SelectedHeldSaleId.HasValue)
-                {
-                    ResumeHeld(win.SelectedHeldSaleId.Value);
-                }
-            }
-        }
+        //private void OpenInvoiceCenter_Click(object sender, RoutedEventArgs e)
+        //{
+        //    using var db = new PosClientDbContext(_dbOptions);
+        //    var open = GetOpenTill(db);
+        //    if (open == null) { MessageBox.Show("Till is CLOSED. Open till first."); return; }
+        //    var win = new InvoiceCenterView(OutletId, CounterId) { };
+        //    if (win.ShowDialog() == true)
+        //    {
+        //        // If a held invoice was chosen there, resume it here
+        //        if (win.SelectedHeldSaleId.HasValue)
+        //        {
+        //            ResumeHeld(win.SelectedHeldSaleId.Value);
+        //        }
+        //    }
+        //}
 
         private void ResumeHeld(int saleId)
         {
@@ -1288,6 +1226,89 @@ ComputeTotalsSnapshot()
             ScanText.Focus();
         }
 
+        private void Global_PreviewKeyDown(object? sender, KeyEventArgs e)
+        {
+            // Existing shortcuts:
+            if (e.Key == Key.F9) { PayButton_Click(sender, e); e.Handled = true; return; }
+            if (e.Key == Key.Delete)
+            {
+                if (CartGrid.SelectedItem is CartLine l) { _cart.Remove(l); UpdateTotal(); }
+                return;
+            }
+            //if (e.Key == Key.F6) { StockReport_Click(sender, e); return; }
+            //if (e.Key == Key.F7) { OpenInvoiceCenter_Click(sender, e); e.Handled = true; return; }
+            if (e.Key == Key.F5) { ClearCurrentInvoice(confirm: true); e.Handled = true; return; }
+            if (e.Key == Key.F8) { HoldCurrentInvoiceQuick(); e.Handled = true; return; }
+
+            if (e.Key == Key.F10 || e.SystemKey == Key.F10 || (e.Key == Key.System && e.SystemKey == Key.F10))
+            {
+                ShowTillSummary_Click(sender, e);
+                e.Handled = true;
+                return;
+            }
+
+            // Double-ESC → focus ScanText from anywhere
+            if (e.Key == Key.Escape)
+            {
+                var now = DateTime.UtcNow;
+                _escCount = (now - _lastEsc).TotalMilliseconds <= EscChordMs ? _escCount + 1 : 1;
+                _lastEsc = now;
+
+                if (_escCount >= 2)
+                {
+                    _escCount = 0;
+
+                    // If popup is open, close it first
+                    if (ScanPopup.IsOpen) ScanPopup.IsOpen = false;
+
+                    if (ScanText.IsFocused)
+                    {
+                        ScanText.Clear();
+                    }
+                    else
+                    {
+                        FocusScanTextCaretToEnd();
+                    }
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void FocusScanTextCaretToEnd()
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                Keyboard.Focus(ScanText);
+                ScanText.Focus();
+                ScanText.CaretIndex = ScanText.Text?.Length ?? 0;
+                ScanText.Select(ScanText.CaretIndex, 0);
+            }), DispatcherPriority.ContextIdle);
+        }
+
+        
+        public void FocusScan()
+        {
+            // Use your hardened helper logic here
+            if (ScanPopup.IsOpen) ScanPopup.IsOpen = false;
+
+            try
+            {
+                CartGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+                CartGrid.CommitEdit(DataGridEditingUnit.Row, true);
+            }
+            catch { /* ignore */ }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                Keyboard.Focus(ScanText);
+                ScanText.Focus();
+                ScanText.CaretIndex = ScanText.Text?.Length ?? 0;
+                ScanText.Select(ScanText.CaretIndex, 0);
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
+
+        // Keep RestoreFocusToScan if other code calls it:
+        public void RestoreFocusToScan() => FocusScan();
     }
 }
     

@@ -14,23 +14,28 @@ using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
-    public partial class WarehousesWindow : Window
+    public partial class WarehousesView : UserControl
     {
         private IDbContextFactory<PosClientDbContext>? _dbf;
         private readonly bool _design;
         private Func<EditWarehouseWindow>? _editWarehouseFactory;
 
-        public WarehousesWindow()
+        public WarehousesView()
         {
             InitializeComponent();
 
             _design = DesignerProperties.GetIsInDesignMode(this);
-            if (_design) return; // let designer load
+            if (_design) return;
 
             _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
             _editWarehouseFactory = () => App.Services.GetRequiredService<EditWarehouseWindow>();
 
-            Loaded += (_, __) => LoadRows();
+            //Loaded += (_, __) => LoadRows();
+        }
+
+        private void UserControl_Loaded(object? sender, RoutedEventArgs e)
+        { 
+            Focus(); LoadRows();
         }
 
         private bool Ready => !_design && _dbf != null;
@@ -176,7 +181,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (!Ready) return;
 
             var dlg = _editWarehouseFactory!();
-            dlg.Owner = this;
+            dlg.Owner = Window.GetWindow(this);
             dlg.EditId = null;
             if (dlg.ShowDialog() == true) LoadRows();
         }
@@ -186,7 +191,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             var row = Selected(); if (row is null) return;
 
             var dlg = _editWarehouseFactory!();
-            dlg.Owner = this;
+            dlg.Owner = Window.GetWindow(this);
             dlg.EditId = row.Id;
             if (dlg.ShowDialog() == true) LoadRows();
         }
@@ -220,10 +225,11 @@ namespace Pos.Client.Wpf.Windows.Admin
             LoadRows();
         }
 
-        private void Window_KeyDown(object sender, KeyEventArgs e)
+        public event EventHandler? CloseRequested;
+        private void Root_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape) Close();
-            else if (e.Key == Key.Enter) Edit_Click(sender, e);
+        if (e.Key == Key.Enter) { Edit_Click(sender, e); e.Handled = true; return; }
+        if (e.Key == Key.Escape) { CloseRequested?.Invoke(this, EventArgs.Empty); e.Handled = true; }
         }
 
         private void OpeningStock_Click(object sender, RoutedEventArgs e)
@@ -242,7 +248,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 InventoryLocationType.Warehouse,
                 wh.Id,
                 $"{wh.Code} - {wh.Name}");
-            dlg.Owner = this;
+            dlg.Owner = Window.GetWindow(this);
             dlg.ShowDialog();
         }
 
