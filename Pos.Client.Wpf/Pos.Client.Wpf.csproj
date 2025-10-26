@@ -3,6 +3,7 @@
   <ItemGroup>
     <Compile Remove="Contracts\IScanFocusable.cs" />
     <Compile Remove="Services\CurrentUserService.cs" />
+    <Compile Remove="Services\WindowNavigator.cs" />
   </ItemGroup>
 
   <ItemGroup>

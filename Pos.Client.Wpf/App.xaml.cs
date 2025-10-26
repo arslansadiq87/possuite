@@ -89,6 +89,15 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.StockReportView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
+            
+            sc.AddTransient<TillSessionSummaryWindow>();
+            sc.AddTransient<Func<int, int, int, TillSessionSummaryWindow>>(sp =>
+            {
+                var opts = sp.GetRequiredService<DbContextOptions<PosClientDbContext>>();
+                return (tillId, outletId, counterId) =>
+                    new TillSessionSummaryWindow(opts, tillId, outletId, counterId);
+            });
+
             sc.AddTransient<WarehousesView>();
 
             // WINDOWS (register every window you resolve from DI)

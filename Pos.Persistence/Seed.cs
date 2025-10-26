@@ -40,7 +40,7 @@ namespace Pos.Persistence
             EnsureProductWithVariants_Jeans(db, now);
 
             // finally opening stock (uses new header+lines model)
-            EnsureOpeningStock_UsingHeader(db, outletId: 1, openingQty: 50m, now);
+            //EnsureOpeningStock_UsingHeader(db, outletId: 1, openingQty: 50m, now);
         }
 
 

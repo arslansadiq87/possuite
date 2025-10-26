@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations.Client
+namespace Pos.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class Init1 : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -24,7 +24,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -50,7 +50,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -70,7 +70,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -90,7 +90,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -112,7 +112,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -136,7 +136,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -158,7 +158,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -189,7 +189,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -211,12 +211,17 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedByUserId = table.Column<int>(type: "INTEGER", nullable: false),
                     LockedByUserId = table.Column<int>(type: "INTEGER", nullable: true),
                     LockedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    ToLocationType = table.Column<int>(type: "INTEGER", nullable: true),
+                    ToLocationId = table.Column<int>(type: "INTEGER", nullable: true),
+                    TransferStatus = table.Column<int>(type: "INTEGER", nullable: true),
+                    ReceivedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    TransferNo = table.Column<string>(type: "TEXT", nullable: true),
                     PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -238,7 +243,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -263,7 +268,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -287,7 +292,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -312,7 +317,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", rowVersion: true, nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -338,7 +343,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -369,7 +374,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -401,7 +406,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -436,7 +441,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -469,7 +474,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -478,6 +483,39 @@ namespace Pos.Persistence.Migrations.Client
                         name: "FK_PartyRoles_Parties_PartyId",
                         column: x => x.PartyId,
                         principalTable: "Parties",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "StockDocLines",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    StockDocId = table.Column<int>(type: "INTEGER", nullable: false),
+                    ItemId = table.Column<int>(type: "INTEGER", nullable: false),
+                    SkuSnapshot = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    ItemNameSnapshot = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    QtyExpected = table.Column<decimal>(type: "decimal(18,4)", nullable: false),
+                    QtyReceived = table.Column<decimal>(type: "decimal(18,4)", nullable: true),
+                    UnitCostExpected = table.Column<decimal>(type: "decimal(18,4)", nullable: true),
+                    Remarks = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    VarianceNote = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_StockDocLines", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_StockDocLines_StockDocs_StockDocId",
+                        column: x => x.StockDocId,
+                        principalTable: "StockDocs",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -494,21 +532,22 @@ namespace Pos.Persistence.Migrations.Client
                     UnitCost = table.Column<decimal>(type: "decimal(18,4)", nullable: false),
                     LocationType = table.Column<int>(type: "INTEGER", nullable: false),
                     LocationId = table.Column<int>(type: "INTEGER", nullable: false),
-                    StockDocId = table.Column<int>(type: "INTEGER", nullable: false),
-                    RefType = table.Column<string>(type: "TEXT", nullable: false),
+                    StockDocId = table.Column<int>(type: "INTEGER", nullable: true),
+                    RefType = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
                     RefId = table.Column<int>(type: "INTEGER", nullable: true),
                     Ts = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    Note = table.Column<string>(type: "TEXT", nullable: true),
+                    Note = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
                     PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_StockEntries", x => x.Id);
+                    table.CheckConstraint("CK_StockEntry_StockDoc_Requirement", "CASE  WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL  ELSE 1 END");
                     table.ForeignKey(
                         name: "FK_StockEntries_StockDocs_StockDocId",
                         column: x => x.StockDocId,
@@ -563,7 +602,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -647,7 +686,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -737,7 +776,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -776,7 +815,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -814,7 +853,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -876,7 +915,7 @@ namespace Pos.Persistence.Migrations.Client
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false)
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
                 },
                 constraints: table =>
                 {
@@ -1171,6 +1210,22 @@ namespace Pos.Persistence.Migrations.Client
                 column: "Status");
 
             migrationBuilder.CreateIndex(
+                name: "IX_StockDocLines_ItemId_StockDocId",
+                table: "StockDocLines",
+                columns: new[] { "ItemId", "StockDocId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_StockDocLines_StockDocId",
+                table: "StockDocLines",
+                column: "StockDocId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_StockDocs_TransferNo",
+                table: "StockDocs",
+                column: "TransferNo",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_StockEntries_StockDocId",
                 table: "StockEntries",
                 column: "StockDocId");
@@ -1242,6 +1297,9 @@ namespace Pos.Persistence.Migrations.Client
 
             migrationBuilder.DropTable(
                 name: "Sales");
+
+            migrationBuilder.DropTable(
+                name: "StockDocLines");
 
             migrationBuilder.DropTable(
                 name: "StockEntries");

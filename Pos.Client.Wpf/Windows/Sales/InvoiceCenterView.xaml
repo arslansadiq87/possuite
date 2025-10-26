@@ -159,7 +159,7 @@
                 <ColumnDefinition Width="1.75*" />
             </Grid.ColumnDefinitions>
 
-            <DataGrid x:Name="InvoicesGrid"
+            <DataGrid x:Name="InvoicesGrid" 
           Grid.Column="0"
           AutoGenerateColumns="False"
           CanUserAddRows="False"
@@ -171,6 +171,28 @@
           HorizontalScrollBarVisibility="Disabled">
 
                 <DataGrid.Resources>
+                    <!-- 1) Override the system selection text colors just for this grid -->
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"                 Color="#111111"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#111111"/>
+
+                    <!-- 2) Also pin selected cell foreground to dark (helps TemplateColumns) -->
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Foreground" Value="#111111"/>
+                        <Style.Triggers>
+                            <!-- selected cell (focused or not) -->
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="#111111"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="IsKeyboardFocusWithin" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter Property="Foreground" Value="#111111"/>
+                            </MultiTrigger>
+                        </Style.Triggers>
+                    </Style>
+                    
                     <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
                     <Style x:Key="StatusBadge" TargetType="Border">
@@ -309,7 +331,7 @@
 
                 <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" Grid.ColumnSpan="2"/>
 
-                <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2">
+                <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2" Style="{StaticResource ModernDataGrid}">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="ItemId" Binding="{Binding ItemId}" Width="70"/>
                         <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120"/>

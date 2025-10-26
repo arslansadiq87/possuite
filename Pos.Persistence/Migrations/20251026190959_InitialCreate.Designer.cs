@@ -8,11 +8,11 @@ using Pos.Persistence;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations.Client
+namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    [Migration("20251008171050_Init7")]
-    partial class Init7
+    [Migration("20251026190959_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1459,7 +1459,7 @@ namespace Pos.Persistence.Migrations.Client
                         .HasColumnType("BLOB")
                         .HasDefaultValueSql("X''");
 
-                    b.Property<int>("StockDocId")
+                    b.Property<int?>("StockDocId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("Ts")
@@ -1478,7 +1478,10 @@ namespace Pos.Persistence.Migrations.Client
 
                     b.HasIndex("StockDocId");
 
-                    b.ToTable("StockEntries");
+                    b.ToTable("StockEntries", t =>
+                        {
+                            t.HasCheckConstraint("CK_StockEntry_StockDoc_Requirement", "CASE  WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL  ELSE 1 END");
+                        });
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.SupplierCredit", b =>
@@ -2028,8 +2031,7 @@ namespace Pos.Persistence.Migrations.Client
                     b.HasOne("Pos.Domain.Entities.StockDoc", "StockDoc")
                         .WithMany("Lines")
                         .HasForeignKey("StockDocId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("StockDoc");
                 });

@@ -109,6 +109,10 @@
                             </Style>
                         </Fluent:Button.Style>
                     </Fluent:Button>
+                    <Fluent:Button Header="Till Summary"
+               KeyTip="TS"
+               Command="{Binding OpenTillSummaryCmd}"/>
+
 
                     <Fluent:Button Header="Close Till"
                  Command="{Binding CloseTillCmd}">

@@ -2,20 +2,17 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
 #nullable disable
 
-namespace Pos.Persistence.Migrations.Client
+namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    [Migration("20251003232922_Init4")]
-    partial class Init4
+    partial class PosClientDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -1304,6 +1301,9 @@ namespace Pos.Persistence.Migrations.Client
                     b.Property<Guid>("PublicId")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -1311,6 +1311,18 @@ namespace Pos.Persistence.Migrations.Client
                         .HasDefaultValueSql("X''");
 
                     b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ToLocationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ToLocationType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TransferNo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("TransferStatus")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
@@ -1321,7 +1333,79 @@ namespace Pos.Persistence.Migrations.Client
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TransferNo")
+                        .IsUnique();
+
                     b.ToTable("StockDocs");
+                });
+
+            modelBuilder.Entity("Pos.Domain.Entities.StockDocLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ItemNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("QtyExpected")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal?>("QtyReceived")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("BLOB")
+                        .HasDefaultValueSql("X''");
+
+                    b.Property<string>("SkuSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StockDocId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("UnitCostExpected")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VarianceNote")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StockDocId");
+
+                    b.HasIndex("ItemId", "StockDocId");
+
+                    b.ToTable("StockDocLines");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.StockEntry", b =>
@@ -1346,6 +1430,7 @@ namespace Pos.Persistence.Migrations.Client
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Note")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("OutletId")
@@ -1362,6 +1447,7 @@ namespace Pos.Persistence.Migrations.Client
 
                     b.Property<string>("RefType")
                         .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<byte[]>("RowVersion")
@@ -1370,7 +1456,7 @@ namespace Pos.Persistence.Migrations.Client
                         .HasColumnType("BLOB")
                         .HasDefaultValueSql("X''");
 
-                    b.Property<int>("StockDocId")
+                    b.Property<int?>("StockDocId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("Ts")
@@ -1389,7 +1475,10 @@ namespace Pos.Persistence.Migrations.Client
 
                     b.HasIndex("StockDocId");
 
-                    b.ToTable("StockEntries");
+                    b.ToTable("StockEntries", t =>
+                        {
+                            t.HasCheckConstraint("CK_StockEntry_StockDoc_Requirement", "CASE  WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL  ELSE 1 END");
+                        });
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.SupplierCredit", b =>
@@ -1925,13 +2014,21 @@ namespace Pos.Persistence.Migrations.Client
                     b.Navigation("RefSale");
                 });
 
+            modelBuilder.Entity("Pos.Domain.Entities.StockDocLine", b =>
+                {
+                    b.HasOne("Pos.Domain.Entities.StockDoc", null)
+                        .WithMany("TransferLines")
+                        .HasForeignKey("StockDocId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Pos.Domain.Entities.StockEntry", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.StockDoc", "StockDoc")
                         .WithMany("Lines")
                         .HasForeignKey("StockDocId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("StockDoc");
                 });
@@ -2022,6 +2119,8 @@ namespace Pos.Persistence.Migrations.Client
             modelBuilder.Entity("Pos.Domain.Entities.StockDoc", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("TransferLines");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.User", b =>

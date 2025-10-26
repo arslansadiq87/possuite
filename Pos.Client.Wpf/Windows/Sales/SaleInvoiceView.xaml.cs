@@ -139,22 +139,22 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         }
 
-        private async void ShowTillSummary_Click(object? sender, RoutedEventArgs e)
-        {
-            using var db = new PosClientDbContext(_dbOptions);
-            var open = GetOpenTill(db);
-            if (open == null)
-            {
-                //MessageBox.Show("No open till session. Open the till first.", "Till Summary");
-                //return;
-                await _dialogs.AlertAsync(
-                    "No open till session. Open the till first.",
-                    "Till Summary");
-                return;
-            }
-            var win = new TillSessionSummaryWindow(_dbOptions, open.Id, OutletId, CounterId) { };
-            win.ShowDialog();
-        }
+        //private async void ShowTillSummary_Click(object? sender, RoutedEventArgs e)
+        //{
+        //    using var db = new PosClientDbContext(_dbOptions);
+        //    var open = GetOpenTill(db);
+        //    if (open == null)
+        //    {
+        //        //MessageBox.Show("No open till session. Open the till first.", "Till Summary");
+        //        //return;
+        //        await _dialogs.AlertAsync(
+        //            "No open till session. Open the till first.",
+        //            "Till Summary");
+        //        return;
+        //    }
+        //    var win = new TillSessionSummaryWindow(_dbOptions, open.Id, OutletId, CounterId) { };
+        //    win.ShowDialog();
+        //}
 
 
         private async void ClearHoldButton_Click(object sender, RoutedEventArgs e)
@@ -1240,12 +1240,12 @@ ComputeTotalsSnapshot()
             if (e.Key == Key.F5) { ClearCurrentInvoice(confirm: true); e.Handled = true; return; }
             if (e.Key == Key.F8) { HoldCurrentInvoiceQuick(); e.Handled = true; return; }
 
-            if (e.Key == Key.F10 || e.SystemKey == Key.F10 || (e.Key == Key.System && e.SystemKey == Key.F10))
-            {
-                ShowTillSummary_Click(sender, e);
-                e.Handled = true;
-                return;
-            }
+            //if (e.Key == Key.F10 || e.SystemKey == Key.F10 || (e.Key == Key.System && e.SystemKey == Key.F10))
+            //{
+            //    ShowTillSummary_Click(sender, e);
+            //    e.Handled = true;
+            //    return;
+            //}
 
             // Double-ESC → focus ScanText from anywhere
             if (e.Key == Key.Escape)

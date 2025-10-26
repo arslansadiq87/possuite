@@ -8,7 +8,9 @@ using Pos.Client.Wpf.Services;
 using Pos.Client.Wpf.Windows.Shell; // for ViewTab
 using Pos.Persistence;
 using System;                        // for Action
-
+using System.Linq; // add this
+using Pos.Client.Wpf.Windows.Sales; // for TillSessionSummaryVm
+using Pos.Domain.Entities; // for TillSession
 
 
 namespace Pos.Client.Wpf.Windows.Shell;
@@ -26,6 +28,7 @@ public sealed class DashboardVm : ObservableObject
     // keep your existing TillStatus string property — do NOT switch to [ObservableProperty]
     private bool _isTillOpen;
     public bool IsTillOpen { get => _isTillOpen; set => SetProperty(ref _isTillOpen, value); }
+    private readonly Func<int, int, int, TillSessionSummaryWindow> _tillSummaryWindowFactory;
 
 
     public DashboardVm(
@@ -34,7 +37,9 @@ public sealed class DashboardVm : ObservableObject
         IWindowNavigator nav,
         IViewNavigator views,
         IDialogService dialogs,
-            ITillService till)                 // <-- NEW
+        ITillService till,
+        Func<int, int, int, TillSessionSummaryWindow> tillSummaryWindowFactory)   // <-- add this
+
     {
         _dbf = dbf;
         _st = st;
@@ -93,29 +98,15 @@ public sealed class DashboardVm : ObservableObject
 
         RefreshCmd = new AsyncRelayCommand(RefreshAsync);
         SyncTillUi();                      // <-- NEW
+        _tillSummaryWindowFactory = tillSummaryWindowFactory;                  // <-- store it
+        OpenTillSummaryCmd = new AsyncRelayCommand(OpenTillSummaryAsync);  // <-- ADD THIS
     }
 
     private async Task NotImplementedAsync(string feature)
     {
-        // Yes/No confirm
-        //var ok = await _dialogs.ConfirmAsync($"{feature} — feature not implemented yet. Continue anyway?", "POS");
-        //if (!ok) return;
-
-        //// Examples of the new API:
         await _dialogs.AlertAsync($"{feature} — feature not implemented yet. Continue anyway?", "POS"); // OK
-
-        //var res = await _dialogs.ShowAsync(
-        //    "Close all tabs?",
-        //    "Close All",
-        //    DialogButtons.YesNoCancel);
-
-        //if (res == DialogResult.Yes)
-        //{
-        //    Tabs.Clear();
-        //    ActiveTab = null;
-        //    TransferTabVisible = false;
-        //}
     }
+
 
 
     // ---------- Top strip / status ----------
@@ -207,45 +198,88 @@ public sealed class DashboardVm : ObservableObject
 
     public IRelayCommand OpenStockCheckCmd { get; }
     public IAsyncRelayCommand RefreshCmd { get; }
+    public IAsyncRelayCommand OpenTillSummaryCmd { get; }
     // NEW commands
     public IAsyncRelayCommand OpenTillCmd { get; }
     public IAsyncRelayCommand CloseTillCmd { get; }
     // Notify views if you want (optional hook from window/tabs)
     public event Action? TillChanged;
 
+    // --- Helper: try to activate an existing tab by Tag (preferred) or Title ---
+    private bool TryActivateTab<TView>()
+    {
+        var existing = Tabs.FirstOrDefault(t =>
+            t.Content?.GetType() == typeof(TView));
+
+        if (existing is null) return false;
+
+        ActiveTab = existing;
+        return true;
+    }
+
+
     // ---------- Openers => Tabs ----------
     private void OpenTransferTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.TransferView>("Stock Transfer", "Transfer");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Inventory.TransferView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.TransferView>("Stock Transfer", "Transfer");
+    }
+        
 
     private void OpenSalesTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Sales.SaleInvoiceView>("Sales", "Sales");
 
     private void OpenSaleCenterCmdTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>("Sale Center", "Sale Center");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>("Sale Center", "Sale Center");
+    }
 
     private void OpenPurchaseTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Purchases.PurchaseView>("Purchases", "Purchase");
 
     private void OpenInvoiceCenterPurchaseTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Purchases.PurchaseCenterView>("Purchase Center", "Purchase Center");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Purchases.PurchaseCenterView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Purchases.PurchaseCenterView>("Purchase Center", "Purchase Center");
+    }
+        
 
     private void OpenProductsTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.ProductsItemsView>("Products", "Products");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.ProductsItemsView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Admin.ProductsItemsView>("Products", "Products");
+    }
+
 
     private void OpenPartiesTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.PartiesView>("Parties", "Parties");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.PartiesView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Admin.PartiesView>("Parties", "Parties");
+    }
 
     private void OpenOutletCountersTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>("Outlets", "Outlets");
-
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>("Outlets", "Outlets");
+    }
     private void OpenWarehousesTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.WarehousesView>("Warehouses", "Warehouses");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.WarehousesView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Admin.WarehousesView>("Warehouses", "Warehouses");
+    }
 
     private void OpenUsersTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Admin.UsersView>("Users", "Users");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.UsersView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Admin.UsersView>("Users", "Users");
+    }
 
     private void StockCheckTab()
-        => _views.OpenTab<Pos.Client.Wpf.Windows.Sales.StockReportView>("Stock Check", "Stock Check");
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Sales.StockReportView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Sales.StockReportView>("Stock Check", "Stock Check");
+    }
     //private void OpenReportsTab()
     //    => _views.OpenTab<Pos.Client.Wpf.Windows.Reports.ReportsView>("Reports", "Reports");
 
@@ -312,7 +346,40 @@ public sealed class DashboardVm : ObservableObject
         SyncTillUi();                      // <-- NEW
     }
 
-    private void SyncTillUi()
+    
+
+    private async Task OpenTillSummaryAsync()
+    {
+        using var db = await _dbf.CreateDbContextAsync();
+
+        var open = await db.Set<TillSession>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.OutletId == CurrentOutletId
+                                   && t.CounterId == CurrentCounterId
+                                   && t.CloseTs == null); // <-- use CloseTs (not ClosedAt)
+
+        if (open is null)
+        {
+            await _dialogs.AlertAsync("No open till session. Open the till first.", "Till Summary");
+            return;
+        }
+
+        var win = _tillSummaryWindowFactory(open.Id, CurrentOutletId, CurrentCounterId);
+
+        // give it proper owner/centering (same as your navigator would)
+        if (Application.Current?.MainWindow is Window owner && owner.IsLoaded)
+        {
+            win.Owner = owner;
+            win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            win.ShowInTaskbar = false;
+        }
+
+        win.ShowDialog();
+    }
+
+
+
+private void SyncTillUi()
     {
         TillStatus = _till.GetStatusText();
         IsTillOpen = _till.IsTillOpen();
