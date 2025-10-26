@@ -338,12 +338,24 @@ namespace Pos.Persistence
                 e.Property(x => x.UnitCost).HasColumnType("decimal(18,4)");
                 e.Property(x => x.RefType).HasMaxLength(64);
                 e.Property(x => x.Note).HasMaxLength(256);
+
                 e.HasOne(x => x.StockDoc)
                  .WithMany(d => d.Lines)
                  .HasForeignKey(x => x.StockDocId)
                  .OnDelete(DeleteBehavior.Restrict)
-                 .IsRequired(false); // <-- important
+                 .IsRequired(false);
+
+                // ✅ add these
+                e.HasIndex(x => new { x.ItemId, x.LocationType, x.LocationId })
+                 .HasDatabaseName("IX_StockEntries_Item_Loc");
+
+                e.HasIndex(x => x.Ts)
+                 .HasDatabaseName("IX_StockEntries_Ts");
+
+                e.HasIndex(x => new { x.RefType, x.RefId })
+                 .HasDatabaseName("IX_StockEntries_Ref");
             });
+
 
             b.Entity<StockEntry>().HasCheckConstraint(
                 "CK_StockEntry_StockDoc_Requirement",

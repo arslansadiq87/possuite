@@ -29,6 +29,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             public decimal TotalQty { get; set; }
             public decimal TotalValue { get; set; }
             public string? Note { get; set; }
+            public StockDocStatus Status { get; set; }            // new
+            public string StatusText => Status.ToString();        // optional helper
         }
 
         public OpeningStockPickDialog(IDbContextFactory<Pos.Persistence.PosClientDbContext> dbf,
@@ -51,9 +53,15 @@ namespace Pos.Client.Wpf.Windows.Admin
             var status = _mode == Mode.Drafts ? StockDocStatus.Draft : StockDocStatus.Locked;
 
             // Load docs for this location
-            var docs = await db.StockDocs
+            //var docs = await db.StockDocs
+            //    .Where(d => d.DocType == StockDocType.Opening
+            //             && d.Status == status
+            //             && d.LocationType == _locType
+            //             && d.LocationId == _locId)
+            //    .OrderByDescending(d => d.Id)
+            //    .ToListAsync();
+            var docs = await db.StockDocs.AsNoTracking()
                 .Where(d => d.DocType == StockDocType.Opening
-                         && d.Status == status
                          && d.LocationType == _locType
                          && d.LocationId == _locId)
                 .OrderByDescending(d => d.Id)
@@ -88,7 +96,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     LineCount = agg?.Count ?? 0,
                     TotalQty = agg?.Qty ?? 0m,
                     TotalValue = agg?.Value ?? 0m,
-                    Note = d.Note
+                    Note = d.Note,
+                    Status = d.Status
                 });
             }
         }

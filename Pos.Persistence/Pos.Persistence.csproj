@@ -3,6 +3,7 @@
   <ItemGroup>
     <Compile Remove="AppDbContext.cs" />
     <Compile Remove="DbSeeder.cs" />
+    <Compile Remove="Features\OpeningStock\IOpeningStockService.cs" />
     <Compile Remove="Services\SuppliersService.cs" />
   </ItemGroup>
 

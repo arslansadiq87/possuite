@@ -6,35 +6,56 @@
 
     <DockPanel Margin="8">
         <!-- Toolbar -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <TextBox x:Name="SearchBox" Width="240" Height="28" VerticalContentAlignment="Center"
-                     TextChanged="SearchBox_TextChanged"
-                     PreviewKeyDown="SearchBox_PreviewKeyDown"
-                     ToolTip="Type to filter; ↑/↓ to navigate" Style="{StaticResource Txt.Search}"/>
-            <Separator Width="16" Opacity="0"/>
+        <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Margin="0,0,0,8">
 
-            <!-- Keep BOTH buttons with mnemonics -->
-            <!-- By Item -->
-            <Button Width="150" Height="28" Margin="0,0,8,0"
-        Click="ByItem_Click" Style="{StaticResource Btn.GlobalPrimary}">
-                <AccessText Text="By _Item (Alt+I)"/>
-            </Button>
+            <!-- Row 1: existing controls -->
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox x:Name="SearchBox" Width="240" Height="28" VerticalContentAlignment="Center"
+               TextChanged="SearchBox_TextChanged"
+               PreviewKeyDown="SearchBox_PreviewKeyDown"
+               ToolTip="Type to filter; ↑/↓ to navigate"
+               Style="{StaticResource Txt.Search}"/>
+                <Separator Width="16" Opacity="0"/>
 
-            <!-- By Product -->
-            <Button Width="150" Height="28"
-        Click="ByProduct_Click" Style="{StaticResource Btn.GlobalPrimary}">
-                <AccessText Text="By _Product (Alt+P)"/>
-            </Button>
+                <!-- By Item -->
+                <Button Width="150" Height="28" Margin="0,0,8,0"
+              Click="ByItem_Click" Style="{StaticResource Btn.GlobalPrimary}">
+                    <AccessText Text="By _Item (Alt+I)"/>
+                </Button>
+
+                <!-- By Product -->
+                <Button Width="150" Height="28"
+              Click="ByProduct_Click" Style="{StaticResource Btn.GlobalPrimary}">
+                    <AccessText Text="By _Product (Alt+P)"/>
+                </Button>
+            </StackPanel>
+
+            <!-- Row 2: NEW scope bar (starts hidden; code-behind decides when to show) -->
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" x:Name="ScopeBar" Visibility="Collapsed">
+                <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                <RadioButton x:Name="ScopeOutletRadio" Content="Outlet" GroupName="Scope"
+                   IsChecked="True" Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
+                <ComboBox x:Name="OutletBox" Width="220" SelectionChanged="OutletBox_SelectionChanged"/>
+
+                <TextBlock Text="  " Width="16"/>
+
+                <RadioButton x:Name="ScopeWarehouseRadio" Content="Warehouse" GroupName="Scope"
+                   Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
+                <ComboBox x:Name="WarehouseBox" Width="220" SelectionChanged="WarehouseBox_SelectionChanged"/>
+            </StackPanel>
+
         </StackPanel>
 
         <!-- Grid -->
         <DataGrid x:Name="Grid"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  HeadersVisibility="Column"
-                  GridLinesVisibility="Horizontal"
-                  SelectionMode="Single"
-                  SelectionUnit="FullRow"/>
+            AutoGenerateColumns="False"
+            IsReadOnly="True"
+            HeadersVisibility="Column"
+            GridLinesVisibility="Horizontal"
+            SelectionMode="Single"
+            SelectionUnit="FullRow"/>
     </DockPanel>
+
 </UserControl>

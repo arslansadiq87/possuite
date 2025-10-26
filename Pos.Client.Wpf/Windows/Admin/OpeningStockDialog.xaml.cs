@@ -30,17 +30,26 @@ namespace Pos.Client.Wpf.Windows.Admin
     public partial class OpeningStockDialog : Window, INotifyPropertyChanged
     {
         private bool _dirty;
+        private StockDocStatus _docStatus = StockDocStatus.Draft;
+        public bool IsLocked => _docStatus == StockDocStatus.Locked;
+        public bool CanUnlock => StockDocId != 0 && IsLocked;
         public bool CanLock
         {
             get
             {
+                if (IsLocked) return false;                      // ⬅️ prevent lock when already locked
                 if (StockDocId == 0) return false;
                 if (Rows.Count == 0) return false;
                 if (HasInvalid) return false;
-                // all rows must be valid
                 return Rows.All(r => !string.IsNullOrWhiteSpace(r.Sku) && r.Qty > 0 && r.UnitCost >= 0m);
             }
         }
+        private void RaiseLockUnlock()
+        {
+            Raise(nameof(CanLock));
+            Raise(nameof(CanUnlock));
+        }
+
         private void MarkDirty()
         {
             _dirty = true;
@@ -294,6 +303,8 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             var doc = await _svc.CreateDraftAsync(req);
             StockDocId = doc.Id;
+            _docStatus = doc.Status;          // ⬅️ new
+            RaiseLockUnlock();                // ⬅️ new
         }
 
         // === Toolbar handlers ===
@@ -478,7 +489,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                 };
                 if (ofd.ShowDialog(this) != true) return;
 
-                EnsureDraftAsync();
+                await EnsureDraftAsync();       // ✅ await it
+
                 if (StockDocId == 0)
                 {
                     MessageBox.Show("Cannot import without a draft. Please try again.", "Error",
@@ -729,6 +741,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                 await _svc.LockAsync(StockDocId, adminId);
                 MessageBox.Show("Opening Stock locked.", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
+                _docStatus = StockDocStatus.Locked;   // ⬅️ new
+                RaiseLockUnlock();                    // ⬅️ new
                 MarkClean();
 
             }
@@ -1163,6 +1177,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             MarkClean();
             Raise(nameof(FooterSummary));
+
         }
 
         protected override void OnClosing(CancelEventArgs e)
@@ -1406,6 +1421,35 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             MarkClean();
             Raise(nameof(FooterSummary));
+            _docStatus = doc.Status;              // ⬅️ new
+            RaiseLockUnlock();                    // ⬅️ new
+        }
+
+        private async void Unlock_Click(object sender, RoutedEventArgs e)
+        {
+            if (StockDocId == 0) { MessageBox.Show("No document to unlock."); return; }
+            if (!IsCurrentUserAdmin()) { MessageBox.Show("Only Admin can unlock Opening Stock."); return; }
+
+            var ok = MessageBox.Show("Unlock this Opening Stock? It will be excluded from reports until re-locked.",
+                                     "Confirm Unlock", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (ok != MessageBoxResult.Yes) return;
+
+            try
+            {
+                var s = AppState.Current;
+                var adminId = (s.CurrentUser?.Id > 0) ? s.CurrentUser.Id : s.CurrentUserId;
+
+                await _svc.UnlockAsync(StockDocId, adminId);
+                await LoadSpecificDocAsync(StockDocId);
+                _docStatus = StockDocStatus.Draft;    // ⬅️ new (explicit; also true after reload)
+                RaiseLockUnlock();                    // ⬅️ new
+                MarkClean();
+                MessageBox.Show("Unlocked. You can edit and re-lock.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Unlock failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
 

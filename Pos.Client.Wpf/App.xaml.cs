@@ -57,6 +57,8 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<IDialogService, DialogService>();
             sc.AddSingleton<IPaymentDialogService, PaymentDialogService>();
             sc.AddSingleton<ITillService, TillService>();
+            
+
 
             // 3) App services
 

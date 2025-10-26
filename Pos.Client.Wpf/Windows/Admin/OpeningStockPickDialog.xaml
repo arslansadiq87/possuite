@@ -1,7 +1,7 @@
 ﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.OpeningStockPickDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Select Opening Document" Width="700" Height="480"
+        Title="Select Opening Document" Width="800" Height="480"
         WindowStartupLocation="CenterOwner">
     <Grid>
         <Grid.RowDefinitions>
@@ -23,6 +23,7 @@
                 <DataGridTextColumn Header="Lines" Binding="{Binding LineCount}" Width="80"/>
                 <DataGridTextColumn Header="Total Qty" Binding="{Binding TotalQty, StringFormat=F4}" Width="100"/>
                 <DataGridTextColumn Header="Total Value" Binding="{Binding TotalValue, StringFormat=F4}" Width="120"/>
+                <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="90"/>
                 <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*"/>
             </DataGrid.Columns>
         </DataGrid>

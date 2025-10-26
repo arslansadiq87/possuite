@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251026233548_InitialCreate1")]
+    partial class InitialCreate1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -1474,15 +1477,6 @@ namespace Pos.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("StockDocId");
-
-                    b.HasIndex("Ts")
-                        .HasDatabaseName("IX_StockEntries_Ts");
-
-                    b.HasIndex("RefType", "RefId")
-                        .HasDatabaseName("IX_StockEntries_Ref");
-
-                    b.HasIndex("ItemId", "LocationType", "LocationId")
-                        .HasDatabaseName("IX_StockEntries_Item_Loc");
 
                     b.ToTable("StockEntries", t =>
                         {

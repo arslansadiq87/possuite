@@ -30,8 +30,8 @@
                         <MenuItem Header="Import CSV" Click="ImportCsv_Click"/>
                         <CheckBox x:Name="ReplaceAllBox" Content="Replace all on Save" IsChecked="True"/>
                         <MenuItem Header="Lock (Admin)" Click="Lock_Click" IsEnabled="{Binding CanLock}" ToolTip="{Binding LockHint}"/>
+                        <MenuItem Header="Unlock (Admin)" Click="Unlock_Click" IsEnabled="{Binding CanUnlock}"/>
                         <MenuItem Header="Export Grid" Click="ExportGrid_Click"/>
-
                         <MenuItem Header="Undo Last Import" Click="UndoImport_Click" IsEnabled="{Binding HasUndo}"/>
                         <MenuItem Header="Fix first invalid" Click="FixFirstInvalid_Click" 
                         Visibility="{Binding HasInvalid, Converter={StaticResource BoolToVisibility}}"/>

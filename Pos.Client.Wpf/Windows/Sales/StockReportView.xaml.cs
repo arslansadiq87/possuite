@@ -4,14 +4,36 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
+using Pos.Client.Wpf.Services;
+using Pos.Domain;
+using Pos.Domain.Entities;
 using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class StockReportView : UserControl
     {
+        private enum LocationScope { Outlet, Warehouse }     // which dimension is active
+        private LocationScope _scope = LocationScope.Outlet;
+        private const int AllId = -1;                        // sentinel for "All ..."
+        private bool _suppressScopeEvents = false;  // don't react while we set up UI
+        private bool _scopeUiReady = false;         // only reload after first init
+
+        private bool IsAdmin()
+        {
+            var u = AppState.Current?.CurrentUser;
+            if (u != null && (u.Role == UserRole.Admin)) return true;
+
+            var roles = (AppState.Current?.CurrentUserRole ?? "")
+                        .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(r => r.Trim());
+            return roles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase)
+                               || r.Equals("Administrator", StringComparison.OrdinalIgnoreCase)
+                               || r.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase));
+        }
+
         private readonly DbContextOptions<PosClientDbContext> _opts;
-        private const int OutletId = 1;
+        //private const int OutletId = 1;
 
         private DateTime? _lastEscDown;
         private ViewMode _mode = ViewMode.ByItem;
@@ -45,7 +67,138 @@ namespace Pos.Client.Wpf.Windows.Sales
                 .Options;
 
             // default view
-            LoadDataByItemWithVariants();
+            //LoadDataByItemWithVariants();
+            var _ = Dispatcher.InvokeAsync(async () =>
+            {
+                _suppressScopeEvents = true;
+
+                // show/hide the bar
+                ScopeBar.Visibility = IsAdmin() ? Visibility.Visible : Visibility.Collapsed;
+
+                await InitScopeAsync();   // populate OutletBox / WarehouseBox
+                _suppressScopeEvents = false;
+                _scopeUiReady = true;
+
+                LoadDataByItemWithVariants();
+            });
+
+
+        }
+
+        private async Task InitScopeAsync()
+        {
+            using var db = new PosClientDbContext(_opts);
+
+            var isAdmin = IsAdmin();
+            var myUserId = AppState.Current.CurrentUserId;
+
+            // ----- Outlets list -----
+            List<Outlet> outlets;
+            if (isAdmin)
+            {
+                outlets = await db.Outlets.AsNoTracking()
+                             .OrderBy(o => o.Name)
+                             .ToListAsync();
+                // Insert ALL
+                OutletBox.ItemsSource = new[] { new Outlet { Id = AllId, Name = "All Outlets" } }
+                                         .Concat(outlets)
+                                         .ToList();
+                OutletBox.SelectedIndex = 0; // default All
+            }
+            else
+            {
+                // Only assigned outlets
+                var assignedIds = await db.Set<UserOutlet>()
+                                          .AsNoTracking()
+                                          .Where(uo => uo.UserId == myUserId)
+                                          .Select(uo => uo.OutletId)
+                                          .ToListAsync();
+
+                outlets = await db.Outlets.AsNoTracking()
+                             .Where(o => assignedIds.Contains(o.Id))
+                             .OrderBy(o => o.Name)
+                             .ToListAsync();
+
+                OutletBox.ItemsSource = outlets;
+                // Choose current outlet if present, else first
+                var cur = outlets.FirstOrDefault(o => o.Id == AppState.Current.CurrentOutletId) ?? outlets.FirstOrDefault();
+                OutletBox.SelectedItem = cur;
+
+                // Lock the scope controls for non-admin
+                ScopeWarehouseRadio.IsEnabled = false;
+                WarehouseBox.IsEnabled = false;
+                if (outlets.Count <= 1) { ScopeOutletRadio.IsEnabled = false; OutletBox.IsEnabled = false; }
+            }
+
+            // ----- Warehouses list (admins only; hide for others) -----
+            if (isAdmin)
+            {
+                var warehouses = await db.Warehouses.AsNoTracking()
+                                     .OrderBy(w => w.Name)
+                                     .ToListAsync();
+
+                WarehouseBox.ItemsSource = new[] { new Warehouse { Id = AllId, Name = "All Warehouses" } }
+                                           .Concat(warehouses)
+                                           .ToList();
+                WarehouseBox.SelectedIndex = 0; // default All
+                ScopeWarehouseRadio.IsEnabled = true;
+                WarehouseBox.IsEnabled = true;
+            }
+            else
+            {
+                // For non-admins, force Outlet scope
+                ScopeOutletRadio.IsChecked = true;
+            }
+
+            ApplyScopeEnablement();
+        }
+
+        private void ApplyScopeEnablement()
+        {
+            bool isOutlet = _scope == LocationScope.Outlet;
+
+            if (OutletBox != null)
+                OutletBox.IsEnabled = isOutlet && OutletBox.Items.Count > 0;
+
+            if (WarehouseBox != null)
+                WarehouseBox.IsEnabled = !isOutlet && WarehouseBox.Items.Count > 0;
+        }
+
+
+        private void ScopeRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_suppressScopeEvents) return;
+            if (sender is not RadioButton rb) return;
+
+            // Decide by which radio raised the event
+            _scope = (rb == ScopeWarehouseRadio) ? LocationScope.Warehouse : LocationScope.Outlet;
+
+            ApplyScopeEnablement();
+
+            if (_scopeUiReady)
+                ReloadCurrentView();   // avoid calling before combos are populated
+        }
+
+
+        private void OutletBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressScopeEvents || !_scopeUiReady) return;
+            if (_scope != LocationScope.Outlet) return;
+            ReloadCurrentView();
+        }
+
+        private void WarehouseBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressScopeEvents || !_scopeUiReady) return;
+            if (_scope != LocationScope.Warehouse) return;
+            ReloadCurrentView();
+        }
+
+
+        private void ReloadCurrentView()
+        {
+            if (_mode == ViewMode.ByItem) LoadDataByItemWithVariants();
+            else LoadDataByProduct();
         }
 
         // ===== Toolbar buttons =====
@@ -80,17 +233,62 @@ namespace Pos.Client.Wpf.Windows.Sales
             Grid.Columns.Add(new DataGridTextColumn { Header = "On Hand", Binding = new Binding("OnHand"), Width = 120 });
         }
 
-        // ===== Data loads (full lists into cache) =====
-        private void LoadDataByItemWithVariants()
+     
+
+        private IQueryable<StockEntry> BuildScopedLedger(PosClientDbContext db)
+            {
+                var q = db.StockEntries.AsNoTracking();
+
+                if (_scope == LocationScope.Outlet)
+                {
+                    var selOutlet = OutletBox.SelectedItem as Outlet;
+                    if (selOutlet == null) return q.Where(s => false); // nothing selected yet
+
+                    if (selOutlet.Id == AllId)
+                    {
+                        // All outlets = any row posted to Outlet locations
+                        return q.Where(s => s.LocationType == InventoryLocationType.Outlet);
+                    }
+                    else
+                    {
+                        var outletId = selOutlet.Id;
+                        return q.Where(s => s.LocationType == InventoryLocationType.Outlet
+                                         && s.LocationId == outletId);
+                    }
+                }
+                else // Warehouse scope
+                {
+                    var selWh = WarehouseBox.SelectedItem as Warehouse;
+                    if (selWh == null) return q.Where(s => false);
+
+                    if (selWh.Id == AllId)
+                    {
+                        // All warehouses
+                        return q.Where(s => s.LocationType == InventoryLocationType.Warehouse);
+                    }
+                    else
+                    {
+                        var whId = selWh.Id;
+                        return q.Where(s => s.LocationType == InventoryLocationType.Warehouse
+                                         && s.LocationId == whId);
+                }
+           }
+        }
+
+
+
+    // ===== Data loads (full lists into cache) =====
+    private void LoadDataByItemWithVariants()
         {
             using var db = new PosClientDbContext(_opts);
+
+            var ledger = BuildScopedLedger(db);
 
             var raw = (from i in db.Items.AsNoTracking()
                        join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                        from p in gp.DefaultIfEmpty()
-                       join se in db.StockEntries.AsNoTracking().Where(s => s.OutletId == OutletId)
-                            on i.Id equals se.ItemId into gse
-                       let onHand = gse.Sum(x => (int?)x.QtyChange) ?? 0
+                       join se in ledger on i.Id equals se.ItemId into gse
+                       let onHand = gse.Sum(x => (decimal?)x.QtyChange) ?? 0m
                        orderby (p != null ? p.Name : i.Name), i.Variant1Value, i.Variant2Value, i.Sku
                        select new
                        {
@@ -103,7 +301,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                            i.Variant2Value,
                            OnHand = onHand
                        })
-                      .AsEnumerable() // compose display names client-side
+                      .AsEnumerable()
                       .Select(x => new ItemRow
                       {
                           Sku = x.Sku,
@@ -112,9 +310,10 @@ namespace Pos.Client.Wpf.Windows.Sales
                                                          x.Variant2Name, x.Variant2Value),
                           Variant = BuildVariant(x.Variant1Name, x.Variant1Value,
                                                  x.Variant2Name, x.Variant2Value),
-                          OnHand = x.OnHand
+                          OnHand = (int)Math.Round(x.OnHand)   // keep your grid int
                       })
                       .ToList();
+
 
             _itemRows = raw;
 
@@ -126,21 +325,24 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             using var db = new PosClientDbContext(_opts);
 
+            var ledger = BuildScopedLedger(db);
+
             var rows =
                 (from i in db.Items.AsNoTracking()
                  join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                  from p in gp.DefaultIfEmpty()
-                 join se in db.StockEntries.AsNoTracking().Where(s => s.OutletId == OutletId)
-                      on i.Id equals se.ItemId into gse
-                 let onHand = gse.Sum(x => (int?)x.QtyChange) ?? 0
+                 join se in ledger on i.Id equals se.ItemId into gse
+                 let onHand = gse.Sum(x => (decimal?)x.QtyChange) ?? 0m
                  group onHand by new { Prod = p != null ? p.Name : i.Name } into g
                  orderby g.Key.Prod
                  select new ProductRow
                  {
                      Product = g.Key.Prod,
-                     OnHand = g.Sum()
+                     OnHand = (int)Math.Round(g.Sum())   // sum is decimal, cast to int for your row
                  })
                 .ToList();
+
+
 
             _productRows = rows;
 
@@ -246,5 +448,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             Grid.SelectedIndex = idx;
             Grid.ScrollIntoView(Grid.SelectedItem);
         }
+
+
     }
 }

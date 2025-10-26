@@ -21,6 +21,7 @@ namespace Pos.Persistence.Services
         Task<OpeningStockValidationResult> ValidateLinesAsync(int stockDocId, IEnumerable<OpeningStockLineDto> lines, CancellationToken ct = default);
         Task UpsertLinesAsync(OpeningStockUpsertRequest req, CancellationToken ct = default);
         Task LockAsync(int stockDocId, int adminUserId, CancellationToken ct = default);
+        Task UnlockAsync(int stockDocId, int adminUserId, CancellationToken ct = default);
         Task<StockDoc?> GetAsync(int stockDocId, CancellationToken ct = default);
     }
 
@@ -174,24 +175,45 @@ namespace Pos.Persistence.Services
         public async Task LockAsync(int stockDocId, int adminUserId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
 
             var doc = await db.StockDocs
-                .Include(d => d.Lines)
+                .Include(d => d.Lines) // Lines = StockEntries
                 .FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
 
             if (doc == null) throw new InvalidOperationException("Opening document not found.");
-            if (doc.Status == StockDocStatus.Locked) return; // idempotent
             if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
+            if (doc.Status == StockDocStatus.Locked) { await tx.CommitAsync(ct); return; } // idempotent
 
-            // Must have at least one line
             if (doc.Lines.Count == 0) throw new InvalidOperationException("No lines to lock.");
-
-            // Guard: UnitCost present & qty > 0 already validated on upsert, but re-check quickly
             if (doc.Lines.Any(l => l.UnitCost < 0 || l.QtyChange <= 0))
                 throw new InvalidOperationException("Invalid line values.");
 
-            // Negative guard forward simulation from EffectiveDate
+            // Safety: re-run your negative-forward guard
             await GuardNoNegativeForwardAsync(db, doc, ct);
+
+            // Normalize all child StockEntries to the header values (in case date/location changed)
+#if EF_CORE_7_OR_LATER
+    await db.StockEntries
+        .Where(se => se.StockDocId == doc.Id)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(se => se.Ts,           _ => doc.EffectiveDateUtc)
+            .SetProperty(se => se.LocationType, _ => doc.LocationType)
+            .SetProperty(se => se.LocationId,   _ => doc.LocationId)
+            .SetProperty(se => se.RefType,      _ => "Opening")
+            .SetProperty(se => se.RefId,        _ => doc.Id),
+            ct);
+#else
+            var children = await db.StockEntries.Where(se => se.StockDocId == doc.Id).ToListAsync(ct);
+            foreach (var se in children)
+            {
+                se.Ts = doc.EffectiveDateUtc;
+                se.LocationType = doc.LocationType;
+                se.LocationId = doc.LocationId;
+                se.RefType = "Opening";
+                se.RefId = doc.Id;
+            }
+#endif
 
             // Lock header
             doc.Status = StockDocStatus.Locked;
@@ -199,7 +221,39 @@ namespace Pos.Persistence.Services
             doc.LockedAtUtc = DateTime.UtcNow;
 
             await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
         }
+
+
+        public async Task UnlockAsync(int stockDocId, int adminUserId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var doc = await db.StockDocs
+                .Include(d => d.Lines)
+                .FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
+
+            if (doc == null) throw new InvalidOperationException("Opening document not found.");
+            if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
+            if (doc.Status != StockDocStatus.Locked) { await tx.CommitAsync(ct); return; } // idempotent
+
+            // Optional: forbid unlock if later movements exist (safe mode)
+            // (keep commented if you want free unlocks)
+            // var hasLater = await db.StockEntries.AnyAsync(se =>
+            //     se.Ts > doc.EffectiveDateUtc &&
+            //     se.ItemId == se.ItemId && // placeholder, refine by affected items+location if needed
+            //     !("Opening".Equals(se.RefType) && se.RefId == doc.Id), ct);
+            // if (hasLater) throw new InvalidOperationException("Cannot unlock: later movements exist.");
+
+            doc.Status = StockDocStatus.Draft;
+            doc.LockedByUserId = null;
+            doc.LockedAtUtc = null;
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
 
         public Task<StockDoc?> GetAsync(int stockDocId, CancellationToken ct = default)
         {
