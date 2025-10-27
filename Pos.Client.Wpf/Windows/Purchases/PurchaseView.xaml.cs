@@ -320,28 +320,33 @@ namespace Pos.Client.Wpf.Windows.Purchases
             // Wire to XAML combo boxes if present
             try { OutletBox.ItemsSource = _outletResults; } catch { /* if control not present, ignore */ }
             try { WarehouseBox.ItemsSource = _warehouseResults; } catch { /* ignore */ }
+            try { OutletBox.Items.Refresh(); } catch { }
+            try { WarehouseBox.Items.Refresh(); } catch { }
             // Basic defaults: if you have warehouses, default to Warehouse; else Outlet
-            var hasWarehouse = _warehouseResults.Any();
-            try
+            if (!(_model != null && _model.Id > 0))
             {
-                if (hasWarehouse)
+                // Basic defaults: if you have warehouses, default to Warehouse; else Outlet
+                var hasWarehouse = _warehouseResults.Any();
+                try
                 {
-                    DestWarehouseRadio.IsChecked = true;
-                    if (_warehouseResults.Any()) WarehouseBox.SelectedIndex = 0;
-                    WarehouseBox.IsEnabled = true;
-                    OutletBox.IsEnabled = false;
+                    if (hasWarehouse)
+                    {
+                        DestWarehouseRadio.IsChecked = true;
+                        if (_warehouseResults.Any()) WarehouseBox.SelectedIndex = 0;
+                        WarehouseBox.IsEnabled = true;
+                        OutletBox.IsEnabled = false;
+                    }
+                    else
+                    {
+                        DestOutletRadio.IsChecked = true;
+                        if (_outletResults.Any()) OutletBox.SelectedIndex = 0;
+                        WarehouseBox.IsEnabled = false;
+                        OutletBox.IsEnabled = true;
+                    }
                 }
-                else
-                {
-                    DestOutletRadio.IsChecked = true;
-                    if (_outletResults.Any()) OutletBox.SelectedIndex = 0;
-                    WarehouseBox.IsEnabled = false;
-                    OutletBox.IsEnabled = true;
-                }
+                catch { /* controls may not exist if not added yet */ }
             }
-            catch { /* controls may not exist if not added yet */ }
         }
-
         // Put this inside the PurchaseWindow class
         // Admins (and only them) can choose destination.
         // Handles: "Admin", "admin", "Administrator", "SuperAdmin", or role lists like "Admin,Manager".
@@ -399,6 +404,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         // ===================== Grid fast entry (kept) =====================
         private void LinesGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+
             if (e.Key == Key.Delete)
             {
                 // If an autocomplete popup is open, let it handle Delete
@@ -942,98 +948,109 @@ namespace Pos.Client.Wpf.Windows.Purchases
         // Button: Save (FINAL)
         private async void BtnSaveFinal_Click(object sender, RoutedEventArgs e)
         {
-            // Make sure totals mirror UI before persisting
-            RecomputeAndUpdateTotals();
+            // optional: disable save UI while working
+            try { ((FrameworkElement)sender).IsEnabled = false; } catch { }
 
-            // --- Same validations you use for Draft/Hold ---
-            if (_lines.Count == 0) { MessageBox.Show("Add at least one item."); return; }
-            if (_lines.Any(l => l.Qty <= 0 || l.UnitCost < 0 || l.Discount < 0))
+            try
             {
-                MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative.");
-                return;
-            }
-            foreach (var l in _lines)
-            {
-                var baseAmt = l.Qty * l.UnitCost;
-                if (l.Discount > baseAmt)
+                // ---------- keep your existing pre-save validations ----------
+                RecomputeAndUpdateTotals();
+
+                if (_lines.Count == 0) { MessageBox.Show("Add at least one item."); return; }
+                if (_lines.Any(l => l.Qty <= 0 || l.UnitCost < 0 || l.Discount < 0))
+                { MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative."); return; }
+
+                foreach (var l in _lines)
                 {
-                    MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'.");
+                    var baseAmt = l.Qty * l.UnitCost;
+                    if (l.Discount > baseAmt)
+                    { MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'."); return; }
+                }
+
+                if (!await EnsureSupplierSelectedAsync())
+                { MessageBox.Show("Please pick a Supplier (press Enter after typing, or choose from the list)."); return; }
+
+                if (_selectedPartyId == null)
+                { MessageBox.Show("Please pick a Supplier (type and press Enter or double-click from list)."); return; }
+
+                // ---------- destination ----------
+                int? outletId = null, warehouseId = null;
+                StockTargetType target;
+                try
+                {
+                    if (DestWarehouseRadio.IsChecked == true)
+                    {
+                        if (WarehouseBox.SelectedItem is not Warehouse wh) { MessageBox.Show("Please pick a warehouse."); return; }
+                        warehouseId = wh.Id; target = StockTargetType.Warehouse;
+                    }
+                    else if (DestOutletRadio.IsChecked == true)
+                    {
+                        if (OutletBox.SelectedItem is not Outlet ot) { MessageBox.Show("Please pick an outlet."); return; }
+                        outletId = ot.Id; target = StockTargetType.Outlet;
+                    }
+                    else { target = StockTargetType.Outlet; }
+                }
+                catch { target = StockTargetType.Outlet; }
+
+                EnforceDestinationPolicy(ref target, ref outletId, ref warehouseId);
+
+                // ---------- header ----------
+                _model.PartyId = _selectedPartyId.Value;
+                _model.TargetType = target;
+                _model.OutletId = outletId;
+                _model.WarehouseId = warehouseId;
+                _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
+                _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now;
+                _model.Status = PurchaseStatus.Final;
+
+                // ---------- lines ----------
+                var lines = _lines.Select(l => new PurchaseLine
+                {
+                    ItemId = l.ItemId,
+                    Qty = l.Qty,
+                    UnitCost = l.UnitCost,
+                    Discount = l.Discount,
+                    TaxRate = l.TaxRate,
+                    Notes = l.Notes
+                });
+
+                var user = AppState.Current?.CurrentUserName ?? "admin";
+
+                // ---------- SAVE (catch business-rule exceptions cleanly) ----------
+                try
+                {
+                    _model = await _purchaseSvc.ReceiveAsync(_model, lines, user);
+
+                    MessageBox.Show(
+                        $"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}",
+                        "Saved (Final)", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    await ResetFormAsync(keepDestination: true);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // e.g., “amendment would make stock negative” or “below returned qty”
+                    MessageBox.Show(ex.Message, "Amendment blocked",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                catch (DbUpdateException ex)
+                {
+                    MessageBox.Show("Save failed:\n" + ex.GetBaseException().Message,
+                        "Database error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Unexpected error:\n" + ex.Message,
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
             }
-            if (!await EnsureSupplierSelectedAsync())
+            finally
             {
-                MessageBox.Show("Please pick a Supplier (press Enter after typing, or choose from the list).");
-                return;
+                try { ((FrameworkElement)sender).IsEnabled = true; } catch { }
             }
-            if (_selectedPartyId == null)
-            {
-                MessageBox.Show("Please pick a Supplier (type and press Enter or double-click from list).");
-                return;
-            }
-
-            // --- Destination (same as your draft save) ---
-            int? outletId = null, warehouseId = null;
-            StockTargetType target;
-            try
-            {
-                if (DestWarehouseRadio.IsChecked == true)
-                {
-                    if (WarehouseBox.SelectedItem is not Warehouse wh)
-                    { MessageBox.Show("Please pick a warehouse."); return; }
-                    warehouseId = wh.Id;
-                    target = StockTargetType.Warehouse;
-                }
-                else if (DestOutletRadio.IsChecked == true)
-                {
-                    if (OutletBox.SelectedItem is not Outlet ot)
-                    { MessageBox.Show("Please pick an outlet."); return; }
-                    outletId = ot.Id;
-                    target = StockTargetType.Outlet;
-                }
-                else
-                {
-                    target = StockTargetType.Outlet; // legacy fallback
-                }
-            }
-            catch
-            {
-                target = StockTargetType.Outlet;
-            }
-
-            EnforceDestinationPolicy(ref target, ref outletId, ref warehouseId);
-
-            // --- Build the model for FINAL ---
-            _model.PartyId = _selectedPartyId.Value;
-            _model.TargetType = target;
-            _model.OutletId = outletId;
-            _model.WarehouseId = warehouseId;
-            _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
-            _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now;
-            _model.Status = PurchaseStatus.Final; // ← important, but service also enforces Final
-
-            // Lines to persist
-            var lines = _lines.Select(l => new PurchaseLine
-            {
-                ItemId = l.ItemId,
-                Qty = l.Qty,
-                UnitCost = l.UnitCost,
-                Discount = l.Discount,
-                TaxRate = l.TaxRate,
-                Notes = l.Notes
-            });
-
-            // Current user (fall back to "admin" if not set)
-            var user = AppState.Current?.CurrentUserName ?? "admin";
-
-            // --- FINALIZE using your service (assigns DocNo, ReceivedAtUtc, recomputes, etc.) ---
-            _model = await _purchaseSvc.ReceiveAsync(_model, lines, user);
-
-            MessageBox.Show(
-                $"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}",
-                "Saved (Final)");
-
-            await ResetFormAsync(keepDestination: true);
         }
 
 
@@ -1854,20 +1871,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             // Header UI
             try { DatePicker.SelectedDate = _model.PurchaseDate; } catch { }
-            try
-            {
-                if (_model.TargetType == StockTargetType.Warehouse && _model.WarehouseId.HasValue)
-                {
-                    var wh = await _db.Set<Warehouse>().AsNoTracking().FirstOrDefaultAsync(w => w.Id == _model.WarehouseId);
-                    if (wh != null) WarehouseBox.SelectedItem = wh;
-                }
-                if (_model.TargetType == StockTargetType.Outlet && _model.OutletId.HasValue)
-                {
-                    var ot = await _db.Set<Outlet>().AsNoTracking().FirstOrDefaultAsync(o => o.Id == _model.OutletId);
-                    if (ot != null) OutletBox.SelectedItem = ot;
-                }
-            }
-            catch { /* controls may not be present in older layout */ }
+            // ===== ensure destination pickers reflect the saved invoice (NO defaults) =====
+            
+            await InitDestinationsAsync();
+
+
+            await SetDestinationSelectionAsync();
+
+            // ===== end destination restore =====
 
             // Supplier header textbox in your UI is a look-up TextBox + popup;
             // we only set its text to the Party name for display (selection logic already exists)
@@ -1940,11 +1951,53 @@ namespace Pos.Client.Wpf.Windows.Purchases
             catch { }
         }
 
-      
 
-      
+        private async Task SetDestinationSelectionAsync()
+        {
+            // Make sure the ItemsSource is already set + measured
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Loaded);
 
-      
+            try
+            {
+                if (_model.TargetType == StockTargetType.Outlet && _model.OutletId.HasValue)
+                {
+                    DestOutletRadio.IsChecked = true;
+                    OutletBox.IsEnabled = true;
+                    WarehouseBox.IsEnabled = false;
+
+                    // Primary way: by value (needs SelectedValuePath="Id")
+                    OutletBox.SelectedValue = _model.OutletId.Value;
+
+                    // Fallback (if value didn’t resolve due to timing), set by reference
+                    if (OutletBox.SelectedValue == null)
+                    {
+                        var ot = _outletResults.FirstOrDefault(o => o.Id == _model.OutletId.Value);
+                        if (ot != null) OutletBox.SelectedItem = ot;
+                    }
+                }
+                else if (_model.TargetType == StockTargetType.Warehouse && _model.WarehouseId.HasValue)
+                {
+                    DestWarehouseRadio.IsChecked = true;
+                    WarehouseBox.IsEnabled = true;
+                    OutletBox.IsEnabled = false;
+
+                    WarehouseBox.SelectedValue = _model.WarehouseId.Value;
+                    if (WarehouseBox.SelectedValue == null)
+                    {
+                        var wh = _warehouseResults.FirstOrDefault(w => w.Id == _model.WarehouseId.Value);
+                        if (wh != null) WarehouseBox.SelectedItem = wh;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore UI timing/layout edge cases
+            }
+        }
+
+
+
+
         private (Purchase model, List<PurchaseLine> lines) BuildPurchaseFromVm(bool isDraft)
         {
             var model = new Purchase

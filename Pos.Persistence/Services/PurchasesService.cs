@@ -140,7 +140,7 @@ namespace Pos.Persistence.Services
 
                 await _db.SaveChangesAsync();
 
-                // normal purchase postings
+                // normal purchase postings (IN to the chosen destination)
                 await PostPurchaseStockAsync(model, lineList, user ?? "system");
 
                 // non-fatal convenience
@@ -166,7 +166,28 @@ namespace Pos.Persistence.Services
 
             var wasFinal = existing.Status == PurchaseStatus.Final;
 
-            // Update header only (lines are immutable once Final; we won't touch them in Amend)
+            // --- capture OLD destination before overwriting header ---
+            var oldLocType = existing.TargetType == StockTargetType.Warehouse
+                ? InventoryLocationType.Warehouse
+                : InventoryLocationType.Outlet;
+            var oldLocId = existing.TargetType == StockTargetType.Warehouse
+                ? (existing.WarehouseId ?? 0)
+                : (existing.OutletId ?? 0);
+
+            // --- compute NEW destination from the incoming model (what user selected) ---
+            var newLocType = model.TargetType == StockTargetType.Warehouse
+                ? InventoryLocationType.Warehouse
+                : InventoryLocationType.Outlet;
+            var newLocId = model.TargetType == StockTargetType.Warehouse
+                ? (model.WarehouseId ?? 0)
+                : (model.OutletId ?? 0);
+
+            // Will destination change?
+            bool destinationChanged =
+                (existing.TargetType != model.TargetType) ||
+                (oldLocId != newLocId);
+
+            // Update header (lines are immutable once Final; we won't touch them in Amend)
             existing.PartyId = model.PartyId;
             existing.TargetType = model.TargetType;
             existing.OutletId = model.OutletId;
@@ -196,6 +217,82 @@ namespace Pos.Persistence.Services
             else
                 existing.Revision = 0;
 
+            // ---------------------------------------------------------
+            // 2X) IF ALREADY FINAL AND DESTINATION CHANGED → MOVE STOCK
+            //      STRATEGY: retag existing postings (Purchase + Amend)
+            //      so all readers immediately reflect the new location.
+            // ---------------------------------------------------------
+            if (wasFinal && destinationChanged)
+            {
+                var relevantRefTypes = new[] { "Purchase", "PurchaseAmend" };
+
+                // 1) Load ALL postings for this purchase that currently sit at the OLD destination
+                var oldPostings = await _db.StockEntries
+                    .Where(se => se.RefId == existing.Id
+                                 && se.LocationType == oldLocType
+                                 && se.LocationId == oldLocId
+                                 && relevantRefTypes.Contains(se.RefType))
+                    .ToListAsync();
+
+                // Nothing posted at old destination (e.g., it was already moved previously) → nothing to do
+                if (oldPostings.Count == 0)
+                    goto AfterMove;
+
+                // 2) Negative guard at OLD destination:
+                //    Compute total qty we are about to remove (per item) and ensure old location won't go < 0.
+                var movingByItem = oldPostings
+                    .GroupBy(se => se.ItemId)
+                    .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
+                    .ToList();
+
+                var itemIds = movingByItem.Select(x => x.ItemId).ToArray();
+
+                var onhandOld = await _db.StockEntries
+                    .AsNoTracking()
+                    .Where(se => se.LocationType == oldLocType
+                                 && se.LocationId == oldLocId
+                                 && itemIds.Contains(se.ItemId))
+                    .GroupBy(se => se.ItemId)
+                    .Select(g => new { ItemId = g.Key, OnHand = g.Sum(x => x.QtyChange) })
+                    .ToDictionaryAsync(x => x.ItemId, x => x.OnHand);
+
+                var names = await _db.Items
+                    .Where(i => itemIds.Contains(i.Id))
+                    .Select(i => new { i.Id, i.Name })
+                    .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+                var negHits = new List<string>();
+                foreach (var m in movingByItem)
+                {
+                    var curr = onhandOld.TryGetValue(m.ItemId, out var oh) ? oh : 0m;
+                    var after = curr - m.Qty;   // we will remove exactly this qty from OLD
+                    if (after < 0m)
+                    {
+                        var label = names.TryGetValue(m.ItemId, out var nm) ? $"{nm} (#{m.ItemId})" : $"Item #{m.ItemId}";
+                        negHits.Add($"{label}: on-hand at old {curr:0.##} → after move {after:0.##}");
+                    }
+                }
+                if (negHits.Count > 0)
+                    throw new InvalidOperationException(
+                        "Cannot change destination — it would make stock negative at the original location:\n" +
+                        string.Join("\n", negHits));
+
+                // 3) Retag the existing rows to NEW destination (update in-place).
+                //    This keeps the same RefType ("Purchase"/"PurchaseAmend"), same quantities/costs/audit,
+                //    but they now reside at the new location so every stock reader reflects it.
+                foreach (var se in oldPostings)
+                {
+                    se.LocationType = newLocType;
+                    se.LocationId = newLocId;
+                    se.Note = "Relocated on amend (dest change)";
+                    // (Optional) se.Ts = DateTime.UtcNow;  // only if you want to bump the timestamp
+                }
+                await _db.SaveChangesAsync();
+
+            AfterMove:;
+            }
+
+
             // -----------------------------------------------
             // 2A) FIRST-TIME FINAL FROM DRAFT (NOT FINAL YET)
             // -----------------------------------------------
@@ -215,7 +312,7 @@ namespace Pos.Persistence.Services
 
                 await _db.SaveChangesAsync();
 
-                // normal purchase postings
+                // normal purchase postings (IN to current destination on header)
                 await PostPurchaseStockAsync(existing, lineList, user ?? "system");
 
                 try
@@ -238,7 +335,7 @@ namespace Pos.Persistence.Services
             // Baseline must be: ORIGINAL LINES + ALL PRIOR AMENDMENTS (PurchaseAmend).
             // Then write ONLY the new delta as StockEntry (append-only).
 
-            // Sum prior amendment deltas for this purchase
+            // Sum prior amendment deltas for this purchase (all locations)
             var priorAmendQtyByItem = await _db.StockEntries
                 .AsNoTracking()
                 .Where(se => se.RefType == "PurchaseAmend" && se.RefId == existing.Id)
@@ -279,7 +376,37 @@ namespace Pos.Persistence.Services
 
             var allItemIds = cur.Keys.Union(nxt.Keys).ToList();
 
-            // Resolve normalized location once
+            // === HARD RULE: Amended qty per item cannot be below the qty already returned for THIS purchase
+            var returnedByItem = await _db.PurchaseLines
+                .AsNoTracking()
+                .Where(l => l.Purchase.IsReturn
+                         && l.Purchase.Status == PurchaseStatus.Final   // <— Final only
+                         && l.Purchase.RefPurchaseId == existing.Id)
+                .GroupBy(l => l.ItemId)
+                .Select(g => new { ItemId = g.Key, Returned = -g.Sum(x => x.Qty) }) // flip sign → positive
+                .ToDictionaryAsync(x => x.ItemId, x => x.Returned);
+
+            if (returnedByItem.Count > 0)
+            {
+                foreach (var kv in returnedByItem)
+                {
+                    var itemId = kv.Key;
+                    var returned = kv.Value; // positive
+                    var desired = nxt.TryGetValue(itemId, out var n) ? n.qty : 0m;
+
+                    if (desired < returned)
+                    {
+                        var name = await _db.Items.Where(i => i.Id == itemId)
+                                                  .Select(i => i.Name)
+                                                  .FirstOrDefaultAsync() ?? $"Item #{itemId}";
+                        throw new InvalidOperationException(
+                            $"Cannot amend '{name}' below {returned:0.##} because that much is already returned. " +
+                            $"Amended qty: {desired:0.##}.");
+                    }
+                }
+            }
+
+            // Resolve normalized NEW location from header (it may have changed above)
             InventoryLocationType locType;
             int locId;
             if (existing.TargetType == StockTargetType.Warehouse)
@@ -298,39 +425,101 @@ namespace Pos.Persistence.Services
             }
 
             // For StockEntry.OutletId (required): use purchase's OutletId when present, else 0 for warehouse-only receipts
-            var entryOutletId = existing.OutletId ?? 0;
+            var entryOutletId2 = existing.OutletId ?? 0;
 
-            // Write ONLY the new delta
-            foreach (var itemId in allItemIds)
+            // ---- Make 2B atomic
+            using (var tx = await _db.Database.BeginTransactionAsync())
             {
-                var before = cur.TryGetValue(itemId, out var c) ? c.qty : 0m;
-                var after = nxt.TryGetValue(itemId, out var n) ? n.qty : 0m;
-                var dQty = after - before;
-                if (dQty == 0m) continue;
+                // 1) Compute deltas first (DON'T add to Db yet)
+                var deltas = new List<(int itemId, decimal dQty, decimal unitCost)>();
+                var deltaByItem = new Dictionary<int, decimal>();
 
-                // choose unit cost for delta: prefer desired state's avg, else baseline's avg
-                var deltaUnitCost =
-                    (nxt.TryGetValue(itemId, out var nMeta) ? nMeta.unitCost
-                     : (cur.TryGetValue(itemId, out var cMeta) ? cMeta.unitCost : 0m));
-
-                _db.StockEntries.Add(new StockEntry
+                foreach (var itemId in allItemIds)
                 {
-                    OutletId = entryOutletId,
-                    ItemId = itemId,
-                    QtyChange = dQty,                 // + IN, – OUT
-                    UnitCost = deltaUnitCost,
-                    LocationType = locType,
-                    LocationId = locId,
-                    RefType = "PurchaseAmend",
-                    RefId = existing.Id,
-                    Ts = DateTime.UtcNow,
-                    Note = $"Amend Rev {existing.Revision + 1}"
-                });
+                    var before = cur.TryGetValue(itemId, out var c) ? c.qty : 0m;
+                    var after = nxt.TryGetValue(itemId, out var n) ? n.qty : 0m;
+                    var dQty = after - before; // + IN, – OUT
+                    if (dQty == 0m) continue;
+
+                    if (deltaByItem.TryGetValue(itemId, out var agg))
+                        deltaByItem[itemId] = agg + dQty;
+                    else
+                        deltaByItem[itemId] = dQty;
+
+                    var unitCost =
+                        (nxt.TryGetValue(itemId, out var nMeta) ? nMeta.unitCost
+                         : (cur.TryGetValue(itemId, out var cMeta) ? cMeta.unitCost : 0m));
+
+                    deltas.Add((itemId, dQty, unitCost));
+                }
+
+                // 2) Guard: ensure these deltas won't make on-hand negative at destination
+                if (deltaByItem.Count > 0)
+                {
+                    var itemIdsForGuard = deltaByItem.Keys.ToList();
+
+                    var onhand = await _db.StockEntries
+                        .AsNoTracking()
+                        .Where(se => se.LocationType == locType
+                                  && se.LocationId == locId
+                                  && itemIdsForGuard.Contains(se.ItemId))
+                        .GroupBy(se => se.ItemId)
+                        .Select(g => new { ItemId = g.Key, OnHand = g.Sum(x => x.QtyChange) })
+                        .ToDictionaryAsync(x => x.ItemId, x => x.OnHand);
+
+                    var names = await _db.Items
+                        .Where(i => itemIdsForGuard.Contains(i.Id))
+                        .Select(i => new { i.Id, i.Name })
+                        .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+                    var negHits = new List<string>();
+                    foreach (var kv in deltaByItem)
+                    {
+                        var itemId = kv.Key;
+                        var d = kv.Value;
+                        var curOn = onhand.TryGetValue(itemId, out var oh) ? oh : 0m;
+                        var nextOn = curOn + d;
+
+                        if (nextOn < 0m)
+                        {
+                            var label = names.TryGetValue(itemId, out var nm) ? $"{nm} (#{itemId})" : $"Item #{itemId}";
+                            negHits.Add($"{label}: on-hand {curOn:0.##} + change {d:0.##} = {nextOn:0.##}");
+                        }
+                    }
+
+                    if (negHits.Count > 0)
+                        throw new InvalidOperationException(
+                            "This amendment would make stock negative at the destination:\n" +
+                            string.Join("\n", negHits) +
+                            "\nReceive stock or undo other movements first.");
+                }
+
+                // 3) Safe → append StockEntry rows now
+                foreach (var (itemId, dQty, unitCost) in deltas)
+                {
+                    _db.StockEntries.Add(new StockEntry
+                    {
+                        OutletId = entryOutletId2,
+                        ItemId = itemId,
+                        QtyChange = dQty,
+                        UnitCost = unitCost,
+                        LocationType = locType,
+                        LocationId = locId,
+                        RefType = "PurchaseAmend",
+                        RefId = existing.Id,
+                        Ts = DateTime.UtcNow,
+                        Note = $"Amend Rev {existing.Revision}"
+                    });
+                }
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
             }
 
-            await _db.SaveChangesAsync();   // header already set; deltas appended
             return existing;
+
         }
+
 
 
 
@@ -1123,21 +1312,97 @@ namespace Pos.Persistence.Services
 
         public async Task VoidPurchaseAsync(int purchaseId, string reason, string? user = null)
         {
-            var p = await _db.Purchases.Include(x => x.Lines)
-                                       .FirstAsync(x => x.Id == purchaseId && !x.IsReturn);
+            // Load the purchase (non-return)
+            var p = await _db.Purchases
+                .AsNoTracking()
+                .FirstAsync(x => x.Id == purchaseId && !x.IsReturn);
 
             if (p.Status == PurchaseStatus.Voided) return;
 
-            var postings = await _db.StockEntries
-                .Where(se => se.RefType == "Purchase" && se.RefId == p.Id)
-                .ToListAsync();
-            if (postings.Count > 0) _db.StockEntries.RemoveRange(postings);
+            // Resolve the exact ledger location used by postings
+            var locType = p.TargetType == StockTargetType.Warehouse
+                ? InventoryLocationType.Warehouse
+                : InventoryLocationType.Outlet;
+            var locId = p.TargetType == StockTargetType.Warehouse
+                ? p.WarehouseId!.Value
+                : p.OutletId!.Value;
 
-            p.Status = PurchaseStatus.Voided;
-            p.UpdatedAtUtc = DateTime.UtcNow;
-            p.UpdatedBy = user;
+            // All postings tied to this purchase that must be removed
+            // IMPORTANT: include both "Purchase" and "PurchaseAmend"
+            var postings = await _db.StockEntries
+                .Where(se => se.RefId == p.Id &&
+                      (se.RefType == "Purchase" || se.RefType == "PurchaseAmend" || se.RefType == "PurchaseMove"))
+                .ToListAsync();
+
+            // Nothing posted? Just mark void and exit.
+            if (postings.Count == 0)
+            {
+                var entity = await _db.Purchases.FirstAsync(x => x.Id == p.Id);
+                entity.Status = PurchaseStatus.Voided;
+                entity.UpdatedAtUtc = DateTime.UtcNow;
+                entity.UpdatedBy = user;
+                await _db.SaveChangesAsync();
+                return;
+            }
+
+            // Compute the net qty that will be REMOVED by voiding
+            // (removing postings changes on-hand by: Δ = - Σ(post.QtyChange))
+            var netByItem = postings
+                .GroupBy(se => se.ItemId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Sum(se => se.QtyChange)    // sum of (+purchase +amend deltas)
+                );
+
+            // Check current on-hand at the same location for these items
+            var itemIds = netByItem.Keys.ToArray();
+
+            var onhandByItem = await _db.StockEntries
+                .AsNoTracking()
+                .Where(se => se.LocationType == locType &&
+                             se.LocationId == locId &&
+                             itemIds.Contains(se.ItemId))
+                .GroupBy(se => se.ItemId)
+                .Select(g => new { ItemId = g.Key, OnHand = g.Sum(x => x.QtyChange) })
+                .ToDictionaryAsync(x => x.ItemId, x => x.OnHand);
+
+            // Validate no item would go below zero after removal
+            var violations = new List<string>();
+            foreach (var kv in netByItem)
+            {
+                var itemId = kv.Key;
+                var sumPosted = kv.Value;               // can be + or − overall
+                var cur = onhandByItem.TryGetValue(itemId, out var oh) ? oh : 0m;
+                var after = cur - sumPosted;            // because removal = -sumPosted
+
+                if (after < 0m)
+                    violations.Add($"Item {itemId}: on-hand {cur:0.##} → after void {after:0.##}");
+            }
+
+            if (violations.Count > 0)
+            {
+                var msg = "Cannot void purchase — it would make stock negative:\n" +
+                          string.Join("\n", violations);
+                throw new InvalidOperationException(msg);
+            }
+
+            // Safe to void: remove all purchase-linked postings atomically and mark void
+            using var tx = await _db.Database.BeginTransactionAsync();
+
+            _db.StockEntries.RemoveRange(postings);
+
+            var entity2 = await _db.Purchases.FirstAsync(x => x.Id == p.Id);
+            entity2.Status = PurchaseStatus.Voided;
+            entity2.UpdatedAtUtc = DateTime.UtcNow;
+            entity2.UpdatedBy = user;
+
+            // (Optional) record audit row if you keep one
+            //_db.AuditLogs.Add(new AuditLog { ... });
+
             await _db.SaveChangesAsync();
+            await tx.CommitAsync();
         }
+
 
         public async Task VoidReturnAsync(int returnId, string reason, string? user = null)
         {
@@ -1231,13 +1496,16 @@ namespace Pos.Persistence.Services
                 .ToList();
         }
 
+        // at file top if missing
+
+        
 
 
-    }
+}
 
-    // ---------- Simple DTOs for Return Draft ----------
+// ---------- Simple DTOs for Return Draft ----------
 
-    public class PurchaseReturnDraft
+public class PurchaseReturnDraft
     {
         public int PartyId { get; set; }
         public StockTargetType TargetType { get; set; }

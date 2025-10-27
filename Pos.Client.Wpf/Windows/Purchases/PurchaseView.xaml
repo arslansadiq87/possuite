@@ -114,11 +114,11 @@
                             </Grid.RowDefinitions>
                             <!-- Outlet row -->
                             <RadioButton x:Name="DestOutletRadio" Grid.Row="0" Grid.Column="0" Content="Outlet" VerticalAlignment="Center" Checked="DestRadio_Checked" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="OutletBox" Grid.Row="0" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" ToolTip="Pick outlet when stock goes directly to an outlet"/>
+                            <ComboBox x:Name="OutletBox" Grid.Row="0" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" IsEditable="False" ToolTip="Pick outlet when stock goes directly to an outlet"/>
 
                             <!-- Warehouse row -->
                             <RadioButton x:Name="DestWarehouseRadio" Grid.Row="1" Grid.Column="0" Content="Warehouse" VerticalAlignment="Center" Checked="DestRadio_Checked" Margin="0,0,8,4"/>
-                            <ComboBox x:Name="WarehouseBox" Grid.Row="1" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" ToolTip="Pick warehouse when stock goes to central warehouse"/>
+                            <ComboBox x:Name="WarehouseBox" Grid.Row="1" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" IsEditable="False" ToolTip="Pick warehouse when stock goes to central warehouse"/>
                         </Grid>
                     </GroupBox>
 
@@ -138,7 +138,7 @@
         <DataGrid x:Name="LinesGrid" Grid.Row="2" FontSize="16" FontWeight="DemiBold" Style="{StaticResource ModernDataGrid}"
           AutoGenerateColumns="False"
           CanUserAddRows="False"
-          CanUserDeleteRows="True"
+          CanUserDeleteRows="False"
           SelectionMode="Extended"
           SelectionUnit="FullRow"
           Margin="0,0,0,4">

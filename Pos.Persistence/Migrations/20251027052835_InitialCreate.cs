@@ -1226,9 +1226,24 @@ namespace Pos.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_StockEntries_Item_Loc",
+                table: "StockEntries",
+                columns: new[] { "ItemId", "LocationType", "LocationId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_StockEntries_Ref",
+                table: "StockEntries",
+                columns: new[] { "RefType", "RefId" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_StockEntries_StockDocId",
                 table: "StockEntries",
                 column: "StockDocId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_StockEntries_Ts",
+                table: "StockEntries",
+                column: "Ts");
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserOutlets_OutletId",

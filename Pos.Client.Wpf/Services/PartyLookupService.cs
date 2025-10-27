@@ -33,12 +33,23 @@ namespace Pos.Client.Wpf.Services
 
             if (!string.IsNullOrWhiteSpace(term))
             {
-                // Broaden search beyond Name (optional but recommended)
+                term = term.Trim();
+
+                // Escape wildcards (optional safety)
+                string Escape(string s) => s
+                    .Replace("[", "[[]")
+                    .Replace("%", "[%]")
+                    .Replace("_", "[_]")
+                    .Replace("'", "''");
+
+                var like = $"%{Escape(term)}%";
+
                 q = q.Where(p =>
-                    p.Name.Contains(term) ||
-                    (p.Phone != null && p.Phone.Contains(term)) ||
-                    (p.Email != null && p.Email.Contains(term)) ||
-                    (p.TaxNumber != null && p.TaxNumber.Contains(term)));
+                    EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), like) ||
+                    (p.Phone != null && EF.Functions.Like(EF.Functions.Collate(p.Phone, "NOCASE"), like)) ||
+                    (p.Email != null && EF.Functions.Like(EF.Functions.Collate(p.Email, "NOCASE"), like)) ||
+                    (p.TaxNumber != null && EF.Functions.Like(EF.Functions.Collate(p.TaxNumber, "NOCASE"), like))
+                );
             }
 
             return await q
@@ -54,7 +65,8 @@ namespace Pos.Client.Wpf.Services
             if (name == "") return null;
 
             var q =
-                from p in _db.Parties.AsNoTracking().Where(p => p.IsActive && p.Name.ToLower() == name.ToLower())
+                from p in _db.Parties.AsNoTracking()
+                    .Where(p => p.IsActive && EF.Functions.Collate(p.Name, "NOCASE") == name)
                 join r in _db.PartyRoles.AsNoTracking() on p.Id equals r.PartyId
                 where r.Role == RoleType.Supplier
                 join map in _db.PartyOutlets.AsNoTracking().Where(m => m.IsActive && m.OutletId == outletId)

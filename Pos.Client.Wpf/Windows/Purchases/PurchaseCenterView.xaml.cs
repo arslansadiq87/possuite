@@ -453,12 +453,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
             try
             {
                 await _svc.VoidPurchaseAsync(sel.PurchaseId, reason2, user);
-                MessageBox.Show("Purchase voided.");
-                LoadPurchases();
+                MessageBox.Show("Purchase voided.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                LoadPurchases();           // refresh the list
+                LinesGrid.ItemsSource = null; // optional: clear lines after void
+            }
+            catch (InvalidOperationException ex)
+            {
+                // will show: "Cannot void purchase — it would make stock negative: ..."
+                MessageBox.Show(ex.Message, "Void blocked", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to void purchase: " + ex.Message);
+                MessageBox.Show("Failed to void purchase: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

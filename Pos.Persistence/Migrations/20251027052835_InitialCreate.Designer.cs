@@ -11,7 +11,7 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    [Migration("20251026190959_InitialCreate")]
+    [Migration("20251027052835_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -1477,6 +1477,15 @@ namespace Pos.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("StockDocId");
+
+                    b.HasIndex("Ts")
+                        .HasDatabaseName("IX_StockEntries_Ts");
+
+                    b.HasIndex("RefType", "RefId")
+                        .HasDatabaseName("IX_StockEntries_Ref");
+
+                    b.HasIndex("ItemId", "LocationType", "LocationId")
+                        .HasDatabaseName("IX_StockEntries_Item_Loc");
 
                     b.ToTable("StockEntries", t =>
                         {
