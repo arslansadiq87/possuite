@@ -150,7 +150,7 @@
 
 
         <!-- ===== LINES ===== -->
-        <DataGrid Grid.Row="2" x:Name="GridLines" Margin="0,12,0,12"
+        <DataGrid Grid.Row="2" x:Name="GridLines" Margin="0,12,0,12" Style="{StaticResource ModernDataGrid}"
                   ItemsSource="{Binding Lines}"
                   RowHeaderWidth="0"
                   CellEditEnding="GridLines_CellEditEnding"

@@ -199,6 +199,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void PurchasesGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             _lines.Clear();
+
             if (PurchasesGrid.SelectedItem is not UiPurchaseRow sel)
             {
                 HeaderText.Text = "";
@@ -208,20 +209,44 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             using var db = new PosClientDbContext(_opts);
 
-            // Load purchase + lines
+            // Load the purchase (base immutable lines)
             var purchase = db.Purchases
                 .Include(p => p.Lines)
+                .AsNoTracking()
                 .First(p => p.Id == sel.PurchaseId);
 
-            // Header (show PR / PO semantics via IsReturn)
-            var kind = sel.IsReturn ? "Return" : "Purchase";
+            // Is this a return?
+            var isReturn = purchase.IsReturn || sel.IsReturn;
+
+            // Header
+            var kind = isReturn ? "Return" : "Purchase";
             var revPart = purchase.Revision > 1 ? $"  Rev {purchase.Revision}  " : "  ";
-            HeaderText.Text = $"{kind} {sel.DocNoOrId}{revPart}" +
-                              $"Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
+            HeaderText.Text = $"{kind} {sel.DocNoOrId}{revPart}Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
 
+            // -------- fold in prior amendment deltas (qty only) --------
+            var refTypeAmend = isReturn ? "PurchaseReturnAmend" : "PurchaseAmend";
 
-            // Compose friendly line display names (same as Sales)
-            var itemIds = purchase.Lines.Select(l => l.ItemId).Distinct().ToList();
+            var amendQtyByItem = db.StockEntries
+                .AsNoTracking()
+                .Where(se => se.RefType == refTypeAmend && se.RefId == purchase.Id)
+                .GroupBy(se => se.ItemId)
+                .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
+                .ToDictionary(x => x.ItemId, x => x.Qty);
+
+            // Base (original immutable) grouped per item
+            var baseByItem = purchase.Lines
+                .GroupBy(l => l.ItemId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new
+                    {
+                        Qty = g.Sum(x => x.Qty),                              // may be negative for returns
+                        AvgUnitCost = g.Any() ? Math.Round(g.Average(x => x.UnitCost), 2) : 0m,
+                        LineTotal = g.Sum(x => x.LineTotal)
+                    });
+
+            // Get meta for all items present in base or amendments
+            var itemIds = baseByItem.Keys.Union(amendQtyByItem.Keys).Distinct().ToList();
 
             var meta = (
                 from i in db.Items.AsNoTracking()
@@ -237,15 +262,29 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     i.Variant1Value,
                     i.Variant2Name,
                     i.Variant2Value,
-                    i.Sku
+                    i.Sku,
+                    i.Price
                 }
             ).ToList().ToDictionary(x => x.Id);
 
-            foreach (var line in purchase.Lines)
+            // Build EFFECTIVE preview rows
+            foreach (var itemId in itemIds)
             {
-                string display = $"Item #{line.ItemId}";
+                baseByItem.TryGetValue(itemId, out var b);
+                amendQtyByItem.TryGetValue(itemId, out var aQty);
+
+                var effectiveQty = (b?.Qty ?? 0m) + aQty;         // purchases: positive; returns: likely negative
+                var displayQty = isReturn ? Math.Abs(effectiveQty) : effectiveQty;
+
+                if (displayQty == 0m) continue;                  // only skip when nothing left to show
+
+                // Display cost: prefer base avg; if item exists only via amendments, fallback to default price
+                var unitCost = b?.AvgUnitCost ?? (meta.TryGetValue(itemId, out var m0) ? (m0?.Price ?? 0m) : 0m);
+
+                // Friendly name + SKU
+                string display = $"Item #{itemId}";
                 string sku = "";
-                if (meta.TryGetValue(line.ItemId, out var m))
+                if (meta.TryGetValue(itemId, out var m))
                 {
                     display = ProductNameComposer.Compose(
                         m.ProductName, m.ItemName,
@@ -256,17 +295,19 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
                 _lines.Add(new UiLineRow
                 {
-                    ItemId = line.ItemId,
+                    ItemId = itemId,
                     Sku = sku,
                     DisplayName = display,
-                    Qty = line.Qty,
-                    UnitCost = line.UnitCost,
-                    LineTotal = line.LineTotal
+                    Qty = displayQty,                                 // ← returns now show positive qty
+                    UnitCost = unitCost,
+                    LineTotal = Math.Round(displayQty * unitCost, 2)        // preview only
                 });
             }
 
             UpdateActions(sel);
         }
+
+
 
         // ===== Bottom actions visibility =====
         private void UpdateActions(UiPurchaseRow? sel)
@@ -375,39 +416,25 @@ namespace Pos.Client.Wpf.Windows.Purchases
             AmendReturn_Click(sender!, new RoutedEventArgs());
         }
 
-        private void Void_Executed(object? sender, ExecutedRoutedEventArgs? e)
+        // At top of the class you already construct _svc; reuse it here.
+
+        private async void Void_Executed(object? sender, ExecutedRoutedEventArgs? e)
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a document."); return; }
 
-            using var db = new PosClientDbContext(_opts);
+            var user = AppState.Current?.CurrentUserName ?? "system";
 
-            // ----- VOID RETURN -----
+            // VOID RETURN
             if (sel.IsReturn)
             {
-                if (sel.Status != nameof(PurchaseStatus.Final))
-                {
-                    MessageBox.Show("Only FINAL returns can be voided here.");
-                    return;
-                }
-
                 var reason = Microsoft.VisualBasic.Interaction.InputBox(
                     $"Void return {sel.DocNoOrId}\nEnter reason:", "Void Return", "Wrong return");
                 if (string.IsNullOrWhiteSpace(reason)) return;
 
                 try
                 {
-                    using var tx = db.Database.BeginTransaction();
-                    var r = db.Purchases.Include(x => x.Lines).First(x => x.Id == sel.PurchaseId && x.IsReturn);
-                    if (r.Status != PurchaseStatus.Final) { MessageBox.Show("Only FINAL returns can be voided."); return; }
-
-                    // TODO: Reverse stock / supplier credit ledger if you post them.
-                    r.Status = PurchaseStatus.Voided;
-                    r.UpdatedAtUtc = DateTime.UtcNow;
-                    r.UpdatedBy = AppState.Current?.CurrentUserName ?? "system";
-                    db.SaveChanges();
-                    tx.Commit();
-
+                    await _svc.VoidReturnAsync(sel.PurchaseId, reason, user);
                     MessageBox.Show("Return voided.");
                     LoadPurchases();
                 }
@@ -418,59 +445,23 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 return;
             }
 
-            // ----- VOID PURCHASE (Draft/Final) -----
-            if (sel.Status == nameof(PurchaseStatus.Draft))
+            // VOID PURCHASE (Draft or Final)
+            var reason2 = Microsoft.VisualBasic.Interaction.InputBox(
+                $"Void purchase {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong purchase");
+            if (string.IsNullOrWhiteSpace(reason2)) return;
+
+            try
             {
-                var reason = Microsoft.VisualBasic.Interaction.InputBox(
-                    $"Void draft {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong entry");
-                if (string.IsNullOrWhiteSpace(reason)) return;
-
-                var p = db.Purchases.First(x => x.Id == sel.PurchaseId && !x.IsReturn);
-                if (p.Status != PurchaseStatus.Draft) { MessageBox.Show("Only DRAFT can be voided here."); return; }
-
-                p.Status = PurchaseStatus.Voided;
-                p.UpdatedAtUtc = DateTime.UtcNow;
-                p.UpdatedBy = AppState.Current?.CurrentUserName ?? "system";
-                db.SaveChanges();
-
+                await _svc.VoidPurchaseAsync(sel.PurchaseId, reason2, user);
                 MessageBox.Show("Purchase voided.");
                 LoadPurchases();
-                return;
             }
-
-            if (sel.Status == nameof(PurchaseStatus.Final))
+            catch (Exception ex)
             {
-                var reason = Microsoft.VisualBasic.Interaction.InputBox(
-                    $"Void purchase {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong purchase");
-                if (string.IsNullOrWhiteSpace(reason)) return;
-
-                try
-                {
-                    using var tx = db.Database.BeginTransaction();
-
-                    var p = db.Purchases.Include(x => x.Lines).First(x => x.Id == sel.PurchaseId && !x.IsReturn);
-                    if (p.Status != PurchaseStatus.Final) { MessageBox.Show("Only FINAL purchases can be voided here."); return; }
-
-                    // NOTE: When you wire purchase stock posting, add symmetric reversal here.
-                    p.Status = PurchaseStatus.Voided;
-                    p.UpdatedAtUtc = DateTime.UtcNow;
-                    p.UpdatedBy = AppState.Current?.CurrentUserName ?? "system";
-
-                    db.SaveChanges();
-                    tx.Commit();
-
-                    MessageBox.Show("Purchase voided.");
-                    LoadPurchases();
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("Failed to void purchase: " + ex.Message);
-                }
-                return;
+                MessageBox.Show("Failed to void purchase: " + ex.Message);
             }
-
-            MessageBox.Show("Only DRAFT or FINAL documents can be voided.");
         }
+
 
         private void Held_Executed(object sender, ExecutedRoutedEventArgs e) => OpenHeldPicker();
 

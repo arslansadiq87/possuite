@@ -113,93 +113,226 @@ namespace Pos.Persistence.Services
         /// </summary>
         public async Task<Purchase> ReceiveAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null)
         {
+            // 0) Normalize + compute monetary totals on incoming UI payload
             ValidateDestination(model);
 
-            // Purchases (not returns) – prevent negative qtys
-            var lineList = NormalizeAndCompute(lines);
-            ComputeHeaderTotals(model, lineList);
+            var lineList = NormalizeAndCompute(lines);   // your helper
+            ComputeHeaderTotals(model, lineList);        // sets Subtotal/Discount/Tax/GrandTotal on model
 
+            // common header stamps
             model.Status = PurchaseStatus.Final;
             model.ReceivedAtUtc ??= DateTime.UtcNow;
             model.UpdatedAtUtc = DateTime.UtcNow;
             model.UpdatedBy = user;
 
+            // -----------------------------
+            // 1) FIRST-TIME FINALIZATION
+            // -----------------------------
             if (model.Id == 0)
             {
-                // First time finalization
                 model.CreatedAtUtc = DateTime.UtcNow;
                 model.CreatedBy = user;
                 model.DocNo = await EnsurePurchaseNumberAsync(model, CancellationToken.None);
-                model.Revision = 0;                              // NEW
+                model.Revision = 0;
+
                 model.Lines = lineList;
                 _db.Purchases.Add(model);
+
+                await _db.SaveChangesAsync();
+
+                // normal purchase postings
+                await PostPurchaseStockAsync(model, lineList, user ?? "system");
+
+                // non-fatal convenience
+                try
+                {
+                    await ApplySupplierCreditsAsync(
+                        supplierId: model.PartyId,
+                        outletId: model.OutletId,
+                        purchase: model,
+                        user: user ?? "system");
+                }
+                catch { /* ignore */ }
+
+                return model;
             }
+
+            // -----------------------------
+            // 2) AMEND OR FIRST-TIME FINAL?
+            // -----------------------------
+            var existing = await _db.Purchases
+                                    .Include(p => p.Lines)
+                                    .FirstAsync(p => p.Id == model.Id);
+
+            var wasFinal = existing.Status == PurchaseStatus.Final;
+
+            // Update header only (lines are immutable once Final; we won't touch them in Amend)
+            existing.PartyId = model.PartyId;
+            existing.TargetType = model.TargetType;
+            existing.OutletId = model.OutletId;
+            existing.WarehouseId = model.WarehouseId;
+            existing.PurchaseDate = model.PurchaseDate;
+            existing.VendorInvoiceNo = model.VendorInvoiceNo;
+
+            existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
+                ? (existing.DocNo ?? await EnsurePurchaseNumberAsync(existing, CancellationToken.None))
+                : model.DocNo;
+
+            // Money totals reflect the desired state user has on screen
+            existing.Subtotal = model.Subtotal;
+            existing.Discount = model.Discount;
+            existing.Tax = model.Tax;
+            existing.OtherCharges = model.OtherCharges;
+            existing.GrandTotal = model.GrandTotal;
+
+            existing.Status = PurchaseStatus.Final;
+            existing.ReceivedAtUtc = model.ReceivedAtUtc;
+            existing.UpdatedAtUtc = model.UpdatedAtUtc;
+            existing.UpdatedBy = model.UpdatedBy;
+
+            // Revision: bump on amendments only
+            if (wasFinal)
+                existing.Revision = (existing.Revision <= 0 ? 1 : existing.Revision + 1);
             else
+                existing.Revision = 0;
+
+            // -----------------------------------------------
+            // 2A) FIRST-TIME FINAL FROM DRAFT (NOT FINAL YET)
+            // -----------------------------------------------
+            if (!wasFinal)
             {
-                var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == model.Id);
-                bool wasFinal = existing.Status == PurchaseStatus.Final;   // NEW
-
-                // header updates...
-                existing.PartyId = model.PartyId;
-                existing.TargetType = model.TargetType;
-                existing.OutletId = model.OutletId;
-                existing.WarehouseId = model.WarehouseId;
-                existing.PurchaseDate = model.PurchaseDate;
-                existing.VendorInvoiceNo = model.VendorInvoiceNo;
-
-                existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
-                    ? await EnsurePurchaseNumberAsync(existing, CancellationToken.None)
-                    : model.DocNo;
-
-                existing.Subtotal = model.Subtotal;
-                existing.Discount = model.Discount;
-                existing.Tax = model.Tax;
-                existing.OtherCharges = model.OtherCharges;
-                existing.GrandTotal = model.GrandTotal;
-
-                existing.Status = PurchaseStatus.Final;
-                existing.ReceivedAtUtc = model.ReceivedAtUtc;
-                existing.UpdatedAtUtc = model.UpdatedAtUtc;
-                existing.UpdatedBy = model.UpdatedBy;
-
-                // 🔁 NEW: bump revision if this is an amendment of a FINAL
-                if (wasFinal)
-                    existing.Revision = (existing.Revision <= 0 ? 1 : existing.Revision + 1);
-                else
-                    existing.Revision = 0; // first time becoming Final
-
+                // replace lines once (draft → final)
                 _db.PurchaseLines.RemoveRange(existing.Lines);
                 await _db.SaveChangesAsync();
 
                 foreach (var l in lineList)
                 {
-                    l.Id = 0; l.PurchaseId = existing.Id; l.Purchase = null;
+                    l.Id = 0;
+                    l.PurchaseId = existing.Id;
+                    l.Purchase = null;
                 }
                 existing.Lines = lineList;
 
-                model = existing;
+                await _db.SaveChangesAsync();
+
+                // normal purchase postings
+                await PostPurchaseStockAsync(existing, lineList, user ?? "system");
+
+                try
+                {
+                    await ApplySupplierCreditsAsync(
+                        supplierId: existing.PartyId,
+                        outletId: existing.OutletId,
+                        purchase: existing,
+                        user: user ?? "system");
+                }
+                catch { /* ignore */ }
+
+                return existing;
             }
 
-            await _db.SaveChangesAsync();
-            await PostPurchaseStockAsync(model, lineList, user ?? "system");
+            // -----------------------------------------------
+            // 2B) AMENDMENT OF AN ALREADY-FINAL PURCHASE
+            // -----------------------------------------------
+            // IMPORTANT: Do NOT modify existing.Lines.
+            // Baseline must be: ORIGINAL LINES + ALL PRIOR AMENDMENTS (PurchaseAmend).
+            // Then write ONLY the new delta as StockEntry (append-only).
 
-            // NEW: After finalize, auto-apply any Supplier Credits before user records cash
-            try
+            // Sum prior amendment deltas for this purchase
+            var priorAmendQtyByItem = await _db.StockEntries
+                .AsNoTracking()
+                .Where(se => se.RefType == "PurchaseAmend" && se.RefId == existing.Id)
+                .GroupBy(se => se.ItemId)
+                .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
+                .ToDictionaryAsync(x => x.ItemId, x => x.Qty);
+
+            // Build BASELINE map (current effective qty = original + prior amendments)
+            var cur = existing.Lines
+                .GroupBy(l => l.ItemId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new
+                    {
+                        qty = g.Sum(x => x.Qty) + (priorAmendQtyByItem.TryGetValue(g.Key, out var aq) ? aq : 0m),
+                        unitCost = g.Any() ? Math.Round(g.Average(x => x.UnitCost), 2) : 0m
+                    });
+
+            // Include items that exist only via prior amendments (no original line)
+            foreach (var kv in priorAmendQtyByItem)
             {
-                await ApplySupplierCreditsAsync(
-                    supplierId: model.PartyId,
-                    outletId: model.OutletId,
-                    purchase: model,
-                    user: user ?? "system"
-                );
-            }
-            catch
-            {
-                // non-fatal
+                if (!cur.ContainsKey(kv.Key))
+                {
+                    cur[kv.Key] = new { qty = kv.Value, unitCost = 0m };
+                }
             }
 
-            return model;
+            // DESIRED state from the screen (incoming now)
+            var nxt = lineList
+                .GroupBy(l => l.ItemId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new
+                    {
+                        qty = g.Sum(x => x.Qty),
+                        unitCost = g.Any() ? Math.Round(g.Average(x => x.UnitCost), 2) : 0m
+                    });
+
+            var allItemIds = cur.Keys.Union(nxt.Keys).ToList();
+
+            // Resolve normalized location once
+            InventoryLocationType locType;
+            int locId;
+            if (existing.TargetType == StockTargetType.Warehouse)
+            {
+                locType = InventoryLocationType.Warehouse;
+                if (!existing.WarehouseId.HasValue)
+                    throw new InvalidOperationException("TargetType=Warehouse but WarehouseId is null.");
+                locId = existing.WarehouseId.Value;
+            }
+            else
+            {
+                locType = InventoryLocationType.Outlet;
+                if (!existing.OutletId.HasValue)
+                    throw new InvalidOperationException("TargetType=Outlet but OutletId is null.");
+                locId = existing.OutletId.Value;
+            }
+
+            // For StockEntry.OutletId (required): use purchase's OutletId when present, else 0 for warehouse-only receipts
+            var entryOutletId = existing.OutletId ?? 0;
+
+            // Write ONLY the new delta
+            foreach (var itemId in allItemIds)
+            {
+                var before = cur.TryGetValue(itemId, out var c) ? c.qty : 0m;
+                var after = nxt.TryGetValue(itemId, out var n) ? n.qty : 0m;
+                var dQty = after - before;
+                if (dQty == 0m) continue;
+
+                // choose unit cost for delta: prefer desired state's avg, else baseline's avg
+                var deltaUnitCost =
+                    (nxt.TryGetValue(itemId, out var nMeta) ? nMeta.unitCost
+                     : (cur.TryGetValue(itemId, out var cMeta) ? cMeta.unitCost : 0m));
+
+                _db.StockEntries.Add(new StockEntry
+                {
+                    OutletId = entryOutletId,
+                    ItemId = itemId,
+                    QtyChange = dQty,                 // + IN, – OUT
+                    UnitCost = deltaUnitCost,
+                    LocationType = locType,
+                    LocationId = locId,
+                    RefType = "PurchaseAmend",
+                    RefId = existing.Id,
+                    Ts = DateTime.UtcNow,
+                    Note = $"Amend Rev {existing.Revision + 1}"
+                });
+            }
+
+            await _db.SaveChangesAsync();   // header already set; deltas appended
+            return existing;
         }
+
+
 
         /// <summary>
         /// Auto-pick last UnitCost/Discount/TaxRate from latest FINAL purchase line of this item.
@@ -987,6 +1120,118 @@ namespace Pos.Persistence.Services
 
             await _db.SaveChangesAsync();
         }
+
+        public async Task VoidPurchaseAsync(int purchaseId, string reason, string? user = null)
+        {
+            var p = await _db.Purchases.Include(x => x.Lines)
+                                       .FirstAsync(x => x.Id == purchaseId && !x.IsReturn);
+
+            if (p.Status == PurchaseStatus.Voided) return;
+
+            var postings = await _db.StockEntries
+                .Where(se => se.RefType == "Purchase" && se.RefId == p.Id)
+                .ToListAsync();
+            if (postings.Count > 0) _db.StockEntries.RemoveRange(postings);
+
+            p.Status = PurchaseStatus.Voided;
+            p.UpdatedAtUtc = DateTime.UtcNow;
+            p.UpdatedBy = user;
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task VoidReturnAsync(int returnId, string reason, string? user = null)
+        {
+            var r = await _db.Purchases.Include(x => x.Lines)
+                                       .FirstAsync(x => x.Id == returnId && x.IsReturn);
+
+            if (r.Status == PurchaseStatus.Voided) return;
+
+            var postings = await _db.StockEntries
+                .Where(se => se.RefType == "PurchaseReturn" && se.RefId == r.Id)
+                .ToListAsync();
+            if (postings.Count > 0) _db.StockEntries.RemoveRange(postings);
+
+            r.Status = PurchaseStatus.Voided;
+            r.UpdatedAtUtc = DateTime.UtcNow;
+            r.UpdatedBy = user;
+            await _db.SaveChangesAsync();
+        }
+
+        public sealed class PurchaseLineEffective
+        {
+            public int ItemId { get; set; }
+            public string? Sku { get; set; }
+            public string? Name { get; set; }
+            public decimal Qty { get; set; }
+            public decimal UnitCost { get; set; }  // display-only; keep simple (avg of base lines)
+            public decimal Discount { get; set; }  // display-only (sum of base discounts)
+            public decimal TaxRate { get; set; }   // display-only (avg of base tax rates)
+        }
+
+        public async Task<List<PurchaseLineEffective>> GetEffectiveLinesAsync(int purchaseId)
+        {
+            // original lines (grouped by Item)
+            var baseLines = await _db.PurchaseLines
+                .AsNoTracking()
+                .Where(l => l.PurchaseId == purchaseId)
+                .GroupBy(l => l.ItemId)
+                .Select(g => new
+                {
+                    ItemId = g.Key,
+                    Qty = g.Sum(x => x.Qty),
+                    UnitCost = g.Any() ? Math.Round(g.Average(x => x.UnitCost), 2) : 0m,
+                    Discount = Math.Round(g.Sum(x => x.Discount), 2),
+                    TaxRate = g.Any() ? Math.Round(g.Average(x => x.TaxRate), 2) : 0m,
+                })
+                .ToDictionaryAsync(x => x.ItemId, x => x);
+
+            // prior amendment deltas (qty only)
+            var amendQty = await _db.StockEntries
+                .AsNoTracking()
+                .Where(se => se.RefType == "PurchaseAmend" && se.RefId == purchaseId)
+                .GroupBy(se => se.ItemId)
+                .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
+                .ToDictionaryAsync(x => x.ItemId, x => x.Qty);
+
+            // build effective map
+            var ids = baseLines.Keys.Union(amendQty.Keys).ToList();
+            var effective = new List<PurchaseLineEffective>(ids.Count);
+
+            // minimal item meta
+            var itemsMeta = await _db.Items
+                .AsNoTracking()
+                .Where(i => ids.Contains(i.Id))
+                .Select(i => new { i.Id, i.Sku, i.Name, i.Price, i.DefaultTaxRatePct })
+                .ToDictionaryAsync(x => x.Id, x => x);
+
+            foreach (var id in ids)
+            {
+                baseLines.TryGetValue(id, out var b);
+                amendQty.TryGetValue(id, out var aQty);
+
+                var qty = (b?.Qty ?? 0m) + (aQty);
+                if (qty <= 0) continue; // nothing left to show
+
+                var meta = itemsMeta.TryGetValue(id, out var m) ? m : null;
+
+                effective.Add(new PurchaseLineEffective
+                {
+                    ItemId = id,
+                    Sku = meta?.Sku ?? "",
+                    Name = meta?.Name ?? $"Item #{id}",
+                    Qty = qty,
+                    UnitCost = b?.UnitCost ?? (meta?.Price ?? 0m),      // display only
+                    Discount = b?.Discount ?? 0m,
+                    TaxRate = b?.TaxRate ?? (meta?.DefaultTaxRatePct ?? 0m)
+                });
+            }
+
+            return effective
+                .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+
 
     }
 

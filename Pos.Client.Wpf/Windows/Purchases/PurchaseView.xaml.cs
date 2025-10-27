@@ -20,8 +20,23 @@ using System.Linq;            // at top of PurchasesService.cs
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
+    
     public partial class PurchaseView : UserControl
     {
+        public enum PurchaseEditorMode { Auto, Draft, Amend }
+        public static readonly DependencyProperty ModeProperty =
+           DependencyProperty.Register(
+               nameof(Mode),
+               typeof(PurchaseEditorMode),
+               typeof(PurchaseView),
+               new PropertyMetadata(PurchaseEditorMode.Auto, OnModeChanged));
+
+        public PurchaseEditorMode Mode
+        {
+            get => (PurchaseEditorMode)GetValue(ModeProperty);
+            set => SetValue(ModeProperty, value);
+        }
+
         private readonly PartyLookupService _partySvc;
         private bool _suppressSupplierPopup;
         private static bool IsNewItemPlaceholder(object? o) => Equals(o, CollectionView.NewItemPlaceholder);
@@ -151,13 +166,59 @@ namespace Pos.Client.Wpf.Windows.Purchases
         .Options;
         // make the accessor resilient (no casts on null)
 
-        public PurchaseView()  // NEW
+        public PurchaseView()
         {
             InitializeComponent();
+
+            // -- ensure DataContext --
             if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
-            
-            // … leave the rest of your initialization in the db-ctor, or move it here if you prefer …
+
+            // -------- INIT CORE SERVICES (so _db isn't null) --------
+            _db = new PosClientDbContext(_opts);
+            _purchaseSvc = new PurchasesService(_db);
+            _partySvc = new PartyLookupService(_db);
+            _itemsSvc = new ItemsService(_db);
+
+            // -------- INIT UI BINDINGS / EVENTS (same as your db-ctor) --------
+            DatePicker.SelectedDate = DateTime.Now;
+            OtherChargesBox.Text = "0.00";
+
+            LinesGrid.ItemsSource = _lines;
+            SupplierList.ItemsSource = _supplierResults;
+            ItemList.ItemsSource = _itemResults;
+
+            _ = LoadSuppliersAsync("");
+            LinesGrid.CellEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
+            LinesGrid.RowEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
+            _lines.CollectionChanged += (_, args) =>
+            {
+                if (args.NewItems != null)
+                    foreach (PurchaseLineVM vm in args.NewItems)
+                        vm.PropertyChanged += (_, __) => RecomputeAndUpdateTotals();
+                RecomputeAndUpdateTotals();
+            };
+
+            LinesGrid.PreviewKeyDown += LinesGrid_PreviewKeyDown;
+
+            Loaded += async (_, __) =>
+            {
+                await InitDestinationsAsync();
+                ApplyDestinationPermissionGuard();
+                SupplierText.Focus();
+                SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
+            };
+
+            ItemList.PreviewKeyDown += ItemList_PreviewKeyDown;
+            SupplierList.PreviewKeyDown += SupplierList_PreviewKeyDown;
+
+            this.PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == Key.F5) { ClearCurrentPurchase(confirm: true); e.Handled = true; return; }
+                if (e.Key == Key.F8) { _ = HoldCurrentPurchaseQuickAsync(); e.Handled = true; return; }
+                if (e.Key == Key.F9) { BtnSaveFinal_Click(s, e); e.Handled = true; return; }
+            };
         }
+
 
 
         private void ApplyDestinationPermissionGuard()
@@ -184,7 +245,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     OutletBox.IsEnabled = false;
 
                     // Keep UI consistent
-                    WarehouseBox.IsEnabled = false;
+                    //WarehouseBox.IsEnabled = false;
                 }
                 catch { /* controls might not exist in some XAML variants */ }
             }
@@ -1712,6 +1773,209 @@ namespace Pos.Client.Wpf.Windows.Purchases
             var allowed = CanEditPayments();
             foreach (var item in cm.Items.OfType<MenuItem>()) item.IsEnabled = allowed;
         }
+
+
+
+        //New Code
+        public static readonly DependencyProperty PurchaseIdProperty =
+    DependencyProperty.Register(
+        nameof(PurchaseId),
+        typeof(int?),
+        typeof(PurchaseView),
+        new PropertyMetadata(null, OnPurchaseIdChanged));
+
+        public int? PurchaseId
+        {
+            get => (int?)GetValue(PurchaseIdProperty);
+            set => SetValue(PurchaseIdProperty, value);
+        }
+               
+        private static async void OnPurchaseIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var v = (PurchaseView)d;
+            if (v.IsLoaded) await v.LoadExistingIfAny();
+        }
+
+        private static async void OnModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var v = (PurchaseView)d;
+            if (v.IsLoaded) await v.ApplyModeAsync();
+        }
+
+        private PurchaseStatus? _loadedStatus;
+        private PurchaseEditorMode _currentMode = PurchaseEditorMode.Draft;
+
+        private bool _firstLoadComplete;
+
+        private async void UserControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (_firstLoadComplete) return;
+            _firstLoadComplete = true;
+
+            // your existing init code will run; then:
+            await LoadExistingIfAny();
+            await ApplyModeAsync();
+        }
+
+        private async Task LoadExistingIfAny()
+        {
+            if (PurchaseId is null or <= 0) return;
+
+            var id = PurchaseId.Value;
+            var p = await _db.Purchases
+                .AsNoTracking()
+                .Include(x => x.Lines)
+                .FirstOrDefaultAsync(x => x.Id == id);
+
+            if (p == null)
+            {
+                MessageBox.Show($"Purchase {id} not found.");
+                return;
+            }
+
+            // Map to your in-memory model/fields already used throughout this view
+            _model = new Purchase
+            {
+                Id = p.Id,
+                PartyId = p.PartyId,
+                TargetType = p.TargetType,
+                OutletId = p.OutletId,
+                WarehouseId = p.WarehouseId,
+                VendorInvoiceNo = p.VendorInvoiceNo,
+                PurchaseDate = p.PurchaseDate,
+                Status = p.Status,
+                GrandTotal = p.GrandTotal,
+                Discount = p.Discount,
+                Tax = p.Tax,               // ✅ matches your entity
+                Subtotal = p.Subtotal,
+                OtherCharges = p.OtherCharges,
+                IsReturn = false
+            };
+
+            // Header UI
+            try { DatePicker.SelectedDate = _model.PurchaseDate; } catch { }
+            try
+            {
+                if (_model.TargetType == StockTargetType.Warehouse && _model.WarehouseId.HasValue)
+                {
+                    var wh = await _db.Set<Warehouse>().AsNoTracking().FirstOrDefaultAsync(w => w.Id == _model.WarehouseId);
+                    if (wh != null) WarehouseBox.SelectedItem = wh;
+                }
+                if (_model.TargetType == StockTargetType.Outlet && _model.OutletId.HasValue)
+                {
+                    var ot = await _db.Set<Outlet>().AsNoTracking().FirstOrDefaultAsync(o => o.Id == _model.OutletId);
+                    if (ot != null) OutletBox.SelectedItem = ot;
+                }
+            }
+            catch { /* controls may not be present in older layout */ }
+
+            // Supplier header textbox in your UI is a look-up TextBox + popup;
+            // we only set its text to the Party name for display (selection logic already exists)
+            try
+            {
+                var party = await _db.Set<Party>().AsNoTracking().FirstOrDefaultAsync(x => x.Id == p.PartyId);
+                if (party != null)
+                {
+                    _selectedPartyId = party.Id;         // keep your view-state in sync
+                    SupplierText.Text = $"{party.Name}";
+                }
+            }
+            catch { }
+
+            // Lines
+            _lines.Clear();
+            var effective = await _purchaseSvc.GetEffectiveLinesAsync(id);
+            foreach (var e in effective)
+            {
+                _lines.Add(new PurchaseLineVM
+                {
+                    ItemId = e.ItemId,
+                    Sku = e.Sku ?? "",
+                    Name = e.Name ?? "",
+                    Qty = e.Qty,              // ← shows last-amended qty
+                    UnitCost = e.UnitCost,
+                    Discount = e.Discount,
+                    TaxRate = e.TaxRate
+                });
+            }
+
+
+            RecomputeAndUpdateTotals();
+            _loadedStatus = p.Status;
+        }
+
+        private Task ApplyModeAsync()
+        {
+            var effective = Mode;
+            if (effective == PurchaseEditorMode.Auto && _loadedStatus.HasValue)
+            {
+                effective = _loadedStatus == PurchaseStatus.Draft
+                    ? PurchaseEditorMode.Draft
+                    : PurchaseEditorMode.Amend;
+            }
+
+            SetUiForMode(effective);
+            _currentMode = effective;
+            return Task.CompletedTask;
+        }
+
+        private void SetUiForMode(PurchaseEditorMode mode)
+        {
+            var amend = (mode == PurchaseEditorMode.Amend);
+
+            // In Amend mode, lock high-risk header fields (supplier/date/destination)
+            try { SupplierText.IsEnabled = !amend; } catch { }
+            try { DatePicker.IsEnabled = !amend; } catch { }
+            try { WarehouseBox.IsEnabled = !amend; } catch { }
+            try { OutletBox.IsEnabled = !amend; } catch { }
+
+            // Optional: change the main Save button caption to communicate "Amend"
+            try
+            {
+                // The "final save" button in XAML is wired to BtnSaveFinal_Click (no x:Name),
+                // but the top-right named button is BtnSave (draft/hold). We won't rename controls;
+                // just leave captions as-is to avoid breaking your styles.
+                // If you want a caption tweak, add x:Name to the final button in XAML and set Content here.
+            }
+            catch { }
+        }
+
+      
+
+      
+
+      
+        private (Purchase model, List<PurchaseLine> lines) BuildPurchaseFromVm(bool isDraft)
+        {
+            var model = new Purchase
+            {
+                Id = VM.PurchaseId,           // 0 for new, >0 for amend
+                PartyId = VM.SupplierId,
+                TargetType = VM.TargetType,
+                OutletId = VM.TargetType == StockTargetType.Outlet ? VM.OutletId : null,
+                WarehouseId = VM.TargetType == StockTargetType.Warehouse ? VM.WarehouseId : null,
+                PurchaseDate = VM.PurchaseDate,
+                VendorInvoiceNo = VM.VendorInvoiceNo,
+                IsReturn = false
+            };
+
+            var lines = _lines.Select(l => new PurchaseLine
+            {
+                ItemId = l.ItemId,
+                Qty = Math.Max(0, l.Qty),
+                UnitCost = l.UnitCost,
+                Discount = l.Discount,
+                TaxRate = l.TaxRate
+            }).ToList();
+
+            // If your VM keeps totals, you can copy them; otherwise let service recompute.
+            return (model, lines);
+        }
+
+        // Wrappers so existing XAML Click handlers resolve
+        private void SaveDraft_Click(object sender, RoutedEventArgs e) => BtnSaveDraft_Click(sender, e);
+        private void PostReceive_Click(object sender, RoutedEventArgs e) => BtnSaveFinal_Click(sender, e);
+        private void SaveAmend_Click(object sender, RoutedEventArgs e) => BtnSaveFinal_Click(sender, e);
 
 
     }

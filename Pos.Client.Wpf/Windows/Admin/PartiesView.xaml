@@ -27,7 +27,7 @@
 
         <!-- Grid -->
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
-                  MouseDoubleClick="Grid_MouseDoubleClick">
+                  MouseDoubleClick="Grid_MouseDoubleClick" Style="{StaticResource ModernDataGrid}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*"/>
                 <DataGridTextColumn Header="Roles" Binding="{Binding RolesText}" Width="*" />

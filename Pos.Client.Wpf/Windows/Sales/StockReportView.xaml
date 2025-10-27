@@ -29,27 +29,29 @@
               Click="ByProduct_Click" Style="{StaticResource Btn.GlobalPrimary}">
                     <AccessText Text="By _Product (Alt+P)"/>
                 </Button>
+                
+                <StackPanel Orientation="Horizontal" Margin="12,0,0,8" x:Name="ScopeBar" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <RadioButton x:Name="ScopeOutletRadio" Content="Outlet" GroupName="Scope"
+   IsChecked="True" Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
+                    <ComboBox   x:Name="OutletBox" DisplayMemberPath="Name" SelectedValuePath="Id" Width="220" SelectionChanged="OutletBox_SelectionChanged"/>
+
+                    <TextBlock Text="  " Width="16"/>
+
+                    <RadioButton x:Name="ScopeWarehouseRadio" Content="Warehouse" GroupName="Scope"
+   Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
+                    <ComboBox   x:Name="WarehouseBox" DisplayMemberPath="Name" SelectedValuePath="Id" Width="220" SelectionChanged="WarehouseBox_SelectionChanged"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- Row 2: NEW scope bar (starts hidden; code-behind decides when to show) -->
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" x:Name="ScopeBar">
-                <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                <RadioButton x:Name="ScopeOutletRadio" Content="Outlet" GroupName="Scope"
-               IsChecked="True" Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
-                <ComboBox   x:Name="OutletBox" DisplayMemberPath="Name" SelectedValuePath="Id" Width="220" SelectionChanged="OutletBox_SelectionChanged"/>
-
-                <TextBlock Text="  " Width="16"/>
-
-                <RadioButton x:Name="ScopeWarehouseRadio" Content="Warehouse" GroupName="Scope"
-               Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
-                <ComboBox   x:Name="WarehouseBox" DisplayMemberPath="Name" SelectedValuePath="Id" Width="220" SelectionChanged="WarehouseBox_SelectionChanged"/>
-            </StackPanel>
+            
 
 
         </StackPanel>
 
         <!-- Grid -->
-        <DataGrid x:Name="Grid"
+        <DataGrid x:Name="Grid" Style="{StaticResource ModernDataGrid}"
             AutoGenerateColumns="False"
             IsReadOnly="True"
             HeadersVisibility="Column"

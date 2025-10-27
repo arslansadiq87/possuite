@@ -45,13 +45,88 @@
               
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        
-        
+
+        <!-- Row 0: Actions toolbar -->
+        <ToolBarTray Grid.Row="0" Margin="0,0,0,8">
+            <ToolBar>
+
+                <!-- Drafts / Held -->
+                <Button x:Name="BtnHeld"
+            Command="{StaticResource CmdHeld}"
+            Width="120" Padding="8,0"
+            ToolTip="Open held drafts (F8)">
+                    <TextBlock Text="_Held (F8)"/>
+                </Button>
+
+                <Separator/>
+
+                <!-- Purchase (base) actions -->
+                <Button x:Name="BtnAmend"
+            Command="{StaticResource CmdAmend}"
+            Width="140" Padding="8,0"
+            ToolTip="Amend / create revision (Alt+E)">
+                    <TextBlock Text="_Amend (Rev) (F2)"/>
+                </Button>
+
+                <Button x:Name="BtnVoidPurchase"
+            Command="{StaticResource CmdVoid}"
+            Width="140" Padding="8,0"
+            ToolTip="Void selected purchase (Del)">
+                    <TextBlock Text="_Void Purchase (F9)"/>
+                </Button>
+
+                <Separator/>
+
+                <!-- Returns to supplier -->
+                <Button x:Name="BtnReturnWith"
+            Width="150" Padding="8,0"
+            Click="ReturnWith_Click"
+            ToolTip="Return with invoice (F8)">
+                    <TextBlock Text="Ret_urn Invoice (F8)"/>
+                </Button>
+
+                <Button x:Name="BtnReturnWithout"
+            Width="150" Padding="8,0"
+            Click="ReturnWithout_Click"
+            ToolTip="Return without invoice (F7)">
+                    <TextBlock Text="Ret. w/o Invoice (F7)"/>
+                </Button>
+
+                <Separator/>
+
+                <!-- Return doc actions (for selected Purchase Return) -->
+                <Button x:Name="BtnAmendReturn"
+            Width="150" Padding="8,0"
+            Click="AmendReturn_Click"
+            ToolTip="Amend a purchase return (F4)">
+                    <TextBlock Text="_Amend Return (F4)"/>
+                </Button>
+
+                <Button x:Name="BtnVoidReturn"
+            Width="150" Padding="8,0"
+            Click="VoidReturn_Click"
+            ToolTip="Void a purchase return (F3)">
+                    <TextBlock Text="_Void Return (F3)"/>
+                </Button>
+
+                <Separator/>
+
+                <!-- Receive finalization -->
+                <Button x:Name="BtnReceive"
+            Command="{StaticResource CmdReceive}"
+            Width="130" Padding="8,0"
+            ToolTip="Mark as received (F6)">
+                    <TextBlock Text="_Receive (F6)"/>
+                </Button>
+
+            </ToolBar>
+        </ToolBarTray>
+
         <!-- Top bar: search + date + dropdown filter -->
-        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
+        <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,8">
             <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
             <TextBox x:Name="SearchBox" Width="220" Height="28" VerticalContentAlignment="Center"
                      ToolTip="Doc #, Supplier name, Vendor Inv #"/>
@@ -110,7 +185,7 @@
         </StackPanel>
 
         <!-- Middle: list | details (same layout as Sales) -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -140,14 +215,14 @@
                         <Style.Triggers>
                             <!-- selected cell (focused or not) -->
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Foreground" Value="#111111"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsSelected" Value="True"/>
                                     <Condition Property="IsKeyboardFocusWithin" Value="False"/>
                                 </MultiTrigger.Conditions>
-                                <Setter Property="Foreground" Value="#111111"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </MultiTrigger>
                         </Style.Triggers>
                     </Style>
@@ -286,44 +361,17 @@
                 <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2" Style="{StaticResource ModernDataGrid}">
                     <DataGrid.Columns>
                         
-                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120"/>
-                        <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"/>
-                        <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="60"/>
-                        <DataGridTextColumn Header="Cost" Binding="{Binding UnitCost, StringFormat=0.00}" Width="80"/>
-                        <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat=0.00}" Width="100"/>
+                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="*"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="2*"/>
+                        <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="0.7*"/>
+                        <DataGridTextColumn Header="Cost" Binding="{Binding UnitCost, StringFormat=0.00}" Width="0.8*"/>
+                        <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat=0.00}" Width="0.7*"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>
         </Grid>
 
-        <Border Grid.Row="2" BorderBrush="#DDD" Padding="0,8,0,0">
-            <DockPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                    <Button x:Name="BtnHeld" Content="_Held (F8)" Width="140" Height="34" Margin="0,0,8,0"
-                           Click="BtnHeld_Click" Style="{StaticResource Btn.GlobalPrimary}" Visibility="Collapsed"/>
-                    <!-- Return doc actions (when a selected row is a Purchase Return) -->
-                    <Button x:Name="BtnAmendReturn" Content="_Amend Return (F4)" Width="150" Height="34" Margin="0,0,8,0"
-                            Click="AmendReturn_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button x:Name="BtnVoidReturn"  Content="_Void Return (F3)"  Width="150" Height="34" Margin="0,0,8,0"
-                            Click="VoidReturn_Click"  Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <!-- Base purchase actions -->
-                    <Button x:Name="BtnAmend"   Content="_Amend (Rev) (F2)" Width="150" Height="34" Margin="0,0,8,0"
-                            Click="Amend_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button x:Name="BtnVoidPurchase" Content="_Void Purchase(F9)" Width="150" Height="34" Margin="0,0,8,0"
-                            Click="VoidPurchase_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <!-- Returns to supplier -->
-                    <Button x:Name="BtnReturnWith" Content="Ret_urn Invoice(F8)" Width="150" Height="34" Margin="0,0,8,0"
-                            Click="ReturnWith_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <Button x:Name="BtnReturnWithout" Content="Ret. w/o Invoice(F7)" Width="150" Height="34"
-                            Click="ReturnWithout_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <!-- Receive finalization -->
-                    <Button x:Name="BtnReceive" Content="_Receive (F6)" Width="150" Height="34" Margin="8,0,0,0"
-                            Click="Receive_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-                </StackPanel>
-                <TextBlock VerticalAlignment="Center"/>
-            </DockPanel>
-        </Border>
-
+        
       
       
 
