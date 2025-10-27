@@ -283,7 +283,7 @@
 
                 <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" Grid.ColumnSpan="2"/>
 
-                <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2">
+                <DataGrid x:Name="LinesGrid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Grid.ColumnSpan="2" Margin="0,29,0,0" Grid.RowSpan="2" Style="{StaticResource ModernDataGrid}">
                     <DataGrid.Columns>
                         
                         <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120"/>

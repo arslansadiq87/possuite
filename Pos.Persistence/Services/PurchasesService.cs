@@ -181,6 +181,7 @@ namespace Pos.Persistence.Services
             }
 
             await _db.SaveChangesAsync();
+            await PostPurchaseStockAsync(model, lineList, user ?? "system");
 
             // NEW: After finalize, auto-apply any Supplier Credits before user records cash
             try
@@ -567,6 +568,7 @@ namespace Pos.Persistence.Services
             }
 
             await _db.SaveChangesAsync();
+            await PostPurchaseReturnStockAsync(model, lineList, user ?? "system");
 
             // === CHANGED: Only auto-apply against original if one exists.
             decimal appliedToOriginal = 0m;
@@ -896,6 +898,96 @@ namespace Pos.Persistence.Services
             await _db.SaveChangesAsync();
             return used;
         }
+
+        // using Microsoft.EntityFrameworkCore;
+        // using Pos.Domain.Entities;
+        // ...
+
+        private async Task PostPurchaseStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user)
+        {
+            // Determine ledger location
+            var locType = model.TargetType == StockTargetType.Warehouse
+                ? InventoryLocationType.Warehouse
+                : InventoryLocationType.Outlet;
+
+            var locId = model.TargetType == StockTargetType.Warehouse
+                ? model.WarehouseId!.Value
+                : model.OutletId!.Value;
+
+            // If this purchase was already FINAL and is being amended, remove previous postings
+            var prior = await _db.StockEntries
+                .Where(se => se.RefType == "Purchase" && se.RefId == model.Id)
+                .ToListAsync();
+            if (prior.Count > 0)
+            {
+                _db.StockEntries.RemoveRange(prior);
+                await _db.SaveChangesAsync();
+            }
+
+            var now = DateTime.UtcNow;
+
+            foreach (var l in lines)
+            {
+                _db.StockEntries.Add(new StockEntry
+                {
+                    Ts = now,
+                    ItemId = l.ItemId,
+                    LocationType = locType,
+                    LocationId = locId,
+                    QtyChange = l.Qty,        // Purchase FINAL = IN
+                    UnitCost = l.UnitCost,   // keep for costing/audit
+                    RefType = "Purchase",
+                    RefId = model.Id,
+                    Note = model.VendorInvoiceNo
+                });
+            }
+
+            await _db.SaveChangesAsync();
+        }
+
+        private async Task PostPurchaseReturnStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user)
+        {
+            // Location mirrors the original purchase destination (Outlet or Warehouse)
+            var locType = model.TargetType == StockTargetType.Warehouse
+                ? InventoryLocationType.Warehouse
+                : InventoryLocationType.Outlet;
+
+            var locId = model.TargetType == StockTargetType.Warehouse
+                ? model.WarehouseId!.Value
+                : model.OutletId!.Value;
+
+            // Remove previous postings if this FINAL return is amended
+            var prior = await _db.StockEntries
+                .Where(se => se.RefType == "PurchaseReturn" && se.RefId == model.Id)
+                .ToListAsync();
+            if (prior.Count > 0)
+            {
+                _db.StockEntries.RemoveRange(prior);
+                await _db.SaveChangesAsync();
+            }
+
+            var now = DateTime.UtcNow;
+
+            foreach (var l in lines)
+            {
+                // NOTE: in SaveReturnAsync we prepared lines with l.Qty NEGATIVE.
+                _db.StockEntries.Add(new StockEntry
+                {
+                    Ts = now,
+                    ItemId = l.ItemId,
+                    LocationType = locType,
+                    LocationId = locId,
+                    QtyChange = l.Qty,        // Return lines are negative => OUT
+                    UnitCost = l.UnitCost,   // valuation trail
+                    RefType = "PurchaseReturn",
+                    RefId = model.Id,
+                    Note = model.VendorInvoiceNo
+                });
+            }
+
+            await _db.SaveChangesAsync();
+        }
+
     }
 
     // ---------- Simple DTOs for Return Draft ----------
@@ -919,4 +1011,6 @@ namespace Pos.Persistence.Services
         public decimal MaxReturnQty { get; set; }
         public decimal ReturnQty { get; set; }
     }
+
+
 }
