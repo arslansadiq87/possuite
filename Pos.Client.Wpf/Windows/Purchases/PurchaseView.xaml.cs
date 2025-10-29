@@ -15,12 +15,11 @@ using Pos.Client.Wpf.Services;
 using System.Windows.Data;
 using Microsoft.VisualBasic;
 using System.Linq;            // at top of PurchasesService.cs
-
+using System.Windows.Media;
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
-    
     public partial class PurchaseView : UserControl
     {
         public enum PurchaseEditorMode { Auto, Draft, Amend }
@@ -55,25 +54,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public class PurchaseLineVM : INotifyPropertyChanged
         {
             public int ItemId { get; set; }
-
             private string _sku = "";
             public string Sku { get => _sku; set { _sku = value; OnPropertyChanged(nameof(Sku)); } }
-
             private string _name = "";
             public string Name { get => _name; set { _name = value; OnPropertyChanged(nameof(Name)); } }
-
             private decimal _qty;
             public decimal Qty { get => _qty; set { _qty = value; Recalc(); OnPropertyChanged(nameof(Qty)); } }
-
             private decimal _unitCost;
             public decimal UnitCost { get => _unitCost; set { _unitCost = value; Recalc(); OnPropertyChanged(nameof(UnitCost)); } }
-
             private decimal _discount;
             public decimal Discount { get => _discount; set { _discount = value; Recalc(); OnPropertyChanged(nameof(Discount)); } }
-
             private decimal _taxRate;
             public decimal TaxRate { get => _taxRate; set { _taxRate = value; Recalc(); OnPropertyChanged(nameof(TaxRate)); } }
-
             private decimal _lineTotal;
             public decimal LineTotal { get => _lineTotal; private set { _lineTotal = value; OnPropertyChanged(nameof(LineTotal)); } }
             public string? Notes { get; set; }
@@ -94,56 +86,39 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             public int PurchaseId { get => _purchaseId; set { _purchaseId = value; OnChanged(); } }
             private int _purchaseId;
-
             public int SupplierId { get => _supplierId; set { _supplierId = value; OnChanged(); } }
             private int _supplierId;
-
             public StockTargetType TargetType { get => _targetType; set { _targetType = value; OnChanged(); } }
             private StockTargetType _targetType;
-
             public int? OutletId { get => _outletId; set { _outletId = value; OnChanged(); } }
             private int? _outletId;
-
             public int? WarehouseId { get => _warehouseId; set { _warehouseId = value; OnChanged(); } }
             private int? _warehouseId;
-
             public DateTime PurchaseDate { get => _purchaseDate; set { _purchaseDate = value; OnChanged(); } }
             private DateTime _purchaseDate = DateTime.UtcNow;
-
             public string? VendorInvoiceNo { get => _vendorInvoiceNo; set { _vendorInvoiceNo = value; OnChanged(); } }
             private string? _vendorInvoiceNo;
-
             public string? DocNo { get => _docNo; set { _docNo = value; OnChanged(); } }
             private string? _docNo;
-
             public decimal Subtotal { get => _subtotal; set { _subtotal = value; OnChanged(); } }
             private decimal _subtotal;
-
             public decimal Discount { get => _discount; set { _discount = value; OnChanged(); } }
             private decimal _discount;
-
             public decimal Tax { get => _tax; set { _tax = value; OnChanged(); } }
             private decimal _tax;
-
             public decimal OtherCharges { get => _otherCharges; set { _otherCharges = value; OnChanged(); } }
             private decimal _otherCharges;
-
             public decimal GrandTotal { get => _grandTotal; set { _grandTotal = value; OnChanged(); } }
             private decimal _grandTotal;
-
             public PurchaseStatus Status { get => _status; set { _status = value; OnChanged(); } }
             private PurchaseStatus _status = PurchaseStatus.Draft;
-
             public bool IsDirty { get => _isDirty; set { _isDirty = value; OnChanged(); } }
             private bool _isDirty;
-
             public ObservableCollection<PurchaseLineVM> Lines { get; } = new();
-
             public event PropertyChangedEventHandler? PropertyChanged;
             private void OnChanged([CallerMemberName] string? prop = null)
                 => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
         }
-
 
         // ===================== Fields & services =====================
         private readonly PosClientDbContext _db;
@@ -153,8 +128,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private Purchase _model = new();
         private readonly ObservableCollection<PurchaseLineVM> _lines = new();
         private ObservableCollection<Party> _supplierResults = new();  // was ObservableCollection<Supplier>
-
-
         private ObservableCollection<Item> _itemResults = new();
         // NEW: destination pickers data (matches XAML group we added)
         private ObservableCollection<Outlet> _outletResults = new();
@@ -169,23 +142,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public PurchaseView()
         {
             InitializeComponent();
-
             // -- ensure DataContext --
             if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
-
             // -------- INIT CORE SERVICES (so _db isn't null) --------
             _db = new PosClientDbContext(_opts);
             _purchaseSvc = new PurchasesService(_db);
             _partySvc = new PartyLookupService(_db);
             _itemsSvc = new ItemsService(_db);
-
             // -------- INIT UI BINDINGS / EVENTS (same as your db-ctor) --------
             DatePicker.SelectedDate = DateTime.Now;
             OtherChargesBox.Text = "0.00";
-
             LinesGrid.ItemsSource = _lines;
             SupplierList.ItemsSource = _supplierResults;
-            ItemList.ItemsSource = _itemResults;
+            //ItemList.ItemsSource = _itemResults;
+            DatePicker.PreviewKeyDown += DatePicker_PreviewKeyDown;
 
             _ = LoadSuppliersAsync("");
             LinesGrid.CellEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
@@ -208,7 +178,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
             };
 
-            ItemList.PreviewKeyDown += ItemList_PreviewKeyDown;
+            //ItemList.PreviewKeyDown += ItemList_PreviewKeyDown;
             SupplierList.PreviewKeyDown += SupplierList_PreviewKeyDown;
 
             this.PreviewKeyDown += (s, e) =>
@@ -219,12 +189,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             };
         }
 
-
-
         private void ApplyDestinationPermissionGuard()
         {
             bool canPick = CanSelectDestination();
-
             // If user cannot pick, force Outlet = current outlet and disable all destination controls.
             if (!canPick)
             {
@@ -234,16 +201,13 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     WarehouseBox.IsEnabled = false;
                     DestOutletRadio.IsEnabled = false;
                     OutletBox.IsEnabled = false;
-
                     // Force to current outlet
                     var currentOutletId = AppState.Current.CurrentOutletId;
                     var match = _outletResults.FirstOrDefault(o => o.Id == currentOutletId);
-
                     DestOutletRadio.IsChecked = true;
                     OutletBox.IsEnabled = true;   // enable just long enough to set selection
                     OutletBox.SelectedItem = match ?? _outletResults.FirstOrDefault();
                     OutletBox.IsEnabled = false;
-
                     // Keep UI consistent
                     //WarehouseBox.IsEnabled = false;
                 }
@@ -251,7 +215,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
-
+        private void DatePicker_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                FocusItemSearchBox();
+            }
+        }
 
         public PurchaseView(PosClientDbContext db) : this()  // CHANGED: chain to parameterless
         {
@@ -259,14 +230,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _purchaseSvc = new PurchasesService(_db);
             _partySvc = new PartyLookupService(_db);
             _itemsSvc = new ItemsService(_db);
-
             // init UI bindings you already had
             DatePicker.SelectedDate = DateTime.Now;
             OtherChargesBox.Text = "0.00";
             LinesGrid.ItemsSource = _lines;
             SupplierList.ItemsSource = _supplierResults;
-            ItemList.ItemsSource = _itemResults;
-
+            //ItemList.ItemsSource = _itemResults;
             _ = LoadSuppliersAsync("");
             LinesGrid.CellEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
             LinesGrid.RowEditEnding += (_, __) => Dispatcher.BeginInvoke(RecomputeAndUpdateTotals);
@@ -277,9 +246,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         vm.PropertyChanged += (_, __) => RecomputeAndUpdateTotals();
                 RecomputeAndUpdateTotals();
             };
-
             LinesGrid.PreviewKeyDown += LinesGrid_PreviewKeyDown;
-
             Loaded += async (_, __) =>
             {
                 await InitDestinationsAsync();
@@ -287,17 +254,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 SupplierText.Focus();
                 SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
             };
-
-            ItemList.PreviewKeyDown += ItemList_PreviewKeyDown;
+            //ItemList.PreviewKeyDown += ItemList_PreviewKeyDown;
             SupplierList.PreviewKeyDown += SupplierList_PreviewKeyDown;
-
             this.PreviewKeyDown += (s, e) =>
             {
                 //if (e.Key == Key.F7) { InvoicesButton_Click(s, e); e.Handled = true; return; }
                 if (e.Key == Key.F5) { ClearCurrentPurchase(confirm: true); e.Handled = true; return; }
                 if (e.Key == Key.F8) { _ = HoldCurrentPurchaseQuickAsync(); e.Handled = true; return; }
                 if (e.Key == Key.F9) { BtnSaveFinal_Click(s, e); e.Handled = true; return; }
-
             };
         }
 
@@ -357,15 +321,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (!string.IsNullOrWhiteSpace(uname) &&
                 uname.Equals("admin", StringComparison.OrdinalIgnoreCase))
                 return true;
-
             // 2) Role string (supports single or comma/semicolon/pipe-separated lists)
             var rolesRaw = AppState.Current?.CurrentUserRole ?? string.Empty;
             if (string.IsNullOrWhiteSpace(rolesRaw)) return false;
-
             var roles = rolesRaw
                 .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(r => r.Trim());
-
             foreach (var r in roles)
             {
                 if (r.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
@@ -401,67 +362,84 @@ namespace Pos.Client.Wpf.Windows.Purchases
             catch { /* controls may not exist */ }
         }
 
+        private void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        {
+            var pick = ((Pos.Client.Wpf.Controls.ItemSearchBox)sender).SelectedItem;
+            if (pick is null) return;
+
+            //await EnsurePurchasePersistedAsync(); // if your flow needs a header first
+            AddItemToLines(pick);                 // everything else is handled inside
+        }
+
+
+
         // ===================== Grid fast entry (kept) =====================
         private void LinesGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-
-            if (e.Key == Key.Delete)
-            {
-                // If an autocomplete popup is open, let it handle Delete
-                if (ItemPopup.IsOpen) return;
-
-                RemoveSelectedLines(askConfirm: Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) == false);
-                if (_lines.Count == 0)
-                {
-                    ItemSearchText.Focus();
-                }
-                else
-                {
-                    LinesGrid.Focus();
-                }
-                e.Handled = true;
-                return;
-            }
             if (e.Key != Key.Enter) return;
+            if (LinesGrid.CurrentItem is not PurchaseLineVM row) return;
+
             e.Handled = true;
-            var dg = (DataGrid)sender;
-            // Commit current edits first
-            dg.CommitEdit(DataGridEditingUnit.Cell, true);
-            dg.CommitEdit(DataGridEditingUnit.Row, true);
-            // Flow (headers must match grid)
-            var flow = new List<string> { "Qty", "Price", "Disc", "Tax %", "Notes" };
-            var cellInfo = dg.CurrentCell;
-            var col = cellInfo.Column;
-            var rawHeader = col != null ? (col.Header as string ?? string.Empty) : string.Empty;
-            var header = NormalizeHeader(rawHeader);
-            var currentRowItem = dg.CurrentItem;
-            if (col == null)
+
+            var col = LinesGrid.CurrentColumn;
+            var isQty = string.Equals(col?.Header as string, "Qty", StringComparison.OrdinalIgnoreCase);
+            var isNotes = string.Equals(col?.Header as string, "Notes", StringComparison.OrdinalIgnoreCase);
+
+            // Commit current cell first so bindings update
+            LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+
+            //if (isQty)
+            //{
+            //    BeginEditOn(row, "Notes");                   // move to Notes
+            //    return;
+            //}
+            if (isNotes)
             {
-                MoveToHeader(dg, currentRowItem, flow[0]);
+                LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
+                LinesGrid.CurrentCell = new DataGridCellInfo(); // avoid snap-back
+                FocusItemSearchBox();                            // jump to search
                 return;
             }
-            bool backward = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
-            if (backward)
+
+            // Default: move forward in your flow (Qty → Price → Disc → Tax % → Notes)
+            var flow = new[] { "Qty", "Price", "Disc", "Tax %", "Notes" };
+            string current = (col?.Header as string ?? "").Trim();
+            int i = Array.FindIndex(flow, h => h.Equals(current, StringComparison.OrdinalIgnoreCase));
+            string? next = (i >= 0 && i < flow.Length - 1) ? flow[i + 1] : null;
+
+            if (next == null)
             {
-                var prev = PrevHeader(flow, header);
-                if (prev is null)
-                {
-                    ItemSearchText.Focus();
-                    ItemSearchText.SelectAll();
-                    return;
-                }
-                MoveToHeader(dg, currentRowItem, prev);
+                FocusItemSearchBox();
                 return;
             }
-            var next = NextHeader(flow, header);
-            if (next is null)
-            {
-                ItemSearchText.Focus();
-                ItemSearchText.SelectAll();
-                return;
-            }
-            MoveToHeader(dg, currentRowItem, next);
+            BeginEditOn(row, next);
         }
+
+        private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            if (root == null) return null;
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T t) return t;
+                var res = FindDescendant<T>(child);
+                if (res != null) return res;
+            }
+            return null;
+        }
+
+        private void FocusItemSearchBox()
+        {
+            try
+            {
+                var tb = FindDescendant<TextBox>(ItemSearch); // ItemSearch = your ItemSearchBox
+                if (tb != null) { tb.Focus(); tb.SelectAll(); }
+                else ItemSearch.Focus();
+            }
+            catch { }
+        }
+
 
         private static string NormalizeHeader(string header)
         {
@@ -509,8 +487,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (e.Key == Key.Enter)
             {
                 // Move to Scan/Search
-                ItemSearchText.Focus();
-                ItemSearchText.SelectAll();
+                //ItemSearchText.Focus();
+                //ItemSearchText.SelectAll();
+                FocusItemSearchBox();
                 e.Handled = true;
             }
         }
@@ -667,121 +646,26 @@ namespace Pos.Client.Wpf.Windows.Purchases
         }
 
        
-        private async Task LoadItemsAsync(string term)
-        {
-            var list = await _itemsSvc.SearchAsync(term);
-            _itemResults.Clear();
-            foreach (var it in list) _itemResults.Add(it);
-            ItemPopup.IsOpen = _itemResults.Count > 0 && !string.IsNullOrWhiteSpace(ItemSearchText.Text);
-            if (_itemResults.Count > 0) ItemList.SelectedIndex = 0;
-        }
+        //private async Task LoadItemsAsync(string term)
+        //{
+        //    var list = await _itemsSvc.SearchAsync(term);
+        //    _itemResults.Clear();
+        //    foreach (var it in list) _itemResults.Add(it);
+        //    ItemPopup.IsOpen = _itemResults.Count > 0 && !string.IsNullOrWhiteSpace(ItemSearchText.Text);
+        //    if (_itemResults.Count > 0) ItemList.SelectedIndex = 0;
+        //}
 
-        private async void ItemSearchText_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            await LoadItemsAsync(ItemSearchText.Text ?? "");
-        }
-
-        private void ItemSearchText_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Down)
-            {
-                if (!ItemPopup.IsOpen)
-                {
-                    _ = LoadItemsAsync(ItemSearchText.Text ?? "");
-                    ItemPopup.IsOpen = _itemResults.Count > 0;
-                }
-                if (ItemPopup.IsOpen && ItemList.Items.Count > 0)
-                {
-                    if (ItemList.SelectedIndex < 0) ItemList.SelectedIndex = 0;
-                    ItemList.Focus();
-                }
-                e.Handled = true;
-                return;
-            }
-            if (e.Key == Key.Up)
-            {
-                if (!ItemPopup.IsOpen)
-                {
-                    _ = LoadItemsAsync(ItemSearchText.Text ?? "");
-                    ItemPopup.IsOpen = _itemResults.Count > 0;
-                }
-                if (ItemPopup.IsOpen && ItemList.Items.Count > 0)
-                {
-                    if (ItemList.SelectedIndex < 0) ItemList.SelectedIndex = ItemList.Items.Count - 1;
-                    ItemList.Focus();
-                }
-                e.Handled = true;
-                return;
-            }
-            if (!ItemPopup.IsOpen)
-            {
-                if (e.Key == Key.Enter) { BtnAddItem_Click(sender, e); e.Handled = true; }
-                return;
-            }
-            if (e.Key == Key.Enter)
-            {
-                var pick = ItemList.SelectedItem as Item ?? _itemResults.FirstOrDefault();
-                if (pick != null)
-                {
-                    AddItemToLines(pick);
-                    FinishItemAdd();
-                }
-                e.Handled = true;
-                return;
-            }
-            if (e.Key == Key.Escape)
-            {
-                ItemPopup.IsOpen = false;
-                e.Handled = true;
-                return;
-            }
-        }
-
-        private void ItemList_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter)
-            {
-                if (ItemList.SelectedItem is Item pick)
-                {
-                    AddItemToLines(pick);
-                    FinishItemAdd();
-                }
-                e.Handled = true;
-                return;
-            }
-            if (e.Key == Key.Escape)
-            {
-                ItemPopup.IsOpen = false;
-                ItemSearchText.Focus();
-                e.Handled = true;
-                return;
-            }
-            if (e.Key == Key.Up && ItemList.SelectedIndex == 0)
-            {
-                ItemSearchText.Focus();
-                ItemSearchText.CaretIndex = ItemSearchText.Text?.Length ?? 0;
-                e.Handled = true;
-                return;
-            }
-        }
-
-        private void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            if (ItemList.SelectedItem is Item i)
-            {
-                AddItemToLines(i);
-                FinishItemAdd();
-            }
-        }
-
-        private void FinishItemAdd()
-        {
-            RecomputeAndUpdateTotals();
-            ItemPopup.IsOpen = false;
-            ItemSearchText.Clear();
-            ItemList.SelectedItem = null;
-            ItemSearchText.Focus();
-        }
+        
+             
+       
+        //private void FinishItemAdd()
+        //{
+        //    RecomputeAndUpdateTotals();
+        //    ItemPopup.IsOpen = false;
+        //    ItemSearchText.Clear();
+        //    ItemList.SelectedItem = null;
+        //    ItemSearchText.Focus();
+        //}
 
         private async Task ApplyLastDefaultsAsync(PurchaseLineVM vm)
         {
@@ -793,43 +677,60 @@ namespace Pos.Client.Wpf.Windows.Purchases
             vm.ForceRecalc();
         }
 
-        private void AddItemToLines(Item item)
+        // using Pos.Domain.DTO;
+
+        private void AddItemToLines(Pos.Domain.DTO.ItemIndexDto dto)
         {
-            var existing = _lines.FirstOrDefault(l => l.ItemId == item.Id);
+            // If row already exists → bump qty, recalc, totals, focus Qty
+            var existing = _lines.FirstOrDefault(l => l.ItemId == dto.Id);
             if (existing != null)
             {
-                existing.Qty += 1;
+                existing.Qty += 1m;
+                existing.ForceRecalc();
+                RecomputeAndUpdateTotals();
+                BeginEditOn(existing, "Qty");
                 return;
             }
 
+            // Map only what the grid needs; fall back safely if DTO lacks some fields
             var vm = new PurchaseLineVM
             {
-                ItemId = item.Id,
-                Sku = item.Sku ?? "",
-                Name = item.Name ?? "",
-                Qty = 1,
-                UnitCost = item.Price,
+                ItemId = dto.Id,
+                Sku = dto.Sku ?? "",
+                Name = dto.DisplayName ?? dto.Name ?? $"Item #{dto.Id}",
+                Qty = 1m,
+                UnitCost = dto.Price,                 // DTO price may be null → use 0
                 Discount = 0m,
-                TaxRate = item.DefaultTaxRatePct,
+                TaxRate = dto.DefaultTaxRatePct,     // DTO tax may be null → use 0
                 Notes = null
             };
+
+            vm.ForceRecalc();                // keep Line Total correct immediately
             _lines.Add(vm);
+            RecomputeAndUpdateTotals();
+
+            // Optionally pull “last purchase defaults” and refresh totals after they arrive
             _ = Dispatcher.BeginInvoke(async () =>
             {
-                await ApplyLastDefaultsAsync(vm);
+                await ApplyLastDefaultsAsync(vm);          // may adjust UnitCost/Discount/TaxRate
+                vm.ForceRecalc();
                 RecomputeAndUpdateTotals();
             });
+
+            // Focus Qty for fast entry
             Dispatcher.BeginInvoke(() =>
             {
                 LinesGrid.UpdateLayout();
                 LinesGrid.SelectedItem = vm;
                 LinesGrid.ScrollIntoView(vm);
-                var qtyCol = LinesGrid.Columns.First(c => (string?)c.Header == "Qty");
+                var qtyCol = LinesGrid.Columns.First(c =>
+                    string.Equals(c.Header as string, "Qty", StringComparison.OrdinalIgnoreCase));
                 LinesGrid.CurrentCell = new DataGridCellInfo(vm, qtyCol);
                 LinesGrid.BeginEdit();
-                if (LinesGrid.CurrentCell.Column.GetCellContent(vm) is TextBox tb) tb.SelectAll();
+                if (qtyCol.GetCellContent(vm) is TextBox tb) tb.SelectAll();
             });
         }
+
 
         // ===================== Totals (kept) =====================
         private void RecomputeAndUpdateTotals()
@@ -1055,104 +956,104 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
 
 
-        private void BtnAddItem_Click(object sender, RoutedEventArgs e)
-        {
-            Item? pick = ItemList.SelectedItem as Item;
+        //private void BtnAddItem_Click(object sender, RoutedEventArgs e)
+        //{
+        //    Item? pick = ItemList.SelectedItem as Item;
 
-            if (pick == null && _itemResults.Count == 1)
-                pick = _itemResults[0];
+        //    if (pick == null && _itemResults.Count == 1)
+        //        pick = _itemResults[0];
 
-            if (pick == null && !string.IsNullOrWhiteSpace(ItemSearchText.Text))
-            {
-                var t = ItemSearchText.Text.Trim();
+        //    if (pick == null && !string.IsNullOrWhiteSpace(ItemSearchText.Text))
+        //    {
+        //        var t = ItemSearchText.Text.Trim();
 
-                // Ensure _itemResults contains Barcodes; if it's populated from EF, include .Include(i => i.Barcodes)
-                pick = _itemResults.FirstOrDefault(i =>
-                    string.Equals(i.Sku, t, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(i.Name, t, StringComparison.OrdinalIgnoreCase) ||
-                    (i.Barcodes != null && i.Barcodes.Any(b => string.Equals(b.Code, t, StringComparison.OrdinalIgnoreCase)))
-                );
-            }
+        //        // Ensure _itemResults contains Barcodes; if it's populated from EF, include .Include(i => i.Barcodes)
+        //        pick = _itemResults.FirstOrDefault(i =>
+        //            string.Equals(i.Sku, t, StringComparison.OrdinalIgnoreCase) ||
+        //            string.Equals(i.Name, t, StringComparison.OrdinalIgnoreCase) ||
+        //            (i.Barcodes != null && i.Barcodes.Any(b => string.Equals(b.Code, t, StringComparison.OrdinalIgnoreCase)))
+        //        );
+        //    }
 
-            if (pick == null)
-            {
-                MessageBox.Show("Type to search and pick an item (Enter), or click Add after selecting.");
-                return;
-            }
+        //    if (pick == null)
+        //    {
+        //        MessageBox.Show("Type to search and pick an item (Enter), or click Add after selecting.");
+        //        return;
+        //    }
 
-            // If AddItemToLines expects a barcode string, use the primary from the collection:
-            // var primary = pick.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
-            //               ?? pick.Barcodes?.FirstOrDefault()?.Code ?? "";
+        //    // If AddItemToLines expects a barcode string, use the primary from the collection:
+        //    // var primary = pick.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
+        //    //               ?? pick.Barcodes?.FirstOrDefault()?.Code ?? "";
 
-            AddItemToLines(pick);
-            FinishItemAdd();
-        }
+        //    AddItemToLines(pick);
+        //    FinishItemAdd();
+        //}
 
 
-        private async void BtnNewItem_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new ItemQuickDialog { };
-            if (dlg.ShowDialog() == true)
-            {
-                var now = DateTime.UtcNow;
+        //private async void BtnNewItem_Click(object sender, RoutedEventArgs e)
+        //{
+        //    var dlg = new ItemQuickDialog { };
+        //    if (dlg.ShowDialog() == true)
+        //    {
+        //        var now = DateTime.UtcNow;
 
-                // Build barcode list (primary if provided)
-                var barcodes = new List<ItemBarcode>();
-                var code = (dlg.BarcodeVal ?? "").Trim();
-                if (!string.IsNullOrWhiteSpace(code))
-                {
-                    barcodes.Add(new ItemBarcode
-                    {
-                        Code = code,
-                        Symbology = BarcodeSymbology.Ean13, // or map from dialog if you expose it
-                        QuantityPerScan = 1,
-                        IsPrimary = true,
-                        CreatedAt = now,
-                        UpdatedAt = now
-                    });
-                }
+        //        // Build barcode list (primary if provided)
+        //        var barcodes = new List<ItemBarcode>();
+        //        var code = (dlg.BarcodeVal ?? "").Trim();
+        //        if (!string.IsNullOrWhiteSpace(code))
+        //        {
+        //            barcodes.Add(new ItemBarcode
+        //            {
+        //                Code = code,
+        //                Symbology = BarcodeSymbology.Ean13, // or map from dialog if you expose it
+        //                QuantityPerScan = 1,
+        //                IsPrimary = true,
+        //                CreatedAt = now,
+        //                UpdatedAt = now
+        //            });
+        //        }
 
-                var item = new Pos.Domain.Entities.Item
-                {
-                    Sku = dlg.Sku,
-                    Name = dlg.NameVal,
-                    // Barcode = dlg.BarcodeVal, // ❌ legacy – remove
-                    Price = dlg.PriceVal,
-                    UpdatedAt = now,
-                    TaxCode = dlg.TaxCodeVal,
-                    DefaultTaxRatePct = dlg.TaxPctVal,
-                    TaxInclusive = dlg.TaxInclusiveVal,
-                    DefaultDiscountPct = dlg.DiscountPctVal,
-                    DefaultDiscountAmt = dlg.DiscountAmtVal,
-                    Variant1Name = dlg.Variant1NameVal,
-                    Variant1Value = dlg.Variant1ValueVal,
-                    Variant2Name = dlg.Variant2NameVal,
-                    Variant2Value = dlg.Variant2ValueVal,
-                    ProductId = null,
-                    Barcodes = barcodes
-                };
+        //        var item = new Pos.Domain.Entities.Item
+        //        {
+        //            Sku = dlg.Sku,
+        //            Name = dlg.NameVal,
+        //            // Barcode = dlg.BarcodeVal, // ❌ legacy – remove
+        //            Price = dlg.PriceVal,
+        //            UpdatedAt = now,
+        //            TaxCode = dlg.TaxCodeVal,
+        //            DefaultTaxRatePct = dlg.TaxPctVal,
+        //            TaxInclusive = dlg.TaxInclusiveVal,
+        //            DefaultDiscountPct = dlg.DiscountPctVal,
+        //            DefaultDiscountAmt = dlg.DiscountAmtVal,
+        //            Variant1Name = dlg.Variant1NameVal,
+        //            Variant1Value = dlg.Variant1ValueVal,
+        //            Variant2Name = dlg.Variant2NameVal,
+        //            Variant2Value = dlg.Variant2ValueVal,
+        //            ProductId = null,
+        //            Barcodes = barcodes
+        //        };
 
-                try
-                {
-                    item = await _itemsSvc.CreateAsync(item); // must save children (Barcodes) too
+        //        try
+        //        {
+        //            item = await _itemsSvc.CreateAsync(item); // must save children (Barcodes) too
 
-                    // If AddItemToLines/UI needs the barcode string, pick primary:
-                    // var primary = item.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
-                    //               ?? item.Barcodes?.FirstOrDefault()?.Code ?? "";
+        //            // If AddItemToLines/UI needs the barcode string, pick primary:
+        //            // var primary = item.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
+        //            //               ?? item.Barcodes?.FirstOrDefault()?.Code ?? "";
 
-                    AddItemToLines(item);
-                    FinishItemAdd();
-                }
-                catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
-                {
-                    // Most common cause: barcode duplicate (unique index on ItemBarcodes.Code)
-                    MessageBox.Show(
-                        ex.InnerException?.Message?.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true
-                            ? "This barcode already exists. Please use a unique code."
-                            : "Couldn’t save item. " + ex.Message);
-                }
-            }
-        }
+        //            AddItemToLines(item);
+        //            FinishItemAdd();
+        //        }
+        //        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+        //        {
+        //            // Most common cause: barcode duplicate (unique index on ItemBarcodes.Code)
+        //            MessageBox.Show(
+        //                ex.InnerException?.Message?.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true
+        //                    ? "This barcode already exists. Please use a unique code."
+        //                    : "Couldn’t save item. " + ex.Message);
+        //        }
+        //    }
+        //}
 
 
         private async void BtnNewSupplier_Click(object sender, RoutedEventArgs e)
@@ -1276,7 +1177,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private async Task ResetFormAsync(bool keepDestination = true)
         {
             try { SupplierPopup.IsOpen = false; } catch { }
-            try { ItemPopup.IsOpen = false; } catch { }
+            //try { ItemPopup.IsOpen = false; } catch { }
             bool chooseWarehouse = false;
             int? selWarehouseId = null, selOutletId = null;
             if (keepDestination)
@@ -1297,14 +1198,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _lines.Clear();
             _payments.Clear();
             PaymentsGrid.ItemsSource = null; // rebounded when a real purchase is loaded
-            ItemSearchText.Clear();
+            //ItemSearchText.Clear();
             OtherChargesBox.Text = "0.00";
             SubtotalText.Text = "0.00";
             DiscountText.Text = "0.00";
             TaxText.Text = "0.00";
             GrandTotalText.Text = "0.00";
             await LoadSuppliersAsync("");
-            await LoadItemsAsync("");
+            //await LoadItemsAsync("");
             if (!keepDestination)
             {
                 await InitDestinationsAsync();
@@ -1364,21 +1265,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
             LoadDraft(draft); // loads into THIS window
         }
 
-        private void ClearHoldButton_Click(object sender, RoutedEventArgs e)
+        private void ClearButton_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show(
-                "Choose an action:\n\nYes = CLEAR this purchase (reset form)\nNo = HOLD this purchase as draft\nCancel = Do nothing",
-                "Clear or Hold?",
-                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
+            // Confirm before clearing, optional
+            if (MessageBox.Show("Clear this purchase form?", "Confirm",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
                 ClearCurrentPurchase(confirm: true);
             }
-            else if (result == MessageBoxResult.No)
-            {
-                _ = HoldCurrentPurchaseQuickAsync();
-            }
+        }
+
+        private async void HoldButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Hold (save as draft) without prompt
+            await HoldCurrentPurchaseQuickAsync();
         }
 
         private async void ClearCurrentPurchase(bool confirm)
@@ -1578,7 +1478,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     }
 
                     // (Optional) If you also want to avoid confusion around draft toggle:
-                    try { IsDraftBox.IsEnabled = false; } catch { }
+                    //try { IsDraftBox.IsEnabled = false; } catch { }
                 }
             }
             catch { /* swallow UI timing issues */ }
@@ -2029,6 +1929,30 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void SaveDraft_Click(object sender, RoutedEventArgs e) => BtnSaveDraft_Click(sender, e);
         private void PostReceive_Click(object sender, RoutedEventArgs e) => BtnSaveFinal_Click(sender, e);
         private void SaveAmend_Click(object sender, RoutedEventArgs e) => BtnSaveFinal_Click(sender, e);
+
+
+        private DataGridColumn? GetColumnByHeader(string header) =>
+    LinesGrid.Columns.FirstOrDefault(c =>
+        string.Equals(c.Header as string, header, StringComparison.OrdinalIgnoreCase));
+
+        private void BeginEditOn(object rowItem, string header)
+        {
+            var col = GetColumnByHeader(header);
+            if (col == null) return;
+
+            LinesGrid.UpdateLayout();
+            LinesGrid.SelectedItem = rowItem;
+            LinesGrid.ScrollIntoView(rowItem, col);
+            LinesGrid.CurrentCell = new DataGridCellInfo(rowItem, col);
+            LinesGrid.BeginEdit();
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                var content = col.GetCellContent(rowItem);
+                if (content is TextBox tb) { tb.Focus(); tb.SelectAll(); }
+                else (content as FrameworkElement)?.Focus();
+            });
+        }
 
 
     }

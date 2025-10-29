@@ -27,8 +27,10 @@ using System.Text;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
-    public partial class OpeningStockDialog : Window, INotifyPropertyChanged
+    public partial class OpeningStockView : UserControl, INotifyPropertyChanged
     {
+        public event EventHandler? CloseRequested;
+
         private bool _dirty;
         private StockDocStatus _docStatus = StockDocStatus.Draft;
         public bool IsLocked => _docStatus == StockDocStatus.Locked;
@@ -44,6 +46,39 @@ namespace Pos.Client.Wpf.Windows.Admin
                 return Rows.All(r => !string.IsNullOrWhiteSpace(r.Sku) && r.Qty > 0 && r.UnitCost >= 0m);
             }
         }
+
+        public bool CanPost
+        {
+            get
+            {
+                if (StockDocId == 0) return false;
+                if (_docStatus != StockDocStatus.Draft) return false;
+                if (Rows.Count == 0) return false;
+                if (HasInvalid) return false;
+                return true;
+            }
+        }
+
+        public bool CanVoid
+        {
+            get
+            {
+                if (StockDocId == 0) return false;
+                if (_docStatus == StockDocStatus.Locked) return false;
+                // Draft or Posted (unlocked) may be voided
+                return _docStatus == StockDocStatus.Draft || _docStatus == StockDocStatus.Posted;
+            }
+        }
+
+        private void RaiseLocksAndActions()
+        {
+            Raise(nameof(CanLock));
+            Raise(nameof(CanUnlock));
+            Raise(nameof(CanPost));
+            Raise(nameof(CanVoid));
+            Raise(nameof(LockHint));
+        }
+
         private void RaiseLockUnlock()
         {
             Raise(nameof(CanLock));
@@ -251,7 +286,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             r.PropertyChanged += (_, __2) => MarkDirty();
         }
 
-        public OpeningStockDialog(InventoryLocationType locationType, int locationId, string locationDisplay)
+        public OpeningStockView(InventoryLocationType locationType, int locationId, string locationDisplay)
         {
             InitializeComponent();
             DataContext = this;
@@ -273,14 +308,22 @@ namespace Pos.Client.Wpf.Windows.Admin
             // start with one empty row
             Rows.CollectionChanged += (_, __) => Raise(nameof(FooterSummary));
             Rows.CollectionChanged += (_, __) => { Raise(nameof(CanLock)); _ = 0; };
-            
+
+            this.Loaded += OpeningStockView_Loaded;
 
             // focus search on load
             Loaded += (_, __) =>
             {
-                ItemSearchText.Focus();
-                ItemSearchText.SelectAll();
+                FocusItemSearchBox();
+                //ItemSearchText.Focus();
+                //ItemSearchText.SelectAll();
             };
+        }
+
+        private async void OpeningStockView_Loaded(object sender, RoutedEventArgs e)
+        {
+            try { await LoadExistingDraftIfAnyAsync(); }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "Load draft error", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
         private async Task EnsureDraftAsync()
@@ -331,7 +374,8 @@ namespace Pos.Client.Wpf.Windows.Admin
 
                 if (!includeProducts)
                 {
-                    if (sfd.ShowDialog(this) != true) return;
+                    var owner1 = Window.GetWindow(this); // parent shell window
+                    if (sfd.ShowDialog(owner1) != true) return;  // for SaveFileDialog
                     var csv1 = BuildBlankSampleCsv(); // already implemented earlier
                     await File.WriteAllTextAsync(sfd.FileName, csv1, Encoding.UTF8);
                     MessageBox.Show("Sample CSV saved.", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -349,7 +393,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                 var suffix = onlyMissing ? "OnlyMissing" : "All";
                 sfd.FileName = $"OpeningSample_{suffix}_{LocationType}_{LocationId}_{DateTime.Now:yyyyMMdd}.csv";
 
-                if (sfd.ShowDialog(this) != true) return;
+                var owner = Window.GetWindow(this); // parent shell window
+                if (sfd.ShowDialog(owner) != true) return;  // for SaveFileDialog
 
                 string csv = onlyMissing
                     ? await BuildSampleCsvOnlyMissingAsync()
@@ -487,7 +532,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
                     Multiselect = false
                 };
-                if (ofd.ShowDialog(this) != true) return;
+                var owner = Window.GetWindow(this); // parent shell window
+                if (ofd.ShowDialog(owner) != true) return;  // for OpenFileDialog
 
                 await EnsureDraftAsync();       // ✅ await it
 
@@ -759,7 +805,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             return string.Equals(s.CurrentUserRole, "Admin", StringComparison.OrdinalIgnoreCase);
         }
 
-        private void Close_Click(object sender, RoutedEventArgs e) => Close();
+        //private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
         // === Row VM ===
         public sealed class RowVM : INotifyPropertyChanged, IDataErrorInfo
@@ -896,6 +942,30 @@ namespace Pos.Client.Wpf.Windows.Admin
             return null;
         }
 
+        private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        {
+            // The control exposes SelectedItem as ItemIndexDto
+            var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
+            var pick = box.SelectedItem;
+            if (pick is null) return;
+
+            try
+            {
+                // Opening stock wants a line for the item (default qty = 1)
+                await AddByIdAsync(pick.Id, 1m);
+
+                // Clear the box so the operator can scan/type the next item quickly
+                try { box.Clear(); } catch { /* ignore */ }
+
+                // Focus grid on Qty (AddOrIncrementRowAsync already does this)
+                // No extra work needed.
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Add failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void Grid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Enter) return;
@@ -915,212 +985,83 @@ namespace Pos.Client.Wpf.Windows.Admin
                 FocusCellForRow(rowObj, _colNote);
             else if (colIndex == _colNote)
             {
-                ItemSearchText.Focus();
-                ItemSearchText.SelectAll();
-                ItemPopup.IsOpen = false;
+                e.Handled = true;
+                Grid.CommitEdit(DataGridEditingUnit.Cell, true);
+                Grid.CommitEdit(DataGridEditingUnit.Row, true);
+
+                // Clear CurrentCell so the grid doesn't yank focus back
+                Grid.CurrentCell = new DataGridCellInfo();
+
+                // Go to the search box
+                FocusItemSearchBox();
+                //ItemSearchText.Focus();
+                //ItemSearchText.SelectAll();
+                //ItemPopup.IsOpen = false;
             }
         }
 
-        // === Purchase-style search (TextBox + Popup List) ===
-
-        private async Task AddFromSearchAsync()
+        private void Grid_CurrentCellChanged(object? sender, EventArgs e)
         {
-            var term = (ItemSearchText.Text ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(term))
-            {
-                ItemSearchText.Focus();
-                ItemSearchText.SelectAll();
-                return;
-            }
+            var info = Grid.CurrentCell;
+            if (info.Column == null || info.Item is not RowVM row) return;
 
-            // 1) Try barcode resolve (QuantityPerScan honored)
+            int colIndex = Grid.Columns.IndexOf(info.Column);
+            if (colIndex != _colQty) return; // only auto-edit Qty
+
+            // Enter edit mode + focus the TextBox + select all
+            Grid.BeginEdit();
+            Dispatcher.InvokeAsync(() =>
+            {
+                var cell = GetCell(Grid, Grid.Items.IndexOf(row), _colQty);
+                if (cell == null) return;
+
+                Grid.BeginEdit();
+                cell.Focus();
+                var tb = FindVisualChild<TextBox>(cell);
+                if (tb != null)
+                {
+                    Keyboard.Focus(tb);
+                    tb.SelectAll();
+                }
+            }, System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+
+        private void FocusItemSearchBox()
+        {
             try
             {
-                var (item, qtyPerScan) = await _catalog.ResolveScanAsync(term);
-                await AddOrIncrementRowAsync(item, qtyPerScan);
-                ItemSearchText.Clear();
-                ItemPopup.IsOpen = false;
-                return;
-            }
-            catch { /* not barcode, continue */ }
-
-            // 2) Use selected suggestion if popup open
-            if (ItemPopup.IsOpen && ItemList.SelectedItem is SuggestVM sPick)
-            {
-                await AddByIdAsync(sPick.ItemId, 1m);
-                ItemSearchText.Clear();
-                ItemPopup.IsOpen = false;
-                return;
-            }
-
-            // 3) If exactly one suggestion, use it
-            if (ItemList.Items.Count == 1 && ItemList.Items[0] is SuggestVM s1)
-            {
-                await AddByIdAsync(s1.ItemId, 1m);
-                ItemSearchText.Clear();
-                ItemPopup.IsOpen = false;
-                return;
-            }
-
-            // 4) Try exact SKU match
-            await using (var db = await _dbf.CreateDbContextAsync())
-            {
-                var it = await db.Items.AsNoTracking().FirstOrDefaultAsync(i => i.Sku == term);
-                if (it != null)
+                var tb = FindVisualChild<TextBox>(ItemSearch);
+                if (tb != null)
                 {
-                    await AddOrIncrementRowAsync(it, 1m);
-                    ItemSearchText.Clear();
-                    ItemPopup.IsOpen = false;
-                    return;
+                    tb.Focus();
+                    tb.SelectAll();
+                }
+                else
+                {
+                    ItemSearch.Focus();
                 }
             }
-
-            // 5) No unique match — keep popup open for manual pick
-            if (!ItemPopup.IsOpen && ItemList.Items.Count > 0)
-            {
-                ItemPopup.IsOpen = true;
-                ItemList.Focus();
-            }
-            else
-            {
-                MessageBox.Show("No unique match. Select an item from the list or scan a barcode.",
-                    "Not found", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            catch { /* ignore */ }
         }
 
-        private async void ItemSearchText_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-        {
-            var term = (ItemSearchText.Text ?? "").Trim();
-            if (term.Length < 2)
-            {
-                ItemPopup.IsOpen = false;
-                ItemList.ItemsSource = null;
-                return;
-            }
-
-            try
-            {
-                await using var db = await _dbf.CreateDbContextAsync();
-                var like = $"%{term}%";
-                var list = await db.Items
-                    .AsNoTracking()
-                    .Where(i =>
-                        EF.Functions.Like(i.Sku, like) ||
-                        EF.Functions.Like(i.Name, like) ||
-                        i.Barcodes.Any(b => EF.Functions.Like(b.Code, like)))
-                    .OrderBy(i => i.Sku)
-                    .Take(30)
-                    .Select(i => new SuggestVM
-                    {
-                        ItemId = i.Id,
-                        Sku = i.Sku,
-                        Name = i.Name,
-                        Barcode = i.Barcodes
-                            .OrderByDescending(b => b.IsPrimary)
-                            .Select(b => b.Code)
-                            .FirstOrDefault()
-                    })
-                    .ToListAsync();
-
-                ItemList.ItemsSource = list;
-                ItemPopup.IsOpen = list.Count > 0;
-                if (list.Count > 0) ItemList.SelectedIndex = 0;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Search error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private async void ItemSearchText_KeyDown(object sender, KeyEventArgs e)
-        {
-            // Open popup with Down if results exist
-            if (!ItemPopup.IsOpen && e.Key == Key.Down && ItemList.Items.Count > 0)
-            {
-                ItemPopup.IsOpen = true;
-                ItemList.SelectedIndex = Math.Max(0, ItemList.SelectedIndex);
-                ItemList.Focus();
-                e.Handled = true;
-                return;
-            }
-
-            // Arrow keys: move selection in list when popup is open
-            if (ItemPopup.IsOpen && (e.Key == Key.Down || e.Key == Key.Up))
-            {
-                if (ItemList.Items.Count == 0) return;
-                int idx = ItemList.SelectedIndex;
-                if (e.Key == Key.Down) idx = Math.Min(ItemList.Items.Count - 1, idx + 1);
-                else idx = Math.Max(0, idx - 1);
-                ItemList.SelectedIndex = idx;
-                ItemList.ScrollIntoView(ItemList.SelectedItem);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.Escape && ItemPopup.IsOpen)
-            {
-                ItemPopup.IsOpen = false;
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.Enter)
-            {
-                e.Handled = true;
-                await AddFromSearchAsync();
-            }
-        }
-
-        private async void ItemList_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter && ItemList.SelectedItem is SuggestVM s)
-            {
-                e.Handled = true;
-                await AddByIdAsync(s.ItemId, 1m);
-                ItemSearchText.Clear();
-                ItemPopup.IsOpen = false;
-            }
-            else if (e.Key == Key.Escape)
-            {
-                e.Handled = true;
-                ItemPopup.IsOpen = false;
-                ItemSearchText.Focus();
-                ItemSearchText.SelectAll();
-            }
-        }
-
-        private async void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            if (ItemList.SelectedItem is SuggestVM s)
-            {
-                await AddByIdAsync(s.ItemId, 1m);
-                ItemSearchText.Clear();
-                ItemPopup.IsOpen = false;
-            }
-        }
-
-        private async void BtnAddItem_Click(object sender, RoutedEventArgs e)
-        {
-            await AddFromSearchAsync();
-        }
-
-        private async void Window_Loaded(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                await LoadExistingDraftIfAnyAsync();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Load draft error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+       
+        //private async void Window_Loaded(object sender, RoutedEventArgs e)
+        //{
+        //    try
+        //    {
+        //        await LoadExistingDraftIfAnyAsync();
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        MessageBox.Show(ex.Message, "Load draft error", MessageBoxButton.OK, MessageBoxImage.Error);
+        //    }
+        //}
 
         private async Task LoadExistingDraftIfAnyAsync()
         {
             await using var db = await _dbf.CreateDbContextAsync();
 
-            // latest draft for this location
             var draft = await db.StockDocs
                 .AsNoTracking()
                 .Where(d => d.DocType == StockDocType.Opening
@@ -1132,14 +1073,15 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             if (draft == null) return;
 
-            // load lines + display names
-            var lines = await db.StockEntries
+            // Draft lines come from OpeningStockDraftLines
+            var dlines = await db.OpeningStockDraftLines
                 .AsNoTracking()
-                .Where(se => se.StockDocId == draft.Id)
-                .Select(se => new { se.ItemId, se.QtyChange, se.UnitCost, se.Note })
+                .Where(x => x.StockDocId == draft.Id)
+                .Select(x => new { x.ItemId, x.Qty, x.UnitCost, x.Note })
                 .ToListAsync();
 
-            var itemIds = lines.Select(l => l.ItemId).Distinct().ToList();
+            var itemIds = dlines.Select(l => l.ItemId).Distinct().ToList();
+
             var names = await db.Items
                 .AsNoTracking()
                 .Include(i => i.Product)
@@ -1154,17 +1096,17 @@ namespace Pos.Client.Wpf.Windows.Admin
                 })
                 .ToListAsync();
 
-            var byId = names.ToDictionary(x => x.Id, x => x, EqualityComparer<int>.Default);
+            var byId = names.ToDictionary(x => x.Id, x => x);
 
             Rows.Clear();
-            foreach (var l in lines)
+            foreach (var l in dlines)
             {
                 var meta = byId[l.ItemId];
                 var row = new RowVM
                 {
                     Sku = meta.Sku,
                     ItemName = meta.Display,
-                    Qty = l.QtyChange,
+                    Qty = l.Qty,
                     UnitCost = l.UnitCost,
                     Note = l.Note ?? ""
                 };
@@ -1174,25 +1116,28 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             StockDocId = draft.Id;
             EffectiveDateLocal = draft.EffectiveDateUtc.ToLocalTime();
+            _docStatus = draft.Status;
 
             MarkClean();
             Raise(nameof(FooterSummary));
-
+            RaiseLocksAndActions();
         }
 
-        protected override void OnClosing(CancelEventArgs e)
-        {
-            base.OnClosing(e);
-            if (_dirty)
-            {
-                var r = MessageBox.Show(
-                    "You have unsaved changes. Do you still want to close?",
-                    "Unsaved changes",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                if (r == MessageBoxResult.No) e.Cancel = true;
-            }
-        }
+
+        private async Task<bool> ConfirmCloseIfDirtyAsync()
+{
+    if (!_dirty) return true;
+    var r = MessageBox.Show("You have unsaved changes. Close anyway?",
+                            "Unsaved changes", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+    return r == MessageBoxResult.Yes;
+}
+
+private async void CloseTab_Click(object sender, RoutedEventArgs e)
+{
+    if (await ConfirmCloseIfDirtyAsync())
+        CloseRequested?.Invoke(this, EventArgs.Empty); // parent tab host should remove this tab
+}
+
 
         private List<RowSnapshot> TakeSnapshot()
         {
@@ -1238,7 +1183,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     AddExtension = true,
                     OverwritePrompt = true
                 };
-                if (sfd.ShowDialog(this) != true) return;
+                var owner = Window.GetWindow(this); // parent shell window
+                if (sfd.ShowDialog(owner) != true) return;  // for SaveFileDialog
 
                 var inv = CultureInfo.InvariantCulture;
                 var sb = new StringBuilder();
@@ -1297,93 +1243,47 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void OpenDraft_Click(object sender, RoutedEventArgs e)
         {
+            var owner = Window.GetWindow(this);
             var dlg = new OpeningStockPickDialog(_dbf, LocationType, LocationId, OpeningStockPickDialog.Mode.Drafts)
-            { Owner = this };
+            { Owner = owner };
             if (dlg.ShowDialog() == true && dlg.SelectedDocId is int id)
             {
                 await LoadSpecificDocAsync(id);
             }
         }
-
-        private async void CloneFromLocked_Click(object sender, RoutedEventArgs e)
-        {
-
-            var user = _state.CurrentUser;
-            if (user?.Role != UserRole.Admin)
-            {
-                MessageBox.Show("Only Admin can create Opening Stock.", "Not allowed",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var pick = new OpeningStockPickDialog(_dbf, LocationType, LocationId, OpeningStockPickDialog.Mode.Locked)
-            { Owner = this };
-            if (pick.ShowDialog() != true || pick.SelectedDocId is not int sourceId) return;
-
-            try
-            {
-                // Load source doc + lines
-                await using var db = await _dbf.CreateDbContextAsync();
-                var src = await db.StockDocs.AsNoTracking().FirstAsync(d => d.Id == sourceId);
-                var lines = await db.StockEntries.AsNoTracking()
-                    .Where(se => se.StockDocId == sourceId)
-                    .Select(se => new { se.ItemId, se.QtyChange, se.UnitCost, se.Note })
-                    .ToListAsync();
-
-                var itemIds = lines.Select(l => l.ItemId).Distinct().ToList();
-                var skus = await db.Items.AsNoTracking()
-                    .Where(i => itemIds.Contains(i.Id))
-                    .Select(i => new { i.Id, i.Sku })
-                    .ToListAsync();
-                var skuById = skus.ToDictionary(x => x.Id, x => x.Sku);
-
-                // 1) Create new draft with same effective date
-                var draft = await _svc.CreateDraftAsync(new OpeningStockCreateRequest
-                {
-                    LocationType = src.LocationType,
-                    LocationId = src.LocationId,
-                    EffectiveDateUtc = src.EffectiveDateUtc,
-                    CreatedByUserId = user.Id,
-                    Note = $"Cloned from #{src.Id}"
-                });
-
-                // 2) Upsert lines using SKUs
-                var up = new OpeningStockUpsertRequest
-                {
-                    StockDocId = draft.Id,
-                    ReplaceAll = true,
-                    Lines = lines.Select(l => new OpeningStockLineDto
-                    {
-                        Sku = skuById[l.ItemId],
-                        Qty = l.QtyChange,
-                        UnitCost = l.UnitCost,
-                        Note = l.Note
-                    }).ToList()
-                };
-                await _svc.UpsertLinesAsync(up);
-
-                // 3) Load new draft into UI
-                await LoadSpecificDocAsync(draft.Id);
-                MessageBox.Show($"Cloned from locked document #{src.Id} into new draft #{draft.Id}.",
-                    "Cloned", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Clone failed", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+               
 
         private async Task LoadSpecificDocAsync(int docId)
         {
             await using var db = await _dbf.CreateDbContextAsync();
 
             var doc = await db.StockDocs.AsNoTracking().FirstAsync(d => d.Id == docId);
-            var lines = await db.StockEntries.AsNoTracking()
-                .Where(se => se.StockDocId == docId)
-                .Select(se => new { se.ItemId, se.QtyChange, se.UnitCost, se.Note })
-                .ToListAsync();
+            List<(int ItemId, decimal Qty, decimal UnitCost, string? Note)> core;
 
-            var itemIds = lines.Select(l => l.ItemId).Distinct().ToList();
+            if (doc.Status == StockDocStatus.Draft)
+            {
+                var dlines = await db.OpeningStockDraftLines
+                    .AsNoTracking()
+                    .Where(x => x.StockDocId == docId)
+                    .Select(x => new { x.ItemId, x.Qty, x.UnitCost, x.Note })
+                    .ToListAsync();
+                core = dlines.Select(x => (x.ItemId, x.Qty, x.UnitCost, x.Note)).ToList();
+            }
+            else
+            {
+                // Posted/Locked/Void – read from ledger
+                var lines = await db.StockEntries
+                    .AsNoTracking()
+                    .Where(se => se.StockDocId == docId && (se.RefType == "Opening" || se.RefType == "OpeningVoid"))
+                    .Select(se => new { se.ItemId, se.QtyChange, se.UnitCost, se.Note })
+                    .ToListAsync();
+
+                // For Voided, you may want to show net (sum by item). For display simplicity, show the original IN lines:
+                var postedIn = lines.Where(l => l.QtyChange > 0).ToList();
+                core = postedIn.Select(l => (l.ItemId, l.QtyChange, l.UnitCost, l.Note)).ToList();
+            }
+
+            var itemIds = core.Select(l => l.ItemId).Distinct().ToList();
             var names = await db.Items
                 .AsNoTracking()
                 .Include(i => i.Product)
@@ -1401,29 +1301,30 @@ namespace Pos.Client.Wpf.Windows.Admin
             var byId = names.ToDictionary(x => x.Id, x => x);
 
             Rows.Clear();
-            foreach (var l in lines)
+            foreach (var l in core)
             {
                 var meta = byId[l.ItemId];
-                var row = new RowVM
+                Rows.Add(new RowVM
                 {
                     Sku = meta.Sku,
                     ItemName = meta.Display,
-                    Qty = l.QtyChange,
+                    Qty = l.Qty,
                     UnitCost = l.UnitCost,
                     Note = l.Note ?? ""
-                };
-                Rows.Add(row);
-                HookRow(row);
+                });
             }
+
+            foreach (var r in Rows) HookRow(r);
 
             StockDocId = doc.Id;
             EffectiveDateLocal = doc.EffectiveDateUtc.ToLocalTime();
+            _docStatus = doc.Status;
 
             MarkClean();
             Raise(nameof(FooterSummary));
-            _docStatus = doc.Status;              // ⬅️ new
-            RaiseLockUnlock();                    // ⬅️ new
+            RaiseLocksAndActions();
         }
+
 
         private async void Unlock_Click(object sender, RoutedEventArgs e)
         {
@@ -1451,6 +1352,174 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show(ex.Message, "Unlock failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        private async void Post_Click(object sender, RoutedEventArgs e)
+        {
+            if (!CanPost)
+            {
+                MessageBox.Show("Fix validation errors and save draft first.", "Cannot Post",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // ensure latest draft saved (header + lines) before post
+            SaveDraft_Click(sender, e);
+            if (_dirty) return; // save failed or cancelled
+
+            var ok = MessageBox.Show(
+                "Post this Opening Stock? This will create stock IN entries and make stock visible in reports.",
+                "Confirm Post", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (ok != MessageBoxResult.Yes) return;
+
+            try
+            {
+                var s = AppState.Current;
+                var userId = (s.CurrentUser?.Id > 0) ? s.CurrentUser.Id : s.CurrentUserId;
+
+                await _svc.PostAsync(StockDocId, userId);
+
+                // reload doc (now Posted) from ledger
+                await LoadSpecificDocAsync(StockDocId);
+                _docStatus = StockDocStatus.Posted;
+                MarkClean();
+                RaiseLocksAndActions();
+
+                MessageBox.Show("Opening Stock posted. Stock is now visible in the report.",
+                    "Posted", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Post failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void Void_Click(object sender, RoutedEventArgs e)
+        {
+            if (!CanVoid)
+            {
+                MessageBox.Show("This document cannot be voided in its current state.", "Cannot Void",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string? reason = null;
+            // Optional: simple prompt
+            var res = MessageBox.Show("Void this Opening Stock?\n\nDraft: mark void.\nPosted: reversal OUT and void.",
+                                      "Confirm Void", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (res != MessageBoxResult.Yes) return;
+
+            try
+            {
+                var s = AppState.Current;
+                var userId = (s.CurrentUser?.Id > 0) ? s.CurrentUser.Id : s.CurrentUserId;
+
+                await _svc.VoidAsync(StockDocId, userId, reason);
+
+                // After void, refresh (status becomes Voided; editing disabled)
+                await LoadSpecificDocAsync(StockDocId);
+                _docStatus = StockDocStatus.Voided;
+                MarkClean();
+                RaiseLocksAndActions();
+
+                MessageBox.Show("Voided successfully.", "Voided",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Void failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void Clear_Click(object sender, RoutedEventArgs e)
+        {
+            // If nothing to clear, just reset UI
+            if (StockDocId == 0 && Rows.Count == 0 && !_dirty)
+            {
+                ResetUiForNew();
+                return;
+            }
+
+            // Ask what to do with current draft (safe for any status; delete only if Draft)
+            var r = MessageBox.Show(
+                "Start a new Opening Stock entry?\n\n" +
+                "Yes = Discard current draft (if it is still Draft) and reset the form.\n" +
+                "No  = Keep current draft but reset the form without deleting it.",
+                "Start New Entry",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question);
+
+            if (r == MessageBoxResult.Cancel) return;
+
+            try
+            {
+                if (r == MessageBoxResult.Yes)
+                {
+                    await DeleteDraftOnServerIfDraftAsync(); // only deletes if Status == Draft
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Could not discard draft", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            ResetUiForNew();
+        }
+
+        private async Task DeleteDraftOnServerIfDraftAsync()
+        {
+            if (StockDocId == 0) return;
+
+            // Only delete if the document is still Draft; never delete Posted/Locked/Voided.
+            if (_docStatus != StockDocStatus.Draft) return;
+
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            // Remove draft lines, then header
+            var drafts = db.OpeningStockDraftLines.Where(x => x.StockDocId == StockDocId);
+            db.OpeningStockDraftLines.RemoveRange(drafts);
+
+            var doc = await db.StockDocs.FirstOrDefaultAsync(d => d.Id == StockDocId);
+            if (doc != null && doc.Status == StockDocStatus.Draft)
+                db.StockDocs.Remove(doc);
+
+            await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Reset the UI to a brand-new entry while keeping the selected Location.
+        /// Does not create a new draft until user saves again.
+        /// </summary>
+        private void ResetUiForNew()
+        {
+            // Clear grid + state
+            Rows.Clear();
+            Raise(nameof(FooterSummary));
+
+            _lastImportSnapshot = null;
+            RaiseUndo();
+
+            // Reset header/date/status for a new entry
+            StockDocId = 0;
+            _docStatus = StockDocStatus.Draft;
+            EffectiveDateLocal = DateTime.Now;
+
+            // Reset toggles
+            if (ReplaceAllBox != null) ReplaceAllBox.IsChecked = true;
+
+            MarkClean();            // no pending changes
+            RaiseLocksAndActions(); // refresh Post/Lock/Unlock/Void enables
+
+            // Put the cursor back to scan/search
+            Dispatcher.InvokeAsync(() =>
+            {
+                //ItemSearchText.Focus();
+                //ItemSearchText.SelectAll();
+            }, System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+
 
 
     }

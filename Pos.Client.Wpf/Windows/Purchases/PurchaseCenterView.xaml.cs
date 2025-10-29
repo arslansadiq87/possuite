@@ -361,17 +361,77 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void Void_Click(object sender, RoutedEventArgs e) => Void_Executed(sender, null!);
 
         // ===== Command handlers =====
-        private void Receive_Executed(object? sender, ExecutedRoutedEventArgs? e)
+        private async void Receive_Executed(object? sender, ExecutedRoutedEventArgs? e)
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a purchase."); return; }
             if (sel.IsReturn) { MessageBox.Show("Returns cannot be received."); return; }
             if (sel.Status != nameof(PurchaseStatus.Draft)) { MessageBox.Show("Only DRAFT purchases can be received."); return; }
 
-            // TODO: open your Receive/Finalize dialog (collect OnReceive payments if any)
-            MessageBox.Show($"Receive {sel.DocNoOrId}", "Receive");
-            LoadPurchases();
+            try
+            {
+                using var db = new PosClientDbContext(_opts);
+                var svc = new PurchasesService(db);
+
+                // Load draft header + lines
+                var draft = await db.Purchases
+                    .Include(p => p.Lines)
+                    .FirstOrDefaultAsync(p => p.Id == sel.PurchaseId);
+
+                if (draft == null) { MessageBox.Show("Draft not found."); return; }
+                if (draft.Status != PurchaseStatus.Draft) { MessageBox.Show("This document is not in Draft anymore."); return; }
+
+                // Build a minimal header model in FINAL status
+                var header = new Purchase
+                {
+                    Id = draft.Id,
+                    PartyId = draft.PartyId,
+                    TargetType = draft.TargetType,
+                    OutletId = draft.OutletId,
+                    WarehouseId = draft.WarehouseId,
+                    VendorInvoiceNo = draft.VendorInvoiceNo,
+                    PurchaseDate = draft.PurchaseDate,
+                    Status = PurchaseStatus.Final
+                };
+
+                // Effective lines (for drafts this is normally same as base lines)
+                // You already have a helper used in the editor:
+                var eff = await svc.GetEffectiveLinesAsync(draft.Id); // (ItemId, Qty, UnitCost, Discount, TaxRate, …)
+
+                var lines = eff.Select(x => new PurchaseLine
+                {
+                    ItemId = x.ItemId,
+                    Qty = x.Qty,
+                    UnitCost = x.UnitCost,
+                    Discount = x.Discount,
+                    TaxRate = x.TaxRate
+                }).ToList();
+
+                var user = AppState.Current?.CurrentUserName ?? "system";
+
+                // Finalize + write stock via the same service the editor uses
+                await svc.ReceiveAsync(header, lines, user);
+
+                MessageBox.Show("Purchase received and posted.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                LoadPurchases();         // refresh list
+                _lines.Clear();          // clear preview
+                UpdateActions(null);     // reset action bar
+            }
+            catch (InvalidOperationException ex)
+            {
+                // business rules (e.g., negative stock guard on amendments etc.)
+                MessageBox.Show(ex.Message, "Blocked", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (DbUpdateException ex)
+            {
+                MessageBox.Show("Database error: " + ex.GetBaseException().Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Unexpected error: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
+
 
         private void Amend_Executed(object? sender, ExecutedRoutedEventArgs? e)
         {

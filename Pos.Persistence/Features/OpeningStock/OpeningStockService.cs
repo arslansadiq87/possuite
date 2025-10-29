@@ -1,27 +1,36 @@
-﻿using System;
+﻿// Pos.Persistence/Services/OpeningStockService.cs
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Domain;                     // InventoryLocationType, etc.
+using Pos.Domain.Entities;            // StockDoc, StockEntry, OpeningStockDraftLine ...
 using Pos.Persistence.Features.OpeningStock;
 
 namespace Pos.Persistence.Services
 {
     /// <summary>
-    /// Orchestrates Opening Stock: create draft header, upsert lines, lock with guards.
-    /// Uses StockEntry as canonical movement with RefType="Opening" and RefId=StockDoc.Id.
+    /// Opening Stock flow (Outlet & Warehouse):
+    /// Draft (OpeningStockDraftLines) -> Post (writes StockEntries IN) -> Lock.
+    /// Void:
+    ///  - Draft: mark void (no stock impact)
+    ///  - Posted (unlocked): write reversal StockEntries and mark void
     /// </summary>
     public interface IOpeningStockService
     {
         Task<StockDoc> CreateDraftAsync(OpeningStockCreateRequest req, CancellationToken ct = default);
         Task<OpeningStockValidationResult> ValidateLinesAsync(int stockDocId, IEnumerable<OpeningStockLineDto> lines, CancellationToken ct = default);
         Task UpsertLinesAsync(OpeningStockUpsertRequest req, CancellationToken ct = default);
+
+        Task PostAsync(int stockDocId, int postedByUserId, CancellationToken ct = default);
         Task LockAsync(int stockDocId, int adminUserId, CancellationToken ct = default);
         Task UnlockAsync(int stockDocId, int adminUserId, CancellationToken ct = default);
+
+        Task VoidAsync(int stockDocId, int userId, string? reason, CancellationToken ct = default);
+
         Task<StockDoc?> GetAsync(int stockDocId, CancellationToken ct = default);
     }
 
@@ -38,10 +47,9 @@ namespace Pos.Persistence.Services
 
         public async Task<StockDoc> CreateDraftAsync(OpeningStockCreateRequest req, CancellationToken ct = default)
         {
-            // Permission: should be enforced in caller (Admin only). This service assumes already-checked.
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
-            // Validate location exists
+            // Validate location
             switch (req.LocationType)
             {
                 case InventoryLocationType.Outlet:
@@ -79,11 +87,11 @@ namespace Pos.Persistence.Services
 
             var doc = await db.StockDocs.AsNoTracking().FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
             if (doc == null) { res.Errors.Add(new() { Field = "StockDocId", Message = "Opening document not found." }); return res; }
-            if (doc.Status != StockDocStatus.Draft) { res.Errors.Add(new() { Field = "Status", Message = "Document is locked." }); return res; }
             if (doc.DocType != StockDocType.Opening) { res.Errors.Add(new() { Field = "DocType", Message = "Invalid document type." }); return res; }
+            if (doc.Status == StockDocStatus.Locked) { res.Errors.Add(new() { Field = "Status", Message = "Document is locked." }); return res; }
+            if (doc.Status == StockDocStatus.Voided) { res.Errors.Add(new() { Field = "Status", Message = "Document is voided." }); return res; }
 
-            // Preload items by SKU
-            var skus = lines.Select(l => l.Sku.Trim()).Where(s => s.Length > 0).Distinct().ToList();
+            var skus = lines.Select(l => (l.Sku ?? "").Trim()).Where(s => s.Length > 0).Distinct().ToList();
             var items = await db.Items.Where(i => skus.Contains(i.Sku)).Select(i => new { i.Id, i.Sku }).ToListAsync(ct);
             var itemBySku = items.ToDictionary(x => x.Sku, x => x.Id, StringComparer.OrdinalIgnoreCase);
 
@@ -94,13 +102,12 @@ namespace Pos.Persistence.Services
                 if (string.IsNullOrWhiteSpace(sku))
                     res.Errors.Add(new() { RowIndex = row, Field = "Sku", Message = "SKU is required." });
 
-                if (!itemBySku.ContainsKey(sku))
+                if (!string.IsNullOrEmpty(sku) && !itemBySku.ContainsKey(sku))
                     res.Errors.Add(new() { RowIndex = row, Field = "Sku", Sku = sku, Message = "SKU not found. Create item first." });
 
                 if (l.Qty <= 0)
                     res.Errors.Add(new() { RowIndex = row, Field = "Qty", Sku = sku, Message = "Quantity must be > 0." });
 
-                // UnitCost mandatory with 4dp allowed; EF precision handled in model.
                 if (l.UnitCost < 0)
                     res.Errors.Add(new() { RowIndex = row, Field = "UnitCost", Sku = sku, Message = "Unit cost cannot be negative." });
 
@@ -110,16 +117,20 @@ namespace Pos.Persistence.Services
             return res;
         }
 
+        /// <summary>
+        /// Save/replace Draft lines WITHOUT touching StockEntries (no on-hand impact).
+        /// </summary>
         public async Task UpsertLinesAsync(OpeningStockUpsertRequest req, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             var doc = await db.StockDocs.FirstOrDefaultAsync(d => d.Id == req.StockDocId, ct);
             if (doc == null) throw new InvalidOperationException("Opening document not found.");
-            if (doc.Status != StockDocStatus.Draft) throw new InvalidOperationException("Document is locked and cannot be edited.");
             if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
+            if (doc.Status == StockDocStatus.Locked) throw new InvalidOperationException("Document is locked and cannot be edited.");
+            if (doc.Status == StockDocStatus.Voided) throw new InvalidOperationException("Document is voided and cannot be edited.");
 
-            // Validate rows
+            // Validate input
             var val = await ValidateLinesAsync(req.StockDocId, req.Lines, ct);
             if (!val.Ok)
             {
@@ -127,105 +138,149 @@ namespace Pos.Persistence.Services
                 throw new InvalidOperationException($"Validation failed at row {(first.RowIndex ?? -1)} ({first.Field}): {first.Message}");
             }
 
-            // Map SKUs to Items
+            // Map SKUs to ItemIds
             var skus = req.Lines.Select(l => l.Sku.Trim()).Distinct().ToList();
             var items = await db.Items.Where(i => skus.Contains(i.Sku)).Select(i => new { i.Id, i.Sku }).ToListAsync(ct);
             var itemBySku = items.ToDictionary(x => x.Sku, x => x.Id, StringComparer.OrdinalIgnoreCase);
 
-            // Optionally replace existing lines
+            // Replace vs merge in the DRAFT LINES table
+            var existingDraft = db.OpeningStockDraftLines.Where(x => x.StockDocId == doc.Id);
             if (req.ReplaceAll)
             {
-                var existing = db.StockEntries.Where(se => se.StockDocId == doc.Id);
-                db.StockEntries.RemoveRange(existing);
+                db.OpeningStockDraftLines.RemoveRange(existingDraft);
+            }
+            else
+            {
+                var cache = await existingDraft.ToListAsync(ct);
+                foreach (var line in req.Lines)
+                {
+                    var itemId = itemBySku[line.Sku.Trim()];
+                    var dup = cache.FirstOrDefault(x => x.ItemId == itemId);
+                    if (dup != null) db.OpeningStockDraftLines.Remove(dup);
+                }
             }
 
-            // Insert (or merge by SKU)
-            // For merge, we remove existing same item line and insert the new one—simple rule for now.
-            var existingByItem = await db.StockEntries.Where(se => se.StockDocId == doc.Id)
-                .ToListAsync(ct);
-
-            foreach (var line in req.Lines)
+            // insert new draft lines
+            foreach (var l in req.Lines)
             {
-                var itemId = itemBySku[line.Sku.Trim()];
-
-                if (!req.ReplaceAll)
-                {
-                    var dup = existingByItem.FirstOrDefault(x => x.ItemId == itemId);
-                    if (dup != null) db.StockEntries.Remove(dup);
-                }
-
-                db.StockEntries.Add(new StockEntry
+                var itemId = itemBySku[l.Sku.Trim()];
+                db.OpeningStockDraftLines.Add(new OpeningStockDraftLine
                 {
                     StockDocId = doc.Id,
                     ItemId = itemId,
-                    QtyChange = line.Qty,           // decimal(18,4)
-                    UnitCost = line.UnitCost,       // decimal(18,4)
-                    LocationType = doc.LocationType,
-                    LocationId = doc.LocationId,
-                    RefType = "Opening",
-                    RefId = doc.Id,
-                    Ts = doc.EffectiveDateUtc,
-                    Note = line.Note ?? ""
+                    Qty = l.Qty,
+                    UnitCost = l.UnitCost,
+                    Note = l.Note
                 });
             }
 
             await db.SaveChangesAsync(ct);
         }
 
-        public async Task LockAsync(int stockDocId, int adminUserId, CancellationToken ct = default)
+        /// <summary>
+        /// Post: convert Draft -> Posted by materializing StockEntries (IN) from DraftLines.
+        /// </summary>
+        public async Task PostAsync(int stockDocId, int postedByUserId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            var doc = await db.StockDocs
-                .Include(d => d.Lines) // Lines = StockEntries
-                .FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
-
+            var doc = await db.StockDocs.FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
             if (doc == null) throw new InvalidOperationException("Opening document not found.");
             if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
-            if (doc.Status == StockDocStatus.Locked) { await tx.CommitAsync(ct); return; } // idempotent
+            if (doc.Status == StockDocStatus.Locked) throw new InvalidOperationException("Locked document cannot be posted.");
+            if (doc.Status == StockDocStatus.Voided) throw new InvalidOperationException("Voided document cannot be posted.");
 
-            if (doc.Lines.Count == 0) throw new InvalidOperationException("No lines to lock.");
-            if (doc.Lines.Any(l => l.UnitCost < 0 || l.QtyChange <= 0))
-                throw new InvalidOperationException("Invalid line values.");
+            var draftLines = await db.OpeningStockDraftLines
+                .Where(x => x.StockDocId == doc.Id)
+                .ToListAsync(ct);
 
-            // Safety: re-run your negative-forward guard
-            await GuardNoNegativeForwardAsync(db, doc, ct);
+            if (draftLines.Count == 0)
+                throw new InvalidOperationException("No lines to post.");
 
-            // Normalize all child StockEntries to the header values (in case date/location changed)
-#if EF_CORE_7_OR_LATER
-    await db.StockEntries
-        .Where(se => se.StockDocId == doc.Id)
-        .ExecuteUpdateAsync(s => s
-            .SetProperty(se => se.Ts,           _ => doc.EffectiveDateUtc)
-            .SetProperty(se => se.LocationType, _ => doc.LocationType)
-            .SetProperty(se => se.LocationId,   _ => doc.LocationId)
-            .SetProperty(se => se.RefType,      _ => "Opening")
-            .SetProperty(se => se.RefId,        _ => doc.Id),
-            ct);
-#else
-            var children = await db.StockEntries.Where(se => se.StockDocId == doc.Id).ToListAsync(ct);
-            foreach (var se in children)
+            // Write IN entries
+            foreach (var l in draftLines)
             {
-                se.Ts = doc.EffectiveDateUtc;
-                se.LocationType = doc.LocationType;
-                se.LocationId = doc.LocationId;
-                se.RefType = "Opening";
-                se.RefId = doc.Id;
+                db.StockEntries.Add(new StockEntry
+                {
+                    StockDocId = doc.Id,
+                    ItemId = l.ItemId,
+                    QtyChange = l.Qty,                // IN
+                    UnitCost = l.UnitCost,
+                    LocationType = doc.LocationType,
+                    LocationId = doc.LocationId,
+                    RefType = "Opening",
+                    RefId = doc.Id,
+                    Ts = doc.EffectiveDateUtc,
+                    Note = l.Note ?? ""
+                });
             }
-#endif
 
-            // Lock header
-            doc.Status = StockDocStatus.Locked;
-            doc.LockedByUserId = adminUserId;
-            doc.LockedAtUtc = DateTime.UtcNow;
+            // Transition to Posted
+            doc.Status = StockDocStatus.Posted; // ensure enum has Posted
+            doc.PostedByUserId = postedByUserId;
+            doc.PostedAtUtc = DateTime.UtcNow;
+
+            // Remove draft lines now that they're materialized
+            db.OpeningStockDraftLines.RemoveRange(draftLines);
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
 
+        /// <summary>
+        /// Lock is allowed only after Post; no stock writes here, just freeze.
+        /// </summary>
+        public async Task LockAsync(int stockDocId, int adminUserId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            var doc = await db.StockDocs
+                .Include(d => d.Lines) // Lines = StockEntries for this doc
+                .FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
+
+            if (doc == null) throw new InvalidOperationException("Opening document not found.");
+            if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
+            if (doc.Status == StockDocStatus.Locked) return; // idempotent
+
+            var hasPostedEntries = (doc.Lines?.Any() == true) || doc.Status == StockDocStatus.Posted;
+            if (!hasPostedEntries)
+                throw new InvalidOperationException("Document must be posted before locking.");
+
+            doc.Status = StockDocStatus.Locked;
+            doc.LockedByUserId = adminUserId;
+            doc.LockedAtUtc = DateTime.UtcNow;
+
+            await db.SaveChangesAsync(ct);
+        }
 
         public async Task UnlockAsync(int stockDocId, int adminUserId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            var doc = await db.StockDocs
+                .Include(d => d.Lines)
+                .FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
+
+            if (doc == null) throw new InvalidOperationException("Opening document not found.");
+            if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
+            if (doc.Status != StockDocStatus.Locked) return; // idempotent
+
+            // Unlock → back to Posted (not Draft)
+            doc.Status = StockDocStatus.Posted;
+            doc.LockedByUserId = null;
+            doc.LockedAtUtc = null;
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        /// <summary>
+        /// Void:
+        ///  - Draft: mark void, delete draft lines (no stock impact)
+        ///  - Posted (unlocked): add reversal StockEntries (OUT) and mark void
+        ///  - Locked: forbid (Unlock first if policy allows)
+        /// </summary>
+        public async Task VoidAsync(int stockDocId, int userId, string? reason, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -236,24 +291,65 @@ namespace Pos.Persistence.Services
 
             if (doc == null) throw new InvalidOperationException("Opening document not found.");
             if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
-            if (doc.Status != StockDocStatus.Locked) { await tx.CommitAsync(ct); return; } // idempotent
 
-            // Optional: forbid unlock if later movements exist (safe mode)
-            // (keep commented if you want free unlocks)
-            // var hasLater = await db.StockEntries.AnyAsync(se =>
-            //     se.Ts > doc.EffectiveDateUtc &&
-            //     se.ItemId == se.ItemId && // placeholder, refine by affected items+location if needed
-            //     !("Opening".Equals(se.RefType) && se.RefId == doc.Id), ct);
-            // if (hasLater) throw new InvalidOperationException("Cannot unlock: later movements exist.");
+            if (doc.Status == StockDocStatus.Locked)
+                throw new InvalidOperationException("Locked documents cannot be voided. Unlock first.");
 
-            doc.Status = StockDocStatus.Draft;
-            doc.LockedByUserId = null;
-            doc.LockedAtUtc = null;
+            if (doc.Status == StockDocStatus.Voided)
+                return; // idempotent
 
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
+            if (doc.Status == StockDocStatus.Draft)
+            {
+                // Remove any draft lines and mark void
+                var drafts = db.OpeningStockDraftLines.Where(x => x.StockDocId == doc.Id);
+                db.OpeningStockDraftLines.RemoveRange(drafts);
+
+                doc.Status = StockDocStatus.Voided;
+                doc.VoidedByUserId = userId;
+                doc.VoidedAtUtc = DateTime.UtcNow;
+                doc.VoidReason = reason;
+
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+                return;
+            }
+
+            // Posted (unlocked) → reversal OUT
+            if (doc.Status == StockDocStatus.Posted)
+            {
+                var postedEntries = await db.StockEntries
+                    .Where(se => se.StockDocId == doc.Id && se.RefType == "Opening")
+                    .ToListAsync(ct);
+
+                foreach (var se in postedEntries)
+                {
+                    db.StockEntries.Add(new StockEntry
+                    {
+                        StockDocId = doc.Id,
+                        ItemId = se.ItemId,
+                        QtyChange = -se.QtyChange, // OUT
+                        UnitCost = se.UnitCost,
+                        LocationType = se.LocationType,
+                        LocationId = se.LocationId,
+                        RefType = "OpeningVoid",
+                        RefId = doc.Id,
+                        Ts = DateTime.UtcNow, // or se.Ts if you want the same effective date
+                        Note = string.IsNullOrWhiteSpace(se.Note) ? "Void reversal" : (se.Note + " (Void)")
+                    });
+                }
+
+                doc.Status = StockDocStatus.Voided;
+                doc.VoidedByUserId = userId;
+                doc.VoidedAtUtc = DateTime.UtcNow;
+                doc.VoidReason = reason;
+
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+                return;
+            }
+
+            throw new InvalidOperationException("Unsupported state for void.");
         }
-
 
         public Task<StockDoc?> GetAsync(int stockDocId, CancellationToken ct = default)
         {
@@ -261,58 +357,9 @@ namespace Pos.Persistence.Services
                 .ContinueWith(async t =>
                 {
                     await using var db = t.Result;
+                    // Lines = StockEntries; keeps parity with your previous pattern
                     return await db.StockDocs.Include(d => d.Lines).FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
                 }, ct).Unwrap();
-        }
-
-        /// <summary>
-        /// Ensure that applying this Opening stock (which is already in Lines with EffectiveDate)
-        /// never causes negative on-hand for any affected Item at Location AFTER EffectiveDate.
-        /// We simulate forward using chronological StockEntry for the affected items+location.
-        /// </summary>
-        private static async Task GuardNoNegativeForwardAsync(PosClientDbContext db, StockDoc doc, CancellationToken ct)
-        {
-            var locType = doc.LocationType;
-            var locId = doc.LocationId;
-            var eff = doc.EffectiveDateUtc;
-
-            var itemIds = doc.Lines.Select(l => l.ItemId).Distinct().ToList();
-
-            // Load all movements for affected items at the same location from EffectiveDate onward.
-            // Include the opening lines (already attached to doc) and all other entries.
-            var laterMovements = await db.StockEntries.AsNoTracking()
-                .Where(se => se.LocationType == locType && se.LocationId == locId
-                             && itemIds.Contains(se.ItemId)
-                             && se.Ts >= eff)
-                .Select(se => new { se.ItemId, se.QtyChange, se.Ts, se.RefType, se.RefId })
-                .OrderBy(se => se.Ts).ThenBy(se => se.RefType).ThenBy(se => se.RefId)
-                .ToListAsync(ct);
-
-            // Seed at eff with the sum of this document's opening qty per item.
-            var openingByItem = doc.Lines
-                .GroupBy(l => l.ItemId)
-                .ToDictionary(g => g.Key, g => g.Sum(x => x.QtyChange));
-
-            // We need any movements occurring exactly at eff but NOT belonging to this doc to be applied after opening.
-            // Our ordering by (Ts, RefType, RefId) will naturally place "Opening" first if needed; if not guaranteed,
-            // we can enforce it by adjusting the ThenBy to make RefType="Opening" come first. Simpler: just accumulate manually.
-
-            foreach (var itemId in itemIds)
-            {
-                decimal running = openingByItem.TryGetValue(itemId, out var init) ? init : 0m;
-
-                foreach (var mv in laterMovements.Where(m => m.ItemId == itemId))
-                {
-                    // If this is one of our opening lines, skip (already seeded).
-                    if (mv.RefType == "Opening" && mv.RefId == doc.Id && mv.Ts == eff)
-                        continue;
-
-                    running += mv.QtyChange;
-
-                    if (running < 0)
-                        throw new InvalidOperationException($"Negative stock detected for ItemId={itemId} after {mv.Ts:u}.");
-                }
-            }
         }
     }
 }

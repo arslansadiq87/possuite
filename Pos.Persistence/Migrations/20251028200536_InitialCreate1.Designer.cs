@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251028200536_InitialCreate1")]
+    partial class InitialCreate1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -456,152 +459,6 @@ namespace Pos.Persistence.Migrations
                         .HasFilter("IsPrimary = 1");
 
                     b.ToTable("ItemBarcodes");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.OpeningStock", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("LocationId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("LocationType")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LockedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("LockedByUserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("PostedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("PostedByUserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("TsUtc")
-                        .HasColumnType("datetime");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("VoidReason")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("VoidedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("VoidedByUserId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("OpeningStocks");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.OpeningStockDraftLine", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ItemId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Qty")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
-
-                    b.Property<int>("StockDocId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("UnitCost")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StockDocId");
-
-                    b.ToTable("OpeningStockDraftLines");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.OpeningStockLine", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("ItemId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("OpeningStockId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Qty")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
-
-                    b.Property<decimal>("UnitCost")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OpeningStockId");
-
-                    b.ToTable("OpeningStockLines");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Outlet", b =>
@@ -1447,12 +1304,6 @@ namespace Pos.Persistence.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("PostedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("PostedByUserId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<Guid>("PublicId")
                         .HasColumnType("TEXT");
 
@@ -1485,15 +1336,6 @@ namespace Pos.Persistence.Migrations
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("TEXT");
-
-                    b.Property<string>("VoidReason")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("VoidedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("VoidedByUserId")
-                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2021,17 +1863,6 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Item");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.OpeningStockLine", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.OpeningStock", "OpeningStock")
-                        .WithMany("Lines")
-                        .HasForeignKey("OpeningStockId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("OpeningStock");
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.PartyLedger", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
@@ -2273,11 +2104,6 @@ namespace Pos.Persistence.Migrations
             modelBuilder.Entity("Pos.Domain.Entities.Item", b =>
                 {
                     b.Navigation("Barcodes");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.OpeningStock", b =>
-                {
-                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Outlet", b =>

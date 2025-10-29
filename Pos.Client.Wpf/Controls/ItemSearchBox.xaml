@@ -1,0 +1,50 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Controls.ItemSearchBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="280">
+    <Grid>
+        <!-- The textbox -->
+        <TextBox x:Name="SearchBox"
+             Padding="8,6"
+             VerticalContentAlignment="Center"
+             TextChanged="SearchBox_TextChanged"
+             PreviewKeyDown="SearchBox_PreviewKeyDown"/>
+
+        <!-- Watermark overlay (shows when Text is empty) -->
+        <TextBlock Text="Scan SKU/Barcode or type name"
+               Foreground="#888"
+               Margin="12,0,0,0"
+               VerticalAlignment="Center"
+               IsHitTestVisible="False">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Text, ElementName=SearchBox}" Value=""/>
+                                <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchBox}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- Suggestions popup -->
+        <Popup x:Name="Popup"
+           PlacementTarget="{Binding ElementName=SearchBox}"
+           Placement="Bottom"
+           StaysOpen="False"
+           AllowsTransparency="True">
+            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
+              Padding="4" Width="{Binding ElementName=SearchBox, Path=ActualWidth}">
+                <ListBox x:Name="List"
+                 MouseDoubleClick="List_MouseDoubleClick"
+                 PreviewKeyDown="List_PreviewKeyDown"
+                 DisplayMemberPath="DisplayName"/>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

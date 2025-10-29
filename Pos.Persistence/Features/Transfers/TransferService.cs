@@ -5,14 +5,35 @@ using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain;
+using Pos.Domain.Settings;
+using Pos.Persistence.Services;
 
 namespace Pos.Persistence.Features.Transfers
 {
     public sealed class TransferService : ITransferService
     {
         private readonly Pos.Persistence.PosClientDbContext _db;
+        private readonly StockGuard _guard; // add this
+
+        public TransferService(PosClientDbContext db, StockGuard guard) // inject
+        {
+            _db = db;
+            _guard = guard;
+        }
 
         public TransferService(Pos.Persistence.PosClientDbContext db) => _db = db;
+
+        private static bool IsAdminOrManager(User u) =>
+    u.IsGlobalAdmin || u.Role == UserRole.Admin || u.Role == UserRole.Manager;
+
+        private static void EnsureCanEditTransfer(User user, StockDoc doc)
+        {
+            if (IsAdminOrManager(user)) return;
+            if (user.Id == doc.CreatedByUserId) return; // sender can edit own draft
+            throw new InvalidOperationException("You do not have permission to edit this transfer.");
+        }
+
+
         public async Task<StockDoc> UndoDispatchAsync(int stockDocId, DateTime effectiveDateUtc, int actedByUserId, string? reason = null)
         {
             var user = await GetUserAsync(actedByUserId);
@@ -274,11 +295,12 @@ namespace Pos.Persistence.Features.Transfers
 
             foreach (var g in linesByItem)
             {
+                var cutoffUtc = effectiveUtc.Date.AddDays(1); // include entire selected day
                 var qty = await _db.StockEntries.AsNoTracking()
                     .Where(se => se.ItemId == g.ItemId
                                  && se.LocationType == fromType
                                  && se.LocationId == fromId
-                                 && se.Ts <= effectiveUtc)
+                                 && se.Ts < cutoffUtc)   // exclusive upper bound = next day 00:00
                     .SumAsync(se => se.QtyChange);
 
                 if (qty - g.OutQty < 0m)
@@ -294,10 +316,10 @@ namespace Pos.Persistence.Features.Transfers
         // -------- API --------------------------------------------------------
 
         public async Task<StockDoc> CreateDraftAsync(
-            InventoryLocationType fromType, int fromId,
-            InventoryLocationType toType, int toId,
-            DateTime effectiveDateUtc,
-            int createdByUserId)
+    InventoryLocationType fromType, int fromId,
+    InventoryLocationType toType, int toId,
+    DateTime effectiveDateUtc,
+    int createdByUserId)
         {
             var user = await GetUserAsync(createdByUserId);
             EnsureCanManageTransfers(user);
@@ -312,13 +334,16 @@ namespace Pos.Persistence.Features.Transfers
                 ToLocationId = toId,
                 EffectiveDateUtc = effectiveDateUtc.ToUniversalTime(),
                 TransferStatus = TransferStatus.Draft,
-                CreatedAtUtc = DateTime.UtcNow
+                CreatedAtUtc = DateTime.UtcNow,
+                CreatedByUserId = user.Id,                // NEW
+                AutoReceiveOnDispatch = false             // default
             };
 
             _db.StockDocs.Add(doc);
             await _db.SaveChangesAsync();
             return doc;
         }
+
 
         public async Task<StockDoc> UpsertLinesAsync(int stockDocId, IReadOnlyList<TransferLineDto> lines, bool replaceAll)
         {
@@ -330,6 +355,10 @@ namespace Pos.Persistence.Features.Transfers
                       ?? throw new InvalidOperationException("Transfer not found.");
 
             EnsureDocIs(doc, StockDocType.Transfer);
+
+            var user = await GetUserAsync(doc.CreatedByUserId);
+            EnsureCanEditTransfer(user, doc);            // NEW enforce author OR admin/manager
+
             if (doc.TransferStatus != TransferStatus.Draft)
                 throw new InvalidOperationException("Only Draft transfers can be edited.");
 
@@ -368,84 +397,113 @@ namespace Pos.Persistence.Features.Transfers
             return doc;
         }
 
-        public async Task<StockDoc> DispatchAsync(int stockDocId, DateTime effectiveDateUtc, int actedByUserId)
+        public async Task<StockDoc> DispatchAsync(int docId, DateTime effectiveUtc, int userId, bool autoReceive)
         {
-            var user = await GetUserAsync(actedByUserId);
-            EnsureCanManageTransfers(user);
+            using var tx = await _db.Database.BeginTransactionAsync();
+
+            var actor = await GetUserAsync(userId);
+            EnsureCanManageTransfers(actor);
 
             var doc = await _db.StockDocs
-                               .Include(d => d.TransferLines)
-                               .FirstOrDefaultAsync(d => d.Id == stockDocId)
-                      ?? throw new InvalidOperationException("Transfer not found.");
+                .Include(d => d.TransferLines)
+                .FirstOrDefaultAsync(d => d.Id == docId)
+                ?? throw new InvalidOperationException("Transfer not found.");
 
             EnsureDocIs(doc, StockDocType.Transfer);
             if (doc.TransferStatus != TransferStatus.Draft)
                 throw new InvalidOperationException("Only Draft transfers can be dispatched.");
-            if (doc.TransferLines.Count == 0)
-                throw new InvalidOperationException("Add at least one line before dispatch.");
 
-            var ts = effectiveDateUtc.ToUniversalTime();
+            if (doc.LocationType == null || doc.ToLocationType == null || doc.LocationId == null || doc.ToLocationId == null)
+                throw new InvalidOperationException("From/To not set.");
 
-            // NEGATIVE GUARD using TransferLines
-            await EnsureNoNegativeAtDispatchAsync(doc, ts, doc.TransferLines.ToList());
+            var fromType = doc.LocationType;
+            var fromId = doc.LocationId;
+            var toType = doc.ToLocationType.Value;
+            var toId = doc.ToLocationId.Value;
 
-            // Numbering per-From + year
+            var lines = doc.TransferLines.ToList();
+            if (lines.Count == 0) throw new InvalidOperationException("No lines to dispatch.");
+
+            // 1) Guard: no negative at source on the selected date
+            var deltas = lines
+                .Where(l => l.QtyExpected > 0m)
+                .Select(l => (
+                    itemId: l.ItemId,
+                    outletId: (fromType == InventoryLocationType.Outlet) ? fromId : 0, // outlet aggregate if you track one
+                    locType: fromType,
+                    locId: fromId,
+                    delta: -l.QtyExpected))
+                .ToArray();
+
+            await _guard.EnsureNoNegativeAtLocationAsync(deltas, atUtc: effectiveUtc);
+
+            // 2) Ledger entries
+            var entries = new List<StockEntry>();
+
+            foreach (var l in lines)
             {
-                // Try the formatted generator first; if it collides, retry a few times.
-                const int maxAttempts = 5;
+                if (l.QtyExpected <= 0m) continue;
 
-                for (int attempt = 0; attempt < maxAttempts; attempt++)
+                // OUT at source
+                entries.Add(new StockEntry
                 {
-                    if (string.IsNullOrWhiteSpace(doc.TransferNo))
+                    OutletId = (fromType == InventoryLocationType.Outlet) ? fromId : 0,
+                    ItemId = l.ItemId,
+                    QtyChange = -l.QtyExpected,
+                    UnitCost = l.UnitCostExpected ?? 0m,
+                    LocationType = fromType,
+                    LocationId = fromId,
+                    StockDocId = doc.Id,
+                    RefType = "TransferOut",
+                    RefId = doc.Id,
+                    Ts = effectiveUtc,
+                    Note = l.Remarks
+                });
+
+                if (autoReceive)
+                {
+                    // IN at destination immediately
+                    entries.Add(new StockEntry
                     {
-                        // your existing formatted generator
-                        doc.TransferNo = await GenerateTransferNoAsync(doc, ts);
-                    }
+                        OutletId = (toType == InventoryLocationType.Outlet) ? toId : 0,
+                        ItemId = l.ItemId,
+                        QtyChange = l.QtyExpected,
+                        UnitCost = l.UnitCostExpected ?? 0m,
+                        LocationType = toType,
+                        LocationId = toId,
+                        StockDocId = doc.Id,
+                        RefType = "TransferIn",
+                        RefId = doc.Id,
+                        Ts = effectiveUtc,
+                        Note = l.Remarks
+                    });
 
-                    var exists = await _db.StockDocs
-                        .AsNoTracking()
-                        .AnyAsync(x => x.TransferNo == doc.TransferNo && x.Id != doc.Id);
-
-                    if (!exists)
-                        break; // unique -> proceed
-
-                    // collision -> clear and try again with a new value
-                    doc.TransferNo = null;
-
-                    // On the last attempt, fall back to a random unique candidate to guarantee progress.
-                    if (attempt == maxAttempts - 1)
-                    {
-                        string MakeCandidate()
-                            => $"TR-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Random.Shared.Next(100, 999)}";
-
-                        for (int j = 0; j < 5; j++)
-                        {
-                            var candidate = MakeCandidate();
-                            var candidateExists = await _db.StockDocs
-                                .AsNoTracking()
-                                .AnyAsync(x => x.TransferNo == candidate);
-
-                            if (!candidateExists)
-                            {
-                                doc.TransferNo = candidate;
-                                break;
-                            }
-                        }
-
-                        if (string.IsNullOrWhiteSpace(doc.TransferNo))
-                            throw new InvalidOperationException("Failed to allocate a unique TransferNo.");
-                    }
+                    l.QtyReceived = l.QtyExpected; // snapshot for print/history
                 }
             }
 
-            doc.TransferStatus = TransferStatus.Dispatched;
-            doc.EffectiveDateUtc = ts;
+            _db.StockEntries.AddRange(entries);
+
+            // 3) Stamp status & flags
+            doc.EffectiveDateUtc = effectiveUtc;
+            doc.AutoReceiveOnDispatch = autoReceive;
+            if (autoReceive)
+            {
+                doc.TransferStatus = TransferStatus.Received;
+                doc.ReceivedAtUtc = effectiveUtc;
+            }
+            else
+            {
+                doc.TransferStatus = TransferStatus.Dispatched;
+                doc.ReceivedAtUtc = null;
+            }
             doc.UpdatedAtUtc = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+            await tx.CommitAsync();
             return doc;
-
         }
+
 
         public async Task<StockDoc> ReceiveAsync(int stockDocId, DateTime receivedAtUtc, IReadOnlyList<ReceiveLineDto> lines, int actedByUserId)
         {

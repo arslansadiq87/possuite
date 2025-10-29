@@ -244,13 +244,27 @@ namespace Pos.Client.Wpf.Windows.Admin
                 return;
             }
 
-            var dlg = new OpeningStockDialog(
-                InventoryLocationType.Warehouse,
-                wh.Id,
-                $"{wh.Code} - {wh.Name}");
-            dlg.Owner = Window.GetWindow(this);
-            dlg.ShowDialog();
+            var nav = App.Services.GetRequiredService<IViewNavigator>();
+            var make = App.Services.GetRequiredService<Func<InventoryLocationType, int, string, OpeningStockView>>();
+
+            // Stable context key = one tab per warehouse
+            string ctx = $"Opening:{InventoryLocationType.Warehouse}:{wh.Id}";
+            string label = string.IsNullOrWhiteSpace(wh.Code)
+                ? $"{wh.Name}"
+                : $"{wh.Code} - {wh.Name}";
+
+            // If a tab for this warehouse already exists, just activate it
+            if ((nav as ViewNavigator)?.TryActivateByContext(ctx) == true) return;
+
+            // Else create the view for this warehouse and open it in a new tab
+            var view = make(InventoryLocationType.Warehouse, wh.Id, label);
+            var tab = nav.OpenTab(view, title: $"Opening Stock – {label}", contextKey: ctx);
+
+            // Allow the view to request closing its own tab
+            view.CloseRequested += (_, __) => nav.CloseTab(tab);
         }
+
+
 
         private static bool IsCurrentUserAdmin()
         {

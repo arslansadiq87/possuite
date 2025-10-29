@@ -1,0 +1,105 @@
+﻿<UserControl
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:controls="clr-namespace=Pos.Client.Wpf.Controls"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls" x:Class="Pos.Client.Wpf.Windows.Inventory.TransferEditorView"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="760">
+
+    <DockPanel>
+        <!-- Header -->
+        <ToolBar DockPanel.Dock="Top">
+            <TextBlock Text="Source:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox x:Name="FromTypeBox" Width="120" Margin="0,0,6,0">
+                <ComboBoxItem Content="Warehouse"/>
+                <ComboBoxItem Content="Outlet"/>
+            </ComboBox>
+            <ComboBox x:Name="FromPicker" Width="220" DisplayMemberPath="Name" SelectedValuePath="Id" Margin="0,0,12,0"/>
+
+            <TextBlock Text="Destination:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox x:Name="ToTypeBox" Width="120" Margin="0,0,6,0">
+                <ComboBoxItem Content="Warehouse"/>
+                <ComboBoxItem Content="Outlet"/>
+            </ComboBox>
+            <ComboBox x:Name="ToPicker" Width="220" DisplayMemberPath="Name" SelectedValuePath="Id" Margin="0,0,12,0"/>
+
+            <TextBlock Text="Date:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <DatePicker x:Name="EffectiveDate" Width="140"/>
+
+            <CheckBox x:Name="AutoReceiveCheck" Content="Delivered stock at destination" Margin="16,0,0,0"/>
+        </ToolBar>
+
+        <!-- Search/Add -->
+        <Border DockPanel.Dock="Top" Padding="10" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Search Item:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+
+                <Controls:ItemSearchBox x:Name="ItemSearch" GotFocus="ItemSearch_GotFocus" ItemPicked="ItemSearch_ItemPicked" Width="360" Margin="0,0,8,0"/>
+                <!--<TextBox x:Name="SearchBox" Width="360" Height="28" VerticalContentAlignment="Center" PreviewKeyDown="SearchBox_PreviewKeyDown"/>-->
+                <Button Content="Add" Width="90" Margin="8,0,0,0" Click="BtnAddLine_Click"/>
+                <Button Content="Save Draft" Width="110" Margin="8,0,0,0" Click="BtnSaveDraft_Click"/>
+                <Button Content="Dispatch" Width="100" Margin="8,0,0,0" Click="BtnDispatch_Click"/>
+                <Separator/>
+                <Button Content="Open Pending Receipts" Width="160" Click="BtnOpenReceipts_Click"/>
+                <Button Content="Receive" Width="100" Margin="8,0,0,0" Click="BtnReceive_Click"/>
+                <Separator/>
+                <Button x:Name="BtnClear" Content="Clear" Width="90" Margin="8,0,0,0" Click="BtnClear_Click"/>
+                <!-- Available badge (hidden by default) -->
+                <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                    <Border x:Name="AvailableBadge" Visibility="Collapsed"
+            Background="#FFE8F0FF" BorderBrush="#FF3B82F6" BorderThickness="1"
+            CornerRadius="10" Padding="8,2" >
+                        <TextBlock x:Name="AvailableText" FontWeight="SemiBold"/>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Grid Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- LINES GRID – name the Qty and Note columns, and hook editing events -->
+            <DataGrid x:Name="LinesGrid" Style="{StaticResource ModernDataGrid}"
+          AutoGenerateColumns="False"
+          CanUserAddRows="False" CanUserDeleteRows="True"
+          HeadersVisibility="Column"
+          SelectionChanged="LinesGrid_SelectionChanged"
+          PreviewKeyDown="LinesGrid_PreviewKeyDown"
+          PreparingCellForEdit="LinesGrid_PreparingCellForEdit"
+          CellEditEnding="LinesGrid_CellEditEnding"
+          LostKeyboardFocus="LinesGrid_LostKeyboardFocus"
+          KeyDown="LinesGrid_KeyDown">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Item" Binding="{Binding ItemNameSnapshot}" Width="*"
+                        IsReadOnly="True"/>
+                    <DataGridTextColumn x:Name="QtyColumn"
+                        Header="Qty"
+                        Binding="{Binding QtyExpected, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.####}}"
+                        Width="110"/>
+                    <DataGridTextColumn x:Name="NoteColumn"
+                        Header="Note"
+                        Binding="{Binding Remarks}"
+                        Width="250"/>
+                    <DataGridTemplateColumn Header="" Width="60">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Delete" Padding="6,2" Click="DeleteLine_Click"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <TextBlock Text="Lines:"/>
+                <TextBlock x:Name="LinesCountText" FontWeight="SemiBold" Margin="6,0,0,0"/>
+            </StackPanel>
+            
+        </Grid>
+
+    </DockPanel>
+</UserControl>

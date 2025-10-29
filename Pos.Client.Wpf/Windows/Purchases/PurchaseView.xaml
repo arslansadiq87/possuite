@@ -2,384 +2,375 @@
 <UserControl x:Class="Pos.Client.Wpf.Windows.Purchases.PurchaseView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls"
+        mc:Ignorable="d"
         Loaded="UserControl_Loaded">
-    
-    
-    <Grid Margin="16">
+
+
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Scan/Search -->
-            <RowDefinition Height="Auto"/>
-            <!-- Lines grid -->
+            <!-- TOP TOOLBAR -->
             <RowDefinition Height="*"/>
-            <!-- Totals + destination + actions + payments -->
-            <RowDefinition Height="Auto"/>
-
+            <!-- CONTENT -->
         </Grid.RowDefinitions>
-        <StackPanel Grid.Row="0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
-                    <!-- ======================= Header ======================= -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12" VerticalAlignment="Top">
-                        <!-- Supplier -->
-                        <StackPanel Margin="0,0,12,0">
-                            <TextBlock Text="Supplier" FontWeight="SemiBold"/>
-                            <DockPanel>
-                                <TextBox x:Name="SupplierText" Width="260"
+        <ToolBarTray Grid.Row="0">
+            <ToolBar>
+                <!-- New / Clear -->
+                <Button Click="ClearButton_Click" ToolTip="New (F5)">
+                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <TextBlock Text="New" Margin="2,0"/>
+                        <TextBlock Text="(F5)" Opacity="0.6" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Hold / Save Draft -->
+                <Button Click="HoldButton_Click" ToolTip="Hold Invoice (F8)">
+                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <TextBlock Text="Hold Invoice" Margin="2,0"/>
+                        <TextBlock Text="(F8)" Opacity="0.6" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Post / Receive -->
+                <Button Click="PostReceive_Click" ToolTip="Post / Receive (F9)">
+                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <TextBlock Text="Post / Receive" Margin="2,0"/>
+                        <TextBlock Text="(F9)" Opacity="0.6" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Separator/>
+
+                <Button Click="SaveDraft_Click" ToolTip="Save / Draft (F10)">
+                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <TextBlock Text="Save Draft" Margin="2,0"/>
+                        <TextBlock Text="(F10)" Opacity="0.6" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="BtnSaveAmend" Click="SaveDraft_Click" ToolTip="Save Amendment (F11)" Visibility="Collapsed" > 
+                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <TextBlock Text="Save Amendment" Margin="2,0"/>
+                        <TextBlock Text="(F11)" Opacity="0.6" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- (Optional) Pick Held drafts list if you have a dialog -->
+                
+            </ToolBar>
+        </ToolBarTray>
+
+        
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- Scan/Search -->
+                <RowDefinition Height="*"/>
+                <!-- Lines grid -->
+                <RowDefinition Height="Auto"/>
+                <!-- Totals + destination + actions + payments -->
+                <!--<RowDefinition Height="Auto"/>-->
+
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Margin="0,0,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <!-- ======================= Header ======================= -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12" VerticalAlignment="Top">
+                            <!-- Supplier -->
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Supplier" FontWeight="SemiBold"/>
+                                <DockPanel>
+                                    <TextBox x:Name="SupplierText" Width="260"
         TextChanged="SupplierText_TextChanged"
         PreviewKeyDown="SupplierText_KeyDown"
         LostFocus="SupplierText_LostFocus" />
-                                <!-- NEW -->
-                                <Button Content="+" Width="28" Height="28" Margin="6,0,0,0"
+                                    <!-- NEW -->
+                                    <Button Content="+" Width="28" Height="28" Margin="6,0,0,0"
            ToolTip="New Supplier"
            Click="BtnNewSupplier_Click"/>
-                            </DockPanel>
+                                </DockPanel>
 
-                            <!-- Suggestions popup -->
-                            <Popup x:Name="SupplierPopup"
+                                <!-- Suggestions popup -->
+                                <Popup x:Name="SupplierPopup"
       PlacementTarget="{Binding ElementName=SupplierText}"
       Placement="Bottom"
       StaysOpen="True"
       AllowsTransparency="True">
-                                <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
+                                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
            Width="{Binding ElementName=SupplierText, Path=ActualWidth}">
-                                    <ListBox x:Name="SupplierList"
+                                        <ListBox x:Name="SupplierList"
                 MouseDoubleClick="SupplierList_MouseDoubleClick"
                 MaxHeight="200"
                 DisplayMemberPath="Name"/>
-                                </Border>
-                            </Popup>
-                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                            </StackPanel>
 
-                        <StackPanel Margin="0,0,12,0">
-                            <TextBlock Text="Vendor Invoice #" FontWeight="SemiBold"/>
-                            <TextBox x:Name="VendorInvBox" Width="160" Height="28"
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Vendor Invoice #" FontWeight="SemiBold"/>
+                                <TextBox x:Name="VendorInvBox" Width="160" Height="28"
     KeyDown="VendorInvBox_KeyDown" />
-                            <!-- NEW -->
+                                <!-- NEW -->
 
-                        </StackPanel>
+                            </StackPanel>
 
-                        <StackPanel>
-                            <TextBlock Text="Date" FontWeight="SemiBold"/>
-                            <DatePicker x:Name="DatePicker" Height="28"
+                            <StackPanel>
+                                <TextBlock Text="Date" FontWeight="SemiBold"/>
+                                <DatePicker x:Name="DatePicker" Height="28"
    KeyDown="DatePicker_KeyDown" />
-                            <!-- NEW -->
+                                <!-- NEW -->
+                            </StackPanel>
+
+                            <!-- Optional: simple draft toggle -->
+
                         </StackPanel>
 
-                        <!-- Optional: simple draft toggle -->
+                        <!-- =================== Scan / Search row =================== -->
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Search Item:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Controls:ItemSearchBox x:Name="ItemSearch" ItemPicked="ItemSearch_ItemPicked" Width="360" Margin="0,0,8,0"/>
+                            <!-- keep your Add/Receive/etc. buttons as they were -->
+                        </StackPanel>
+
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Bottom" HorizontalAlignment="Right">
+
+                        <GroupBox Grid.Column="0" Header="Destination" Padding="8" Margin="12,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="200"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <!-- Outlet row -->
+                                <RadioButton x:Name="DestOutletRadio" Grid.Row="0" Grid.Column="0" Content="Outlet" VerticalAlignment="Center" Checked="DestRadio_Checked" Margin="0,0,8,0"/>
+                                <ComboBox x:Name="OutletBox" Grid.Row="0" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" IsEditable="False" ToolTip="Pick outlet when stock goes directly to an outlet"/>
+
+                                <!-- Warehouse row -->
+                                <RadioButton x:Name="DestWarehouseRadio" Grid.Row="1" Grid.Column="0" Content="Warehouse" VerticalAlignment="Center" Checked="DestRadio_Checked" Margin="0,0,8,4"/>
+                                <ComboBox x:Name="WarehouseBox" Grid.Row="1" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" IsEditable="False" ToolTip="Pick warehouse when stock goes to central warehouse"/>
+                            </Grid>
+                        </GroupBox>
+
+
+
+
 
                     </StackPanel>
 
-                    <!-- =================== Scan / Search row =================== -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
-                        <TextBlock Text="Scan / Search Item:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <DockPanel>
-                            <TextBox x:Name="ItemSearchText" Width="380" TextChanged="ItemSearchText_TextChanged" PreviewKeyDown="ItemSearchText_KeyDown"/>
-                            <Button Content="+" Width="28" Height="28" Margin="6,0,0,0" ToolTip="New Item" Click="BtnNewItem_Click"/>
-                            <Button Content="Add" Width="60" Height="28" Margin="6,0,0,0" ToolTip="Add selected item to lines" Click="BtnAddItem_Click"/>
-                        </DockPanel>
-                        <!-- Suggestions popup -->
-                        <Popup x:Name="ItemPopup" PlacementTarget="{Binding ElementName=ItemSearchText}" Placement="Bottom" StaysOpen="True" AllowsTransparency="True">
-                            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4" Width="{Binding ElementName=ItemSearchText, Path=ActualWidth}">
-                                <ListBox x:Name="ItemList" MouseDoubleClick="ItemList_MouseDoubleClick" MaxHeight="240">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Name}" Width="220"/>
-                                                <TextBlock Text="{Binding Sku}" Width="90" Margin="12,0,0,0" Foreground="#666"/>
-                                                <TextBlock Text="{Binding Barcode}" Width="90" Margin="12,0,0,0" Foreground="#999"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </Border>
-                        </Popup>
-                    </StackPanel>
-                </StackPanel>
-                <StackPanel Grid.Column="1" VerticalAlignment="Bottom" HorizontalAlignment="Right">
-
-                    <GroupBox Grid.Column="0" Header="Destination" Padding="8" Margin="12,0,0,8">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="200"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <!-- Outlet row -->
-                            <RadioButton x:Name="DestOutletRadio" Grid.Row="0" Grid.Column="0" Content="Outlet" VerticalAlignment="Center" Checked="DestRadio_Checked" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="OutletBox" Grid.Row="0" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" IsEditable="False" ToolTip="Pick outlet when stock goes directly to an outlet"/>
-
-                            <!-- Warehouse row -->
-                            <RadioButton x:Name="DestWarehouseRadio" Grid.Row="1" Grid.Column="0" Content="Warehouse" VerticalAlignment="Center" Checked="DestRadio_Checked" Margin="0,0,8,4"/>
-                            <ComboBox x:Name="WarehouseBox" Grid.Row="1" Grid.Column="1" Width="180" DisplayMemberPath="Name" SelectedValuePath="Id" IsEditable="False" ToolTip="Pick warehouse when stock goes to central warehouse"/>
-                        </Grid>
-                    </GroupBox>
+                </Grid>
 
 
+            </StackPanel>
 
 
-
-                </StackPanel>
-
-            </Grid>
-
-
-        </StackPanel>
-
-
-        <!-- ======================= Lines grid ======================= -->
-        <DataGrid x:Name="LinesGrid" Grid.Row="2" FontSize="16" FontWeight="DemiBold" Style="{StaticResource ModernDataGrid}"
+            <!-- ======================= Lines grid ======================= -->
+            <DataGrid x:Name="LinesGrid" Grid.Row="1" FontSize="16" FontWeight="DemiBold" Style="{StaticResource ModernDataGrid}"
           AutoGenerateColumns="False"
           CanUserAddRows="False"
           CanUserDeleteRows="False"
           SelectionMode="Extended"
           SelectionUnit="FullRow"
           Margin="0,0,0,4">
-            
-            <DataGrid.ContextMenu>
-                <ContextMenu>
-                    <MenuItem Header="Delete selected row(s)" Click="DeleteSelectedMenu_Click"/>
-                </ContextMenu>
-            </DataGrid.ContextMenu>
+
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Delete selected row(s)" Click="DeleteSelectedMenu_Click"/>
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
 
 
-            <DataGrid.Columns>
+                <DataGrid.Columns>
 
-                <!-- 🗑 Delete button column must be INSIDE Columns -->
-                <DataGridTemplateColumn Width="40" IsReadOnly="True">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Padding="0" Margin="0"
+                    <!-- 🗑 Delete button column must be INSIDE Columns -->
+                    <DataGridTemplateColumn Width="40" IsReadOnly="True">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Padding="0" Margin="0"
                   Content="🗑"
                   ToolTip="Delete this line"
                   Click="DeleteLineButton_Click"
                   Tag="{Binding}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
-                <!-- Identifiers -->
-                <DataGridTextColumn Header="SKU"  Binding="{Binding Sku}"  Width="120" IsReadOnly="True"/>
-                <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="2*"  IsReadOnly="True"/>
+                    <!-- Identifiers -->
+                    <DataGridTextColumn Header="SKU"  Binding="{Binding Sku}"  Width="120" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="2*"  IsReadOnly="True"/>
 
-                <!-- Qty -->
-                <DataGridTextColumn Header="Qty" Width="80"
+                    <!-- Qty -->
+                    <DataGridTextColumn Header="Qty" Width="80"
                         Binding="{Binding Qty, UpdateSourceTrigger=PropertyChanged, StringFormat=N3}">
-                    <DataGridTextColumn.EditingElementStyle>
-                        <Style TargetType="TextBox">
-                            <Setter Property="HorizontalContentAlignment" Value="Right"/>
-                            <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
-                        </Style>
-                    </DataGridTextColumn.EditingElementStyle>
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="TextAlignment" Value="Right"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                        <DataGridTextColumn.EditingElementStyle>
+                            <Style TargetType="TextBox">
+                                <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
+                            </Style>
+                        </DataGridTextColumn.EditingElementStyle>
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextAlignment" Value="Right"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
-                <!-- Price -->
-                <DataGridTextColumn Header="Price" Width="100"
+                    <!-- Price -->
+                    <DataGridTextColumn Header="Price" Width="100"
                         Binding="{Binding UnitCost, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
-                    <DataGridTextColumn.EditingElementStyle>
-                        <Style TargetType="TextBox">
-                            <Setter Property="HorizontalContentAlignment" Value="Right"/>
-                            <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
-                        </Style>
-                    </DataGridTextColumn.EditingElementStyle>
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="TextAlignment" Value="Right"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                        <DataGridTextColumn.EditingElementStyle>
+                            <Style TargetType="TextBox">
+                                <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
+                            </Style>
+                        </DataGridTextColumn.EditingElementStyle>
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextAlignment" Value="Right"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
-                <!-- Discount (amount) -->
-                <DataGridTextColumn Header="Disc" Width="90"
+                    <!-- Discount (amount) -->
+                    <DataGridTextColumn Header="Disc" Width="90"
                         Binding="{Binding Discount, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
-                    <DataGridTextColumn.EditingElementStyle>
-                        <Style TargetType="TextBox">
-                            <Setter Property="HorizontalContentAlignment" Value="Right"/>
-                            <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
-                        </Style>
-                    </DataGridTextColumn.EditingElementStyle>
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="TextAlignment" Value="Right"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                        <DataGridTextColumn.EditingElementStyle>
+                            <Style TargetType="TextBox">
+                                <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
+                            </Style>
+                        </DataGridTextColumn.EditingElementStyle>
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextAlignment" Value="Right"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
-                <!-- Tax % -->
-                <DataGridTextColumn Header="Tax %" Width="80"
+                    <!-- Tax % -->
+                    <DataGridTextColumn Header="Tax %" Width="80"
                         Binding="{Binding TaxRate, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}">
-                    <DataGridTextColumn.EditingElementStyle>
-                        <Style TargetType="TextBox">
-                            <Setter Property="HorizontalContentAlignment" Value="Right"/>
-                            <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
-                        </Style>
-                    </DataGridTextColumn.EditingElementStyle>
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="TextAlignment" Value="Right"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                        <DataGridTextColumn.EditingElementStyle>
+                            <Style TargetType="TextBox">
+                                <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                                <EventSetter Event="PreviewTextInput" Handler="Numeric_PreviewTextInput"/>
+                            </Style>
+                        </DataGridTextColumn.EditingElementStyle>
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextAlignment" Value="Right"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
-                <!-- Computed -->
-                <DataGridTextColumn Header="Line Total" Width="110" IsReadOnly="True"
+                    <!-- Computed -->
+                    <DataGridTextColumn Header="Line Total" Width="110" IsReadOnly="True"
                         Binding="{Binding LineTotal, Mode=OneWay, StringFormat=N2}">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="TextAlignment" Value="Right"/>
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextAlignment" Value="Right"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
-                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
 
-            </DataGrid.Columns>
-        </DataGrid>
+                </DataGrid.Columns>
+            </DataGrid>
 
 
-        <!-- =================== Bottom: Destination + Totals + Actions + Payments =================== -->
-        <Border Grid.Row="3" Margin="0,0,0,0" Padding="12"
-            BorderBrush="#DDD" BorderThickness="1" CornerRadius="8"
-            Background="#FAFAFA">
+            <!-- =================== Bottom: Destination + Totals + Actions + Payments =================== -->
+            <Border Grid.Row="2" Margin="0,0,0,0" Padding="12" BorderBrush="#DDD" BorderThickness="1" CornerRadius="8" Background="#FAFAFA">
+                <Grid>
+                    <!-- Row 0: content | Row 1: buttons -->
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-            <Grid>
-                <!-- Row 0: content | Row 1: buttons -->
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="2*"/>
-                </Grid.ColumnDefinitions>
+                    <!-- ===== Row 0: CONTENT (3 columns) ===== -->
+                    <Grid Grid.Column="0">
+                        <StackPanel Grid.Column="1" Margin="0,0,0,0" VerticalAlignment="Bottom">
+                            <GroupBox Header="Payments">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Advance:" Margin="0,0,6,0"/>
+                                        <TextBox x:Name="AdvanceAmtBox" Width="80"/>
+                                        <ComboBox x:Name="AdvanceMethodBox" Width="77" Margin="6,0,0,0" SelectedIndex="0">
+                                            <ComboBoxItem Content="Cash"/>
+                                            <ComboBoxItem Content="Card"/>
+                                            <ComboBoxItem Content="Bank"/>
+                                            <ComboBoxItem Content="Other"/>
+                                        </ComboBox>
+                                        <Button Content="Add Advance" Margin="6,0,0,0" Click="BtnAddAdvance_Click" Width="85"/>
+                                    </StackPanel>
 
-                <!-- ===== Row 0: CONTENT (3 columns) ===== -->
-                <Grid Grid.Column="0">
-                    <StackPanel Grid.Column="1" Margin="0,0,0,0" VerticalAlignment="Bottom">
-                        <GroupBox Header="Payments">
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Advance:" Margin="0,0,6,0"/>
-                                    <TextBox x:Name="AdvanceAmtBox" Width="80"/>
-                                    <ComboBox x:Name="AdvanceMethodBox" Width="77" Margin="6,0,0,0" SelectedIndex="0">
-                                        <ComboBoxItem Content="Cash"/>
-                                        <ComboBoxItem Content="Card"/>
-                                        <ComboBoxItem Content="Bank"/>
-                                        <ComboBoxItem Content="Other"/>
-                                    </ComboBox>
-                                    <Button Content="Add Advance" Margin="6,0,0,0" Click="BtnAddAdvance_Click" Width="85"/>
+                                    <DataGrid x:Name="PaymentsGrid" AutoGenerateColumns="False" Height="120" Margin="0,6,0,0"
+                                        CanUserAddRows="False" IsReadOnly="True" MouseDoubleClick="PaymentsGrid_MouseDoubleClick">
+                                        <DataGrid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Edit…" Click="EditPayment_Click"/>
+                                                <Separator />
+                                                <MenuItem Header="Delete" Click="DeletePayment_Click"/>
+                                            </ContextMenu>
+                                        </DataGrid.ContextMenu>
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Kind" Binding="{Binding Kind}"/>
+                                            <DataGridTextColumn Header="Method" Binding="{Binding Method}"/>
+                                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat=N2}"/>
+                                            <DataGridTextColumn Header="When (UTC)" Binding="{Binding TsUtc}"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
                                 </StackPanel>
-
-                                <DataGrid x:Name="PaymentsGrid" AutoGenerateColumns="False" Height="120" Margin="0,6,0,0"
-          CanUserAddRows="False" IsReadOnly="True" MouseDoubleClick="PaymentsGrid_MouseDoubleClick">
-                                    <DataGrid.ContextMenu>
-                                        <ContextMenu>
-                                            <MenuItem Header="Edit…" Click="EditPayment_Click"/>
-                                            <Separator />
-                                            <MenuItem Header="Delete" Click="DeletePayment_Click"/>
-                                        </ContextMenu>
-                                    </DataGrid.ContextMenu>
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Kind" Binding="{Binding Kind}"/>
-                                        <DataGridTextColumn Header="Method" Binding="{Binding Method}"/>
-                                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat=N2}"/>
-                                        <DataGridTextColumn Header="When (UTC)" Binding="{Binding TsUtc}"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </GroupBox>
-                    </StackPanel>
-
-
-
-                </Grid>
-
-                <!-- ===== Row 1: BUTTONS BAR ===== -->
-                <Grid  Grid.Column="1" Margin="0,2,0,0">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid Grid.Row="0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0">
-                                    <Grid Margin="16,12,0,0" VerticalAlignment="Top">
-                                        <CheckBox x:Name="IsDraftBox" Content="Save as Draft (no stock)"/>
-                                    </Grid>
-                                </Grid>
-
-                                <GroupBox Grid.Column="1"  Header="Totals" Padding="8" Margin="0,0,0,8" HorizontalAlignment="Right" Width="330">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <!-- Row 0 -->
-                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" FontWeight="SemiBold" Margin="0,0,8,0"/>
-                                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="SubtotalText"/>
-                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="Discount:" FontWeight="SemiBold" Margin="12,0,8,0"/>
-                                        <TextBlock Grid.Row="0" Grid.Column="3" x:Name="DiscountText"/>
-                                        <!-- Row 1 -->
-                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Tax:" FontWeight="SemiBold" Margin="0,0,8,0"/>
-                                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TaxText"/>
-                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="Other:" FontWeight="SemiBold" Margin="12,0,8,0"/>
-                                        <TextBox Grid.Row="1" Grid.Column="3" x:Name="OtherChargesBox"
-TextChanged="OtherChargesBox_TextChanged" Margin="0,0,0,16" Grid.RowSpan="2"/>
-                                        <!-- Row 2 -->
-                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Grand Total:" FontWeight="Bold" Margin="0,0,8,0"/>
-                                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="GrandTotalText" FontWeight="Bold"/>
-
-                                    </Grid>
-
-
-                                </GroupBox>
-
-                            </Grid>
-
-
-
-
-
-
-                        </Grid>
-                        <Grid Grid.Row="1">
-                            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
-                                <Button Content="Clear(F5)/Hold(F8)" Width="150" Height="40" Margin="0,0,8,0"
-                                    Click="ClearHoldButton_Click"
-                                    Style="{StaticResource Btn.GlobalPrimary}"/>
-                                <!--<Button Content="Invoices (F7)" Width="150" Height="40"  Margin="0,0,8,0" Click="InvoicesButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>-->
-                                <!--<Button x:Name="BtnSave" Content="Save Draft" Width="150" Height="40" Click="BtnSaveFinal_Click" Style="{StaticResource Btn.GlobalPrimary}"/>-->
-                                <Button x:Name="BtnSaveDraft" Content="Save Draft" Click="SaveDraft_Click" Margin="0,0,8,0"/>
-                                <Button x:Name="BtnPostReceive" Content="Post (Receive)" Click="PostReceive_Click" />
-                                <Button x:Name="BtnSaveAmend" Content="Save Amendment" Click="SaveAmend_Click" Visibility="Collapsed" />
-                            </StackPanel>
-                        </Grid>
-
+                            </GroupBox>
+                        </StackPanel>
                     </Grid>
 
-                </Grid>
-            </Grid>
-        </Border>
+                    <Grid  Grid.Column="1" Margin="0,2,0,0">
+                        <GroupBox Header="Totals" FontSize="16" Padding="8" Margin="0,0,0,8" HorizontalAlignment="Right" Width="430">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                 </Grid.RowDefinitions>
+                                 <Grid.ColumnDefinitions>
+                                     <ColumnDefinition Width="Auto"/>
+                                     <ColumnDefinition Width="*"/>
+                                     <ColumnDefinition Width="Auto"/>
+                                     <ColumnDefinition Width="*"/>
+                                  </Grid.ColumnDefinitions>
+                                            <!-- Row 0 -->
+                                  <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                                  <TextBlock Grid.Row="0" Grid.Column="1" x:Name="SubtotalText"/>
+                                  <TextBlock Grid.Row="0" Grid.Column="2" Text="Discount:" FontWeight="SemiBold" Margin="12,0,8,0"/>
+                                  <TextBlock Grid.Row="0" Grid.Column="3" x:Name="DiscountText"/>
+                                  <!-- Row 1 -->
+                                  <TextBlock Grid.Row="1" Grid.Column="0" Text="Tax:" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                                  <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TaxText"/>
+                                  <TextBlock Grid.Row="1" Grid.Column="2" Text="Other:" FontWeight="SemiBold" Margin="12,0,8,0"/>
+                                  <TextBox Grid.Row="1" Grid.Column="3" x:Name="OtherChargesBox" TextChanged="OtherChargesBox_TextChanged" Margin="0,0,0,16"/>
+                                  <!-- Row 2 -->
+                                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Grand Total:" FontWeight="Bold" Margin="0,0,8,0"/>
+                                  <TextBlock Grid.Row="2" Grid.Column="1" x:Name="GrandTotalText" FontWeight="Bold"/>
+                             </Grid>
+                         </GroupBox>
+                     </Grid>
 
+                </Grid>
+            </Border>
+
+        </Grid>
     </Grid>
+    
 </UserControl>

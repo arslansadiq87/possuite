@@ -522,7 +522,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void OpenOpeningStock_Click(object sender, RoutedEventArgs e)
         {
-            // Prefer the selected row (gives you Code/Name), but fall back to _selectedOutletId
+            // Prefer selected row, fallback to the cached selection _selectedOutletId
             var row = OutletsGrid?.SelectedItem as OutletRow;
             int id = row?.Id ?? (_selectedOutletId ?? 0);
             if (id == 0) return;
@@ -534,19 +534,24 @@ namespace Pos.Client.Wpf.Windows.Admin
                 return;
             }
 
-            // Build the label. If row is null (e.g., selection cleared but id remains), fetch minimal info.
-            string label = row != null
-                ? $"{row.Code} - {row.Name}"
-                : $"Outlet #{id}";
+            string label = row != null ? $"{row.Code} - {row.Name}" : $"Outlet #{id}";
 
-            var dlg = new OpeningStockDialog(
-                InventoryLocationType.Outlet,
-                id,
-                label);
+            // Resolve the factory and navigator
+            var nav = App.Services.GetRequiredService<IViewNavigator>();
+            var make = App.Services.GetRequiredService<Func<InventoryLocationType, int, string, OpeningStockView>>();
 
-            //dlg.Owner = this;
-            dlg.ShowDialog();
+            string ctx = $"Opening:{InventoryLocationType.Outlet}:{id}"; // or Warehouse:{id} for warehouses
+
+            // If tab exists, just focus it
+            if ((nav as ViewNavigator)?.TryActivateByContext(ctx) == true) return;
+
+            // Else create the view and open with the same contextKey
+            var view = make(InventoryLocationType.Outlet, id, label);
+            var tab = nav.OpenTab(view, title: $"Opening Stock – {label}", contextKey: ctx);
+            view.CloseRequested += (_, __) => nav.CloseTab(tab);
+
         }
+
 
 
 

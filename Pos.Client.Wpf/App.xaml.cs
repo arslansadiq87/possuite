@@ -15,6 +15,7 @@ using Pos.Persistence.Services;
 using Pos.Persistence.Features.Transfers;
 using ControlzEx.Theming;
 using Pos.Client.Wpf.Windows.Inventory;
+using Pos.Domain.Entities;
 
 
 
@@ -57,14 +58,16 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<IDialogService, DialogService>();
             sc.AddSingleton<IPaymentDialogService, PaymentDialogService>();
             sc.AddSingleton<ITillService, TillService>();
-            
+
+            sc.AddSingleton<ResetStockService>();
 
 
             // 3) App services
 
             sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
-            
+            sc.AddSingleton<StockGuard>();            // ✅ Register here
+
 
             //sc.AddSingleton<CurrentUserService>();
 
@@ -80,13 +83,20 @@ namespace Pos.Client.Wpf
             sc.AddTransient<SaleInvoiceView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UsersView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>();
+            sc.AddTransient<WarehousesView>();
+            // NEW: OpeningStockView factory (parametrized)
+            sc.AddTransient<Func<InventoryLocationType, int, string, Pos.Client.Wpf.Windows.Admin.OpeningStockView>>(sp =>
+            {
+                return (locType, locId, label) =>
+                    new Pos.Client.Wpf.Windows.Admin.OpeningStockView(locType, locId, label);
+            });
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UserOutletAssignmentsWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.ProductsItemsView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.PartiesView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.EditPartyWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.TransferView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.TransferEditorView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.PayDialog>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.StockReportView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
@@ -100,7 +110,7 @@ namespace Pos.Client.Wpf
                     new TillSessionSummaryWindow(opts, tillId, outletId, counterId);
             });
 
-            sc.AddTransient<WarehousesView>();
+            
 
             // WINDOWS (register every window you resolve from DI)
             sc.AddTransient<BrandsWindow>();
@@ -113,6 +123,8 @@ namespace Pos.Client.Wpf
             sc.AddScoped<CatalogService>();   // <-- register this
             sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();
             sc.AddScoped<ITransferQueries, TransferQueries>();
+            sc.AddScoped<ItemsService>();
+
 
             //sc.AddTransient<UsersWindow>(sp =>
             //{

@@ -71,7 +71,7 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <DataGrid x:Name="Grid"
+            <DataGrid x:Name="Grid" Style="{StaticResource ModernDataGrid}"
                       AutoGenerateColumns="False"
                       CanUserAddRows="False"
                       IsReadOnly="True"

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pos.Domain.Entities;
 
 namespace Pos.Persistence.Features.Transfers
 {
@@ -19,6 +20,8 @@ namespace Pos.Persistence.Features.Transfers
 
     public interface ITransferService
     {
+        Task<StockDoc> DispatchAsync(int stockDocId, DateTime effectiveDateUtc, int actedByUserId, bool autoReceive);
+
         // Create draft with From & To
         System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> CreateDraftAsync(
             Pos.Domain.Entities.InventoryLocationType fromType, int fromId,
@@ -33,11 +36,7 @@ namespace Pos.Persistence.Features.Transfers
             bool replaceAll);
 
         // Lock From (OUT entries + numbering + cost snapshot)
-        System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> DispatchAsync(
-            int stockDocId,
-            DateTime effectiveDateUtc,
-            int actedByUserId);
-
+        
         // Undo a mistaken dispatch (reverses OUT ledger, returns to Draft)
         System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> UndoDispatchAsync(
             int stockDocId,

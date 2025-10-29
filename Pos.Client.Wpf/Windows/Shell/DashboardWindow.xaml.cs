@@ -122,6 +122,48 @@ namespace Pos.Client.Wpf.Windows.Shell
             }
             return null;
         }
+
+
+        private async void ResetStockButton_Click(object sender, RoutedEventArgs e)
+        {
+            // ✅ Close the backstage *by name* so dialogs aren’t hidden underneath
+            if (MainBackstage != null && MainBackstage.IsOpen)
+                MainBackstage.IsOpen = false;
+            var dialogs = App.Services.GetRequiredService<IDialogService>();
+            var reset = App.Services.GetRequiredService<ResetStockService>();
+
+            var ok1 = await dialogs.ConfirmAsync(
+                "This will DELETE:\n• Sales & Sale Lines (incl. returns)\n• Purchases, Purchase Lines & Payments (incl. returns)\n• Transfers (Stock Docs with DocType=Transfer) & their lines\n• Stock ledger entries for the above (Sale/Purchase/Transfer)\n\n" +
+                "It WILL NOT touch Opening Stock or master data (Items, Outlets, Users, etc.).\n\n" +
+                "A timestamped backup of the SQLite DB will be created.\n\nProceed?",
+                "Reset Stock Data");
+
+            if (!ok1) return;
+
+            var ok2 = await dialogs.ConfirmAsync(
+                "Final confirmation: Are you absolutely sure?\n\nTip: Close running sales/purchases windows first.",
+                "Confirm Reset");
+
+            if (!ok2) return;
+
+            try
+            {
+                Mouse.OverrideCursor = Cursors.Wait;
+                await reset.RunAsync();
+                Mouse.OverrideCursor = null;
+
+                await dialogs.AlertAsync(
+                    "Stock data has been reset.\n\n" +
+                    "A backup was created under %LocalAppData%\\PosSuite\\backups.\n" +
+                    "You may restart the app if any lists still show stale rows.",
+                    "Done");
+            }
+            catch (Exception ex)
+            {
+                Mouse.OverrideCursor = null;
+                await dialogs.AlertAsync("Reset failed:\n\n" + ex.Message, "Error");
+            }
+        }
         //private void OverlayLayer_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         //{
         //    if (OverlayLayer.IsVisible)

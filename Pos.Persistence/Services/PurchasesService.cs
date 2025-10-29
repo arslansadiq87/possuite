@@ -763,13 +763,7 @@ namespace Pos.Persistence.Services
         /// <summary>
         /// Save a FINAL purchase return with optional refunds and auto-credit creation.
         /// </summary>
-        public async Task<Purchase> SaveReturnAsync(
-    Purchase model,
-    IEnumerable<PurchaseLine> lines,
-    string? user = null,
-    IEnumerable<SupplierRefundSpec>? refunds = null,
-    int? tillSessionId = null,
-    int? counterId = null)
+        public async Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, IEnumerable<SupplierRefundSpec>? refunds = null, int? tillSessionId = null, int? counterId = null)
         {
             if (!model.IsReturn)
                 throw new InvalidOperationException("Model must be a return (IsReturn=true).");
@@ -786,7 +780,7 @@ namespace Pos.Persistence.Services
             }
             else
             {
-                // Free-form return: must NOT reference any original purchase line.
+                ValidateDestination(model);
                 if (anyLineReferencesOriginal)
                     throw new InvalidOperationException("Free-form returns cannot contain lines with RefPurchaseLineId.");
             }
@@ -956,6 +950,33 @@ namespace Pos.Persistence.Services
             await tx.CommitAsync();
             return model;
         }
+
+        public async Task<decimal> GetOnHandAsync(int itemId, StockTargetType target, int? outletId, int? warehouseId)
+        {
+            if (itemId <= 0) return 0m;
+
+            if (target == StockTargetType.Outlet)
+            {
+                if (outletId is not int o || o <= 0) return 0m;
+
+                return await _db.StockEntries
+                    .Where(se => se.ItemId == itemId
+                              && se.LocationType == InventoryLocationType.Outlet
+                              && se.LocationId == o)
+                    .SumAsync(se => se.QtyChange);
+            }
+            else // Warehouse
+            {
+                if (warehouseId is not int w || w <= 0) return 0m;
+
+                return await _db.StockEntries
+                    .Where(se => se.ItemId == itemId
+                              && se.LocationType == InventoryLocationType.Warehouse
+                              && se.LocationId == w)
+                    .SumAsync(se => se.QtyChange);
+            }
+        }
+
 
 
         private async Task<string> EnsureReturnNumberAsync(Purchase p, CancellationToken ct)
@@ -1269,16 +1290,42 @@ namespace Pos.Persistence.Services
 
         private async Task PostPurchaseReturnStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user)
         {
-            // Location mirrors the original purchase destination (Outlet or Warehouse)
-            var locType = model.TargetType == StockTargetType.Warehouse
-                ? InventoryLocationType.Warehouse
-                : InventoryLocationType.Outlet;
+            // ---- Resolve where to post OUT (debit) ----
+            InventoryLocationType locType;
+            int locId;
 
-            var locId = model.TargetType == StockTargetType.Warehouse
-                ? model.WarehouseId!.Value
-                : model.OutletId!.Value;
+            if (model.RefPurchaseId is int rid && rid > 0)
+            {
+                // WITH-INVOICE: reduce where the original purchase was received
+                var orig = await _db.Purchases.AsNoTracking().FirstAsync(p => p.Id == rid);
 
-            // Remove previous postings if this FINAL return is amended
+                if (orig.TargetType == StockTargetType.Warehouse)
+                {
+                    locType = InventoryLocationType.Warehouse;
+                    locId = orig.WarehouseId!.Value;
+                }
+                else
+                {
+                    locType = InventoryLocationType.Outlet;
+                    locId = orig.OutletId!.Value;
+                }
+            }
+            else
+            {
+                // WITHOUT-INVOICE: reduce at the user-selected header source
+                if (model.TargetType == StockTargetType.Warehouse)
+                {
+                    locType = InventoryLocationType.Warehouse;
+                    locId = model.WarehouseId!.Value;
+                }
+                else
+                {
+                    locType = InventoryLocationType.Outlet;
+                    locId = model.OutletId!.Value;
+                }
+            }
+
+            // --- keep the rest of your method as-is (remove prior, add rows, SaveChanges) ---
             var prior = await _db.StockEntries
                 .Where(se => se.RefType == "PurchaseReturn" && se.RefId == model.Id)
                 .ToListAsync();
@@ -1289,26 +1336,24 @@ namespace Pos.Persistence.Services
             }
 
             var now = DateTime.UtcNow;
-
             foreach (var l in lines)
             {
-                // NOTE: in SaveReturnAsync we prepared lines with l.Qty NEGATIVE.
                 _db.StockEntries.Add(new StockEntry
                 {
                     Ts = now,
                     ItemId = l.ItemId,
                     LocationType = locType,
                     LocationId = locId,
-                    QtyChange = l.Qty,        // Return lines are negative => OUT
-                    UnitCost = l.UnitCost,   // valuation trail
+                    QtyChange = l.Qty,      // negative → OUT
+                    UnitCost = l.UnitCost,
                     RefType = "PurchaseReturn",
                     RefId = model.Id,
                     Note = model.VendorInvoiceNo
                 });
             }
-
             await _db.SaveChangesAsync();
         }
+
 
         public async Task VoidPurchaseAsync(int purchaseId, string reason, string? user = null)
         {
@@ -1498,14 +1543,35 @@ namespace Pos.Persistence.Services
 
         // at file top if missing
 
-        
 
+        public async Task<decimal> GetRemainingReturnableQtyAsync(int purchaseLineId)
+        {
+            // original line qty (may be negative)
+            var orig = await _db.PurchaseLines
+                .AsNoTracking()
+                .Where(x => x.Id == purchaseLineId)
+                .Select(x => (decimal?)x.Qty)
+                .FirstOrDefaultAsync();
 
-}
+            if (orig is null) return 0m;
 
-// ---------- Simple DTOs for Return Draft ----------
+            // SUM of positive magnitudes for all returns that reference this line
+            // Use ternary to emulate ABS() and nullable SUM to handle empty set => 0
+            var returned = await _db.PurchaseLines
+                .AsNoTracking()
+                .Where(x => x.RefPurchaseLineId == purchaseLineId)
+                .Select(x => (decimal?)(x.Qty < 0 ? -x.Qty : x.Qty))
+                .SumAsync() ?? 0m;
 
-public class PurchaseReturnDraft
+            var origAbs = orig.Value < 0 ? -orig.Value : orig.Value;
+            var remaining = Math.Max(0m, origAbs - returned);
+            return remaining;
+        }
+    }
+
+    // ---------- Simple DTOs for Return Draft ----------
+
+    public class PurchaseReturnDraft
     {
         public int PartyId { get; set; }
         public StockTargetType TargetType { get; set; }

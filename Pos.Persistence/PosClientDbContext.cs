@@ -38,6 +38,9 @@ namespace Pos.Persistence
         public DbSet<SupplierCredit> SupplierCredits => Set<SupplierCredit>();
         public DbSet<StockDoc> StockDocs { get; set; }
         public DbSet<StockDocLine> StockDocLines { get; set; }
+        public DbSet<OpeningStock> OpeningStocks => Set<OpeningStock>();
+        public DbSet<OpeningStockLine> OpeningStockLines => Set<OpeningStockLine>();
+        public DbSet<OpeningStockDraftLine> OpeningStockDraftLines => Set<OpeningStockDraftLine>();
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -354,6 +357,39 @@ namespace Pos.Persistence
 
                 e.HasIndex(x => new { x.RefType, x.RefId })
                  .HasDatabaseName("IX_StockEntries_Ref");
+            });
+
+            // Opening Stock configuration
+            // Opening Stock header
+            b.Entity<OpeningStock>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.Property(x => x.Status).HasConversion<int>();
+                b.Property(x => x.TsUtc).HasColumnType("datetime");
+
+                // Posted lines (child collection)
+                b.HasMany(x => x.Lines)
+                 .WithOne(x => x.OpeningStock)
+                 .HasForeignKey(x => x.OpeningStockId)
+                 .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Posted lines config
+            b.Entity<OpeningStockLine>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.Property(x => x.Qty).HasPrecision(18, 4);
+                b.Property(x => x.UnitCost).HasPrecision(18, 4);
+                b.HasIndex(x => x.OpeningStockId);
+            });
+
+            // Draft lines (StockDoc-centric; no relationship to OpeningStock)
+            b.Entity<OpeningStockDraftLine>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.Property(x => x.Qty).HasPrecision(18, 4);
+                b.Property(x => x.UnitCost).HasPrecision(18, 4);
+                b.HasIndex(x => x.StockDocId);
             });
 
 

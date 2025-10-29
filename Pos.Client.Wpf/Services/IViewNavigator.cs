@@ -21,5 +21,8 @@ namespace Pos.Client.Wpf.Services
         void CloseTab(ViewTab tab);
         void CloseActiveTab();
         void ActivateTab(ViewTab tab);
+        ViewTab OpenTab(object viewInstance, string? title = null, string? contextKey = null, bool activate = true);
+        bool TryActivateByContext(string contextKey);
+
     }
 }

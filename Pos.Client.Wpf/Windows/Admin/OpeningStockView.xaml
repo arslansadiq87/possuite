@@ -1,13 +1,16 @@
 ﻿<!-- Pos.Client.Wpf/Windows/Admin/OpeningStockDialog.xaml -->
-<Window x:Class="Pos.Client.Wpf.Windows.Admin.OpeningStockDialog"
+<UserControl x:Class="Pos.Client.Wpf.Windows.Admin.OpeningStockView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Opening Stock" Width="980" Height="720"
-        WindowStartupLocation="CenterOwner">
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls"
+        mc:Ignorable="d"
+        d:DesignHeight="720" d:DesignWidth="980">
 
-    <Window.Resources>
+    <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-    </Window.Resources>
+    </UserControl.Resources>
     <Grid Margin="4">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -29,29 +32,47 @@
                         <MenuItem Header="Download Sample CSV" Click="DownloadSampleCsv_Click"/>
                         <MenuItem Header="Import CSV" Click="ImportCsv_Click"/>
                         <CheckBox x:Name="ReplaceAllBox" Content="Replace all on Save" IsChecked="True"/>
-                        <MenuItem Header="Lock (Admin)" Click="Lock_Click" IsEnabled="{Binding CanLock}" ToolTip="{Binding LockHint}"/>
-                        <MenuItem Header="Unlock (Admin)" Click="Unlock_Click" IsEnabled="{Binding CanUnlock}"/>
                         <MenuItem Header="Export Grid" Click="ExportGrid_Click"/>
                         <MenuItem Header="Undo Last Import" Click="UndoImport_Click" IsEnabled="{Binding HasUndo}"/>
                         <MenuItem Header="Fix first invalid" Click="FixFirstInvalid_Click" 
                         Visibility="{Binding HasInvalid, Converter={StaticResource BoolToVisibility}}"/>
-                
-
 
                     </MenuItem>
                 </Menu>
 
 
-                <Button Content="Save Draft" Click="SaveDraft_Click" Width="90"/>
+                <Button Content="Save Draft" Click="SaveDraft_Click" Width="100"/>
 
+                <Button Content="Post" Width="80"
+          Click="Post_Click"
+          IsEnabled="{Binding CanPost}"
+          ToolTip="Converts Draft to Posted and writes stock IN entries"/>
+
+                <!-- NEW -->
+                <Button Content="Clear" Width="80"
+        Click="Clear_Click"
+        ToolTip="Reset the form and start a new entry"/>
+                
+                <Button Content="Lock (Admin)" Width="110"
+          Click="Lock_Click"
+          IsEnabled="{Binding CanLock}"
+          ToolTip="{Binding LockHint}"/>
+
+                <Button Content="Unlock (Admin)" Width="120"
+          Click="Unlock_Click"
+          IsEnabled="{Binding CanUnlock}"/>
+
+                <Button Content="Void" Width="80"
+          Click="Void_Click"
+          IsEnabled="{Binding CanVoid}"
+          ToolTip="Draft: mark void. Posted: write reversal OUT and void."/>
 
                 <Separator/>
-                <Button Content="Delete Row" Click="DeleteRow_Click" Margin="6,0,0,0" Width="80"/>
-                <Button Content="Open Draft…" Click="OpenDraft_Click" Margin="6,0,0,0" Width="110"/>
-                <Button Content="Clone from Locked…" Click="CloneFromLocked_Click" Margin="6,0,0,0" Width="160"/>
 
+                <Button Content="Open Draft…" Click="OpenDraft_Click" Width="120"/>
 
-                <Button Content="Close" Click="Close_Click" Width="50"/>
+                <Separator/>
+                <Button Content="Close" Click="CloseTab_Click" Width="70"/>
 
 
             </ToolBar>
@@ -85,20 +106,22 @@
             <!-- Search row (identical pattern to Purchase window) -->
             <StackPanel Grid.Row="2" Margin="12,8,12,0" Orientation="Horizontal">
                 <TextBlock Text="Scan / Search Item:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                <DockPanel>
+            <Controls:ItemSearchBox x:Name="ItemSearch" ItemPicked="ItemSearch_ItemPicked" Width="360" Margin="0,0,8,0"/>
+
+            <!--<DockPanel>
                     <TextBox x:Name="ItemSearchText"
              Width="380"
              TextChanged="ItemSearchText_TextChanged"
              PreviewKeyDown="ItemSearchText_KeyDown"/>
 
-                    <!-- (Optional) New-item button; keep/remove as you like -->
-                    <!--<Button Content="+" Width="28" Height="28" Margin="6,0,0,0" ToolTip="New Item" Click="BtnNewItem_Click"/>-->
+                    --><!-- (Optional) New-item button; keep/remove as you like -->
+                    <!--<Button Content="+" Width="28" Height="28" Margin="6,0,0,0" ToolTip="New Item" Click="BtnNewItem_Click"/>--><!--
 
                     <Button Content="Add" Width="60" Height="28" Margin="6,0,0,0"
             ToolTip="Add selected item to lines" Click="BtnAddItem_Click"/>
                 </DockPanel>
 
-                <!-- Suggestions popup anchored to the TextBox -->
+                --><!-- Suggestions popup anchored to the TextBox --><!--
                 <Popup x:Name="ItemPopup"
          PlacementTarget="{Binding ElementName=ItemSearchText}"
          Placement="Bottom"
@@ -121,7 +144,7 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
                     </Border>
-                </Popup>
+                </Popup>-->
             </StackPanel>
         
 
@@ -129,6 +152,7 @@
         <DataGrid x:Name="Grid" Margin="4" AutoGenerateColumns="False" Grid.Row="3"
                   ItemsSource="{Binding Rows}" CanUserAddRows="False"
                   IsReadOnly="False" RowHeaderWidth="0"
+                  CurrentCellChanged="Grid_CurrentCellChanged"
                   PreviewKeyDown="Grid_PreviewKeyDown">
             <DataGrid.Resources>
                 <Style TargetType="DataGridCell">
@@ -154,7 +178,20 @@
                 <DataGridTextColumn Header="Subtotal" Width="120" IsReadOnly="True"
             Binding="{Binding Subtotal, StringFormat=F4}"/>
                 <DataGridTextColumn Header="Note" Width="*" Binding="{Binding Note, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <!-- ✅ Put the template column INSIDE Columns -->
+                <DataGridTemplateColumn Header="Delete" Width="70">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="✖"
+                                  Padding="6,2"
+                                  ToolTip="Delete this row"
+                                  Click="DeleteRow_Click"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
+            
         </DataGrid>
 
 
@@ -166,4 +203,4 @@
         </StatusBar>
 
     </Grid>
-</Window>
+</UserControl>

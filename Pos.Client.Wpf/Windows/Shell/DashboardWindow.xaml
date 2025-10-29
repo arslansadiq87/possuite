@@ -21,17 +21,31 @@
         </Grid.RowDefinitions>
 
         <!-- Ribbon -->
-        <Fluent:Ribbon VerticalAlignment="Bottom">
+        <Fluent:Ribbon x:Name="MainRibbon" VerticalAlignment="Bottom">
 
             <!-- Backstage (MUST wrap in BackstageTabControl) -->
             <Fluent:Ribbon.Menu>
-                <Fluent:Backstage>
+                <Fluent:Backstage x:Name="MainBackstage">
                     <Fluent:BackstageTabControl>
                         <Fluent:BackstageTabItem Header="Settings" KeyTip="S">
                             <ScrollViewer Padding="16">
                                 <StackPanel>
                                     <TextBlock Text="Application Settings" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
                                     <!-- Put your settings UI here -->
+                                    <!-- ✅ Maintenance block -->
+                                    <GroupBox Header="Maintenance" Margin="0,16,0,0">
+                                        <StackPanel Margin="12,8,12,12" Orientation="Vertical" >
+                                            <TextBlock Text="Reset Stock Data" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Deletes Sales, Purchases, Transfers (and their lines) plus stock ledger for those docs. Opening stock and master data are preserved. A timestamped DB backup will be created."
+                     TextWrapping="Wrap" Margin="0,0,0,12"/>
+                                            <Button Content="⚠ Reset Stock Data"
+                  Click="ResetStockButton_Click"
+                  Padding="14,8"
+                  HorizontalAlignment="Left"
+                  Background="#FFE53935"
+                  Foreground="White"/>
+                                        </StackPanel>
+                                    </GroupBox>
                                 </StackPanel>
                             </ScrollViewer>
                         </Fluent:BackstageTabItem>

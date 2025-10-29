@@ -221,8 +221,8 @@ public sealed class DashboardVm : ObservableObject
     // ---------- Openers => Tabs ----------
     private void OpenTransferTab()
     {
-        if (TryActivateTab<Pos.Client.Wpf.Windows.Inventory.TransferView>()) return;
-        _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.TransferView>("Stock Transfer", "Transfer");
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Inventory.TransferEditorView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.TransferEditorView>("Stock Transfer", "Transfer");
     }
         
 

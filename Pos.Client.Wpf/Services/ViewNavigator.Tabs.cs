@@ -10,9 +10,22 @@ namespace Pos.Client.Wpf.Services
     public sealed partial class ViewNavigator : IViewNavigator
     {
         public ViewTab OpenTab<TView>(string? title = null, string? contextKey = null, bool activate = true)
-            where TView : FrameworkElement
+    where TView : FrameworkElement
         {
             var vm = EnsureShell();
+
+            // ✅ Same dedupe logic for generic overloads
+            if (!string.IsNullOrWhiteSpace(contextKey))
+            {
+                var existing = vm.Tabs.FirstOrDefault(t => t.ContextKey == contextKey);
+                if (existing != null)
+                {
+                    if (activate) vm.ActiveTab = existing;
+                    UpdateContextualGroups(vm);
+                    return existing;
+                }
+            }
+
             var view = _sp.GetRequiredService<TView>();
 
             var tab = new ViewTab
@@ -28,6 +41,7 @@ namespace Pos.Client.Wpf.Services
             UpdateContextualGroups(vm);
             return tab;
         }
+
 
         public void CloseTab(ViewTab tab)
         {
@@ -75,5 +89,51 @@ namespace Pos.Client.Wpf.Services
             var typeName = vm.ActiveTab?.Content?.GetType().FullName ?? string.Empty;
             vm.TransferTabVisible = typeName.EndsWith(".TransferView", StringComparison.Ordinal);
         }
+
+        public ViewTab OpenTab(object viewInstance, string? title = null, string? contextKey = null, bool activate = true)
+        {
+            var vm = EnsureShell();
+
+            // ✅ If a contextKey is provided and a tab with the same key already exists, just activate it.
+            if (!string.IsNullOrWhiteSpace(contextKey))
+            {
+                var existing = vm.Tabs.FirstOrDefault(t => t.ContextKey == contextKey);
+                if (existing != null)
+                {
+                    if (activate) vm.ActiveTab = existing;
+                    UpdateContextualGroups(vm);
+                    return existing;
+                }
+            }
+
+            var tab = new ViewTab
+            {
+                Title = title ?? (viewInstance?.GetType().Name?.Replace("View", string.Empty) ?? "Tab"),
+                Content = viewInstance!,
+                ContextKey = contextKey
+            };
+
+            vm.Tabs.Add(tab);
+            if (activate) vm.ActiveTab = tab;
+
+            UpdateContextualGroups(vm);
+            return tab;
+        }
+
+
+        public bool TryActivateByContext(string contextKey)
+        {
+            var vm = EnsureShell();
+            var existing = vm.Tabs.FirstOrDefault(t => t.ContextKey == contextKey);
+            if (existing == null) return false;
+
+            vm.ActiveTab = existing;
+            UpdateContextualGroups(vm);
+            return true;
+        }
+
+
+
+
     }
 }

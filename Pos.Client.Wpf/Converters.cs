@@ -31,4 +31,14 @@ namespace Pos.Client.Wpf
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
             => throw new NotImplementedException();
     }
+
+    // You can put this in the same file (outside the class) or in a shared Converters.cs
+    public sealed class InverseBooleanConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => value is bool b ? !b : value;
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => value is bool b ? !b : value;
+    }
+
 }
