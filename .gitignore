@@ -438,3 +438,4 @@ appsettings.*.local.json
 *.db
 *.mdf
 *.ldf
+/PosSuite.zip
