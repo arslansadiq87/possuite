@@ -16,6 +16,9 @@ using System.Timers;
 using System.Windows.Input;
 using System.Xml.Linq;
 using Pos.Domain;
+using Pos.Client.Wpf.Controls;          // ItemSearchBox user control
+using Pos.Domain.DTO;                   // ItemIndexDto
+
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -47,7 +50,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             InitializeComponent();
             _freeForm = true;
             _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
-            _itemDebounce.Elapsed += ItemDebounce_Elapsed;
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
             _svc = new PurchasesService(new PosClientDbContext(_opts));
@@ -55,7 +57,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             GridLines.BeginningEdit += GridLines_BeginningEdit;
             GridLines.CurrentCellChanged += GridLines_CurrentCellChanged;
             DataContext = VM;
-            // Refresh AvailablePanel if source (Outlet/Warehouse) changes mid-edit
             VM.PropertyChanged += async (_, args) =>
             {
                 if (args.PropertyName is nameof(ReturnVM.TargetType)
@@ -76,7 +77,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 await InitFreeFormAsync();
                 await LoadSourcesAsync();               // <-- add this
-                // Focus supplier after UI is ready
                 await Dispatcher.InvokeAsync(() => SupplierText.Focus());
             };
         }
@@ -86,7 +86,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             InitializeComponent();
             _refPurchaseId = refPurchaseId;
             _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
-            _itemDebounce.Elapsed += ItemDebounce_Elapsed;
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
             _svc = new PurchasesService(new PosClientDbContext(_opts));
@@ -121,7 +120,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             InitializeComponent();
             _returnId = returnId;
             _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
-            _itemDebounce.Elapsed += ItemDebounce_Elapsed;
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
             _svc = new PurchasesService(new PosClientDbContext(_opts));
@@ -161,20 +159,128 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _suppressSupplierSearch = false;
             SupplierPopup.IsOpen = false;
             SupplierText.CaretIndex = SupplierText.Text.Length;
-            // Move focus to item search next
             MoveFocusToItemSearch();
         }
 
-        private void MoveFocusToItemSearch()
+
+        private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
         {
-            // Make sure item search is visible only when allowed
-            if (VM.CanAddItems)
-                ItemText.Focus();
-            else
-                GridLines.Focus();
+            if (root == null) return null;
+            int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is T t) return t;
+                var res = FindDescendant<T>(child);
+                if (res != null) return res;
+            }
+            return null;
         }
 
-        // Cache of the key column indexes so we resolve them once.
+        private void FocusItemSearchBox()
+        {
+            try
+            {
+                var tb = FindDescendant<TextBox>(ItemSearch);
+                if (tb != null) { tb.Focus(); tb.SelectAll(); return; }
+                ItemSearch.Focus();
+            }
+            catch { }
+        }
+
+        // Replace old MoveFocusToItemSearch() to use the new control
+        private void MoveFocusToItemSearch()
+        {
+            if (VM.CanAddItems) FocusItemSearchBox();
+            else GridLines.Focus();
+        }
+
+        private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        {
+            var dto = ((ItemSearchBox)sender).SelectedItem as ItemIndexDto;
+            if (dto is null) return;
+            await AddOrBumpItem_ByItemIdAsync(dto.Id);
+            // Show on-hand preview in the Tag (like before)
+            _previewItemId = dto.Id;
+            _ = RefreshPreviewOnHandAsync();   // this will call UpdateOnHandBadge()
+        }
+
+
+        private async Task AddOrBumpItem_ByItemIdAsync(int itemId)
+        {
+            // 1) If exists → bump qty
+            var existing = VM.Lines.FirstOrDefault(l => l.ItemId == itemId);
+            if (existing != null)
+            {
+                existing.ReturnQty = existing.ReturnQty + 1m;
+                existing.ClampQty();
+                existing.RecomputeLineTotal();
+                VM.RecomputeTotals();
+                await SetLineMaxFromOnHandAsync(existing);  // ensure cap reflects header source
+                                                            // Focus UnitCost for quick edits
+                Dispatcher.InvokeAsync(() => FocusUnitCost(existing));
+                return;
+            }
+
+            // 2) New line → fetch display/meta + last cost
+            using var db = new PosClientDbContext(_opts);
+            var row = await (
+                from i in db.Items.AsNoTracking().Where(x => x.Id == itemId)
+                join pr in db.Products.AsNoTracking() on i.ProductId equals pr.Id into gp
+                from pr in gp.DefaultIfEmpty()
+                select new
+                {
+                    i.Id,
+                    i.Sku,
+                    ItemName = i.Name,
+                    ProductName = pr != null ? pr.Name : null,
+                    i.Variant1Name,
+                    i.Variant1Value,
+                    i.Variant2Name,
+                    i.Variant2Value
+                }
+            ).FirstOrDefaultAsync();
+
+            if (row == null) return;
+            // Last purchase cost (ignoring returns)
+            var lastCost = await (
+                from pl in db.PurchaseLines.AsNoTracking()
+                join pu in db.Purchases.AsNoTracking() on pl.PurchaseId equals pu.Id
+                where pl.ItemId == itemId && !pu.IsReturn
+                orderby pu.PurchaseDate descending
+                select pl.UnitCost
+            ).FirstOrDefaultAsync();
+            var display = ProductNameComposer.Compose(
+                row.ProductName, row.ItemName,
+                row.Variant1Name, row.Variant1Value,
+                row.Variant2Name, row.Variant2Value);
+
+            var line = new LineVM
+            {
+                OriginalLineId = null,         // free-form
+                ItemId = itemId,
+                DisplayName = display,
+                Sku = row.Sku ?? "",
+                UnitCost = Math.Max(0, lastCost),  // default from last cost if present
+                Discount = 0m,
+                TaxRate = 0m,
+                MaxReturnQty = 999999m,        // will be capped by on-hand below
+                ReturnQty = 1m
+            };
+
+            var wasEmpty = VM.Lines.Count == 0;
+            VM.Lines.Add(line);
+            // Cap by on-hand at current source (free-form)
+            await SetLineMaxFromOnHandAsync(line);
+            VM.RecomputeTotals();
+            // Lock source as soon as first line is added in free-form mode
+            if (wasEmpty && _freeForm)
+            {
+                VM.IsSourceReadonly = true;
+            }
+            // Focus UnitCost for quick edits
+            Dispatcher.InvokeAsync(() => FocusUnitCost(line));
+        }
 
         private int EnsureColumnIndex(string bindingPath)
         {
@@ -320,177 +426,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public string LastCostDisplay => LastCost.HasValue ? $"Last: {LastCost.Value:N2}" : "";
         }
 
-        private async void ItemDebounce_Elapsed(object? sender, ElapsedEventArgs e)
-        {
-            await Dispatcher.InvokeAsync(async () =>
-            {
-                if (!VM.CanAddItems) { ItemPopup.IsOpen = false; return; }
-                var term = (ItemText.Text ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(term))
-                {
-                    ItemList.ItemsSource = null;
-                    ItemPopup.IsOpen = false;
-                    return;
-                }
-                _itemResults = await SearchItemsAsync(term);
-                ItemList.ItemsSource = _itemResults;
-                // keep the preview handler wiring (good)
-                ItemList.SelectionChanged -= ItemList_SelectionChanged;
-                ItemList.SelectionChanged += ItemList_SelectionChanged;
-                // ⬇️ restore these two lines
-                ItemPopup.IsOpen = _itemResults.Count > 0;
-                if (ItemPopup.IsOpen) ItemList.SelectedIndex = 0;
-                // kick the on-hand preview (works even if keyboard didn’t move selection yet)
-                if (_itemResults.Count > 0)
-                {
-                    _previewItemId = _itemResults[ItemList.SelectedIndex >= 0 ? ItemList.SelectedIndex : 0].ItemId;
-                    _ = RefreshPreviewOnHandAsync();
-                }
-            });
-        }
-
-        private void ItemText_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (!VM.CanAddItems) return;
-            _itemDebounce.Stop();
-            _itemDebounce.Start();
-        }
-
-        private async void ItemText_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (!VM.CanAddItems) return;
-            if (e.Key == Key.Down && ItemPopup.IsOpen && ItemList.Items.Count > 0)
-            {
-                ItemList.Focus();
-                ItemList.SelectedIndex = Math.Max(0, ItemList.SelectedIndex);
-                e.Handled = true;
-                return;
-            }
-            if (e.Key == Key.Enter && ItemPopup.IsOpen)
-            {
-                var pick = ItemList.SelectedItem as ItemPick ?? _itemResults.FirstOrDefault();
-                if (pick != null) await AddOrBumpItem(pick);
-                e.Handled = true;
-            }
-            if (e.Key == Key.Escape && ItemPopup.IsOpen)
-            {
-                ItemPopup.IsOpen = false;
-                e.Handled = true;
-            }
-        }
-
-        private void ItemText_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-        {
-            // Popup closes via StaysOpen=False
-        }
-
-        private async void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            if (ItemList.SelectedItem is ItemPick p) await AddOrBumpItem(p);
-        }
-
-        private async void ItemList_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter && ItemList.SelectedItem is ItemPick p)
-            {
-                await AddOrBumpItem(p);
-                _previewItemId = p.ItemId;
-                _ = RefreshPreviewOnHandAsync();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Escape)
-            {
-                ItemPopup.IsOpen = false;
-                ItemText.Focus();
-                e.Handled = true;
-            }
-        }
-
-        private async Task<List<ItemPick>> SearchItemsAsync(string term, int take = 50)
-        {
-            using var db = new PosClientDbContext(_opts);
-            term = term.Trim();
-            var q =
-                from i in db.Items.AsNoTracking()
-                join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
-                from p in gp.DefaultIfEmpty()
-                where (EF.Functions.Like(i.Sku, $"%{term}%")
-                       || EF.Functions.Like(i.Name, $"%{term}%")
-                       || (p != null && EF.Functions.Like(p.Name, $"%{term}%")))
-                orderby i.Sku
-                select new { i.Id, i.Sku, ItemName = i.Name, ProductName = p != null ? p.Name : null };
-            var rows = await q.Take(take).ToListAsync();
-            // Last purchase cost per item (optional)
-            var itemIds = rows.Select(r => r.Id).ToList();
-            var lastCosts = await (
-                from pl in db.PurchaseLines.AsNoTracking()
-                join pu in db.Purchases.AsNoTracking() on pl.PurchaseId equals pu.Id
-                where itemIds.Contains(pl.ItemId) && !pu.IsReturn
-                orderby pu.PurchaseDate descending
-                select new { pl.ItemId, pl.UnitCost, pu.PurchaseDate }
-            )
-            .GroupBy(x => x.ItemId)
-            .Select(g => new { ItemId = g.Key, LastCost = g.First().UnitCost })
-            .ToDictionaryAsync(x => x.ItemId, x => (decimal?)x.LastCost);
-            var list = rows.Select(r => new ItemPick
-            {
-                ItemId = r.Id,
-                Sku = r.Sku ?? "",
-                Display = ProductNameComposer.Compose(r.ProductName, r.ItemName, null, null, null, null),
-                LastCost = lastCosts.TryGetValue(r.Id, out var c) ? c : null
-            }).ToList();
-            return list;
-        }
-
-        private async Task AddOrBumpItem(ItemPick pick)
-        {
-            LineVM targetLine;
-            var existing = VM.Lines.FirstOrDefault(l => l.ItemId == pick.ItemId);
-            if (existing != null)
-            {
-                existing.ReturnQty = existing.ReturnQty + 1;
-                existing.ClampQty();
-                existing.RecomputeLineTotal();
-                VM.RecomputeTotals();
-                // Ensure Max is synced with on-hand (in case user changed source before first add)
-                await SetLineMaxFromOnHandAsync(existing);
-                targetLine = existing;
-            }
-            else
-            {
-                var unitCost = Math.Max(0, pick.LastCost ?? 0m);
-                var line = new LineVM
-                {
-                    OriginalLineId = null,
-                    ItemId = pick.ItemId,
-                    DisplayName = pick.Display,
-                    Sku = pick.Sku,
-                    UnitCost = unitCost,
-                    Discount = 0m,
-                    TaxRate = 0m,
-                    MaxReturnQty = 999999m,   // will be overwritten below
-                    ReturnQty = 1m
-                };
-                var wasEmpty = VM.Lines.Count == 0;
-                VM.Lines.Add(line);
-                // ⬇️ Bound by available stock at the selected source
-                await SetLineMaxFromOnHandAsync(line);
-                VM.RecomputeTotals();
-                targetLine = line;
-                // ⛓️ Lock the source as soon as the first line is added
-                if (wasEmpty && _freeForm)
-                {
-                    VM.IsSourceReadonly = true;   // your XAML binds IsEnabled to IsSourceEditable (= !IsSourceReadonly)
-                }
-            }
-            _previewItemId = pick.ItemId;
-            _ = RefreshPreviewOnHandAsync();
-            ItemPopup.IsOpen = false;
-            ItemText.Clear();
-            // Jump to UnitCost for in-place edit
-            Dispatcher.InvokeAsync(() => FocusUnitCost(targetLine));
-        }
-
 
         private void GridLines_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -519,7 +454,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 rowVm.RecomputeLineTotal();
                 VM.RecomputeTotals();
                 // Back to item search box for the next scan/type
-                Dispatcher.InvokeAsync(() => ItemText.Focus());
+                Dispatcher.InvokeAsync(() => FocusItemSearchBox());
                 return;
             }
         }
@@ -836,8 +771,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public string Name { get; set; } = "";
         }
 
-
-        // ===== View Models =====
         public class ReturnVM : INotifyPropertyChanged
         {
             // Header
@@ -972,10 +905,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             // Convenience: show/hide warehouse/outlet pickers depending on target
             public bool ShowOutletPicker => TargetType == StockTargetType.Outlet;
             public bool ShowWarehousePicker => TargetType == StockTargetType.Warehouse;
-
-           
-
-
         }
 
         public class LineVM : INotifyPropertyChanged
@@ -1043,17 +972,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void UpdateOnHandBadge()
         {
-            ItemText.Tag = $"On hand: {_previewOnHand:0.##}";
+            ItemSearch.Tag = $"On hand: {_previewOnHand:0.##}";
         }
 
-        private void ItemList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (ItemList.SelectedItem is ItemPick p)
-            {
-                _previewItemId = p.ItemId;
-                _ = RefreshPreviewOnHandAsync();
-            }
-        }
 
         private bool IsAdmin()
         {

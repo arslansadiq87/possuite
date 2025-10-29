@@ -2,9 +2,12 @@
         x:Name="MainWindowRoot"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls"
+        mc:Ignorable="d"
         MinHeight="400" MinWidth="800" FocusManager.IsFocusScope="True">
    
-    
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>        <!-- Till bar -->
@@ -48,41 +51,9 @@
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" Grid.Column="0">
                 <TextBlock Text="Scan / Search:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <Grid>
-                    <TextBox x:Name="ScanText"
-             Width="320" Height="28"
-             VerticalContentAlignment="Center"
-             TextChanged="ScanText_TextChanged"
-             PreviewKeyDown="ScanText_PreviewKeyDown" Style="{StaticResource Txt.Search}"/>
-                    <Popup x:Name="ScanPopup"
-           PlacementTarget="{Binding ElementName=ScanText}"
-           Placement="Bottom"
-           StaysOpen="False"
-           AllowsTransparency="True">
-                        <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
-              Padding="4" MinWidth="{Binding ElementName=ScanText, Path=ActualWidth}">
-                            <ListBox x:Name="ScanList"
-                 MouseDoubleClick="ScanList_MouseDoubleClick"
-                 PreviewKeyDown="ScanList_PreviewKeyDown">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding DisplayName}" />
-                                            <TextBlock Text=" — " Foreground="Gray"/>
-                                            <TextBlock Text="{Binding Sku}" Foreground="Gray"/>
-                                            <TextBlock Text=" (" Foreground="Gray"/>
-                                            <TextBlock Text="{Binding Barcode}" Foreground="Gray"/>
-                                            <TextBlock Text=")" Foreground="Gray"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Border>
-                    </Popup>
-                </Grid>
-                <Button Content="Add" Click="AddButton_Click"
-          Margin="8,0,0,0" Height="28" Width="55"
-          Style="{StaticResource Btn.GlobalPrimary}"/>
+                <Controls:ItemSearchBox x:Name="ItemSearch"
+                          Width="320"
+                          ItemPicked="ItemSearch_ItemPicked"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
                 <TextBlock Text="Cashier:" VerticalAlignment="Center" Margin="16,0,6,0"/>
@@ -224,14 +195,10 @@
                FontWeight="Bold" Foreground="#1F3A93"
                HorizontalAlignment="Stretch" TextAlignment="Right"/>
                     </Grid>
-
                 </Grid>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                    
                     <Button Content="Clear(F5)/Hold(F8)" Height="40" Width="150" Margin="12,0,0,0"
                     Click="ClearHoldButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
-                    <!--<Button Content="Invoices (F7)" Height="40" Width="150" Margin="12,0,0,0"
-                    Click="OpenInvoiceCenter_Click" Style="{StaticResource Btn.GlobalPrimary}"/>-->
                     <Button Content="Pay (F9)" Height="40" Width="150" Margin="12,0,0,0"
                     Click="PayButton_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
                 </StackPanel>

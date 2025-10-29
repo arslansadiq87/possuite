@@ -129,8 +129,14 @@
         <!-- ===== ITEM SEARCH (free-form only) ===== -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,12" HorizontalAlignment="Left"
             Visibility="{Binding CanAddItems, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="Item:" FontWeight="SemiBold" Margin="0,0,6,0"/>
-            <Grid>
+            <TextBlock Text="Item Search:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+            <!-- New shared search control -->
+            <Controls:ItemSearchBox x:Name="ItemSearch"
+                        Margin="0,4,0,8"
+                        ItemPicked="ItemSearch_ItemPicked"
+                        TabIndex="30" />
+
+            <!--<Grid>
                 <TextBox x:Name="ItemText" Width="360" Height="32"
                      TextChanged="ItemText_TextChanged"
                      PreviewKeyDown="ItemText_PreviewKeyDown"
@@ -164,7 +170,7 @@
                         </ScrollViewer>
                     </Border>
                 </Popup>
-            </Grid>
+            </Grid>-->
 
             <!-- Return Source: only visible for WITHOUT-INVOICE returns --><!--
             <StackPanel Orientation="Horizontal" Grid.ColumnSpan="2" Margin="0,6,0,0">
