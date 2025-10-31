@@ -44,6 +44,7 @@ public sealed class TillService : ITillService
     public async Task<bool> CloseTillAsync()
     {
         using var db = new PosClientDbContext(_dbOptions);
+
         var open = GetOpenTill(db, OutletId, CounterId);
         if (open == null)
         {
@@ -51,29 +52,55 @@ public sealed class TillService : ITillService
             return false;
         }
 
-        // Sales tied to this till session (already scoped by TillSessionId)
-        var all = db.Sales
-            .Where(s => s.TillSessionId == open.Id && s.Status == SaleStatus.Final)
-            .AsNoTracking()
+        // A) Latest state for business totals (exclude superseded & voided)
+        var latest = db.Sales.AsNoTracking()
+            .Where(s => s.TillSessionId == open.Id
+                     && s.Status == SaleStatus.Final
+                     && s.VoidedAtUtc == null
+                     && s.RevisedToSaleId == null)
             .ToList();
 
-        var sales = all.Where(s => !s.IsReturn).ToList();
-        var returns = all.Where(s => s.IsReturn).ToList();
-        var salesTotal = sales.Sum(s => s.Total);
-        var returnsTotal = returns.Sum(s => s.Total);
-        var expectedCash = open.OpeningFloat + sales.Sum(s => s.CashAmount) - returns.Sum(s => s.CashAmount);
+        var latestSales = latest.Where(s => !s.IsReturn).ToList();
+        var latestReturns = latest.Where(s => s.IsReturn).ToList();
 
+        var salesTotal = latestSales.Sum(s => s.Total);
+        var returnsTotalAbs = latestReturns.Sum(s => Math.Abs(s.Total));
+        var netTotal = salesTotal - returnsTotalAbs;
+
+        // B) Movements for expected cash (include ALL final, non-voided docs; each revision = delta)
+        var moves = db.Sales.AsNoTracking()
+            .Where(s => s.TillSessionId == open.Id
+                     && s.Status == SaleStatus.Final
+                     && s.VoidedAtUtc == null)
+            .ToList();
+
+        // Cash from sales: sign-preserving (amendments that reduce cash will be negative)
+        var salesCash = moves.Where(s => !s.IsReturn).Sum(s => s.CashAmount);
+
+        // Cash refunds: subtract absolute magnitude (polarity-safe for how returns are stored)
+        var refundsCashAbs = Math.Abs(moves.Where(s => s.IsReturn).Sum(s => s.CashAmount));
+
+        var expectedCash = open.OpeningFloat + salesCash - refundsCashAbs;
+
+        // Prompt for declared cash (pre-fill with expected)
         var declaredStr = Microsoft.VisualBasic.Interaction.InputBox(
-            $"Z Report\nSales total: {salesTotal:0.00}\n\nEnter DECLARED CASH:",
-            "Close Till (Z Report)", expectedCash.ToString("0.00"));
+            $"Z Report\nSales total: {salesTotal:0.00}\nReturns total: {returnsTotalAbs:0.00}\nNet total: {netTotal:0.00}\n\nEnter DECLARED CASH:",
+            "Close Till (Z Report)", expectedCash.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
 
-        if (!decimal.TryParse(declaredStr, out var declaredCash))
+        if (!decimal.TryParse(declaredStr, System.Globalization.NumberStyles.Number,
+                              System.Globalization.CultureInfo.CurrentCulture, out var declaredCash))
         {
-            MessageBox.Show("Invalid amount. Till not closed.");
-            return false;
+            // try invariant as a fallback (e.g., 1234.56 typed with dot)
+            if (!decimal.TryParse(declaredStr, System.Globalization.NumberStyles.Number,
+                                  System.Globalization.CultureInfo.InvariantCulture, out declaredCash))
+            {
+                MessageBox.Show("Invalid amount. Till not closed.");
+                return false;
+            }
         }
 
         var overShort = declaredCash - expectedCash;
+
         open.CloseTs = DateTime.UtcNow;
         open.DeclaredCash = declaredCash;
         open.OverShort = overShort;
@@ -81,18 +108,21 @@ public sealed class TillService : ITillService
 
         var z = new StringBuilder();
         z.AppendLine($"=== Z REPORT (Till {open.Id}) ===");
-        z.AppendLine($"Outlet/Counter: {OutletId}/{CounterId}");
-        z.AppendLine($"Opened (local): {open.OpenTs.ToLocalTime()}");
-        z.AppendLine($"Closed (local): {open.CloseTs?.ToLocalTime()}");
-        z.AppendLine($"Opening Float : {open.OpeningFloat:0.00}");
-        z.AppendLine($"Sales Total   : {salesTotal:0.00}");
-        z.AppendLine($"Expected Cash : {expectedCash:0.00}");
-        z.AppendLine($"Declared Cash : {declaredCash:0.00}");
-        z.AppendLine($"Over/Short    : {overShort:+0.00;-0.00;0.00}");
-        MessageBox.Show(z.ToString(), "Z Report");
+        z.AppendLine($"Outlet/Counter : {OutletId}/{CounterId}");
+        z.AppendLine($"Opened (local) : {open.OpenTs.ToLocalTime()}");
+        z.AppendLine($"Closed (local) : {open.CloseTs?.ToLocalTime()}");
+        z.AppendLine($"Opening Float  : {open.OpeningFloat:0.00}");
+        z.AppendLine($"Sales Total    : {salesTotal:0.00}");
+        z.AppendLine($"Returns Total  : {returnsTotalAbs:0.00}");
+        z.AppendLine($"Net Total      : {netTotal:0.00}");
+        z.AppendLine($"Expected Cash  : {expectedCash:0.00}");
+        z.AppendLine($"Declared Cash  : {declaredCash:0.00}");
+        z.AppendLine($"Over/Short     : {overShort:+0.00;-0.00;0.00}");
 
+        MessageBox.Show(z.ToString(), "Z Report");
         return true;
     }
+
 
     public string GetStatusText()
     {

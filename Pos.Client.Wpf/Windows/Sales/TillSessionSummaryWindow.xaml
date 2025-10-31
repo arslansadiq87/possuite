@@ -102,6 +102,11 @@
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <!-- add these -->
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -138,6 +143,20 @@
 
                     <TextBlock Grid.Row="10" Grid.Column="0" Text="Tax refunded:" HorizontalAlignment="Right"/>
                     <TextBlock Grid.Row="10" Grid.Column="1" x:Name="TaxRefundedText" TextAlignment="Right"/>
+                    
+                    <Border Grid.Row="11" Grid.ColumnSpan="2" BorderBrush="#EEE" BorderThickness="0,1,0,0" Margin="0,6,0,6"/>
+                    <!-- Row 11 -->
+                    <TextBlock Grid.Row="12" Grid.Column="0" Text="Sale amendments:" HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="12" Grid.Column="1" x:Name="SalesAmendmentsText" TextAlignment="Right"/>
+
+                    <!-- Row 12 -->
+                    <TextBlock Grid.Row="13" Grid.Column="0" Text="Return amendments:" HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="13" Grid.Column="1" x:Name="ReturnAmendmentsText" TextAlignment="Right"/>
+
+                    <!-- Row 13 -->
+                    <TextBlock Grid.Row="14" Grid.Column="0" Text="Voided invoices:" HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="14" Grid.Column="1" x:Name="VoidsCountText" TextAlignment="Right"/>
+
                 </Grid>
             </GroupBox>
         </Grid>

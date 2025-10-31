@@ -42,7 +42,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             public string TsLocal { get; set; } = "";
             public string Customer { get; set; } = "";
             public decimal Total { get; set; }
-            public bool HasRevisions => Revision > 1;
+            public bool HasRevisions => Revision > 0;
             public bool IsReturnWithInvoice { get; set; }   // NEW
 
 
@@ -290,7 +290,7 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             var (sale, lines) = _svc.LoadSaleWithLines(sel.SaleId);
             var displayTotal = sale.IsReturn ? -Math.Abs(sale.Total) : Math.Abs(sale.Total);
-            var revPart = sale.Revision > 1 ? $"  Rev {sale.Revision}  " : "  ";
+            var revPart = sale.Revision > 0 ? $"  Rev {sale.Revision}  " : "  ";
             HeaderText.Text = $"Invoice {sale.CounterId}-{sale.InvoiceNumber}{revPart}" +
                               $"Status: {sale.Status}  {(sale.IsReturn ? "[RETURN]" : "")}  Total: {displayTotal:0.00}";
 
