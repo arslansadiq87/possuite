@@ -41,6 +41,9 @@ namespace Pos.Persistence
         public DbSet<OpeningStock> OpeningStocks => Set<OpeningStock>();
         public DbSet<OpeningStockLine> OpeningStockLines => Set<OpeningStockLine>();
         public DbSet<OpeningStockDraftLine> OpeningStockDraftLines => Set<OpeningStockDraftLine>();
+        public DbSet<InvoiceSettings> InvoiceSettings { get; set; } = default!;
+        public DbSet<InvoiceLocalization> InvoiceLocalizations { get; set; } = default!;
+        public DbSet<BarcodeLabelSettings> BarcodeLabelSettings { get; set; } = default!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -51,6 +54,9 @@ namespace Pos.Persistence
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);
+
+            b.ApplyConfiguration(new Configurations.InvoiceSettingsConfig());
+            b.ApplyConfiguration(new Configurations.InvoiceLocalizationConfig());
             b.Entity<User>().Property(u => u.Role).HasConversion<int>();
             b.Entity<User>()
                 .HasIndex(u => u.Username)
@@ -443,6 +449,14 @@ namespace Pos.Persistence
                 // NOTE: We keep your existing StockDoc -> Lines (StockEntry) relationship
                 // for Opening and other flows (it’s already implicit via StockEntry.StockDocId).
             });
+            b.Entity<BarcodeLabelSettings>(e =>
+            {
+                e.ToTable("BarcodeLabelSettings");
+                e.HasIndex(x => x.OutletId);
+                e.Property(x => x.PrinterName).HasMaxLength(200);
+                e.Property(x => x.CodeType).HasMaxLength(20);
+            });
+
 
 
             // ---- Provider-aware RowVersion mapping for ALL BaseEntity types ----

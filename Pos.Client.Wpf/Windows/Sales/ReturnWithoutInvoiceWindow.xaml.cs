@@ -23,38 +23,19 @@ namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class ReturnWithoutInvoiceWindow : Window
     {
-        // ====== DB ======
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
-
-        // ====== Context (aligns with Sale screen) ======
         private readonly ObservableCollection<ReturnLine> _cart = new();
-        public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
-        private ICollectionView? _scanView;
-
         private readonly int _outletId;
         private readonly int _counterId;
-
-        // Cashier & Salesman (basic snapshot; wire to login if you have it)
-        private int cashierId = 1;
-        private string cashierDisplay = "Admin";
+        private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
+        private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
         private int? _selectedSalesmanId = null;
         private string? _selectedSalesmanName = null;
-
         // Invoice-level discount
         private decimal _invDiscPct = 0m;
         private decimal _invDiscAmt = 0m;
-
         // Footer
         private string _footer = "Return processed — thank you!";
-
-        // Scan helpers
-        private DateTime _lastScanTextAt = DateTime.MinValue;
-        private int _scanBurstCount = 0;
-        private bool _suppressDropdown = false;
-        private readonly DispatcherTimer _burstResetTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
-        private string _typedQuery = "";
-
-        // ====== Constructors (pick the one your caller uses) ======
         // Designer-safe
         public ReturnWithoutInvoiceWindow() : this(1, 1) { }
 
@@ -63,65 +44,34 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             _outletId = outletId;
             _counterId = counterId;
-
             _dbOptions = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString)
                 .Options;
-
             Init();
         }
 
-        // Compatibility ctor for InvoiceCenterWindow (fixes CS1739)
         public ReturnWithoutInvoiceWindow(IReturnsService _unused, int outletId, int counterId, int? _unusedTill, int _unusedUser)
             : this(outletId, counterId) { }
 
-        // ====== Init (shared by all ctors) ======
         private void Init()
         {
             InitializeComponent();
-
-            // Keyboard shortcuts
             this.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.F9) { RefundButton_Click(s, e); e.Handled = true; return; }
                 if (e.Key == Key.F5) { ClearButton_Click(s, e); e.Handled = true; return; }
-
-                if (e.Key == Key.Down)
-                {
-                    _scanView?.Refresh();
-                    if (_scanView != null && _scanView.Cast<object>().Any())
-                        ScanPopup.IsOpen = true;
-                    if (ScanPopup.IsOpen && ScanList.Items.Count > 0 && ScanList.SelectedIndex < 0)
-                        ScanList.SelectedIndex = 0;
-                }
             };
-
-            // Cart/grid
             CartGrid.ItemsSource = _cart;
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
-
-            // Item index for scan/search dropdown
-            LoadItemIndex();
-            _scanView = CollectionViewSource.GetDefaultView(DataContextItemIndex);
-            _scanView.Filter = ScanFilter;
-            ScanList.ItemsSource = _scanView;
-
-            _burstResetTimer.Tick += (_, __) =>
-            {
-                _suppressDropdown = false; _scanBurstCount = 0; _burstResetTimer.Stop();
-            };
-
-            // Defaults
             FooterBox.Text = _footer;
             CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
-
             Loaded += (_, __) =>
             {
                 UpdateTillStatusUi();
                 UpdateInvoicePreview();
                 UpdateInvoiceDateNow();
                 LoadSalesmen();
-                ScanText.Focus();
+                ItemSearch?.FocusSearch();
                 UpdateTotal();
             };
         }
@@ -191,7 +141,38 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
-        // ====== Scan / search (Sale-like behavior) ======
+        // Map Pos.Domain.DTO.ItemIndexDto (from ItemSearchBox) to this window's local ItemIndexDto
+        private ItemIndexDto AdaptItem(Pos.Domain.DTO.ItemIndexDto src)
+        {
+            return new ItemIndexDto(
+                Id: src.Id,
+                Name: src.Name ?? src.DisplayName ?? "",
+                Sku: src.Sku ?? "",
+                Barcode: src.Barcode ?? "",
+                Price: src.Price,
+                TaxCode: src.TaxCode,
+                DefaultTaxRatePct: src.DefaultTaxRatePct,
+                TaxInclusive: src.TaxInclusive,
+                DefaultDiscountPct: src.DefaultDiscountPct,
+                DefaultDiscountAmt: src.DefaultDiscountAmt,
+                ProductName: src.ProductName,
+                Variant1Name: src.Variant1Name,
+                Variant1Value: src.Variant1Value,
+                Variant2Name: src.Variant2Name,
+                Variant2Value: src.Variant2Value
+            );
+        }
+
+        private void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        {
+            var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
+            var pick = box.SelectedItem; // Pos.Domain.DTO.ItemIndexDto
+            if (pick is null) return;
+            var adapted = AdaptItem(pick);
+            AddItemToCart(adapted);
+            try { ItemSearch?.FocusSearch(); } catch { }
+        }
+
         public record ItemIndexDto(
             int Id,
             string Name,
@@ -214,222 +195,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 ProductNameComposer.Compose(ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
         }
 
-        private void LoadItemIndex()
-        {
-            using var db = new PosClientDbContext(_dbOptions);
-
-            var list =
-                (from i in db.Items.AsNoTracking()
-                 let primaryBarcode =
-                     db.ItemBarcodes
-                       .Where(b => b.ItemId == i.Id)
-                       .OrderByDescending(b => b.IsPrimary)   // prefer primary
-                       .ThenBy(b => b.Id)                      // stable fallback
-                       .Select(b => b.Code)
-                       .FirstOrDefault()
-                 join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
-                 from p in gp.DefaultIfEmpty()
-                 orderby i.Name
-                 select new ItemIndexDto(
-                     i.Id,
-                     i.Name,
-                     i.Sku,
-                     primaryBarcode ?? "",        // <-- was i.Barcode
-                     i.Price,
-                     i.TaxCode,
-                     i.DefaultTaxRatePct,
-                     i.TaxInclusive,
-                     i.DefaultDiscountPct,
-                     i.DefaultDiscountAmt,
-                     p != null ? p.Name : null,
-                     i.Variant1Name, i.Variant1Value,
-                     i.Variant2Name, i.Variant2Value
-                 )).ToList();
-
-            DataContextItemIndex.Clear();
-            foreach (var it in list) DataContextItemIndex.Add(it);
-        }
-
-
-        private bool ScanFilter(object o)
-        {
-            if (o is not ItemIndexDto i) return false;
-            var term = (_typedQuery ?? "").Trim();
-            if (term.Length == 0) return true;
-
-            return (i.DisplayName?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
-                || (i.Sku?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
-                || (i.Barcode?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
-        }
-
-        private void ScanText_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            // burst detection (barcode scanners)
-            var now = DateTime.UtcNow;
-            if ((now - _lastScanTextAt).TotalMilliseconds <= 40) _scanBurstCount++;
-            else _scanBurstCount = 1;
-            _lastScanTextAt = now;
-            if (_scanBurstCount >= 4) { _suppressDropdown = true; _burstResetTimer.Stop(); _burstResetTimer.Start(); }
-
-            _typedQuery = ScanText.Text ?? "";
-            _scanView?.Refresh();
-
-            bool hasMatches = _scanView != null && _scanView.Cast<object>().Any();
-            ScanPopup.IsOpen = !_suppressDropdown && _typedQuery.Length > 0 && hasMatches;
-
-            if (ScanPopup.IsOpen && ScanList.Items.Count > 0 && ScanList.SelectedIndex < 0)
-                ScanList.SelectedIndex = 0;
-        }
-
-        private void ScanText_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter) { e.Handled = true; AddFromScanBox(); return; }
-
-            if (e.Key == Key.Down)
-            {
-                if (!ScanPopup.IsOpen)
-                {
-                    _scanView?.Refresh();
-                    if (_scanView != null && _scanView.Cast<object>().Any())
-                        ScanPopup.IsOpen = true;
-                }
-                if (ScanPopup.IsOpen && ScanList.Items.Count > 0)
-                {
-                    if (ScanList.SelectedIndex < 0) ScanList.SelectedIndex = 0;
-                    ScanList.Focus();
-                }
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.Escape && ScanPopup.IsOpen)
-            {
-                ScanPopup.IsOpen = false;
-                e.Handled = true;
-                return;
-            }
-        }
-
-        private void ScanList_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter)
-            {
-                if (ScanList.SelectedItem is ItemIndexDto pick)
-                {
-                    AddItemToCart(pick);
-                    ClearScan();
-                }
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Escape)
-            {
-                ScanPopup.IsOpen = false;
-                ScanText.Focus();
-                e.Handled = true;
-            }
-        }
-
-        private void ScanList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            if (ScanList.SelectedItem is ItemIndexDto pick)
-            {
-                AddItemToCart(pick);
-                ClearScan();
-            }
-        }
-
-        private void AddButton_Click(object sender, RoutedEventArgs e) => AddFromScanBox();
-
-        private void AddFromScanBox()
-        {
-            var text = ScanText.Text?.Trim() ?? string.Empty;
-            ItemIndexDto? pick = null;
-
-            // 1) selected from dropdown
-            if (ScanPopup.IsOpen && ScanList.SelectedItem is ItemIndexDto sel) pick = sel;
-
-            // 2) exact barcode / SKU
-            if (pick is null && text.Length > 0)
-            {
-                pick = DataContextItemIndex.FirstOrDefault(i => i.Barcode == text)
-                    ?? DataContextItemIndex.FirstOrDefault(i => i.Sku == text);
-            }
-
-            // 3) starts-with on display name
-            if (pick is null && text.Length > 0)
-            {
-                pick = DataContextItemIndex.FirstOrDefault(i =>
-                    (i.DisplayName ?? i.Name).StartsWith(text, StringComparison.OrdinalIgnoreCase));
-            }
-
-            // 4) DB fallback
-            // 4) DB fallback (now checks ItemBarcodes instead of Items.Barcode)
-            if (pick is null && text.Length > 0)
-            {
-                using var db = new PosClientDbContext(_dbOptions);
-
-                var dbItem =
-                    (from i in db.Items.AsNoTracking()
-                     let primaryBarcode =
-                         db.ItemBarcodes
-                           .Where(b => b.ItemId == i.Id)
-                           .OrderByDescending(b => b.IsPrimary)
-                           .ThenBy(b => b.Id)
-                           .Select(b => b.Code)
-                           .FirstOrDefault()
-                     join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
-                     from p in gp.DefaultIfEmpty()
-                     where
-                         // exact barcode hit on ANY barcode for the item
-                         db.ItemBarcodes.Any(b => b.ItemId == i.Id && b.Code == text)
-                         // or exact SKU
-                         || i.Sku == text
-                         // or starts-with on names/variants/product
-                         || EF.Functions.Like(EF.Functions.Collate(i.Name, "NOCASE"), text + "%")
-                         || (i.Variant1Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant1Value, "NOCASE"), text + "%"))
-                         || (i.Variant2Value != null && EF.Functions.Like(EF.Functions.Collate(i.Variant2Value, "NOCASE"), text + "%"))
-                         || (p != null && EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), text + "%"))
-                     orderby i.Name
-                     select new ItemIndexDto(
-                         i.Id,
-                         i.Name,
-                         i.Sku,
-                         primaryBarcode ?? "",   // present a primary (or first) barcode in the UI
-                         i.Price,
-                         i.TaxCode,
-                         i.DefaultTaxRatePct,
-                         i.TaxInclusive,
-                         i.DefaultDiscountPct,
-                         i.DefaultDiscountAmt,
-                         p != null ? p.Name : null,
-                         i.Variant1Name, i.Variant1Value,
-                         i.Variant2Name, i.Variant2Value
-                     )).FirstOrDefault();
-
-                if (dbItem is not null)
-                {
-                    DataContextItemIndex.Add(dbItem);
-                    pick = dbItem;
-                }
-            }
-
-
-            if (pick is null) { MessageBox.Show("Item not found."); ScanText.Focus(); return; }
-
-            AddItemToCart(pick);
-            ClearScan();
-        }
-
-        private void ClearScan()
-        {
-            _typedQuery = "";
-            ScanText.Text = string.Empty;
-            ScanPopup.IsOpen = false;
-            _suppressDropdown = false;
-            _scanBurstCount = 0;
-            ScanText.Focus();
-        }
-
+        
         private void AddItemToCart(ItemIndexDto item)
         {
             var existing = _cart.FirstOrDefault(c => c.ItemId == item.Id);
@@ -461,7 +227,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
         }
 
-        // ====== Cart / pricing ======
         private static void RecalcLineShared(ReturnLine l)
         {
             var a = PricingMath.CalcLine(new LineInput(
@@ -471,7 +236,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 DiscountAmt: l.DiscountAmt,
                 TaxRatePct: l.TaxRatePct,
                 TaxInclusive: l.TaxInclusive));
-
             l.UnitNet = a.UnitNet;
             l.LineNet = a.LineNet;
             l.LineTax = a.LineTax;
@@ -570,9 +334,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                     ? Math.Min(_invDiscAmt, baseForInvDisc)
                     : PricingMath.RoundMoney(baseForInvDisc * (_invDiscPct / 100m));
             }
-
             var factor = (baseForInvDisc > 0m) ? (baseForInvDisc - invDiscValue) / baseForInvDisc : 1m;
-
             decimal adjNetSum = 0m, adjTaxSum = 0m;
             foreach (var l in lines)
             {
@@ -582,26 +344,21 @@ namespace Pos.Client.Wpf.Windows.Sales
                 adjNetSum += adjNet;
                 adjTaxSum += adjTax;
             }
-
             var subtotal = adjNetSum;
             var tax = adjTaxSum;
             var grand = subtotal + tax;
-
             SubtotalText.Text = subtotal.ToString("N2", CultureInfo.CurrentCulture);
             DiscountText.Text = (-invDiscValue).ToString("N2", CultureInfo.CurrentCulture);
             TaxText.Text = tax.ToString("N2", CultureInfo.CurrentCulture);
             TotalText.Text = grand.ToString("N2", CultureInfo.CurrentCulture);
-
             ItemsCountText.Text = _cart.Count.ToString();
             QtySumText.Text = _cart.Sum(l => l.Qty).ToString();
         }
 
-        // ====== Buttons ======
         private void ClearButton_Click(object sender, RoutedEventArgs e)
         {
             if (_cart.Count == 0 && string.IsNullOrWhiteSpace(InvDiscPctBox.Text) && string.IsNullOrWhiteSpace(InvDiscAmtBox.Text))
             {
-                // nothing to clear
             }
             else
             {
@@ -618,26 +375,20 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (CustPhoneBox != null) CustPhoneBox.Text = "";
             ReasonBox.Text = "";
             UpdateTotal();
-            ScanText.Focus();
+            ItemSearch?.FocusSearch();
         }
 
         private async void RefundButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_cart.Any()) { MessageBox.Show("Nothing to return — cart is empty."); return; }
-
             using var db = new PosClientDbContext(_dbOptions);
             var open = GetOpenTill(db);
             if (open == null) { MessageBox.Show("Till is CLOSED. Please open till before refund.", "Till Closed"); return; }
-
-            // recompute lines
             foreach (var l in _cart) RecalcLineShared(l);
-
             // totals with invoice-level discount
             var lineNetSum = _cart.Sum(l => l.LineNet);
             var lineTaxSum = _cart.Sum(l => l.LineTax);
-
             if (_invDiscPct > 100m) _invDiscPct = 100m;
-
             var baseForInvDisc = lineNetSum;
             var invDiscValue = 0m;
             if (baseForInvDisc > 0m)
@@ -647,7 +398,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                     : PricingMath.RoundMoney(baseForInvDisc * (_invDiscPct / 100m));
             }
             var factor = (baseForInvDisc > 0m) ? (baseForInvDisc - invDiscValue) / baseForInvDisc : 1m;
-
             decimal adjNetSum = 0m, adjTaxSum = 0m;
             foreach (var l in _cart)
             {
@@ -657,40 +407,30 @@ namespace Pos.Client.Wpf.Windows.Sales
                 adjNetSum += adjNet;
                 adjTaxSum += adjTax;
             }
-
             var subtotal = adjNetSum;
             var tax = adjTaxSum;
             var grand = subtotal + tax;
             if (grand <= 0m) { MessageBox.Show("Refund must be greater than 0."); return; }
-
             var itemsCount = _cart.Count;
             var qtySum = _cart.Sum(l => l.Qty);
-
-            // customer snapshot
             bool isWalkIn = (WalkInCheck?.IsChecked == true);
             var customerKind = isWalkIn ? CustomerKind.WalkIn : CustomerKind.Registered;
             int? customerId = null; // attach if you have a customers table/id
             string? customerName = isWalkIn ? null : (CustNameBox?.Text?.Trim());
             string? customerPhone = isWalkIn ? null : (CustPhoneBox?.Text?.Trim());
-
-            // cashier
             var cashier = db.Users.AsNoTracking()
                 .FirstOrDefault(u => u.Id == cashierId)
                 ?? db.Users.AsNoTracking().FirstOrDefault(u => u.Username == "admin")
                 ?? db.Users.AsNoTracking().FirstOrDefault(u => u.IsActive);
             if (cashier == null) { MessageBox.Show("No active users found."); return; }
-
             int cashierIdLocal = cashier.Id;
             string cashierDisplayLocal = cashier.DisplayName ?? "Unknown";
-
             int? salesmanIdLocal = _selectedSalesmanId;
             if (!salesmanIdLocal.HasValue && SalesmanBox?.SelectedItem is User sel2)
                 salesmanIdLocal = (sel2.Id == 0) ? (int?)null : sel2.Id;
-
             if (salesmanIdLocal.HasValue &&
                 !db.Users.AsNoTracking().Any(u => u.Id == salesmanIdLocal.Value))
                 salesmanIdLocal = null;
-
             // Pay dialog (overlay, refund split)
             var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
             var payResult = await paySvc.ShowAsync(
@@ -702,48 +442,38 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             if (!payResult.Confirmed)
             {
-                ScanText.Focus();
+                ItemSearch?.FocusSearch();
                 return;
             }
-
             var refundCash = payResult.Cash;
             var refundCard = payResult.Card;
-
             if (refundCash + refundCard + 0.01m < grand)
             {
                 MessageBox.Show("Refund split is less than total.");
                 return;
             }
-
-
             var paymentMethod =
                 (refundCash > 0 && refundCard > 0) ? PaymentMethod.Mixed :
                 (refundCash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
-
             // Save inside a transaction
             using var tx = db.Database.BeginTransaction();
-
             var seq = db.CounterSequences.SingleOrDefault(x => x.CounterId == _counterId)
                       ?? db.CounterSequences.Add(new CounterSequence { CounterId = _counterId, NextInvoiceNumber = 1 }).Entity;
             db.SaveChanges();
-
             var allocatedInvoiceNo = seq.NextInvoiceNumber;
             seq.NextInvoiceNumber++;
             db.SaveChanges();
-
             var sale = new Sale
             {
                 Ts = DateTime.UtcNow,
                 OutletId = _outletId,
                 CounterId = _counterId,
                 TillSessionId = open.Id,
-
                 IsReturn = true,
                 OriginalSaleId = null,
                 Status = SaleStatus.Final,
                 Revision = 0,
                 InvoiceNumber = allocatedInvoiceNo,
-
                 // invoice-level discounts
                 InvoiceDiscountPct = (_invDiscAmt > 0m) ? (decimal?)null : _invDiscPct,
                 InvoiceDiscountAmt = (_invDiscAmt > 0m) ? _invDiscAmt : (decimal?)null,
@@ -859,28 +589,21 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
             UpdateInvoicePreview();
             UpdateInvoiceDateNow();
-            ScanText.Focus();
+            ItemSearch?.FocusSearch();
         }
 
-        // ====== Till open/close (simple MVP) ======
-                
-        // ====== ReturnLine (mirrors CartLine) ======
         public class ReturnLine : INotifyPropertyChanged
         {
             public event PropertyChangedEventHandler? PropertyChanged;
             private void OnPropertyChanged([CallerMemberName] string? name = null)
                 => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
             public int ItemId { get; set; }
             public string Sku { get; set; } = "";
             public string DisplayName { get; set; } = "";
-
             private int _qty;
             public int Qty { get => _qty; set { if (_qty == value) return; _qty = value; OnPropertyChanged(); } }
-
             private decimal _unitPrice;
             public decimal UnitPrice { get => _unitPrice; set { if (_unitPrice == value) return; _unitPrice = value; OnPropertyChanged(); } }
-
             private decimal? _discountPct;
             public decimal? DiscountPct
             {
@@ -894,7 +617,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 get => _discountAmt;
                 set { if (_discountAmt == value) return; _discountAmt = value; if ((_discountAmt ?? 0) > 0) DiscountPct = null; OnPropertyChanged(); }
             }
-
             public string? TaxCode { get; set; }
             public decimal TaxRatePct { get; set; }
             public bool TaxInclusive { get; set; }

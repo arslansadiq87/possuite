@@ -17,6 +17,262 @@ namespace Pos.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
 
+            modelBuilder.Entity("InvoiceSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AddressLine1")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AddressLine2")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("AskToPrintOnSave")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("BusinessNtn")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("EnableDrawerKick")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EnableFbr")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FbrApiBaseUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FbrAuthKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FbrPosId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LogoAlignment")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LogoMaxWidthPx")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte[]>("LogoPng")
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("OutletDisplayName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("OutletId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PaperWidthMm")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("PrintBarcodeOnReceipt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("PrintOnSave")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PrinterName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RowShowLineDiscount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RowShowLineTotal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RowShowProductName")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RowShowProductSku")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RowShowQty")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RowShowUnitPrice")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowAddress")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowBusinessName")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowBusinessNtn")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowCashierOnReceipt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowContacts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowCustomerOnReceipt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowFbrQr")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowFooter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowLogo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowQr")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("TotalsShowBalance")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("TotalsShowDiscounts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("TotalsShowGrandTotal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("TotalsShowOtherExpenses")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("TotalsShowPaymentRecv")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("TotalsShowTaxes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutletId");
+
+                    b.ToTable("InvoiceSettings", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Domain.Entities.BarcodeLabelSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("BarcodeHeightMm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("BarcodeMarginBottomMm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("BarcodeMarginLeftMm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("BarcodeMarginRightMm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("BarcodeMarginTopMm")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("BusinessName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("BusinessXmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("BusinessYmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("CodeType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Columns")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Dpi")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FontSizePt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HorizontalGapMm")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LabelHeightMm")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LabelWidthMm")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MarginLeftMm")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MarginTopMm")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("NameXmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("NameYmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("OutletId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("PriceXmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("PriceYmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("PrinterName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Rows")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowBusinessName")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowName")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowPrice")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowSku")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("SkuXmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("SkuYmm")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("VerticalGapMm")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutletId");
+
+                    b.ToTable("BarcodeLabelSettings", (string)null);
+                });
+
             modelBuilder.Entity("Pos.Domain.Entities.Brand", b =>
                 {
                     b.Property<int>("Id")
@@ -305,6 +561,37 @@ namespace Pos.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("CounterSequences");
+                });
+
+            modelBuilder.Entity("Pos.Domain.Entities.InvoiceLocalization", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Footer")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Header")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("InvoiceSettingsId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Lang")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SaleReturnNote")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceSettingsId", "Lang")
+                        .IsUnique();
+
+                    b.ToTable("InvoiceLocalizations", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Item", b =>
@@ -1959,6 +2246,15 @@ namespace Pos.Persistence.Migrations
                     b.ToTable("Products");
                 });
 
+            modelBuilder.Entity("InvoiceSettings", b =>
+                {
+                    b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
+                        .WithMany()
+                        .HasForeignKey("OutletId");
+
+                    b.Navigation("Outlet");
+                });
+
             modelBuilder.Entity("Pos.Domain.Entities.Counter", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
@@ -1987,6 +2283,17 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Counter");
 
                     b.Navigation("Outlet");
+                });
+
+            modelBuilder.Entity("Pos.Domain.Entities.InvoiceLocalization", b =>
+                {
+                    b.HasOne("InvoiceSettings", "InvoiceSettings")
+                        .WithMany("Localizations")
+                        .HasForeignKey("InvoiceSettingsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InvoiceSettings");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Item", b =>
@@ -2249,6 +2556,11 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Brand");
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("InvoiceSettings", b =>
+                {
+                    b.Navigation("Localizations");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Brand", b =>

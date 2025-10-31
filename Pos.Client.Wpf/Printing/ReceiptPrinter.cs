@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using Pos.Domain.Entities;
 using Pos.Client.Wpf.Models;
-
+using Pos.Client.Wpf.Services;
 using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // <-- to see CartLine from MainWindow namespace
+using System.Threading.Tasks;
 
 namespace Pos.Client.Wpf.Printing
 {
@@ -14,9 +15,10 @@ namespace Pos.Client.Wpf.Printing
         // Back-compat 2-arg
         public static void PrintSale(Sale sale, IEnumerable<CartLine> cart)
         {
-            var bytes = EscPosReceiptBuilder.Build(sale, cart, storeName: "One Dollar Shop");
+            var bytes = EscPosReceiptBuilder.Build(sale, cart, "My Store");
             RawPrinterHelper.SendBytesToPrinter(PrinterName, bytes);
         }
+
 
         // NEW: matches your current call site (5 args)
         public static void PrintSale(
@@ -66,6 +68,33 @@ namespace Pos.Client.Wpf.Printing
         {
             // Build “Return Receipt”: show Original Invoice (if any),
             // list returned lines and refund/payment method.
+        }
+
+        public static async Task PrintSaleAsync(
+    Sale sale,
+    IEnumerable<CartLine> cart,
+    TillSession? till,
+    string cashierName,
+    string? salesmanName,
+    IInvoiceSettingsService settingsSvc)
+        {
+            var result = await settingsSvc.GetAsync(sale.OutletId, "en");
+            var settings = result.Settings;
+            // var loc = result.Local; // keep for future localization work
+
+            // Choose store display name from settings (fallback)
+            var storeName = string.IsNullOrWhiteSpace(settings.OutletDisplayName) ? "My Store" : settings.OutletDisplayName;
+
+            var bytes = EscPosReceiptBuilder.Build(
+                sale,
+                cart,
+                till,
+                storeName,          // 4th param is string storeName
+                cashierName,
+                salesmanName,
+                eReceiptBaseUrl: null);
+
+            RawPrinterHelper.SendBytesToPrinter(settings.PrinterName ?? PrinterName, bytes);
         }
 
 

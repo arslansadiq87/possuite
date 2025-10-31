@@ -20,18 +20,17 @@ namespace Pos.Client.Wpf.Printing
 
         // ---- Back-compat overload (old signature still works) ----
         public static byte[] Build(Sale sale, IEnumerable<CartLine> cart, string storeName = "My Store")
-            => Build(sale, cart, till: null, storeName: storeName, cashierName: "", salesmanName: null, eReceiptBaseUrl: null);
+            => Build(sale, cart, till: null, storeName, cashierName: "", salesmanName: null, eReceiptBaseUrl: null);
 
         // ---- New rich overload ----
         public static byte[] Build(
             Sale sale,
             IEnumerable<CartLine> cart,
-            TillSession? till,                // pass your open till here; can be null
+            TillSession? till,
             string storeName,
             string cashierName,
             string? salesmanName,
-            string? eReceiptBaseUrl = null    // e.g., "https://pos.example.com/r"
-        )
+            string? eReceiptBaseUrl = null)
         {
             var bytes = new List<byte>();
 

@@ -20,6 +20,9 @@ using Pos.Client.Wpf.Services;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows.Media;
+using Pos.Persistence.Services;
+using System.Linq;
+
 //using Pos.Client.Wpf.Contracts; // for App.Services.GetRequiredService
 
 namespace Pos.Client.Wpf.Windows.Sales
@@ -29,15 +32,15 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
-        private const int OutletId = 1;
-        private const int CounterId = 1;
+        private int OutletId => AppState.Current?.CurrentOutletId ?? 1;
+        private int CounterId => AppState.Current?.CurrentCounterId ?? 1;
         private decimal _invDiscPct = 0m;
         private decimal _invDiscAmt = 0m;
         private bool _isWalkIn = true;
         private string? _enteredCustomerName;
         private string? _enteredCustomerPhone;
-        private int cashierId = 1;                // TODO: wire to your login/session
-        private string cashierDisplay = "Admin";   // shows on screen/receipt
+        private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
+        private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
         private int? _selectedSalesmanId = null;
         private string? _selectedSalesmanName = null;
         private string _invoiceFooter = "Thank you for shopping with us!";
@@ -57,7 +60,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             _dbOptions = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString)   // <-- use the SAME connection string
                 .Options;
-
             CartGrid.ItemsSource = _cart;
             UpdateTotal();
             LoadItemIndex();
@@ -73,10 +75,8 @@ namespace Pos.Client.Wpf.Windows.Sales
                 // Sync once when everything exists
                 if (Window.GetWindow(this) is Window w)
                     w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
-
                 FocusScan();
             };
-
         }
 
         private ItemIndexDto AdaptItem(Pos.Domain.DTO.ItemIndexDto src)
@@ -98,22 +98,38 @@ namespace Pos.Client.Wpf.Windows.Sales
             );
         }
 
-        private void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
-            var pick = box.SelectedItem;                     // Pos.Domain.DTO.ItemIndexDto
+            var pick = box.SelectedItem;
             if (pick is null) return;
-            // Reuse your existing cart pipeline
-            var adapted = AdaptItem(pick);
-            AddItemToCart(adapted);
-            try
+
+            var itemId = pick.Id;
+            // Proposed total = existing qty in cart (for the same item) + 1
+            var existing = _cart.FirstOrDefault(c => c.ItemId == itemId);
+            var proposedTotal = (existing?.Qty ?? 0) + 1;
+
+            if (!await GuardSaleQtyAsync(itemId, proposedTotal))
             {
-                var tb = FindDescendant<TextBox>(ItemSearch);
-                if (tb != null) { tb.Focus(); tb.SelectAll(); }
-                else ItemSearch.Focus();
+                // Do not add
+                try { ItemSearch?.FocusSearch(); } catch { }
+                return;
             }
-            catch { }
+
+            // OK – proceed to add/increment
+            if (existing != null)
+            {
+                existing.Qty += 1;
+                RecalcLineShared(existing);
+            }
+            else
+            {
+                AddItemToCart(AdaptItem(pick)); // your existing add
+            }
+            UpdateTotal();
+            try { ItemSearch?.FocusSearch(); } catch { }
         }
+
 
         private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
         {
@@ -615,6 +631,27 @@ namespace Pos.Client.Wpf.Windows.Sales
             string eReceiptToken = Guid.NewGuid().ToString("N");
             string? eReceiptUrl = null;
             string? invoiceFooter = string.IsNullOrWhiteSpace(FooterBox?.Text) ? null : FooterBox!.Text;
+            
+            // --- Negative stock guard (Outlet) BEFORE we allocate invoice or write anything
+            {
+                var guard = new StockGuard(db);
+                var deltas = _cart
+                    .Where(l => l.ItemId > 0)
+                    .GroupBy(l => l.ItemId)
+                    .Select(g => (
+                        itemId: g.Key,
+                        outletId: OutletId,
+                        locType: InventoryLocationType.Outlet,
+                        locId: OutletId,
+                        // sale is OUT; negative delta
+                        delta: -g.Sum(x => Convert.ToDecimal(x.Qty))
+                    ))
+                    .ToArray();
+
+                // Will throw InvalidOperationException if any item would go < 0
+                await guard.EnsureNoNegativeAtLocationAsync(deltas);
+            }
+
             // ===== Start a transaction only AFTER the user confirms =====
             using var tx = db.Database.BeginTransaction();
             // ===================== Allocate invoice number per counter (inside tx) =====================
@@ -746,15 +783,19 @@ namespace Pos.Client.Wpf.Windows.Sales
             //ScanText.Focus();
         }
 
-        private void QtyPlus_Click(object sender, RoutedEventArgs e)
+        private async void QtyPlus_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.Tag is CartLine l)
             {
-                l.Qty += 1;
+                var proposedTotal = l.Qty + 1;
+                if (!await GuardSaleQtyAsync(l.ItemId, proposedTotal)) return;
+
+                l.Qty = proposedTotal;
                 RecalcLineShared(l);
                 UpdateTotal();
             }
         }
+
 
         private void QtyMinus_Click(object sender, RoutedEventArgs e)
         {
@@ -793,24 +834,46 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
         {
             if (e.EditAction != DataGridEditAction.Commit) return;
-            Dispatcher.BeginInvoke(new Action(() =>
+
+            // Defer until edit box value is applied to the bound object
+            Dispatcher.BeginInvoke(new Action(async () =>
             {
                 if (e.Row?.Item is CartLine l)
                 {
                     var header = (e.Column.Header as string) ?? string.Empty;
+
+                    if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Ensure positive integer/decimal if you support decimals
+                        if (l.Qty <= 0) { l.Qty = 1; }
+
+                        var ok = await GuardSaleQtyAsync(l.ItemId, l.Qty);
+                        if (!ok)
+                        {
+                            // Roll back one step (previous valid state). If you track old value, set that;
+                            // otherwise clamp to the maximum allowed by calling guard in a quick bisection,
+                            // but simplest UX is: revert to 1 or previous qty - 1:
+                            l.Qty -= 1;
+                            if (l.Qty < 1) l.Qty = 1;
+                        }
+                    }
+
+                    // Preserve your existing discount/price recompute logic
                     if (header.Contains("Disc %"))
                     {
-                        if ((l.DiscountPct ?? 0) > 0) l.DiscountAmt = null;   // % wins
+                        if ((l.DiscountPct ?? 0) > 0) l.DiscountAmt = null;
                     }
                     else if (header.Contains("Disc Amt"))
                     {
-                        if ((l.DiscountAmt ?? 0) > 0) l.DiscountPct = null;   // amount wins
+                        if ((l.DiscountAmt ?? 0) > 0) l.DiscountPct = null;
                     }
+
                     RecalcLineShared(l);
                     UpdateTotal();
                 }
-            }), System.Windows.Threading.DispatcherPriority.Background);
+            }), DispatcherPriority.Background);
         }
+
 
         private void ResumeHeld(int saleId)
         {
@@ -898,6 +961,38 @@ namespace Pos.Client.Wpf.Windows.Sales
             }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
         public void RestoreFocusToScan() => FocusScan();
+
+        // Validate a single line's proposed qty (total to sell for this item in this invoice)
+        // We pass the proposed total OUT delta (-qty) to the shared StockGuard.
+        private async Task<bool> GuardSaleQtyAsync(int itemId, decimal proposedQty)
+        {
+            if (proposedQty <= 0) return true; // nothing to guard
+
+            using var db = new PosClientDbContext(_dbOptions);
+            var guard = new StockGuard(db);
+
+            try
+            {
+                // Single-location, single-item check at the current outlet
+                var outletId = OutletId; // (this property already exists in your Sale window)
+                await guard.EnsureNoNegativeAtLocationAsync(new[]
+                {
+            (itemId: itemId,
+             outletId: outletId,
+             locType: InventoryLocationType.Outlet,
+             locId: outletId,
+             delta: -proposedQty) // OUT for sale
+        });
+                return true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Show the same message the guard uses (keeps UX/messages consistent)
+                MessageBox.Show(ex.Message, "Not enough stock", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+        }
+
     }
 }
     

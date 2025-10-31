@@ -4,22 +4,24 @@ using Pos.Domain.Entities;
 using System.Text;
 using System.Windows;
 using Pos.Domain;
+using Pos.Client.Wpf.Services;
 
 public sealed class TillService : ITillService
 {
     private readonly DbContextOptions<PosClientDbContext> _dbOptions;
-    private const int OutletId = 1;
-    private const int CounterId = 1;
-
-    public TillService(DbContextOptions<PosClientDbContext> dbOptions)
+    private readonly ITerminalContext _ctx;
+        
+    public TillService(DbContextOptions<PosClientDbContext> dbOptions, ITerminalContext ctx)
     {
         _dbOptions = dbOptions;
+        _ctx = ctx;
     }
-
+    private int OutletId => _ctx.OutletId;
+    private int CounterId => _ctx.CounterId;
     public async Task<bool> OpenTillAsync()
     {
         using var db = new PosClientDbContext(_dbOptions);
-        var open = GetOpenTill(db);
+        var open = GetOpenTill(db, OutletId, CounterId);
         if (open != null)
         {
             MessageBox.Show($"Till already open (Id={open.Id}).", "Info");
@@ -42,15 +44,16 @@ public sealed class TillService : ITillService
     public async Task<bool> CloseTillAsync()
     {
         using var db = new PosClientDbContext(_dbOptions);
-        var open = GetOpenTill(db);
+        var open = GetOpenTill(db, OutletId, CounterId);
         if (open == null)
         {
             MessageBox.Show("No open till to close.", "Info");
             return false;
         }
 
+        // Sales tied to this till session (already scoped by TillSessionId)
         var all = db.Sales
-            .Where(s => s.TillSessionId == open.Id && s.Status == SaleStatus.Final)  // SaleStatus is in Pos.Domain
+            .Where(s => s.TillSessionId == open.Id && s.Status == SaleStatus.Final)
             .AsNoTracking()
             .ToList();
 
@@ -94,23 +97,23 @@ public sealed class TillService : ITillService
     public string GetStatusText()
     {
         using var db = new PosClientDbContext(_dbOptions);
-        var open = GetOpenTill(db);
+        var open = GetOpenTill(db, OutletId, CounterId);
         return open == null
             ? "Till: Closed"
             : $"Till: OPEN (Id={open.Id}, Opened {open.OpenTs:HH:mm})";
     }
 
-    // NEW: parameterless IsTillOpen for DashboardVm
     public bool IsTillOpen()
     {
         using var db = new PosClientDbContext(_dbOptions);
-        return GetOpenTill(db) != null;
+        return GetOpenTill(db, OutletId, CounterId) != null;
     }
 
-    private static TillSession? GetOpenTill(PosClientDbContext db)
+    // Note: now parameterized by outlet/counter
+    private static TillSession? GetOpenTill(PosClientDbContext db, int outletId, int counterId)
         => db.TillSessions
              .OrderByDescending(t => t.Id)
-             .FirstOrDefault(t => t.OutletId == OutletId
-                               && t.CounterId == CounterId
+             .FirstOrDefault(t => t.OutletId == outletId
+                               && t.CounterId == counterId
                                && t.CloseTs == null);
 }

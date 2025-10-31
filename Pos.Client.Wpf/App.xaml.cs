@@ -16,6 +16,7 @@ using Pos.Persistence.Features.Transfers;
 using ControlzEx.Theming;
 using Pos.Client.Wpf.Windows.Inventory;
 using Pos.Domain.Entities;
+using Pos.Client.Wpf.Windows.Settings;
 
 
 
@@ -58,6 +59,7 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<IDialogService, DialogService>();
             sc.AddSingleton<IPaymentDialogService, PaymentDialogService>();
             sc.AddSingleton<ITillService, TillService>();
+            sc.AddSingleton<ITerminalContext, TerminalContext>();
 
             sc.AddSingleton<ResetStockService>();
 
@@ -119,6 +121,14 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditCategoryWindow>();
             
             sc.AddTransient<EditWarehouseWindow>();
+
+            
+            sc.AddSingleton<IInvoiceSettingsService, InvoiceSettingsService>();
+            sc.AddTransient<InvoiceSettingsViewModel>();
+            sc.AddTransient<BarcodeLabelSettingsViewModel>();
+            sc.AddSingleton<IBarcodeLabelSettingsService, BarcodeLabelSettingsService>();
+            sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
+
             sc.AddScoped<Pos.Persistence.Services.IOpeningStockService, Pos.Persistence.Services.OpeningStockService>();
             sc.AddScoped<CatalogService>();   // <-- register this
             sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();

@@ -49,12 +49,16 @@ namespace Pos.Client.Wpf.Windows.Sales
             public string Sku { get; set; } = "";
             public string DisplayName { get; set; } = "";   // Product + variant
             public string Variant { get; set; } = "";
+            public string Brand { get; set; } = "";
+            public string Category { get; set; } = "";
             public decimal OnHand { get; set; }
         }
 
         private sealed class ProductRow
         {
             public string Product { get; set; } = "";
+            public string Brand { get; set; } = "";
+            public string Category { get; set; } = "";
             public decimal OnHand { get; set; }
         }
 
@@ -62,7 +66,14 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             InitializeComponent();
 
-            // show names in the combo boxes
+            // Initial toggle states
+            ModeByItemBtn.IsChecked = true;     // default mode
+            ScopeOutletBtn.IsChecked = true;    // default scope
+
+            // Admin-only visibility of the whole scope area
+            ScopePanel.Visibility = IsAdmin() ? Visibility.Visible : Visibility.Collapsed;
+
+            // keep these if you like:
             OutletBox.DisplayMemberPath = "Name";
             OutletBox.SelectedValuePath = "Id";
             WarehouseBox.DisplayMemberPath = "Name";
@@ -75,15 +86,16 @@ namespace Pos.Client.Wpf.Windows.Sales
             var _ = Dispatcher.InvokeAsync(async () =>
             {
                 _suppressScopeEvents = true;
-                ScopeBar.Visibility = IsAdmin() ? Visibility.Visible : Visibility.Collapsed;
 
                 await InitScopeAsync();
+
                 _suppressScopeEvents = false;
                 _scopeUiReady = true;
 
                 LoadDataByItemWithVariants();
             });
         }
+
 
 
         private async Task InitScopeAsync()
@@ -113,15 +125,22 @@ namespace Pos.Client.Wpf.Windows.Sales
                                   .ToListAsync();
 
                 OutletBox.ItemsSource = outlets;
-                OutletBox.SelectedItem = outlets.FirstOrDefault(o => o.Id == AppState.Current.CurrentOutletId) ?? outlets.FirstOrDefault();
+                OutletBox.SelectedItem =
+                    outlets.FirstOrDefault(o => o.Id == AppState.Current.CurrentOutletId) ?? outlets.FirstOrDefault();
 
-                // Lock to outlet-only for non-admins
-                ScopeWarehouseRadio.IsEnabled = false;
-                WarehouseBox.IsEnabled = false;
-                if (outlets.Count <= 1) { ScopeOutletRadio.IsEnabled = false; OutletBox.IsEnabled = false; }
+                // NEW (non-admin): force Outlet scope and lock controls as needed
+                ScopeOutletBtn.IsChecked = true;          // make sure outlet is the active scope
+                ScopeWarehouseBtn.IsEnabled = false;      // cannot switch to warehouse
+                WarehouseBox.IsEnabled = false;           // cannot change warehouse
+
+                if (outlets.Count <= 1)
+                {
+                    ScopeOutletBtn.IsEnabled = false;     // only one outlet, lock toggle
+                    OutletBox.IsEnabled = false;          // and its picker
+                }
             }
 
-            // Warehouses (admins only)
+            // Warehouses
             if (isAdmin)
             {
                 var warehouses = await db.Warehouses.AsNoTracking().OrderBy(w => w.Name).ToListAsync();
@@ -131,10 +150,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             else
             {
-                ScopeWarehouseRadio.Visibility = Visibility.Collapsed;
-                WarehouseBox.Visibility = Visibility.Collapsed;
+                // For non-admins we already hid/disabled via constructor visibility;
+                // nothing else needed here.
             }
         }
+
 
 
         private void ApplyScopeEnablement()
@@ -149,20 +169,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         }
 
 
-        private void ScopeRadio_Checked(object sender, RoutedEventArgs e)
-        {
-            if (_suppressScopeEvents) return;
-            if (sender is not RadioButton rb) return;
-
-            // Decide by which radio raised the event
-            _scope = (rb == ScopeWarehouseRadio) ? LocationScope.Warehouse : LocationScope.Outlet;
-
-            ApplyScopeEnablement();
-
-            if (_scopeUiReady)
-                ReloadCurrentView();   // avoid calling before combos are populated
-        }
-
+               
 
         private void OutletBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -206,6 +213,10 @@ namespace Pos.Client.Wpf.Windows.Sales
             Grid.Columns.Clear();
             Grid.Columns.Add(new DataGridTextColumn { Header = "SKU", Binding = new Binding("Sku"), Width = 140 });
             Grid.Columns.Add(new DataGridTextColumn { Header = "Display Name", Binding = new Binding("DisplayName"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+            // NEW: Brand & Category columns
+            Grid.Columns.Add(new DataGridTextColumn { Header = "Brand", Binding = new Binding("Brand"), Width = 150 });
+            Grid.Columns.Add(new DataGridTextColumn { Header = "Category", Binding = new Binding("Category"), Width = 170 });
+
             Grid.Columns.Add(new DataGridTextColumn { Header = "Variant", Binding = new Binding("Variant"), Width = 220 });
             Grid.Columns.Add(new DataGridTextColumn { Header = "On Hand", Binding = new Binding("OnHand") { StringFormat = "N2" }, Width = 90 });
         }
@@ -214,6 +225,8 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             Grid.Columns.Clear();
             Grid.Columns.Add(new DataGridTextColumn { Header = "Product", Binding = new Binding("Product"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+            Grid.Columns.Add(new DataGridTextColumn { Header = "Brand", Binding = new Binding("Brand"), Width = 150 });
+            Grid.Columns.Add(new DataGridTextColumn { Header = "Category", Binding = new Binding("Category"), Width = 170 });
             Grid.Columns.Add(new DataGridTextColumn { Header = "On Hand", Binding = new Binding("OnHand"), Width = 120 });
         }
 
@@ -250,6 +263,13 @@ namespace Pos.Client.Wpf.Windows.Sales
             var raw = (from i in db.Items.AsNoTracking()
                        join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                        from p in gp.DefaultIfEmpty()
+
+                           // NEW: left joins for brand and category
+                       join b in db.Set<Brand>().AsNoTracking() on p.BrandId equals b.Id into gb
+                       from b in gb.DefaultIfEmpty()
+                       join c in db.Set<Category>().AsNoTracking() on p.CategoryId equals c.Id into gc
+                       from c in gc.DefaultIfEmpty()
+
                        join se in ledger on i.Id equals se.ItemId into gse
                        let onHand = gse.Sum(x => (decimal?)x.QtyChange) ?? 0m
                        orderby (p != null ? p.Name : i.Name), i.Variant1Value, i.Variant2Value, i.Sku
@@ -258,29 +278,31 @@ namespace Pos.Client.Wpf.Windows.Sales
                            i.Sku,
                            ItemName = i.Name,
                            ProductName = p != null ? p.Name : null,
+                           BrandName = b != null ? b.Name : null,
+                           CategoryName = c != null ? c.Name : null,
                            i.Variant1Name,
                            i.Variant1Value,
                            i.Variant2Name,
                            i.Variant2Value,
                            OnHand = onHand
                        })
-          .AsEnumerable()
-          .Select(x => new ItemRow
-          {
-              Sku = x.Sku,
-              DisplayName = BuildDisplayName(x.ProductName, x.ItemName, x.Variant1Name, x.Variant1Value, x.Variant2Name, x.Variant2Value),
-              Variant = BuildVariant(x.Variant1Name, x.Variant1Value, x.Variant2Name, x.Variant2Value),
-              OnHand = (int)Math.Round(x.OnHand, MidpointRounding.AwayFromZero)
-          })
-          .ToList();
-
-
+              .AsEnumerable()
+              .Select(x => new ItemRow
+              {
+                  Sku = x.Sku,
+                  DisplayName = BuildDisplayName(x.ProductName, x.ItemName, x.Variant1Name, x.Variant1Value, x.Variant2Name, x.Variant2Value),
+                  Brand = x.BrandName ?? "",
+                  Category = x.CategoryName ?? "",
+                  Variant = BuildVariant(x.Variant1Name, x.Variant1Value, x.Variant2Name, x.Variant2Value),
+                  OnHand = (int)Math.Round(x.OnHand, MidpointRounding.AwayFromZero)
+              })
+              .ToList();
 
             _itemRows = raw;
-
             ConfigureColumnsForItem();
-            ApplySearchFilter();      // uses current SearchBox.Text
+            ApplySearchFilter();
         }
+
 
         private void LoadDataByProduct()
         {
@@ -291,25 +313,40 @@ namespace Pos.Client.Wpf.Windows.Sales
             var rows = (from i in db.Items.AsNoTracking()
                         join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
                         from p in gp.DefaultIfEmpty()
+
+                            // NEW: joins for brand and category
+                        join b in db.Set<Brand>().AsNoTracking() on p.BrandId equals b.Id into gb
+                        from b in gb.DefaultIfEmpty()
+                        join c in db.Set<Category>().AsNoTracking() on p.CategoryId equals c.Id into gc
+                        from c in gc.DefaultIfEmpty()
+
                         join se in ledger on i.Id equals se.ItemId into gse
                         let onHand = gse.Sum(x => (decimal?)x.QtyChange) ?? 0m
-                        group onHand by new { Prod = p != null ? p.Name : i.Name } into g
+
+                        group new { onHand, Brand = b != null ? b.Name : "", Category = c != null ? c.Name : "" }
+                        by new
+                        {
+                            Prod = p != null ? p.Name : i.Name,
+                            BrandName = b != null ? b.Name : "",
+                            CategoryName = c != null ? c.Name : ""
+                        }
+                        into g
                         orderby g.Key.Prod
                         select new ProductRow
                         {
                             Product = g.Key.Prod,
-                            OnHand = (int)Math.Round(g.Sum(), MidpointRounding.AwayFromZero)
+                            Brand = g.Key.BrandName,
+                            Category = g.Key.CategoryName,
+                            OnHand = (int)Math.Round(g.Sum(x => x.onHand), MidpointRounding.AwayFromZero)
                         })
-           .ToList();
-
-
-
+                       .ToList();
 
             _productRows = rows;
 
             ConfigureColumnsForProduct();
             ApplySearchFilter();
         }
+
 
         // ===== Search/filter (works in both modes) =====
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplySearchFilter();
@@ -329,10 +366,14 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 IEnumerable<ProductRow> rows = _productRows;
                 if (term.Length > 0)
-                    rows = rows.Where(r => ContainsIC(r.Product, term));
+                    rows = rows.Where(r =>
+                        ContainsIC(r.Product, term) ||
+                        ContainsIC(r.Brand, term) ||
+                        ContainsIC(r.Category, term));
 
                 Grid.ItemsSource = rows.ToList();
             }
+
 
             SelectFirstRow();
         }
@@ -408,6 +449,72 @@ namespace Pos.Client.Wpf.Windows.Sales
             idx = Math.Clamp(idx + delta, 0, Grid.Items.Count - 1);
             Grid.SelectedIndex = idx;
             Grid.ScrollIntoView(Grid.SelectedItem);
+        }
+
+        // ===== Mode toggles =====
+        private void ModeByItem_Checked(object sender, RoutedEventArgs e)
+        {
+            // keep group exclusive
+            if (ModeByProductBtn.IsChecked == true) ModeByProductBtn.IsChecked = false;
+
+            if (_mode != ViewMode.ByItem)
+            {
+                _mode = ViewMode.ByItem;
+                LoadDataByItemWithVariants();
+            }
+            SearchBox.Focus();
+        }
+        private void ModeByItem_Unchecked(object sender, RoutedEventArgs e)
+        {
+            // prevent both off: if user unchecks manually, re-check unless other got checked
+            if (ModeByProductBtn.IsChecked != true)
+                ModeByItemBtn.IsChecked = true;
+        }
+
+        private void ModeByProduct_Checked(object sender, RoutedEventArgs e)
+        {
+            if (ModeByItemBtn.IsChecked == true) ModeByItemBtn.IsChecked = false;
+
+            if (_mode != ViewMode.ByProduct)
+            {
+                _mode = ViewMode.ByProduct;
+                LoadDataByProduct();
+            }
+            SearchBox.Focus();
+        }
+        private void ModeByProduct_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (ModeByItemBtn.IsChecked != true)
+                ModeByProductBtn.IsChecked = true;
+        }
+
+        // ===== Scope toggles =====
+        private void ScopeOutlet_Checked(object sender, RoutedEventArgs e)
+        {
+            if (ScopeWarehouseBtn.IsChecked == true) ScopeWarehouseBtn.IsChecked = false;
+
+            _scope = LocationScope.Outlet;
+            ApplyScopeEnablement();
+            if (_scopeUiReady) ReloadCurrentView();
+        }
+        private void ScopeOutlet_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (ScopeWarehouseBtn.IsChecked != true)
+                ScopeOutletBtn.IsChecked = true;
+        }
+
+        private void ScopeWarehouse_Checked(object sender, RoutedEventArgs e)
+        {
+            if (ScopeOutletBtn.IsChecked == true) ScopeOutletBtn.IsChecked = false;
+
+            _scope = LocationScope.Warehouse;
+            ApplyScopeEnablement();
+            if (_scopeUiReady) ReloadCurrentView();
+        }
+        private void ScopeWarehouse_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (ScopeOutletBtn.IsChecked != true)
+                ScopeWarehouseBtn.IsChecked = true;
         }
 
 

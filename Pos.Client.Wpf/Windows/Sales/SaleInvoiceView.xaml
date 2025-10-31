@@ -23,9 +23,6 @@
             </Grid.ColumnDefinitions>
             <!-- Left: Till status + invoice/date -->
             <StackPanel Orientation="Horizontal" Grid.Column="0">
-                <TextBlock Text="Till:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                <TextBlock x:Name="TillStatusText" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                <TextBlock Text="   |   " VerticalAlignment="Center" Foreground="#999" Margin="8,0,8,0"/>
                 <TextBlock Text="Invoice #:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBlock x:Name="InvoicePreviewText" VerticalAlignment="Center" FontWeight="Bold" />
                 <TextBlock Text="   " />

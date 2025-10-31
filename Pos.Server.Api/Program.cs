@@ -5,7 +5,7 @@ using Pos.Persistence; // <-- AppDbContext lives here
 var builder = WebApplication.CreateBuilder(args);
 
 // 1) DbContext from ConnectionStrings:Default (appsettings.Development.json)
-builder.Services.AddDbContext<AppDbContext>(opts =>
+builder.Services.AddDbContext<PosClientDbContext>(opts =>
     opts.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
 // 2) OpenAPI/Swagger (handy during dev)
@@ -20,8 +20,9 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    DbSeeder.Seed(db);
+    var db = scope.ServiceProvider.GetRequiredService<PosClientDbContext>();
+    await db.Database.MigrateAsync(); 
+    //DbSeeder.Seed(db);
 }
 
 // 4) Dev-time Swagger UI

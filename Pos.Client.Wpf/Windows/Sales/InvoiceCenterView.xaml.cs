@@ -468,9 +468,12 @@ namespace Pos.Client.Wpf.Windows.Sales
                     // Reverse stock effect from the return
                     db.StockEntries.Add(new StockEntry
                     {
+                        LocationType = InventoryLocationType.Outlet,
+                        LocationId = sale.OutletId,
                         OutletId = sale.OutletId,
                         ItemId = l.ItemId,
-                        QtyChange = l.Qty,   // l.Qty is positive, so this becomes negative (stock OUT)
+                        //QtyChange = l.Qty,   // l.Qty is positive, so this becomes negative (stock OUT)
+                        QtyChange = -l.Qty,    // correct: reverse the return (IN → OUT)
                         RefType = "Void",
                         RefId = sale.Id,
                         Ts = DateTime.UtcNow
@@ -514,6 +517,8 @@ namespace Pos.Client.Wpf.Windows.Sales
                     // Reverse stock effect of a sale (sale wrote QtyChange = -Qty)
                     db.StockEntries.Add(new StockEntry
                     {
+                        LocationType = InventoryLocationType.Outlet,
+                        LocationId = sale.OutletId,
                         OutletId = sale.OutletId,
                         ItemId = l.ItemId,
                         QtyChange = +l.Qty,     // add back to stock

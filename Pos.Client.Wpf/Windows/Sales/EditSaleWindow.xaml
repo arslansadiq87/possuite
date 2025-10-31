@@ -2,6 +2,10 @@
         x:Name="EditSaleRoot"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls"
+        mc:Ignorable="d"
         Title="Amend Invoice" Height="768" Width="1024"
         WindowStartupLocation="CenterOwner">
 
@@ -50,38 +54,10 @@
             <!-- LEFT: Scan/Search + Add -->
             <StackPanel Orientation="Horizontal" Grid.Column="0">
                 <TextBlock Text="Scan / Search:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-
-                <Grid>
-                    <TextBox x:Name="ScanText" Width="320" Height="28"
-                             VerticalContentAlignment="Center"
-                             TextChanged="ScanText_TextChanged"
-                             PreviewKeyDown="ScanText_PreviewKeyDown"/>
-                    <Popup x:Name="ScanPopup" PlacementTarget="{Binding ElementName=ScanText}" Placement="Bottom"
-                           StaysOpen="False" AllowsTransparency="True">
-                        <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
-                                Padding="4" MinWidth="{Binding ElementName=ScanText, Path=ActualWidth}">
-                            <ListBox x:Name="ScanList"
-                                     MouseDoubleClick="ScanList_MouseDoubleClick"
-                                     PreviewKeyDown="ScanList_PreviewKeyDown">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding DisplayName}"/>
-                                            <TextBlock Text=" — " Foreground="Gray"/>
-                                            <TextBlock Text="{Binding Sku}" Foreground="Gray"/>
-                                            <TextBlock Text=" (" Foreground="Gray"/>
-                                            <TextBlock Text="{Binding Barcode}" Foreground="Gray"/>
-                                            <TextBlock Text=")" Foreground="Gray"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Border>
-                    </Popup>
-                </Grid>
-
-                <Button Content="Add" Click="AddButton_Click" Margin="8,0,0,0" Height="28" Width="55"
-                        Style="{StaticResource Btn.GlobalPrimary}"/>
+                <Controls:ItemSearchBox
+                x:Name="ItemSearch"
+                Margin="0,0,8,0"
+                ItemPicked="ItemSearch_ItemPicked"/>
             </StackPanel>
 
             <!-- RIGHT: Cashier → Salesman + Customer snapshot -->
@@ -104,7 +80,7 @@
         </Grid>
 
         <!-- ===== Row 2: CART (same columns as Sale) ===== -->
-        <DataGrid x:Name="CartGrid" Grid.Row="2" AutoGenerateColumns="False"
+        <DataGrid x:Name="CartGrid" Grid.Row="2" AutoGenerateColumns="False" Style="{StaticResource ModernDataGrid}"
                   IsReadOnly="False" CanUserAddRows="False"
                   HeadersVisibility="Column" VerticalContentAlignment="Center" FontSize="16" FontWeight="DemiBold">
             <DataGrid.Resources>
@@ -244,5 +220,26 @@
                 </StackPanel>
             </Grid>
         </Border>
+       
+        <!-- Full-window dim mask -->
+        <Border x:Name="OverlayMask"
+        Grid.RowSpan="4"
+        Background="#80000000"
+        Visibility="Collapsed"
+        Panel.ZIndex="999"
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Stretch"
+        IsHitTestVisible="True"/>
+
+        <!-- Centered overlay content host -->
+        <ContentPresenter x:Name="OverlayPresenter"
+                  Grid.RowSpan="4"
+                  Visibility="Collapsed"
+                  Panel.ZIndex="1000"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  IsHitTestVisible="True"/>
+
+
     </Grid>
 </Window>

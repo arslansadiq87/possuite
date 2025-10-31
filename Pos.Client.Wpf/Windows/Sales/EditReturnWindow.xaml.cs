@@ -324,6 +324,8 @@ namespace Pos.Client.Wpf.Windows.Sales
                 {
                     db.StockEntries.Add(new StockEntry
                     {
+                        LocationType = InventoryLocationType.Outlet,
+                        LocationId = amended.OutletId,
                         OutletId = amended.OutletId,
                         ItemId = itemId,
                         QtyChange = -deltaQty, // sign-aware

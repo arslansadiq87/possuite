@@ -36,32 +36,26 @@ namespace Pos.Client.Wpf.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            // --- StockEntries (but keep Opening) ---
-            var ledgerRefs = new[] { "Sale", "SaleReturn", "Purchase", "PurchaseReturn", "TransferOut", "TransferIn" };
-            await db.StockEntries.Where(e => ledgerRefs.Contains(e.RefType)).ExecuteDeleteAsync(ct);
+            // --- Stock ledger & docs (delete ALL, incl. Opening) ---
+            // Order matters: entries -> lines -> docs
+            await db.StockEntries.ExecuteDeleteAsync(ct);
+            await db.StockDocLines.ExecuteDeleteAsync(ct);
+            await db.StockDocs.ExecuteDeleteAsync(ct);
 
-            // --- Transfers: only DocType=Transfer (keep Opening stock docs) ---
-            var transferIds = await db.StockDocs
-                .Where(d => d.DocType == StockDocType.Transfer)
-                .Select(d => d.Id)
-                .ToListAsync(ct);
-
-            if (transferIds.Count > 0)
-            {
-                await db.StockDocLines.Where(l => transferIds.Contains(l.StockDocId)).ExecuteDeleteAsync(ct);
-                await db.StockDocs.Where(d => transferIds.Contains(d.Id)).ExecuteDeleteAsync(ct);
-            }
-
-            // --- Purchases (incl. returns via IsReturn) ---
-            await db.PurchaseLines.ExecuteDeleteAsync(ct);
+            // --- Purchases (incl. returns) ---
             await db.PurchasePayments.ExecuteDeleteAsync(ct);
+            await db.PurchaseLines.ExecuteDeleteAsync(ct);
             await db.Purchases.ExecuteDeleteAsync(ct);
 
-            // --- Sales (incl. returns via IsReturn) ---
+            // --- Sales (incl. returns) ---
             await db.SaleLines.ExecuteDeleteAsync(ct);
             await db.Sales.ExecuteDeleteAsync(ct);
 
             await tx.CommitAsync(ct);
+
+            // 3) Reclaim file space (SQLite only; must be outside txn)
+            await db.Database.ExecuteSqlRawAsync("VACUUM;");
         }
+
     }
 }

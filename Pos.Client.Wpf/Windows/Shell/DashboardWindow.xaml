@@ -5,6 +5,7 @@
                      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                      xmlns:shell="clr-namespace:Pos.Client.Wpf.Windows.Shell;assembly=Pos.Client.Wpf"
                      xmlns:att="clr-namespace:Pos.Client.Wpf.Attached"
+                     xmlns:views="clr-namespace:Pos.Client.Wpf.Windows.Settings"
                      xmlns:Fluent="urn:fluent-ribbon"
                      mc:Ignorable="d"
                      Title="POS — Dashboard"
@@ -49,8 +50,15 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </Fluent:BackstageTabItem>
+                        <Fluent:BackstageTabItem Header="Invoice Settings">
+                            <!-- Fix: Ensure the InvoiceSettingsPage is properly defined and accessible -->
+                            <views:InvoiceSettingsPage/>
+                        </Fluent:BackstageTabItem>
+						<Fluent:BackstageTabItem Header="Barcode Labels">
+							<views:BarcodeLabelSettingsPage/>
+						</Fluent:BackstageTabItem>
 
-                        <Fluent:BackstageTabItem Header="About" KeyTip="A">
+						<Fluent:BackstageTabItem Header="About" KeyTip="A">
                             <StackPanel Margin="16">
                                 <TextBlock Text="PosSuite" FontSize="18" FontWeight="SemiBold"/>
                                 <TextBlock Text="Multi-outlet POS with offline-first sync" Margin="0,8,0,0"/>
@@ -84,7 +92,6 @@
 
                     <Fluent:Button x:Name="BtnNewSale" IsTabStop="False" Header="New&#160;Sale"
                          KeyTip="N" Command="{Binding NewSaleCmd}" Icon="{StaticResource Icon.Add}"/>
-                    <Fluent:Button Header="Returns" Command="{Binding OpenReturnsCmd}"/>
                     <Fluent:Button Header="Sale Center" Command="{Binding OpenSaleCenterCmd}"/>
                 </Fluent:RibbonGroupBox>
 
@@ -154,8 +161,6 @@
             </Fluent:RibbonTabItem>
 
         </Fluent:Ribbon>
-
-        <!-- Content -->
         <!-- Content (Tabbed) -->
         <Border Grid.Row="1" CornerRadius="8" Padding="2" Margin="2"
         Background="{DynamicResource ControlBackgroundBrush}">
@@ -167,19 +172,16 @@
                 Margin="0"
                 BorderThickness="0">
                 <!-- Tab headers -->
-                <!-- Tab headers -->
                 <TabControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
                             <TextBlock Text="{Binding Title}" Margin="0,0,8,0"/>
                             <Button Content="{StaticResource Icon.Close}"
-        Style="{StaticResource Btn.IconBare}"
-        att:IconProps.IconSize="12"
-        Width="18" Height="18" Padding="0"
-        Command="{Binding DataContext.CloseActiveTabCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"
-        ToolTip="Close" Focusable="False"/>
-
-
+                                Style="{StaticResource Btn.IconBare}"
+                                att:IconProps.IconSize="12"
+                                Width="18" Height="18" Padding="0"
+                                Command="{Binding DataContext.CloseActiveTabCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                ToolTip="Close" Focusable="False"/>
                         </StackPanel>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
@@ -190,7 +192,6 @@
                         <ContentPresenter Content="{Binding Content}"/>
                     </DataTemplate>
                 </TabControl.ContentTemplate>
-
 
                 <!-- Optional: context menu on tabs -->
                 <TabControl.ItemContainerStyle>
@@ -212,7 +213,6 @@
                 </TabControl.ItemContainerStyle>
             </TabControl>
         </Border>
-
 
         <!-- Status Bar -->
         <Fluent:StatusBar Grid.Row="2" MinHeight="28" Padding="8,0">
@@ -252,10 +252,6 @@
             </Fluent:StatusBarItem>
         </Fluent:StatusBar>
 
-
-
-
-
         <!-- Overlay Layer: place this right before the closing </Grid> -->
         <Grid x:Name="OverlayLayer"
       Grid.RowSpan="3"
@@ -287,13 +283,8 @@
 
                     <ContentPresenter Content="{Binding OverlayView}"/>
                 </Border>
-
             </Grid>
         </Grid>
-
-
-
-
     </Grid>
 </Fluent:RibbonWindow>
 

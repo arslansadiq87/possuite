@@ -1,4 +1,5 @@
 ﻿// Pos.Persistence/Services/ReturnsService.cs
+using System.Reflection.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
@@ -61,6 +62,8 @@ namespace Pos.Persistence.Services
                 // STOCK IN (return): only fields we are sure about
                 _db.StockEntries.Add(new StockEntry
                 {
+                    LocationType = InventoryLocationType.Outlet,
+                    LocationId = outletId,
                     OutletId = outletId,
                     ItemId = l.ItemId,
                     QtyChange = (int)l.Qty   // your StockEntries query showed int, cast from decimal

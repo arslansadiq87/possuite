@@ -6,49 +6,56 @@
 
     <DockPanel Margin="8">
         <!-- Toolbar -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Margin="0,0,0,8">
-
-            <!-- Row 1: existing controls -->
-            <StackPanel Orientation="Horizontal">
+        <ToolBarTray DockPanel.Dock="Top">
+            <ToolBar x:Name="TopBar" Band="0" BandIndex="0">
+                <!-- Search -->
                 <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBox x:Name="SearchBox" Width="240" Height="28" VerticalContentAlignment="Center"
-               TextChanged="SearchBox_TextChanged"
-               PreviewKeyDown="SearchBox_PreviewKeyDown"
-               ToolTip="Type to filter; ↑/↓ to navigate"
-               Style="{StaticResource Txt.Search}"/>
-                <Separator Width="16" Opacity="0"/>
+                 TextChanged="SearchBox_TextChanged"
+                 PreviewKeyDown="SearchBox_PreviewKeyDown"
+                 ToolTip="Type to filter; ↑/↓ to navigate"
+                 Style="{StaticResource Txt.Search}"/>
+                <Separator/>
 
-                <!-- By Item -->
-                <Button Width="150" Height="28" Margin="0,0,8,0"
-              Click="ByItem_Click" Style="{StaticResource Btn.GlobalPrimary}">
+                <!-- Mode: By Item / By Product (toggle group) -->
+                <ToggleButton x:Name="ModeByItemBtn" Width="150" Height="28" Margin="0,0,8,0"
+                      Checked="ModeByItem_Checked" Unchecked="ModeByItem_Unchecked">
                     <AccessText Text="By _Item (Alt+I)"/>
-                </Button>
-
-                <!-- By Product -->
-                <Button Width="150" Height="28"
-              Click="ByProduct_Click" Style="{StaticResource Btn.GlobalPrimary}">
+                </ToggleButton>
+                <ToggleButton x:Name="ModeByProductBtn" Width="150" Height="28"
+                      Checked="ModeByProduct_Checked" Unchecked="ModeByProduct_Unchecked">
                     <AccessText Text="By _Product (Alt+P)"/>
-                </Button>
-                
-                <StackPanel Orientation="Horizontal" Margin="12,0,0,8" x:Name="ScopeBar" VerticalAlignment="Center" HorizontalAlignment="Center">
+                </ToggleButton>
+
+                <Separator/>
+
+                <!-- Scope: visible only for Admin (we’ll set via code-behind) -->
+                <StackPanel x:Name="ScopePanel" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <RadioButton x:Name="ScopeOutletRadio" Content="Outlet" GroupName="Scope"
-   IsChecked="True" Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
-                    <ComboBox   x:Name="OutletBox" DisplayMemberPath="Name" SelectedValuePath="Id" Width="220" SelectionChanged="OutletBox_SelectionChanged"/>
+
+                    <RadioButton x:Name="ScopeOutletBtn" Margin="0,0,12,0"
+                          Checked="ScopeOutlet_Checked" Unchecked="ScopeOutlet_Unchecked"
+                          ToolTip="Show stock by Outlet">
+                        <TextBlock Text="Outlet"/>
+                    </RadioButton>
+                    <ComboBox x:Name="OutletBox" Width="220"
+                      DisplayMemberPath="Name" SelectedValuePath="Id"
+                      SelectionChanged="OutletBox_SelectionChanged"/>
 
                     <TextBlock Text="  " Width="16"/>
 
-                    <RadioButton x:Name="ScopeWarehouseRadio" Content="Warehouse" GroupName="Scope"
-   Margin="0,0,12,0" Checked="ScopeRadio_Checked"/>
-                    <ComboBox   x:Name="WarehouseBox" DisplayMemberPath="Name" SelectedValuePath="Id" Width="220" SelectionChanged="WarehouseBox_SelectionChanged"/>
+                    <RadioButton x:Name="ScopeWarehouseBtn" Margin="0,0,12,0"
+                          Checked="ScopeWarehouse_Checked" Unchecked="ScopeWarehouse_Unchecked"
+                          ToolTip="Show stock by Warehouse">
+                        <TextBlock Text="Warehouse"/>
+                    </RadioButton>
+                    <ComboBox x:Name="WarehouseBox" Width="220"
+                      DisplayMemberPath="Name" SelectedValuePath="Id"
+                      SelectionChanged="WarehouseBox_SelectionChanged"/>
                 </StackPanel>
-            </StackPanel>
+            </ToolBar>
+        </ToolBarTray>
 
-            <!-- Row 2: NEW scope bar (starts hidden; code-behind decides when to show) -->
-            
-
-
-        </StackPanel>
 
         <!-- Grid -->
         <DataGrid x:Name="Grid" Style="{StaticResource ModernDataGrid}"

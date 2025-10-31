@@ -1,0 +1,259 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Settings.InvoiceSettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:conv="clr-namespace:Pos.Client.Wpf.Converters">
+    <UserControl.Resources>
+        <conv:BytesToBitmapConverter x:Key="BytesToBitmap"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="3*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ================================
+             LEFT COLUMN: Scope + Printer + Options + Logo + Actions
+             ================================= -->
+        <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Stretch">
+
+            <!-- Scope -->
+            <GroupBox Header="Scope">
+                <StackPanel>
+                    <RadioButton Content="Global (all outlets)"
+                 GroupName="Scope"
+                 IsChecked="{Binding IsGlobal}"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <RadioButton Content="Specific outlet:"
+                   GroupName="Scope"
+                   IsChecked="{Binding IsOutlet}"/>
+                        <ComboBox Width="220" Margin="8,0,0,0"
+                ItemsSource="{Binding Outlets}"
+                SelectedItem="{Binding SelectedOutlet}"
+                DisplayMemberPath="Name"/>
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+
+
+            <!-- Printer -->
+            <GroupBox Header="Printer" Margin="0,8,0,0">
+                <StackPanel>
+                    <ComboBox ItemsSource="{Binding InstalledPrinters}"
+                              SelectedItem="{Binding PrinterName}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="Paper width (mm):" VerticalAlignment="Center"/>
+                        <ComboBox Width="80" Margin="8,0,0,0"
+                                  ItemsSource="{Binding PaperWidths}"
+                                  SelectedItem="{Binding PaperWidthMm}"/>
+                    </StackPanel>
+                    <CheckBox Content="Open cash drawer (kick)"
+                              IsChecked="{Binding EnableDrawerKick}"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Print Behavior -->
+            <GroupBox Header="Print Behavior" Margin="0,8,0,0">
+                <StackPanel>
+                    <CheckBox Content="Auto-print on Save (Sale)"
+                              IsChecked="{Binding PrintOnSave}"/>
+                    <CheckBox Content="Ask before printing when saving"
+                              IsChecked="{Binding AskToPrintOnSave}"/>
+                    <CheckBox Content="Print barcode/QR on receipt"
+                              IsChecked="{Binding PrintBarcodeOnReceipt}"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Misc Options -->
+            <GroupBox Header="Options" Margin="0,8,0,0">
+                <StackPanel>
+                    <CheckBox Content="Show QR (e-receipt/other)"
+                              IsChecked="{Binding ShowQr}"/>
+                    <CheckBox Content="Show customer on receipt"
+                              IsChecked="{Binding ShowCustomerOnReceipt}"/>
+                    <CheckBox Content="Show cashier on receipt"
+                              IsChecked="{Binding ShowCashierOnReceipt}"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Receipt Logo -->
+            <GroupBox Header="Receipt Logo" Margin="0,8,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Vertical" Margin="0,0,16,0">
+                        <Button Content="Upload PNG…"
+                                Command="{Binding UploadLogoCommand}"
+                                Width="140"/>
+                        <Button Content="Remove"
+                                Command="{Binding RemoveLogoCommand}"
+                                Width="140" Margin="0,6,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Max width (px):" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding LogoMaxWidthPx}" Width="80" Margin="8,0,0,0"/>
+                            <TextBlock Text="Alignment:" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                            <ComboBox Width="100" SelectedItem="{Binding LogoAlignment}">
+                                <ComboBoxItem Content="Left"/>
+                                <ComboBoxItem Content="Center"/>
+                                <ComboBoxItem Content="Right"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Quick preview (PNG bytes) -->
+                        <Border BorderBrush="#DDD" BorderThickness="1" Padding="6">
+                            <Image Stretch="None"
+                                   Source="{Binding LogoPng, Converter={StaticResource BytesToBitmap}}"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- Actions -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <Button Content="Save" Width="100" Command="{Binding SaveCommand}"/>
+                <Button Content="Reset" Width="100" Margin="8,0,0,0" Command="{Binding ResetCommand}"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- =================================
+             RIGHT COLUMN: Identity + Localization + Visibility Toggles + Preview
+             ================================= -->
+        <StackPanel Grid.Column="1">
+
+            <!-- Identity -->
+            <GroupBox Header="Outlet / Company Identity">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Display name:"/>
+                    <TextBox  Grid.Row="0" Grid.Column="1" Text="{Binding OutletDisplayName}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Address line 1:"/>
+                    <TextBox  Grid.Row="1" Grid.Column="1" Text="{Binding AddressLine1}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Address line 2:"/>
+                    <TextBox  Grid.Row="2" Grid.Column="1" Text="{Binding AddressLine2}"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Phone:"/>
+                    <TextBox  Grid.Row="3" Grid.Column="1" Text="{Binding Phone}"/>
+                </Grid>
+            </GroupBox>
+
+            <!-- Localization -->
+            <GroupBox Header="Localization (Header / Footer / Return Note)" Margin="0,8,0,0">
+                <DockPanel>
+                    <ComboBox Width="120"
+                              ItemsSource="{Binding Languages}"
+                              SelectedItem="{Binding SelectedLang}"
+                              DockPanel.Dock="Top"/>
+                    <TabControl Margin="0,8,0,0">
+                        <TabItem Header="Header">
+                            <TextBox AcceptsReturn="True" TextWrapping="Wrap"
+                                     Text="{Binding CurrentLocalization.Header}" Height="120"/>
+                        </TabItem>
+                        <TabItem Header="Footer">
+                            <TextBox AcceptsReturn="True" TextWrapping="Wrap"
+                                     Text="{Binding CurrentLocalization.Footer}" Height="120"/>
+                        </TabItem>
+                        <TabItem Header="Sale Return Note">
+                            <TextBox AcceptsReturn="True" TextWrapping="Wrap"
+                                     Text="{Binding CurrentLocalization.SaleReturnNote}" Height="120"/>
+                        </TabItem>
+                    </TabControl>
+                </DockPanel>
+            </GroupBox>
+
+            <!-- Header Visibility + NTN/FBR -->
+            <GroupBox Header="Header Visibility &amp; FBR/NTN" Margin="0,8,0,0">
+                <StackPanel>
+                    <WrapPanel Margin="0,0,0,6">
+                        <CheckBox Content="Show Business Name" IsChecked="{Binding ShowBusinessName}" Margin="0,0,16,0"/>
+                        <CheckBox Content="Show Address"       IsChecked="{Binding ShowAddress}"       Margin="0,0,16,0"/>
+                        <CheckBox Content="Show Contacts"      IsChecked="{Binding ShowContacts}"      Margin="0,0,16,0"/>
+                        <CheckBox Content="Show Logo"          IsChecked="{Binding ShowLogo}"/>
+                    </WrapPanel>
+
+                    <Separator/>
+
+                    <WrapPanel Margin="8,6,0,0">
+                        <CheckBox Content="Show NTN" IsChecked="{Binding ShowBusinessNtn}" Margin="0,0,12,0"/>
+                        <TextBlock Text="NTN:" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                        <TextBox Text="{Binding BusinessNtn}" Width="180"/>
+                    </WrapPanel>
+
+                    <WrapPanel Margin="8,6,0,0">
+                        <CheckBox Content="Enable FBR" IsChecked="{Binding EnableFbr}" Margin="0,0,12,0"/>
+                        <TextBlock Text="POS ID:" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                        <TextBox Text="{Binding FbrPosId}" Width="180"
+                                 Visibility="{Binding EnableFbr, Converter={StaticResource BoolToVis}}"/>
+                        <CheckBox Content="Show FBR QR" IsChecked="{Binding ShowFbrQr}" Margin="12,0,0,0"
+                                  Visibility="{Binding EnableFbr, Converter={StaticResource BoolToVis}}"/>
+                    </WrapPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Row Visibility (items section) -->
+            <GroupBox Header="Row Visibility (Items Section)" Margin="0,8,0,0">
+                <StackPanel>
+                    <WrapPanel>
+                        <CheckBox Content="Product Name"   IsChecked="{Binding RowShowProductName}"  Margin="0,0,16,6"/>
+                        <CheckBox Content="Product SKU"    IsChecked="{Binding RowShowProductSku}"   Margin="0,0,16,6"/>
+                        <CheckBox Content="Quantity"       IsChecked="{Binding RowShowQty}"          Margin="0,0,16,6"/>
+                        <CheckBox Content="Unit Price"     IsChecked="{Binding RowShowUnitPrice}"    Margin="0,0,16,6"/>
+                        <CheckBox Content="Line Discount"  IsChecked="{Binding RowShowLineDiscount}" Margin="0,0,16,6"/>
+                        <CheckBox Content="Line Total"     IsChecked="{Binding RowShowLineTotal}"    Margin="0,0,16,6"/>
+                    </WrapPanel>
+                    <TextBlock Text="Tip: 58mm (~32 chars) is tighter; hide columns you don't need."
+                               Opacity=".6" Margin="0,6,0,0"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Totals Visibility -->
+            <GroupBox Header="Totals Visibility" Margin="0,8,0,0">
+                <WrapPanel>
+                    <CheckBox Content="Taxes"              IsChecked="{Binding TotalsShowTaxes}"          Margin="0,0,16,6"/>
+                    <CheckBox Content="Invoice Discounts"  IsChecked="{Binding TotalsShowDiscounts}"     Margin="0,0,16,6"/>
+                    <CheckBox Content="Other Expenses"     IsChecked="{Binding TotalsShowOtherExpenses}"  Margin="0,0,16,6"/>
+                    <CheckBox Content="Grand Total"        IsChecked="{Binding TotalsShowGrandTotal}"     Margin="0,0,16,6"/>
+                    <CheckBox Content="Payment Received"   IsChecked="{Binding TotalsShowPaymentRecv}"    Margin="0,0,16,6"/>
+                    <CheckBox Content="Balance"            IsChecked="{Binding TotalsShowBalance}"        Margin="0,0,16,6"/>
+                </WrapPanel>
+            </GroupBox>
+
+            <!-- Footer Visibility -->
+            <GroupBox Header="Footer" Margin="0,8,0,0">
+                <StackPanel>
+                    <CheckBox Content="Show Footer" IsChecked="{Binding ShowFooter}"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Live Preview -->
+            <GroupBox Header="Preview" Margin="0,8,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                    <TextBlock Text="{Binding PreviewText}"
+                               FontFamily="Consolas"
+                               xml:space="preserve"/>
+                </ScrollViewer>
+            </GroupBox>
+
+        </StackPanel>
+    </Grid>
+</UserControl>
