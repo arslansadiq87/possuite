@@ -18,38 +18,38 @@
                 <Separator/>
 
                 <!-- Mode: By Item / By Product (toggle group) -->
-                <ToggleButton x:Name="ModeByItemBtn" Width="150" Height="28" Margin="0,0,8,0"
+                <ToggleButton x:Name="ModeByItemBtn" Width="90" Height="28" Margin="0,0,8,0"
                       Checked="ModeByItem_Checked" Unchecked="ModeByItem_Unchecked">
-                    <AccessText Text="By _Item (Alt+I)"/>
+                    <AccessText Text="By _Item"/>
                 </ToggleButton>
-                <ToggleButton x:Name="ModeByProductBtn" Width="150" Height="28"
+                <ToggleButton x:Name="ModeByProductBtn" Width="90" Height="28"
                       Checked="ModeByProduct_Checked" Unchecked="ModeByProduct_Unchecked">
-                    <AccessText Text="By _Product (Alt+P)"/>
+                    <AccessText Text="By _Product"/>
                 </ToggleButton>
 
                 <Separator/>
 
                 <!-- Scope: visible only for Admin (we’ll set via code-behind) -->
                 <StackPanel x:Name="ScopePanel" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <!--<TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0"/>-->
 
-                    <RadioButton x:Name="ScopeOutletBtn" Margin="0,0,12,0"
+                    <RadioButton x:Name="ScopeOutletBtn" Margin="0,0,12,0" VerticalAlignment="Center"
                           Checked="ScopeOutlet_Checked" Unchecked="ScopeOutlet_Unchecked"
                           ToolTip="Show stock by Outlet">
                         <TextBlock Text="Outlet"/>
                     </RadioButton>
-                    <ComboBox x:Name="OutletBox" Width="220"
+                    <ComboBox x:Name="OutletBox" Width="220" VerticalAlignment="Center"
                       DisplayMemberPath="Name" SelectedValuePath="Id"
                       SelectionChanged="OutletBox_SelectionChanged"/>
 
                     <TextBlock Text="  " Width="16"/>
 
-                    <RadioButton x:Name="ScopeWarehouseBtn" Margin="0,0,12,0"
+                    <RadioButton x:Name="ScopeWarehouseBtn" Margin="0,0,12,0" VerticalAlignment="Center"
                           Checked="ScopeWarehouse_Checked" Unchecked="ScopeWarehouse_Unchecked"
                           ToolTip="Show stock by Warehouse">
                         <TextBlock Text="Warehouse"/>
                     </RadioButton>
-                    <ComboBox x:Name="WarehouseBox" Width="220"
+                    <ComboBox x:Name="WarehouseBox" Width="220" VerticalAlignment="Center"
                       DisplayMemberPath="Name" SelectedValuePath="Id"
                       SelectionChanged="WarehouseBox_SelectionChanged"/>
                 </StackPanel>

@@ -22,6 +22,8 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Windows.Media;
 using Pos.Persistence.Services;
 using System.Linq;
+using Pos.Client.Wpf.Printing;
+
 
 //using Pos.Client.Wpf.Contracts; // for App.Services.GetRequiredService
 
@@ -32,6 +34,12 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
+        private readonly ITerminalContext _ctx;
+
+        private readonly IInvoiceSettingsService _invSettings;
+        private bool _printOnSave;
+        private bool _askBeforePrintOnSave;
+
         private int OutletId => AppState.Current?.CurrentOutletId ?? 1;
         private int CounterId => AppState.Current?.CurrentCounterId ?? 1;
         private decimal _invDiscPct = 0m;
@@ -39,6 +47,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private bool _isWalkIn = true;
         private string? _enteredCustomerName;
         private string? _enteredCustomerPhone;
+
         private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
         private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
         private int? _selectedSalesmanId = null;
@@ -49,17 +58,21 @@ namespace Pos.Client.Wpf.Windows.Sales
         private int _escCount = 0;
         private const int EscChordMs = 450; // double-press window
         private int? _currentHeldSaleId = null;
-        public SaleInvoiceView(IDialogService dialogs)
+        public SaleInvoiceView(IDialogService dialogs, ITerminalContext ctx)
         {
             InitializeComponent();
+
+            _ctx = ctx;
             _dialogs = dialogs;
+            
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>();
+
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
-            {
-            };
 
             _dbOptions = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString)   // <-- use the SAME connection string
                 .Options;
+
             CartGrid.ItemsSource = _cart;
             UpdateTotal();
             LoadItemIndex();
@@ -68,10 +81,24 @@ namespace Pos.Client.Wpf.Windows.Sales
             AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), /*handledEventsToo:*/ true);
             FooterBox.Text = _invoiceFooter;
             CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
+
+
             Loaded += (_, __) =>
             {
+                // 1) Load invoice settings (async)
+                //var (s, _) = await _invSettings.GetAsync(_ctx.OutletId, lang: "en");
+
+
+                var (s, _) = _invSettings.GetAsync(_ctx.OutletId, "en").GetAwaiter().GetResult();
+
+
+                _printOnSave = s.PrintOnSave;
+                _askBeforePrintOnSave = s.AskToPrintOnSave;
+
                 UpdateInvoicePreview();
                 UpdateInvoiceDateNow();
+                UpdateLocationUi();
+
                 // Sync once when everything exists
                 if (Window.GetWindow(this) is Window w)
                     w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
@@ -79,6 +106,40 @@ namespace Pos.Client.Wpf.Windows.Sales
             };
         }
 
+        private async Task MaybePrintReceiptAsync(Sale sale, TillSession? open)
+        {
+            // _printOnSave and _askBeforePrintOnSave should already be set from _invSettings.GetAsync(...)
+            var doPrint = _printOnSave;
+
+            if (_askBeforePrintOnSave)
+            {
+                var ans = MessageBox.Show(
+                    "Print receipt now?",
+                    "Print",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                doPrint = (ans == MessageBoxResult.Yes);
+            }
+
+            if (!doPrint) return;
+
+            try
+            {
+                // Uses per-outlet settings (printer name, outlet display name)
+                await ReceiptPrinter.PrintSaleAsync(
+                    sale: sale,
+                    cart: _cart,
+                    till: open,
+                    cashierName: cashierDisplay,
+                    salesmanName: _selectedSalesmanName,
+                    settingsSvc: _invSettings);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Print failed: " + ex.Message, "Receipt Print");
+            }
+        }
         private ItemIndexDto AdaptItem(Pos.Domain.DTO.ItemIndexDto src)
         {
             return new ItemIndexDto(
@@ -491,6 +552,16 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
         }
 
+        private void UpdateLocationUi()
+        {
+            if (_ctx == null) return;
+
+            InventoryLocationText.Text = $"Outlet: {_ctx.OutletName}";
+        }
+
+
+
+
         private void UpdateTotal()
         {
             // 1) sum current lines (they already include per-line discounts/tax calculations)
@@ -761,9 +832,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateInvoiceDateNow();  // timestamp of current screen state
             try
             {
-                Pos.Client.Wpf.Printing.ReceiptPrinter.PrintSale(
-                    sale, _cart, open /* TillSession */, cashierDisplay, _selectedSalesmanName
-                );
+                //Pos.Client.Wpf.Printing.ReceiptPrinter.PrintSale(
+                //    sale, _cart, open /* TillSession */, cashierDisplay, _selectedSalesmanName
+                //);
+                // NEW (after db.SaveChangesAsync succeeds and status = Final)
+                await MaybePrintReceiptAsync(sale, open);
             }
             catch (Exception ex)
             {

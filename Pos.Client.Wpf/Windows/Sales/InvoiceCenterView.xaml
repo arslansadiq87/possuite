@@ -170,6 +170,7 @@
 
             <Button Content="Search _F2" Width="120" Height="28" Margin="12,0,0,0"
                     Click="Search_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button x:Name="BtnRefresh" Content="Refresh" Click="Refresh_Click" Width="120" Height="28" Margin="12,0,0,0" Style="{StaticResource Btn.GlobalSecondary}"/>
         </StackPanel>
 
         <!-- Middle: list | details -->

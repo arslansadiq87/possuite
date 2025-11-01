@@ -6,6 +6,7 @@ using Pos.Client.Wpf.Windows.Sales;
 using System.Windows.Media;
 using System.Windows.Controls;
 using Pos.Client.Wpf.Debugging;
+using Pos.Client.Wpf.Windows.Settings;
 
 
 namespace Pos.Client.Wpf.Windows.Shell
@@ -29,6 +30,9 @@ namespace Pos.Client.Wpf.Windows.Shell
             _views = views;
             DataContext = _vm;
 
+            // ADD THIS LINE:
+            InitBackstage();
+
             Loaded += (_, __) =>
             {
                 _views.Attach(_vm);
@@ -36,6 +40,16 @@ namespace Pos.Client.Wpf.Windows.Shell
                 // _views.SetRoot<Windows.Reports.ReportsView>();
                 _ = _vm.RefreshAsync();
             };
+            // Fire OnActivated() when the user changes the selected tab via UI
+            if (DocumentTabs != null)
+            {
+                DocumentTabs.SelectionChanged += (_, __) =>
+                {
+                    if (DocumentTabs.SelectedContent is Pos.Client.Wpf.Infrastructure.IRefreshOnActivate r)
+                        r.OnActivated();
+                };
+            }
+            
 
             PreviewKeyDown += (s, e) =>
             {
@@ -46,6 +60,14 @@ namespace Pos.Client.Wpf.Windows.Shell
                 }
             };
         }
+
+        private void InitBackstage()
+        {
+            // construct the page from DI so its VM and services are resolved
+            var prefs = App.Services.GetRequiredService<PreferencesPage>();
+            BackstagePreferencesTab.Content = prefs;
+        }
+
 
         private void OverlayLayer_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
@@ -164,126 +186,7 @@ namespace Pos.Client.Wpf.Windows.Shell
                 await dialogs.AlertAsync("Reset failed:\n\n" + ex.Message, "Error");
             }
         }
-        //private void OverlayLayer_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-        //{
-        //    if (OverlayLayer.IsVisible)
-        //    {
-        //        _focusBeforeOverlay = Keyboard.FocusedElement;
-
-        //        Dispatcher.BeginInvoke(new Action(() =>
-        //        {
-        //            var first = FindFirstFocusable(OverlayLayer);
-        //            if (first != null) Keyboard.Focus(first);
-        //        }), System.Windows.Threading.DispatcherPriority.Input);
-        //    }
-        //    else
-        //    {
-        //        // block Ribbon focus briefly; let tab reclaim it
-        //        _suppressRibbonFocusUntilUtc = DateTime.UtcNow.AddMilliseconds(220);
-
-        //        void FocusActiveScan()
-        //        {
-        //            if (DocumentTabs?.SelectedContent is IScanFocusable scanTarget)
-        //            {
-        //                if (DocumentTabs.SelectedContent is FrameworkElement fe)
-        //                {
-        //                    var scope = FocusManager.GetFocusScope(DocumentTabs);
-        //                    FocusManager.SetFocusedElement(scope, fe);
-        //                    DocumentTabs.Focus();
-        //                    fe.Focus();
-        //                }
-        //                scanTarget.FocusScan();
-        //            }
-        //        }
-
-        //        Dispatcher.BeginInvoke(new Action(() =>
-        //        {
-        //            if (TryRestorePreviousFocus(_focusBeforeOverlay)) return;
-
-        //            FocusActiveScan();
-        //            // re-assert once more to beat any late Ribbon/keytip grabs
-        //            Dispatcher.BeginInvoke(new Action(FocusActiveScan),
-        //                System.Windows.Threading.DispatcherPriority.Background);
-        //        }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-
-        //        _focusBeforeOverlay = null;
-        //    }
-        //}
-
-
-
-        //private static bool TryRestorePreviousFocus(IInputElement? prev)
-        //{
-        //    if (prev is FrameworkElement fe &&
-        //        fe.IsVisible && fe.IsEnabled && fe.IsLoaded)
-        //    {
-        //        Keyboard.Focus(fe);
-        //        fe.Focus();
-        //        return true;
-        //    }
-        //    if (prev is FrameworkContentElement fce && fce.IsEnabled)
-        //    {
-        //        Keyboard.Focus(fce);
-        //        return true;
-        //    }
-        //    return false;
-        //}
-
-        //private static IInputElement? FindFirstFocusable(DependencyObject root)
-        //{
-        //    for (int i = 0, n = VisualTreeHelper.GetChildrenCount(root); i < n; i++)
-        //    {
-        //        var child = VisualTreeHelper.GetChild(root, i);
-
-        //        // UIElement branch (most controls)
-        //        if (child is UIElement uie && uie.IsVisible && uie.IsEnabled && uie.Focusable)
-        //            return uie;
-
-        //        // ContentElement branch (rare, but supported)
-        //        if (child is ContentElement ce && ce.IsEnabled && ce.Focusable)
-        //            return ce;
-
-        //        var sub = FindFirstFocusable(child);
-        //        if (sub != null) return sub;
-        //    }
-        //    return null;
-        //}
-
-
-        //public void FocusActiveTabAndScan()
-        //{
-        //    Activate(); // keep your re-activate
-
-        //    if (DocumentTabs?.SelectedContent is IScanFocusable scanTarget)
-        //    {
-        //        // Give tab content logical focus first (prevents header grabbing it)
-        //        if (DocumentTabs.SelectedContent is FrameworkElement fe)
-        //        {
-        //            DocumentTabs.Focus();
-        //            fe.Focus();
-        //            var scope = FocusManager.GetFocusScope(fe);
-        //            FocusManager.SetFocusedElement(scope, fe);
-        //        }
-
-        //        // Now delegate to the view that knows how to focus its scan box
-        //        scanTarget.FocusScan();
-        //    }
-        //    // else: do nothing — no rummaging through other tabs/controls
-        //}
-
-        //private DateTime _suppressRibbonFocusUntilUtc = DateTime.MinValue;
-
-        //private void Ribbon_PreviewGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-        //{
-        //    // If we’re in the suppression window, stop Ribbon from taking focus
-        //    if (DateTime.UtcNow <= _suppressRibbonFocusUntilUtc)
-        //    {
-        //        e.Handled = true;
-        //        // re-assert focus to active tab content + scan box
-        //        FocusActiveTabAndScan();
-        //    }
-        //}
-
+   
 
 
     }

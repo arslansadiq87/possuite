@@ -8,11 +8,14 @@ using Pos.Client.Wpf.Services;
 using Pos.Domain;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using Pos.Client.Wpf.Infrastructure;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
-    public partial class StockReportView : UserControl
+    public partial class StockReportView : UserControl, IRefreshOnActivate
     {
+        private DateTime _lastRefreshUtc = DateTime.MinValue;
+
         private enum LocationScope { Outlet, Warehouse }     // which dimension is active
         private LocationScope _scope = LocationScope.Outlet;
         private const int AllId = -1;                        // sentinel for "All ..."
@@ -111,6 +114,11 @@ namespace Pos.Client.Wpf.Windows.Sales
                 OutletBox.ItemsSource = new[] { new Outlet { Id = AllId, Name = "All Outlets" } }
                                         .Concat(outlets).ToList();
                 OutletBox.SelectedIndex = 0;
+                ScopeOutletBtn.IsChecked = true;
+                ScopeOutletBtn.IsEnabled = OutletBox.Items.Count > 0;   // you can toggle radio if multiple
+                OutletBox.IsEnabled = OutletBox.Items.Count > 0;
+                ScopeWarehouseBtn.IsEnabled = isAdmin;
+                WarehouseBox.IsEnabled = false;
             }
             else
             {
@@ -517,6 +525,29 @@ namespace Pos.Client.Wpf.Windows.Sales
                 ScopeWarehouseBtn.IsChecked = true;
         }
 
+        public void OnActivated()
+        {
+            // tiny throttle so activation + selection doesn't double-call
+            var now = DateTime.UtcNow;
+            if (now - _lastRefreshUtc < TimeSpan.FromMilliseconds(250)) return;
+            _lastRefreshUtc = now;
+
+            // If scope UI hasn't finished its first async init, defer slightly
+            if (!_scopeUiReady)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_scopeUiReady) ReloadCurrentView();
+                }), System.Windows.Threading.DispatcherPriority.Background);
+                return;
+            }
+
+            // Refresh according to the current mode + current scope & pickers
+            if (!IsLoaded)
+                Dispatcher.BeginInvoke(new Action(ReloadCurrentView));
+            else
+                ReloadCurrentView();
+        }
 
     }
 }

@@ -530,6 +530,10 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 db.StockEntries.Add(new StockEntry
                 {
+                    // ✅ Location-aware fields the report uses
+                    LocationType = InventoryLocationType.Outlet, // use your enum
+                    LocationId = _outletId,
+
                     OutletId = _outletId,
                     ItemId = line.ItemId,
                     QtyChange = +line.Qty,             // stock IN from customer

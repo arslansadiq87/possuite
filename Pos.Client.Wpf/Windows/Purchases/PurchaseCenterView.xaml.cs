@@ -11,11 +11,14 @@ using Pos.Persistence;
 using Pos.Persistence.Services;
 using Pos.Client.Wpf.Services;
 using System.Windows.Controls;       // AppState / AppCtx
+using Pos.Client.Wpf.Infrastructure;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
-    public partial class PurchaseCenterView : UserControl
+    public partial class PurchaseCenterView : UserControl, IRefreshOnActivate
     {
+        private DateTime _lastRefreshUtc = DateTime.MinValue;
+
         public int? SelectedHeldPurchaseId { get; private set; }  // bubble selection back to caller
         private readonly DbContextOptions<PosClientDbContext> _opts;
         private readonly PurchasesService _svc;
@@ -73,6 +76,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             LoadPurchases();
             UpdateHeldButtonVisibility();
         }
+
+        private void Refresh_Click(object sender, RoutedEventArgs e) => LoadPurchases();
 
         private DateTime? _lastEscDown;
         //private void PurchaseCenterWindow_PreviewKeyDown(object? sender, KeyEventArgs e)
@@ -578,6 +583,17 @@ namespace Pos.Client.Wpf.Windows.Purchases
             var win = new PurchaseReturnWindow(returnId: sel.PurchaseId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true) LoadPurchases();
             //MessageBox.Show($"Amend Return {sel.DocNoOrId} — TODO: open return window.");
+        }
+
+        public void OnActivated()
+        {
+            // tiny throttle so activation + selection doesn't double-call
+            var now = DateTime.UtcNow;
+            if (now - _lastRefreshUtc < TimeSpan.FromMilliseconds(250)) return;
+            _lastRefreshUtc = now;
+
+            if (!IsLoaded) Dispatcher.BeginInvoke(new Action(LoadPurchases));
+            else LoadPurchases();
         }
 
         private void VoidReturn_Click(object sender, RoutedEventArgs e) => Void_Executed(sender, null!);

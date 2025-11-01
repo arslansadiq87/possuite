@@ -57,8 +57,11 @@
 						<Fluent:BackstageTabItem Header="Barcode Labels">
 							<views:BarcodeLabelSettingsPage/>
 						</Fluent:BackstageTabItem>
+                        <Fluent:BackstageTabItem Header="Preferences" x:Name="BackstagePreferencesTab">
+                            <ContentPresenter/>
+                        </Fluent:BackstageTabItem>
 
-						<Fluent:BackstageTabItem Header="About" KeyTip="A">
+                        <Fluent:BackstageTabItem Header="About" KeyTip="A">
                             <StackPanel Margin="16">
                                 <TextBlock Text="PosSuite" FontSize="18" FontWeight="SemiBold"/>
                                 <TextBlock Text="Multi-outlet POS with offline-first sync" Margin="0,8,0,0"/>

@@ -339,6 +339,8 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                     db.StockEntries.Add(new StockEntry
                     {
+                        LocationType = InventoryLocationType.Outlet, // ensure this enum exists in your domain
+                        LocationId = ret.OutletId,
                         OutletId = ret.OutletId,
                         ItemId = r.ItemId,
                         QtyChange = +r.ReturnQty,         // add back to stock

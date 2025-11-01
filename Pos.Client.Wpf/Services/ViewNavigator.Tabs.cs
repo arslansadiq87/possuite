@@ -22,6 +22,7 @@ namespace Pos.Client.Wpf.Services
                 {
                     if (activate) vm.ActiveTab = existing;
                     UpdateContextualGroups(vm);
+                    if (existing.Content is Pos.Client.Wpf.Infrastructure.IRefreshOnActivate r) r.OnActivated();
                     return existing;
                 }
             }
@@ -80,6 +81,8 @@ namespace Pos.Client.Wpf.Services
             {
                 vm.ActiveTab = tab;
                 UpdateContextualGroups(vm);
+                // 🔄 NEW
+                if (tab.Content is Pos.Client.Wpf.Infrastructure.IRefreshOnActivate r) r.OnActivated();
             }
         }
 
@@ -102,6 +105,8 @@ namespace Pos.Client.Wpf.Services
                 {
                     if (activate) vm.ActiveTab = existing;
                     UpdateContextualGroups(vm);
+                    // 🔄 NEW
+                    if (existing.Content is Pos.Client.Wpf.Infrastructure.IRefreshOnActivate r) r.OnActivated();
                     return existing;
                 }
             }
@@ -129,6 +134,8 @@ namespace Pos.Client.Wpf.Services
 
             vm.ActiveTab = existing;
             UpdateContextualGroups(vm);
+            // 🔄 NEW
+            if (existing.Content is Pos.Client.Wpf.Infrastructure.IRefreshOnActivate r) r.OnActivated();
             return true;
         }
 

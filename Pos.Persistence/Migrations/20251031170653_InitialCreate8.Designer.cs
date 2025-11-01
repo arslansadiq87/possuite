@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251031170653_InitialCreate8")]
+    partial class InitialCreate8
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -2112,56 +2115,6 @@ namespace Pos.Persistence.Migrations
                     b.HasIndex("OutletId");
 
                     b.ToTable("UserOutlets");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.UserPreference", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DefaultBarcodeType")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("MachineName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("PurchaseDestinationId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("PurchaseDestinationScope")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MachineName")
-                        .IsUnique();
-
-                    b.ToTable("UserPreferences");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Warehouse", b =>

@@ -44,6 +44,7 @@ namespace Pos.Persistence
         public DbSet<InvoiceSettings> InvoiceSettings { get; set; } = default!;
         public DbSet<InvoiceLocalization> InvoiceLocalizations { get; set; } = default!;
         public DbSet<BarcodeLabelSettings> BarcodeLabelSettings { get; set; } = default!;
+        public DbSet<UserPreference> UserPreferences { get; set; }   // ✅ add this line
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -457,7 +458,9 @@ namespace Pos.Persistence
                 e.Property(x => x.CodeType).HasMaxLength(20);
             });
 
-
+            b.Entity<UserPreference>()
+            .HasIndex(p => p.MachineName)
+            .IsUnique();
 
             // ---- Provider-aware RowVersion mapping for ALL BaseEntity types ----
             var provider = Database.ProviderName ?? string.Empty;

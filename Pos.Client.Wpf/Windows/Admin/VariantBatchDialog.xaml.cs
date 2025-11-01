@@ -430,7 +430,10 @@ namespace Pos.Client.Wpf.Windows.Admin
                 if (!string.IsNullOrWhiteSpace(v1Name) && !string.IsNullOrWhiteSpace(v1Val)) pieces.Add($"{v1Name}:{v1Val}");
                 if (!string.IsNullOrWhiteSpace(v2Name) && !string.IsNullOrWhiteSpace(v2Val)) pieces.Add($"{v2Name}:{v2Val}");
                 string suffix = pieces.Count > 0 ? " — " + string.Join(", ", pieces) : "";
-                string displayName = _product != null ? (_product.Name + suffix) : _rows[0].Name; // choose your desired behavior
+                string displayName = _product != null
+                    ? (_product.Name + suffix)
+                    : (NameBox?.Text?.Trim() ?? _rows[0].Name);
+
                 var edited = new Item
                 {
                     Id = _rows[0].ExistingItemId ?? 0,
@@ -556,23 +559,23 @@ namespace Pos.Client.Wpf.Windows.Admin
             UpdateTitle();
             if (_mode == Mode.EditSingle)
             {
-                AxesGroup.Visibility = Visibility.Visible;
+                AxesGroup.Visibility = Visibility.Collapsed;
                 AxesGroup.IsEnabled = true;
                 HideBatchValuesRows();             // keeps AxisSingleValuesPanel visible
-                AxisSingleValuesPanel.Visibility = Visibility.Visible;
-                AxisSingleValuesPanel.IsEnabled = true;
-                Axis1NameBox.IsEnabled = true;
-                Axis1NameBox.IsReadOnly = false;
-                Axis1SingleBox.IsEnabled = true;
-                Axis1SingleBox.IsReadOnly = false;
-                Axis2NameBox.IsEnabled = true;
-                Axis2NameBox.IsReadOnly = false;
-                Axis2SingleBox.IsEnabled = true;
-                Axis2SingleBox.IsReadOnly = false;
-                Axis1NameBox.TabIndex = 0;
-                Axis1SingleBox.TabIndex = 1;
-                Axis2NameBox.TabIndex = 2;
-                Axis2SingleBox.TabIndex = 3;
+                //AxisSingleValuesPanel.Visibility = Visibility.Visible;
+                //AxisSingleValuesPanel.IsEnabled = true;
+                //Axis1NameBox.IsEnabled = true;
+                //Axis1NameBox.IsReadOnly = false;
+                //Axis1SingleBox.IsEnabled = true;
+                //Axis1SingleBox.IsReadOnly = false;
+                //Axis2NameBox.IsEnabled = true;
+                //Axis2NameBox.IsReadOnly = false;
+                //Axis2SingleBox.IsEnabled = true;
+                //Axis2SingleBox.IsReadOnly = false;
+                //Axis1NameBox.TabIndex = 0;
+                //Axis1SingleBox.TabIndex = 1;
+                //Axis2NameBox.TabIndex = 2;
+                //Axis2SingleBox.TabIndex = 3;
                 SaveBtn.Content = "Save";
                 SaveAddBtn.Visibility = Visibility.Collapsed;
             }
@@ -1265,6 +1268,45 @@ namespace Pos.Client.Wpf.Windows.Admin
                 SkuStartBox.Text = _seqSku.ToString(CultureInfo.InvariantCulture);
             };
         }
+
+        public async Task PrefillStandaloneForEditAsync(Item item)
+        {
+            // Mark dialog as standalone and hide product/axes just like Add-Standalone
+            IsStandaloneMode = true;
+            _product = null;
+
+            ProductText.Visibility = Visibility.Collapsed;
+            StandaloneNameRow.Visibility = Visibility.Visible; // show Name/Brand/Category row
+            AxesGroup.Visibility = Visibility.Collapsed;
+            HideBatchValuesRows();
+
+            // Buttons/Title same vibe as add-standalone, but editing now
+            SaveBtn.Content = "Save";
+            SaveAddBtn.Visibility = Visibility.Collapsed;
+            Title = "Edit Standalone Item";
+            UpdateTitle(); // keeps "Edit Item" when standalone + EditSingle
+
+            // Load lookups (same as PrefillStandalone Loaded handler)
+            await using (var db = await _dbf.CreateDbContextAsync())
+            {
+                var brands = await db.Brands.Where(b => b.IsActive).OrderBy(b => b.Name).ToListAsync();
+                BrandBox.ItemsSource = brands;
+
+                var cats = await db.Categories.OrderBy(c => c.Name).ToListAsync();
+                CategoryBox.ItemsSource = cats;
+            }
+
+            // Pre-fill editable fields
+            NameBox.Text = item.Name;
+            BrandBox.SelectedValue = item.BrandId;
+            CategoryBox.SelectedValue = item.CategoryId;
+
+            // Reuse your existing population logic for the rest
+            PrefillForEdit(item);                 // price/tax/discount/axes textboxes/_rows[0] etc.
+            PrefillBarcodesForEdit(item.Barcodes);
+        }
+
+
         private async Task<int> GetNextSkuSequenceAsync(string prefix, int fallbackStart)
         {
             try

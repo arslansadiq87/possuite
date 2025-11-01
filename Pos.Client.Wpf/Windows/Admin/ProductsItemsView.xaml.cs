@@ -588,14 +588,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Could not load the selected item.");
                 return;
             }
-            var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.EditSingle)
-            {
-                //Owner = this
-            };
-            dlg.PrefillForEdit(entity);
-            dlg.PrefillBarcodesForEdit(entity.Barcodes);
-            dlg.HideAxesForStandalone();          // 👈 hide axes in the form
-            dlg.Title = "Edit Item";
+            var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.EditSingle) { };
+            await dlg.PrefillStandaloneForEditAsync(entity);   // 👈 single, consistent entry-point
+
             if (dlg.ShowDialog() != true) return;
             var edited = dlg.CreatedItems?.FirstOrDefault();
             if (edited == null)

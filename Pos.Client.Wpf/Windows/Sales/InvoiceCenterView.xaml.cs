@@ -11,12 +11,15 @@ using Pos.Domain.Formatting; // <-- add this
 using Pos.Domain.Services;
 using System.Windows.Controls;
 using Pos.Client.Wpf.Services;
+using Pos.Client.Wpf.Infrastructure;
 
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
-    public partial class InvoiceCenterView : UserControl
+    public partial class InvoiceCenterView : UserControl, IRefreshOnActivate
     {
+        private DateTime _lastRefreshUtc = DateTime.MinValue;
+
         private readonly int _outletId;
         private readonly int _counterId;
         private readonly DbContextOptions<PosClientDbContext> _opts;
@@ -111,6 +114,8 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if (BtnHeld != null) BtnHeld.Visibility = Visibility.Collapsed;
             }
         }
+
+        private void Refresh_Click(object sender, RoutedEventArgs e) => LoadInvoices();
 
         private void BtnHeld_Click(object sender, RoutedEventArgs e) => OpenHeldPicker();
 
@@ -364,7 +369,19 @@ namespace Pos.Client.Wpf.Windows.Sales
                 {
                     BtnAmend.Visibility = Visibility.Visible;
                     BtnReturnWith.Visibility = Visibility.Visible;
-                    BtnVoidSale.Visibility = Visibility.Visible; // << show for FINAL sales
+
+                    // 🔒 Hide Void if there is any non-voided return against this sale
+                    bool hasReturn;
+                    using (var db = new PosClientDbContext(_opts))
+                    {
+                        hasReturn = db.Sales.AsNoTracking()
+                            .Any(s => s.IsReturn
+                                   && (s.OriginalSaleId == sel.SaleId || s.RefSaleId == sel.SaleId)
+                                   && s.Status != SaleStatus.Voided);
+                    }
+
+                    BtnVoidSale.Visibility = hasReturn ? Visibility.Collapsed : Visibility.Visible;
+                    BtnAmend.Visibility = hasReturn ? Visibility.Collapsed : Visibility.Visible;
                 }
             }
         }
@@ -374,16 +391,45 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private void Amend_Click(object sender, RoutedEventArgs e)
         {
-            if (InvoicesGrid.SelectedItem is not UiInvoiceRow sel) { MessageBox.Show("Select an invoice."); return; }
-            if (sel.IsReturn) { MessageBox.Show("Returns cannot be amended."); return; }
-            if (sel.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL invoices can be amended."); return; }
-            var win = new Pos.Client.Wpf.Windows.Sales.EditSaleWindow(sel.SaleId) { Owner = Window.GetWindow(this) };
+            if (InvoicesGrid.SelectedItem is not UiInvoiceRow sel)
+            {
+                MessageBox.Show("Select an invoice."); return;
+            }
+            if (sel.IsReturn)
+            {
+                MessageBox.Show("Returns cannot be amended."); return;
+            }
+            if (sel.Status != SaleStatus.Final)
+            {
+                MessageBox.Show("Only FINAL invoices can be amended."); return;
+            }
+
+            // 🔒 Block if any non-voided return exists for this sale
+            using (var db = new PosClientDbContext(_opts))
+            {
+                bool hasReturn = db.Sales.AsNoTracking()
+                    .Any(s => s.IsReturn
+                           && (s.OriginalSaleId == sel.SaleId || s.RefSaleId == sel.SaleId)
+                           && s.Status != SaleStatus.Voided);
+
+                if (hasReturn)
+                {
+                    MessageBox.Show("This sale has a return against it and cannot be amended.", "Blocked");
+                    return;
+                }
+            }
+
+            var win = new Pos.Client.Wpf.Windows.Sales.EditSaleWindow(sel.SaleId)
+            {
+                Owner = Window.GetWindow(this)
+            };
             if (win.ShowDialog() == true && win.Confirmed)
             {
                 MessageBox.Show($"Amended to Revision {win.NewRevision}.");
                 LoadInvoices();
             }
         }
+
 
         private void ReturnWithInvoice_Click(object sender, RoutedEventArgs e)
         {
@@ -462,23 +508,44 @@ namespace Pos.Client.Wpf.Windows.Sales
                 var sale = db.Sales.First(s => s.Id == sel.SaleId);
                 if (!sale.IsReturn) { MessageBox.Show("Not a return."); return; }
                 if (sale.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL documents can be voided."); return; }
-                var lines = db.SaleLines.Where(l => l.SaleId == sale.Id).ToList();
-                foreach (var l in lines)
+                // Get all stock entries that were created for THIS return
+                
+                var prior = db.StockEntries
+                    .Where(e => e.RefId == sale.Id && e.RefType == "SaleReturn")  // adjust if your RefType differs
+                    .ToList();
+
+                foreach (var p in prior)
                 {
-                    // Reverse stock effect from the return
                     db.StockEntries.Add(new StockEntry
                     {
-                        LocationType = InventoryLocationType.Outlet,
-                        LocationId = sale.OutletId,
-                        OutletId = sale.OutletId,
-                        ItemId = l.ItemId,
-                        //QtyChange = l.Qty,   // l.Qty is positive, so this becomes negative (stock OUT)
-                        QtyChange = -l.Qty,    // correct: reverse the return (IN → OUT)
+                        LocationType = p.LocationType,
+                        LocationId = p.LocationId,
+                        OutletId = p.OutletId,
+                        ItemId = p.ItemId,
+                        QtyChange = -p.QtyChange,  // exact negation of what was posted
                         RefType = "Void",
                         RefId = sale.Id,
                         Ts = DateTime.UtcNow
                     });
                 }
+
+                //var lines = db.SaleLines.Where(l => l.SaleId == sale.Id).ToList();
+                //foreach (var l in lines)
+                //{
+                //    // Reverse stock effect from the return
+                //    db.StockEntries.Add(new StockEntry
+                //    {
+                //        LocationType = InventoryLocationType.Outlet,
+                //        LocationId = sale.OutletId,
+                //        OutletId = sale.OutletId,
+                //        ItemId = l.ItemId,
+                //        //QtyChange = l.Qty,   // l.Qty is positive, so this becomes negative (stock OUT)
+                //        QtyChange = -l.Qty,    // correct: reverse the return (IN → OUT)
+                //        RefType = "Void",
+                //        RefId = sale.Id,
+                //        Ts = DateTime.UtcNow
+                //    });
+                //}
                 sale.Status = SaleStatus.Voided;
                 sale.VoidReason = reason;
                 sale.VoidedAtUtc = DateTime.UtcNow;
@@ -500,17 +567,48 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (sel == null) { MessageBox.Show("Select an invoice."); return; }
             if (sel.IsReturn) { MessageBox.Show("This action is for normal sale invoices, not returns."); return; }
             if (sel.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL invoices can be voided."); return; }
+
+            // 🔒 Block if any non-voided return exists for this sale
+            using (var db = new PosClientDbContext(_opts))
+            {
+                bool hasReturn = db.Sales.AsNoTracking()
+                    .Any(s => s.IsReturn
+                           && (s.OriginalSaleId == sel.SaleId || s.RefSaleId == sel.SaleId)
+                           && s.Status != SaleStatus.Voided);
+
+                if (hasReturn)
+                {
+                    MessageBox.Show("This sale has a return against it and cannot be voided.", "Blocked");
+                    return;
+                }
+            }
+
             var reason = Microsoft.VisualBasic.Interaction.InputBox(
                 $"Void sale {sel.CounterId}-{sel.InvoiceNumber} (Rev {sel.Revision})\nEnter reason:",
                 "Void Sale", "Wrong sale");
             if (string.IsNullOrWhiteSpace(reason)) return;
+
             try
             {
                 using var db = new PosClientDbContext(_opts);
                 using var tx = db.Database.BeginTransaction();
+
+                // 🔁 Recheck inside the transaction to prevent race conditions
+                bool hasReturnNow = db.Sales.AsNoTracking()
+                    .Any(s => s.IsReturn
+                           && (s.OriginalSaleId == sel.SaleId || s.RefSaleId == sel.SaleId)
+                           && s.Status != SaleStatus.Voided);
+
+                if (hasReturnNow)
+                {
+                    MessageBox.Show("This sale now has a return against it and cannot be voided.", "Blocked");
+                    return;
+                }
+
                 var sale = db.Sales.First(s => s.Id == sel.SaleId);
                 if (sale.IsReturn) { MessageBox.Show("Selected document is a return."); return; }
                 if (sale.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL invoices can be voided."); return; }
+
                 var lines = db.SaleLines.Where(l => l.SaleId == sale.Id).ToList();
                 foreach (var l in lines)
                 {
@@ -521,7 +619,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                         LocationId = sale.OutletId,
                         OutletId = sale.OutletId,
                         ItemId = l.ItemId,
-                        QtyChange = +l.Qty,     // add back to stock
+                        QtyChange = +l.Qty,   // add back to stock
                         RefType = "Void",
                         RefId = sale.Id,
                         Ts = DateTime.UtcNow
@@ -531,8 +629,10 @@ namespace Pos.Client.Wpf.Windows.Sales
                 sale.Status = SaleStatus.Voided;
                 sale.VoidReason = reason;
                 sale.VoidedAtUtc = DateTime.UtcNow;
+
                 db.SaveChanges();
                 tx.Commit();
+
                 MessageBox.Show("Sale voided.");
                 LoadInvoices();
             }
@@ -540,6 +640,17 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 MessageBox.Show("Failed to void sale: " + ex.Message);
             }
+        }
+
+        public void OnActivated()
+        {
+            // tiny throttle so activation + selection doesn't double-call
+            var now = DateTime.UtcNow;
+            if (now - _lastRefreshUtc < TimeSpan.FromMilliseconds(250)) return;
+            _lastRefreshUtc = now;
+
+            if (!IsLoaded) Dispatcher.BeginInvoke(new Action(LoadInvoices));
+            else LoadInvoices();
         }
 
         // Shortcut command wrappers (call existing click handlers)

@@ -62,6 +62,7 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<ITerminalContext, TerminalContext>();
 
             sc.AddSingleton<ResetStockService>();
+            sc.AddSingleton<IUserPreferencesService, UserPreferencesService>();
 
 
             // 3) App services
@@ -121,8 +122,9 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditCategoryWindow>();
             
             sc.AddTransient<EditWarehouseWindow>();
+            sc.AddTransient<PreferencesViewModel>();
+            sc.AddTransient<PreferencesPage>();
 
-            
             sc.AddSingleton<IInvoiceSettingsService, InvoiceSettingsService>();
             sc.AddTransient<InvoiceSettingsViewModel>();
             sc.AddTransient<BarcodeLabelSettingsViewModel>();

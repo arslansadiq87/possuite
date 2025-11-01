@@ -16,6 +16,7 @@ using System.Windows.Data;
 using Microsoft.VisualBasic;
 using System.Linq;            // at top of PurchasesService.cs
 using System.Windows.Media;
+using Microsoft.Extensions.DependencyInjection;
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
@@ -173,6 +174,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             Loaded += async (_, __) =>
             {
                 await InitDestinationsAsync();
+                await ApplyUserPrefsToDestinationAsync();
                 ApplyDestinationPermissionGuard();
                 SupplierText.Focus();
                 SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
@@ -250,6 +252,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             Loaded += async (_, __) =>
             {
                 await InitDestinationsAsync();
+                await ApplyUserPrefsToDestinationAsync();
+
                 ApplyDestinationPermissionGuard();
                 SupplierText.Focus();
                 SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
@@ -1209,6 +1213,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (!keepDestination)
             {
                 await InitDestinationsAsync();
+                await ApplyUserPrefsToDestinationAsync();   // << apply saved prefs on a fresh form
+                ApplyDestinationPermissionGuard();
             }
             else
             {
@@ -1953,6 +1959,64 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 else (content as FrameworkElement)?.Focus();
             });
         }
+
+        private async Task ApplyUserPrefsToDestinationAsync()
+        {
+            // Only apply for brand-new forms (don’t override a loaded draft/amend)
+            if ((_model?.Id ?? 0) > 0) return;
+            if (PurchaseId is int pid && pid > 0) return;
+
+            // We need the lists populated first
+            try
+            {
+                var prefSvc = App.Services.GetRequiredService<IUserPreferencesService>();
+                var prefs = await prefSvc.GetAsync();
+
+                // Graceful fallbacks
+                var scope = prefs?.PurchaseDestinationScope ?? "Outlet";
+                var id = prefs?.PurchaseDestinationId;
+
+                if (string.Equals(scope, "Warehouse", StringComparison.OrdinalIgnoreCase) && _warehouseResults.Any())
+                {
+                    // Select Warehouse scope
+                    try { DestWarehouseRadio.IsChecked = true; } catch { }
+                    try { WarehouseBox.IsEnabled = true; OutletBox.IsEnabled = false; } catch { }
+
+                    if (id.HasValue)
+                    {
+                        try { WarehouseBox.SelectedValue = id.Value; } catch { }
+                    }
+                    // Fallback if SelectedValuePath is not set or the value didn’t bind yet
+                    if (WarehouseBox.SelectedValue == null)
+                    {
+                        var match = _warehouseResults.FirstOrDefault(w => w.Id == id);
+                        if (match != null) try { WarehouseBox.SelectedItem = match; } catch { }
+                        else if (_warehouseResults.Count > 0) try { WarehouseBox.SelectedIndex = 0; } catch { }
+                    }
+                }
+                else
+                {
+                    // Select Outlet scope
+                    try { DestOutletRadio.IsChecked = true; } catch { }
+                    try { OutletBox.IsEnabled = true; WarehouseBox.IsEnabled = false; } catch { }
+
+                    var outletId = id ?? AppState.Current.CurrentOutletId;
+
+                    try { OutletBox.SelectedValue = outletId; } catch { }
+                    if (OutletBox.SelectedValue == null)
+                    {
+                        var match = _outletResults.FirstOrDefault(o => o.Id == outletId);
+                        if (match != null) try { OutletBox.SelectedItem = match; } catch { }
+                        else if (_outletResults.Count > 0) try { OutletBox.SelectedIndex = 0; } catch { }
+                    }
+                }
+            }
+            catch
+            {
+                // Swallow: don’t block UI if prefs/service aren’t available
+            }
+        }
+
 
 
     }

@@ -26,6 +26,10 @@
                 <TextBlock Text="Invoice #:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBlock x:Name="InvoicePreviewText" VerticalAlignment="Center" FontWeight="Bold" />
                 <TextBlock Text="   " />
+                <!-- NEW: Inventory location -->
+                <TextBlock Text="" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock x:Name="InventoryLocationText" VerticalAlignment="Center" FontStyle="Italic"/>
+                <TextBlock Text="   " />
                 <TextBlock Text="Date:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBlock x:Name="InvoiceDateText" VerticalAlignment="Center"/>
             </StackPanel>
@@ -63,7 +67,7 @@
            
         </Grid>
 
-        <DataGrid x:Name="CartGrid" Grid.Row="2" AutoGenerateColumns="False"
+        <DataGrid x:Name="CartGrid" Grid.Row="2" AutoGenerateColumns="False" Style="{StaticResource ModernDataGrid}"
           IsReadOnly="False" CanUserAddRows="False" HeadersVisibility="Column" VerticalContentAlignment="Center" FontSize="16" FontWeight="DemiBold">
             <DataGrid.Resources>
                 <Style x:Key="NumericRightAligned" TargetType="TextBlock">

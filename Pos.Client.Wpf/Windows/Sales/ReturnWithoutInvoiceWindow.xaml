@@ -89,7 +89,7 @@
         </Grid>
 
         <!-- ===== Row 2: CART (same grid/columns) ===== -->
-        <DataGrid x:Name="CartGrid" Grid.Row="2" AutoGenerateColumns="False" SnapsToDevicePixels="True"
+        <DataGrid x:Name="CartGrid" Grid.Row="2" AutoGenerateColumns="False" SnapsToDevicePixels="True" Style="{StaticResource ModernDataGrid}"
           EnableRowVirtualization="True"
           ScrollViewer.CanContentScroll="True"
                   IsReadOnly="False" CanUserAddRows="False"
@@ -226,5 +226,25 @@
                 </StackPanel>
             </Grid>
         </Border>
+        <!-- Full-window dim mask -->
+        <Border x:Name="OverlayMask"
+Grid.RowSpan="4"
+Background="#80000000"
+Visibility="Collapsed"
+Panel.ZIndex="999"
+HorizontalAlignment="Stretch"
+VerticalAlignment="Stretch"
+IsHitTestVisible="True"/>
+
+        <!-- Centered overlay content host -->
+        <ContentPresenter x:Name="OverlayPresenter"
+          Grid.RowSpan="4"
+          Visibility="Collapsed"
+          Panel.ZIndex="1000"
+          HorizontalAlignment="Center"
+          VerticalAlignment="Center"
+          IsHitTestVisible="True"/>
+
+
     </Grid>
 </Window>
