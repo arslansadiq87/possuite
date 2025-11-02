@@ -48,6 +48,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private bool _isWalkIn = true;
         private string? _enteredCustomerName;
         private string? _enteredCustomerPhone;
+        //private readonly IStaffDirectory _staff;
 
         private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
         private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
@@ -395,24 +396,38 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void LoadSalesmen()
         {
             using var db = new PosClientDbContext(_dbOptions);
-            var list = db.Users
-                .AsQueryable()
-                .Where(u => u.IsActive && (u.Role == UserRole.Salesman || u.Role == UserRole.Cashier))
-                .OrderBy(u => u.DisplayName)
+
+            // Pull active staff who are marked as salesmen
+            var list = db.Staff
+                .AsNoTracking()
+                .Where(s => s.IsActive && s.ActsAsSalesman)
+                .OrderBy(s => s.FullName)
                 .ToList();
-            list.Insert(0, new User { Id = 0, DisplayName = "-- None --", Username = "__none__", Role = UserRole.Salesman });
+
+            // Optional first row: "-- None --"
+            list.Insert(0, new Pos.Domain.Hr.Staff { Id = 0, FullName = "-- None --", IsActive = true });
+
             SalesmanBox.ItemsSource = list;
-            SalesmanBox.DisplayMemberPath = "DisplayName";
+            SalesmanBox.DisplayMemberPath = "FullName";
             SalesmanBox.SelectedValuePath = "Id";
-            SalesmanBox.SelectedIndex = 0;
+            SalesmanBox.SelectedIndex = list.Count > 0 ? 0 : -1;
         }
+
 
         private void SalesmanBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (SalesmanBox.SelectedItem is Pos.Domain.Entities.User sel)
+            if (SalesmanBox.SelectedItem is Pos.Domain.Hr.Staff sel)
             {
-                if (sel.Id == 0) { _selectedSalesmanId = null; _selectedSalesmanName = null; }
-                else { _selectedSalesmanId = sel.Id; _selectedSalesmanName = sel.DisplayName; }
+                if (sel.Id == 0)
+                {
+                    _selectedSalesmanId = null;
+                    _selectedSalesmanName = null;
+                }
+                else
+                {
+                    _selectedSalesmanId = sel.Id;
+                    _selectedSalesmanName = sel.FullName;
+                }
             }
             else
             {
@@ -420,6 +435,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 _selectedSalesmanName = null;
             }
         }
+
 
         private void PayBox_GotFocus(object sender, RoutedEventArgs e)
         {
@@ -693,21 +709,29 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             int cashierIdLocal = cashier.Id;
             string cashierDisplay = cashier.DisplayName ?? "Unknown";
+
             int? salesmanIdLocal = _selectedSalesmanId;
-            if (!salesmanIdLocal.HasValue && SalesmanBox?.SelectedItem is User sel2)
-                salesmanIdLocal = (sel2.Id == 0) ? (int?)null : sel2.Id;
-            if (salesmanIdLocal.HasValue &&
-                !db.Users.AsNoTracking().Any(u => u.Id == salesmanIdLocal.Value))
-                salesmanIdLocal = null;
+
+            // If not set via _selectedSalesmanId, try from the combobox
+            if (!salesmanIdLocal.HasValue && SalesmanBox?.SelectedItem is Pos.Domain.Hr.Staff selStaff)
+                salesmanIdLocal = (selStaff.Id == 0) ? (int?)null : selStaff.Id;
+
+            // Validate salesman against Staff (ActsAsSalesman + IsActive)
+            if (salesmanIdLocal.HasValue)
+            {
+                bool exists = db.Staff
+                    .AsNoTracking()
+                    .Any(s => s.Id == salesmanIdLocal.Value && s.IsActive && s.ActsAsSalesman);
+
+                if (!exists) salesmanIdLocal = null;
+            }
+
+
             if (!db.Users.AsNoTracking().Any(x => x.Id == cashierIdLocal))
             {
                 MessageBox.Show("Cashier not found in Users table."); return;
             }
-            if (salesmanIdLocal.HasValue &&
-                !db.Users.AsNoTracking().Any(x => x.Id == salesmanIdLocal.Value))
-            {
-                MessageBox.Show("Selected salesman not found in Users table."); return;
-            }
+            
             // ========== Customer ==========
             bool isWalkIn = (WalkInCheck?.IsChecked == true);
             var customerKind = isWalkIn ? CustomerKind.WalkIn : CustomerKind.Registered;
@@ -1115,7 +1139,9 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (CustNameBox != null) CustNameBox.Text = s.CustomerName ?? "";
             if (CustPhoneBox != null) CustPhoneBox.Text = s.CustomerPhone ?? "";
             if (!string.IsNullOrWhiteSpace(s.InvoiceFooter) && FooterBox != null) FooterBox.Text = s.InvoiceFooter;
-            _selectedSalesmanId = s.SalesmanId;
+            if (SalesmanBox != null)
+                SalesmanBox.SelectedValue = _selectedSalesmanId ?? 0;
+
             // optional: set SalesmanBox.SelectedValue = s.SalesmanId ?? 0;
             _currentHeldSaleId = s.Id;
             UpdateTotal();

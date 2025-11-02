@@ -2,17 +2,24 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:acc="clr-namespace:Pos.Client.Wpf.Windows.Accounting">
-
     <DockPanel>
         <ToolBar DockPanel.Dock="Top">
-            <Button Content="New Header"        Command="{Binding NewHeaderCommand}" />
-            <Button Content="New Account"       Command="{Binding NewAccountCommand}" />
+            <Button Content="New Header"        Command="{Binding NewHeaderCommand}" 
+                    ToolTip="Create a header under the selected node (disabled inside Parties)"/>
+            
+            <Button Content="New Account"       Command="{Binding NewAccountCommand}" 
+                    ToolTip="Create a posting account under the selected header (disabled inside Parties)"/>
+
             <Separator/>
-            <Button Content="Edit"              Command="{Binding EditAccountCommand}" />
-            <Button Content="Delete"            Command="{Binding DeleteAccountCommand}" />
+            <Button Content="Edit"              Command="{Binding EditAccountCommand}" 
+                            ToolTip="Edit selected account (disabled for Parties)"/>
+
+            <Button Content="Delete"            Command="{Binding DeleteAccountCommand}" 
+                            ToolTip="Delete selected account (disabled for Parties)"/>
+            
             <Separator/>
             <Button Content="Add Cash (Outlet)" Command="{Binding AddCashForOutletCommand}" />
-            <Button Content="Add Staff"         Command="{Binding AddStaffAccountCommand}" />
+            
             <Separator/>
             <Button Content="Save Openings"     Command="{Binding SaveOpeningsCommand}" />
             <Button Content="Lock Openings"     Command="{Binding LockOpeningsCommand}" />

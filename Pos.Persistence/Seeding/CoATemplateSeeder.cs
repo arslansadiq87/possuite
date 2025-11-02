@@ -168,9 +168,9 @@ namespace Pos.Persistence.Seeding
                 new("6",    "Parties",              AccountType.Parties, null,  true,  false, NormalSide.Debit),
                 new("61",   "Suppliers",              AccountType.Parties, "6",   true,  false, NormalSide.Credit),
                 new("62",   "Customers",            AccountType.Parties, "6",   true,  false, NormalSide.Debit),
-                new("63",   "Salesmen",             AccountType.Parties, "6",   true,  false, NormalSide.Debit),
+                new("63",   "Staff",               AccountType.Parties, "6",   true,  false, NormalSide.Debit),
                 new("64",   "Others",               AccountType.Parties, "6",   true,  false, NormalSide.Debit),
-                new("65",   "Staff",               AccountType.Parties, "6",   true,  false, NormalSide.Debit),
+                
 
             };
 
@@ -190,7 +190,9 @@ namespace Pos.Persistence.Seeding
                     NormalSide = r.Normal,
                     IsHeader = r.IsHeader,
                     AllowPosting = r.AllowPosting,
-                    IsActive = true
+                    IsActive = true,
+                    IsSystem = true    // <-- protect seeded structure
+
                 });
             }
             if (db.ChangeTracker.HasChanges())
@@ -214,6 +216,7 @@ namespace Pos.Persistence.Seeding
                     tracked.IsHeader = r.IsHeader;
                     tracked.AllowPosting = r.AllowPosting;
                     tracked.NormalSide = r.Normal;
+                    tracked.IsSystem = true;
                     toUpdate.Add(tracked);
                 }
             }

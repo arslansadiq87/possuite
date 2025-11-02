@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using Pos.Client.Wpf.Infrastructure;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -253,13 +254,86 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
             }
 
+            // -------- Ensure Party GL account under 61/62 --------
+            var isCustomer = party.Roles.Any(r => r.Role == RoleType.Customer);
+            var isSupplier = party.Roles.Any(r => r.Role == RoleType.Supplier);
+
+            // Choose header: prefer Customers when both (you can change this policy later)
+            string headerCode = isCustomer ? "62" : "61";
+
+            // Find parent header
+            var parent = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Code == headerCode);
+            if (parent == null)
+            {
+                MessageBox.Show($"Chart of Accounts header {headerCode} not found. Seed CoA first.", "Parties");
+                return;
+            }
+
+            // Create or update the linked account
+            Account? linked = null;
+            if (party.AccountId.HasValue)
+            {
+                linked = await db.Accounts.FirstOrDefaultAsync(a => a.Id == party.AccountId.Value);
+                if (linked == null) party.AccountId = null; // dangling link, treat as missing
+            }
+
+            if (linked == null)
+            {
+                var code = await GenerateNextChildCodeAsync(db, parent, forHeader: false);
+                linked = new Account
+                {
+                    Code = code,
+                    Name = party.Name,
+                    Type = AccountType.Parties,
+                    NormalSide = isSupplier && !isCustomer ? NormalSide.Credit : NormalSide.Debit,
+                    IsHeader = false,
+                    AllowPosting = true,
+                    ParentId = parent.Id
+                };
+                db.Accounts.Add(linked);
+                await db.SaveChangesAsync();   // get Id
+                party.AccountId = linked.Id;
+            }
+            else
+            {
+                // Keep it tidy: reflect name changes; if parent header changed by roles, move it
+                linked.Name = party.Name;
+                if (linked.ParentId != parent.Id)
+                    linked.ParentId = parent.Id;
+                // Update natural side based on role (credit for pure supplier)
+                linked.NormalSide = isSupplier && !isCustomer ? NormalSide.Credit : NormalSide.Debit;
+            }
+
             await db.SaveChangesAsync();
+            // notify CoA and any other listeners that accounts changed
+            AppEvents.RaiseAccountsChanged();
+
             _partyId ??= party.Id; // set after create
             DialogResult = true;
             Close();
 
             static RoleType? ifTrue(bool cond, RoleType val) => cond ? val : (RoleType?)null;
         }
+
+        private static async Task<string> GenerateNextChildCodeAsync(PosClientDbContext db, Account parent, bool forHeader)
+        {
+            var sibs = await db.Accounts
+                .AsNoTracking()
+                .Where(a => a.ParentId == parent.Id)
+                .Select(a => a.Code)
+                .ToListAsync();
+
+            int max = 0;
+            foreach (var code in sibs)
+            {
+                var last = code?.Split('-').LastOrDefault();
+                if (int.TryParse(last, out var n) && n > max) max = n;
+            }
+            var next = max + 1;
+            var suffix = forHeader ? next.ToString("D2") : next.ToString("D3");
+            return $"{parent.Code}-{suffix}";
+        }
+
 
         private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
 

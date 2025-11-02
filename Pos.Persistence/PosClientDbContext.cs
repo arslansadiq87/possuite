@@ -63,6 +63,8 @@ namespace Pos.Persistence
         public DbSet<Pos.Domain.Hr.AttendanceDay> AttendanceDays { get; set; } = null!;
         public DbSet<Pos.Domain.Hr.PayrollRun> PayrollRuns { get; set; } = null!;
         public DbSet<Pos.Domain.Hr.PayrollItem> PayrollItems { get; set; } = null!;
+        public DbSet<OtherAccount> OtherAccounts { get; set; } = null!;
+
         //public DbSet<OpeningBalance> OpeningBalances => Set<OpeningBalance>();
         //public DbSet<OpeningBalanceLine> OpeningBalanceLines => Set<OpeningBalanceLine>();
 

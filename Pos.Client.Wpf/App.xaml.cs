@@ -113,12 +113,15 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Purchases.PurchaseCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.PartiesView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.EditPartyWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.StaffView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Admin.StaffDialog>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.TransferEditorView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.PayDialog>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.StockReportView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
-            
+            sc.AddScoped<Pos.Client.Wpf.Services.IStaffDirectory, Pos.Client.Wpf.Services.StaffDirectory>();
+
             sc.AddTransient<TillSessionSummaryWindow>();
             sc.AddTransient<Func<int, int, int, TillSessionSummaryWindow>>(sp =>
             {
@@ -126,8 +129,10 @@ namespace Pos.Client.Wpf
                 return (tillId, outletId, counterId) =>
                     new TillSessionSummaryWindow(opts, tillId, outletId, counterId);
             });
+            sc.AddTransient<OtherAccountsView>();
+            sc.AddTransient<OtherAccountDialog>();
 
-            
+
 
             // WINDOWS (register every window you resolve from DI)
             sc.AddTransient<BrandsWindow>();

@@ -76,6 +76,7 @@ public sealed class DashboardVm : ObservableObject
         OpenTransferCmd = new RelayCommand(OpenTransferTab);
         OpenProductsCmd = new RelayCommand(OpenProductsTab);
         OpenPartiesCmd = new RelayCommand(OpenPartiesTab);
+        OpenStaffCmd = new RelayCommand(OpenStaffTab);
         OpenOutletsCountersCmd = new RelayCommand(OpenOutletCountersTab);
         OpenWarehousesCmd = new RelayCommand(OpenWarehousesTab);
         OpenStockCheckCmd = new RelayCommand(StockCheckTab);
@@ -95,6 +96,7 @@ public sealed class DashboardVm : ObservableObject
         CloseOthersCmd = new RelayCommand(CloseOtherTabs);
         CloseLeftCmd = new RelayCommand(CloseLeftTabs);
         CloseRightCmd = new RelayCommand(CloseRightTabs);
+        OpenOtherAccountsCmd = new RelayCommand(OpenOtherAccountsTab);
         //OpenOpeningBalanceCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>());
 
         OpenChartOfAccountsCmd = new RelayCommand(OpenChartOfAccountsTab);
@@ -221,7 +223,8 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand OpenPayrollCmd { get; }
     public IRelayCommand OpenAttendanceCmd { get; }
     //public IRelayCommand OpenOpeningBalanceCmd { get; }
-
+    public IRelayCommand OpenStaffCmd { get; }
+    public IRelayCommand OpenOtherAccountsCmd { get; }
     public IAsyncRelayCommand RefreshCmd { get; }
     public IAsyncRelayCommand OpenTillSummaryCmd { get; }
     // NEW commands
@@ -282,6 +285,20 @@ public sealed class DashboardVm : ObservableObject
         if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.PartiesView>()) return;
         _views.OpenTab<Pos.Client.Wpf.Windows.Admin.PartiesView>("Parties", "Parties");
     }
+
+    private void OpenStaffTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.StaffView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Admin.StaffView>("Staff", "Staff");
+    }
+
+    private void OpenOtherAccountsTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.OtherAccountsView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Admin.OtherAccountsView>("Other Accounts", "Other Accounts");
+    }
+
+
 
     private void OpenChartOfAccountsTab()
     {

@@ -108,6 +108,8 @@
                 <Fluent:RibbonGroupBox Header="Admin">
                     <Fluent:Button Header="Products"          Command="{Binding OpenProductsCmd}"/>
                     <Fluent:Button Header="Parties"         Command="{Binding OpenPartiesCmd}"/>
+                    <Fluent:Button Header="Staff"         Command="{Binding OpenStaffCmd}"/>
+                    <Fluent:Button Header="Other Accounts" Command="{Binding OpenOtherAccountsCmd}"/>
                     <Fluent:Button Header="Outlets/Counters"  Command="{Binding OpenOutletsCountersCmd}"/>
                     <Fluent:Button Header="Warehouses"  Command="{Binding OpenWarehousesCmd}"/>
                     <Fluent:Button Header="Users"             Command="{Binding OpenUsersCmd}"/>

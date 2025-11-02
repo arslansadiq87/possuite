@@ -110,9 +110,10 @@
                 <TextBlock Text="   Salesman:" VerticalAlignment="Center" Margin="12,0,6,0"/>
                 <ComboBox x:Name="SalesmanBox"
                   Width="180"
-                  DisplayMemberPath="DisplayName"
+                  DisplayMemberPath="FullName"
                   SelectedValuePath="Id"
-                  SelectionChanged="SalesmanBox_SelectionChanged"/>
+                  SelectionChanged="SalesmanBox_SelectionChanged"
+                  IsEditable="False"/>
             </StackPanel>
            
         </Grid>

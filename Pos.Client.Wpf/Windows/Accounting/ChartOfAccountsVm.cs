@@ -11,11 +11,13 @@ using Pos.Client.Wpf.Services;
 using Pos.Domain;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using System.Windows.Threading;
+using Pos.Client.Wpf.Infrastructure;
+using System; // <-- add this
+
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
-    
-
     // ---------- Node shown in the tree/grid ----------
     public partial class AccountNode : ObservableObject
     {
@@ -63,7 +65,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
     }
 
     // ---------- ViewModel ----------
-    public partial class ChartOfAccountsVm : ObservableObject
+    public partial class ChartOfAccountsVm : ObservableObject, IDisposable
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
 
@@ -74,6 +76,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public ObservableCollection<AccountFlatRow> Flat { get; } = new();
        
         private readonly HashSet<int> _expanded = new();
+        private static bool IsPartyTree(AccountNode n) => n.Type == AccountType.Parties;
+
 
         private static NormalSide DefaultNormalFor(AccountType t) => t switch
         {
@@ -93,8 +97,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
         // Only allow creating children under header/grouping nodes
         private static bool CanHaveChildren(AccountNode n) => IsHeaderNode(n);
 
-
-        // Selection (toolbar commands use this)
         // Selection (toolbar commands use this)
         private AccountNode? _selectedNode;
         public AccountNode? SelectedNode
@@ -107,9 +109,18 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     // Re-evaluate toolbar button CanExecute when selection changes
                     EditAccountCommand.NotifyCanExecuteChanged();
                     DeleteAccountCommand.NotifyCanExecuteChanged();
+                    // NEW:
+                    NewHeaderCommand.NotifyCanExecuteChanged();
+                    NewAccountCommand.NotifyCanExecuteChanged();
                 }
             }
         }
+
+        private bool CanCreateUnderSelection()
+    => SelectedNode != null && CanHaveChildren(SelectedNode) && !IsPartyTree(SelectedNode);
+
+        private bool CanEditOrDelete()
+            => SelectedNode != null && !IsPartyTree(SelectedNode);
 
         // Generate next numeric child code under the parent.
         // Headers: ..-01, ..-02 (2 digits)
@@ -135,7 +146,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             return $"{parent.Code}-{suffix}";
         }
 
-
         // Simple name prompt wrapper (uses your existing MessageBox prompt pattern)
         private static string AskName(string title, string suggested)
         {
@@ -149,6 +159,27 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public ChartOfAccountsVm(IDbContextFactory<PosClientDbContext> dbf)
         {
             _dbf = dbf;
+            AppEvents.AccountsChanged += OnAccountsChanged;   // <-- subscribe
+        }
+
+        private async void OnAccountsChanged()
+        {
+            try
+            {
+                var disp = Application.Current?.Dispatcher;
+                if (disp != null && !disp.CheckAccess())
+                {
+                    await disp.InvokeAsync(async () => await LoadAsync(), DispatcherPriority.Background);
+                }
+                else
+                {
+                    await LoadAsync();
+                }
+            }
+            catch
+            {
+                // swallow to avoid UI crash if signal arrives during shutdown
+            }
         }
 
         // ---- Role helpers ----
@@ -209,7 +240,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         }
 
         // ---- New header/account ----
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
         public async Task NewHeaderAsync()
         {
             if (!CanManageCoA()) return;
@@ -224,14 +255,17 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 MessageBox.Show("You cannot add under a posting account. Convert it to a header (no posting) first.", "Chart of Accounts");
                 return;
             }
+            if (IsPartyTree(SelectedNode))
+            {
+                MessageBox.Show("Party accounts are managed from their own forms. You cannot create headers inside Parties.", "Chart of Accounts");
+                return;
+            }
 
             using var db = _dbf.CreateDbContext();
             var parent = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
             if (parent == null) return;
-
             var name = AskName("Header name:", "New Header");
             var code = await GenerateNextChildCodeAsync(db, parent, forHeader: true);
-
             var acc = new Account
             {
                 Code = code,
@@ -249,9 +283,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             await LoadAsync();
         }
 
-
-
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
         public async Task NewAccountAsync()
         {
             if (!CanManageCoA()) return;
@@ -266,6 +298,12 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 MessageBox.Show("You cannot add under a posting account. Convert it to a header (no posting) first.", "Chart of Accounts");
                 return;
             }
+            if (IsPartyTree(SelectedNode))
+            {
+                MessageBox.Show("Party accounts are managed from their own forms. You cannot create accounts inside Parties.", "Chart of Accounts");
+                return;
+            }
+
 
             using var db = _dbf.CreateDbContext();
             var parent = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
@@ -397,6 +435,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
         {
             if (!CanManageCoA()) return;
             if (SelectedNode is null) return;
+            if (IsPartyTree(SelectedNode))
+            {
+                MessageBox.Show("Party accounts are managed from their own forms. Edit is disabled here.", "Chart of Accounts");
+                return;
+            }
 
             using var db = _dbf.CreateDbContext();
             var acc = await db.Accounts.FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
@@ -421,6 +464,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
         {
             if (!CanManageCoA()) return;
             if (SelectedNode is null) return;
+            if (IsPartyTree(SelectedNode))
+            {
+                MessageBox.Show("Party accounts are managed from their own forms. Delete is disabled here.", "Chart of Accounts");
+                return;
+            }
 
             using var db = _dbf.CreateDbContext();
             var acc = await db.Accounts.FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
@@ -448,9 +496,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             await LoadAsync();
         }
 
-
-        private bool CanEditOrDelete() => SelectedNode != null;
-
+        
         // ---- Expand/Collapse for GridView pseudo-tree ----
         [RelayCommand]
         private void ToggleExpandCmd(AccountFlatRow row)
@@ -503,13 +549,26 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     yield return n;
         }
 
+                
+        public void Dispose()
+        {
+            AppEvents.AccountsChanged -= OnAccountsChanged;
+        }
 
-        // Tiny stubs (replace with proper dialogs if needed)
-        private static string? Prompt(string caption, string defaultValue) => defaultValue;
+        // Real prompts
+        private static string? Prompt(string caption, string defaultValue)
+        {
+            var owner = Application.Current?.Windows.Count > 0 ? Application.Current.Windows[0] : null;
+            // Single-line input for names/codes
+            var text = Pos.Client.Wpf.Windows.Common.InputDialog.Show(owner, caption, "", defaultValue);
+            return text;
+        }
         private static bool MessageBoxYesNo(string message, bool defaultValue)
         {
-            var r = MessageBox.Show($"{message}\n(Yes = true, No = false)", "Edit", MessageBoxButton.YesNo);
+            var r = MessageBox.Show(message, "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question);
             return r == MessageBoxResult.Yes;
         }
+
+
     }
 }

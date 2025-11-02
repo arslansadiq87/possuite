@@ -8,6 +8,7 @@ namespace Pos.Domain.Hr
 
     public class Staff : BaseEntity
     {
+        public int? AccountId { get; set; }   // GL account under 63-Staff
         public string Code { get; set; } = "";        // Employee No
         public string FullName { get; set; } = "";
         public int? OutletId { get; set; }            // home outlet (optional)
@@ -15,6 +16,7 @@ namespace Pos.Domain.Hr
 
         // Payroll
         public decimal BasicSalary { get; set; }      // monthly base
+        public bool ActsAsSalesman { get; set; } = false;   // subset of staff
         public bool IsActive { get; set; } = true;
         public DateTime JoinedOnUtc { get; set; } = DateTime.UtcNow;
         public DateTime? LeftOnUtc { get; set; }
