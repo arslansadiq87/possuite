@@ -121,6 +121,7 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
             sc.AddScoped<Pos.Client.Wpf.Services.IStaffDirectory, Pos.Client.Wpf.Services.StaffDirectory>();
+            sc.AddScoped<ICoaService, CoaService>();
 
             sc.AddTransient<TillSessionSummaryWindow>();
             sc.AddTransient<Func<int, int, int, TillSessionSummaryWindow>>(sp =>
@@ -175,6 +176,10 @@ namespace Pos.Client.Wpf
             sc.AddScoped<IGlPostingService, GlPostingService>();
             sc.AddScoped<IAttendanceService, AttendanceService>();
             sc.AddScoped<IPayrollService, PayrollService>();
+            // after DbContext/ITerminalContext registrations
+            sc.AddScoped<Pos.Client.Wpf.Services.ICoaService, Pos.Client.Wpf.Services.CoaService>();
+            sc.AddScoped<Pos.Client.Wpf.Services.IOutletService, Pos.Client.Wpf.Services.OutletService>();
+
             // VM & window
             //sc.AddTransient<OpeningBalanceVm>();
             //sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>();

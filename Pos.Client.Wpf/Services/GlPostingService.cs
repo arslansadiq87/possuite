@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Linq;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Accounting;
@@ -19,17 +21,25 @@ namespace Pos.Client.Wpf.Services
         Task PostVoucherAsync(Voucher v);
         Task PostPayrollAccrualAsync(PayrollRun run);   // Dr Salaries Expense, Cr Salaries Payable
         Task PostPayrollPaymentAsync(PayrollRun run);   // Dr Salaries Payable, Cr Cash/Bank
-        Task PostSaleRevisionAsync(Sale newSale, decimal deltaSub, decimal deltaTax); // <-- ADD THIS
+        Task PostSaleRevisionAsync(Sale newSale, decimal deltaSub, decimal deltaTax);
         Task PostReturnRevisionAsync(Sale amended, decimal deltaSub, decimal deltaTax);
 
+        // NEW: Move declared cash from Till -> Cash in Hand and post over/short
+        Task PostTillCloseAsync(TillSession session, decimal declaredCash, decimal systemCash);
     }
 
     public sealed class GlPostingService : IGlPostingService
     {
         private readonly PosClientDbContext _db;
-        public GlPostingService(PosClientDbContext db) => _db = db;
+        private readonly ICoaService _coa;
 
-        private const string CASH = "1000";
+        public GlPostingService(PosClientDbContext db, ICoaService coa)
+        {
+            _db = db;
+            _coa = coa;
+        }
+
+        // Keep your existing codes for non-cash accounts (safe with your current seeding)
         private const string BANK = "1010";
         private const string INV = "1100";
         private const string AR = "1200";
@@ -40,73 +50,10 @@ namespace Pos.Client.Wpf.Services
         private const string COGS = "5000";
         private const string SALX = "5130"; // Salaries Expense
 
+        // ----- helpers -------------------------------------------------------
+
         private async Task<int> IdOfAsync(string code) =>
             (await _db.Accounts.AsNoTracking().FirstAsync(a => a.Code == code)).Id;
-
-        public async Task<int> PostAsync(DateTime tsUtc, int? outletId,
-            string refType, int? refId, string? memo,
-            IEnumerable<(int accountId, decimal debit, decimal credit, int? partyId, string? lineMemo)> lines,
-            CancellationToken ct = default)
-        {
-            var j = new Journal
-            {
-                TsUtc = tsUtc,
-                OutletId = outletId,
-                RefType = refType,
-                RefId = refId,
-                Memo = memo
-            };
-            _db.Journals.Add(j);
-            await _db.SaveChangesAsync(ct);
-
-            decimal dr = 0, cr = 0;
-            foreach (var l in lines)
-            {
-                dr += l.debit; cr += l.credit;
-                _db.JournalLines.Add(new JournalLine
-                {
-                    JournalId = j.Id,
-                    AccountId = l.accountId,
-                    PartyId = l.partyId,
-                    Debit = l.debit,
-                    Credit = l.credit,
-                    Memo = l.lineMemo
-                });
-
-                // Also reflect in PartyLedger if attached to a party
-                if (l.partyId.HasValue && (l.debit != 0 || l.credit != 0))
-                {
-                    var docType = refType switch
-                    {
-                        "Sale" => PartyLedgerDocType.Sale,
-                        "SaleReturn" => PartyLedgerDocType.SaleReturn,
-                        "Purchase" => PartyLedgerDocType.Purchase,
-                        "PurchaseReturn" => PartyLedgerDocType.PurchaseReturn,
-                        "Receipt" => PartyLedgerDocType.Receipt,
-                        "Payment" => PartyLedgerDocType.Payment,
-                        _ => PartyLedgerDocType.Adjustment
-                    };
-
-                    _db.PartyLedgers.Add(new PartyLedger
-                    {
-                        PartyId = l.partyId.Value,
-                        OutletId = outletId,
-                        TimestampUtc = tsUtc,
-                        DocType = docType,
-                        DocId = refId ?? 0,
-                        Description = memo,
-                        Debit = l.debit,
-                        Credit = l.credit
-                    });
-                }
-            }
-
-            if (Math.Round(dr, 2) != Math.Round(cr, 2))
-                throw new InvalidOperationException($"Unbalanced journal (Dr {dr} != Cr {cr}).");
-
-            await _db.SaveChangesAsync(ct);
-            return j.Id;
-        }
 
         private async Task LineAsync(DateTime tsUtc, int? outletId, string code, decimal dr, decimal cr, GlDocType dt, int docId, string? memo = null)
         {
@@ -124,27 +71,50 @@ namespace Pos.Client.Wpf.Services
             });
         }
 
+        // NEW: when we already have the AccountId (Cash/Till via CoaService)
+        private void LineById(DateTime tsUtc, int? outletId, int accountId, decimal dr, decimal cr, GlDocType dt, int docId, string? memo = null)
+        {
+            _db.GlEntries.Add(new GlEntry
+            {
+                TsUtc = tsUtc,
+                OutletId = outletId,
+                AccountId = accountId,
+                Debit = dr,
+                Credit = cr,
+                DocType = dt,
+                DocId = docId,
+                Memo = memo
+            });
+        }
+
+        // ----- Sales ---------------------------------------------------------
+
         public async Task PostSaleAsync(Sale sale)
         {
             var ts = sale.Ts;
             var outletId = sale.OutletId;
 
-            // Your Sale model uses non-nullable decimals
             decimal paidNow = sale.CashAmount + sale.CardAmount;
-
-            // Use the real sales tax field you have
             decimal tax = sale.TaxTotal;
             decimal revenuePortion = sale.Total - tax;
-
             decimal credit = sale.Total - paidNow;
 
-            if (paidNow > 0m)
-                await LineAsync(ts, outletId, CASH, paidNow, 0m, GlDocType.Sale, sale.Id, "Sale paid now");
+            // DR: Cash (Till) for cash portion; DR Bank (or Undeposited) for card portion
+            if (sale.CashAmount > 0m)
+            {
+                var tillAccId = await _coa.GetTillAccountIdAsync(outletId);
+                LineById(ts, outletId, tillAccId, sale.CashAmount, 0m, GlDocType.Sale, sale.Id, "Sale cash to Till");
+            }
+            if (sale.CardAmount > 0m)
+            {
+                // keep your existing bank path (adjust BANK code to your card clearing account if needed)
+                await LineAsync(ts, outletId, BANK, sale.CardAmount, 0m, GlDocType.Sale, sale.Id, "Sale card/bank");
+            }
 
             if (credit > 0m)
                 await LineAsync(ts, outletId, AR, credit, 0m, GlDocType.Sale, sale.Id, "Sale on credit");
 
-            // Revenue and output tax
+            // CR: Revenue and Output Tax
             if (revenuePortion != 0m)
                 await LineAsync(ts, outletId, SALES, 0m, revenuePortion, GlDocType.Sale, sale.Id, "Sales revenue");
 
@@ -165,22 +135,26 @@ namespace Pos.Client.Wpf.Services
             await _db.SaveChangesAsync();
         }
 
-
-
         public async Task PostSaleReturnAsync(Sale sale)
         {
             var ts = sale.Ts;
             var outletId = sale.OutletId;
 
             decimal paidBack = sale.CashAmount + sale.CardAmount;
-
             decimal tax = sale.TaxTotal;
-            decimal revenuePortion = sale.Total - tax;
-
+            decimal revenuePortion = sale.Total - tax;   // usually negative for returns
             decimal creditReversed = sale.Total - paidBack;
 
-            if (paidBack > 0m)
-                await LineAsync(ts, outletId, CASH, 0m, paidBack, GlDocType.SaleReturn, sale.Id, "Refund paid");
+            // If you refund from the counter, pull from Till; card part goes to BANK
+            if (sale.CashAmount > 0m)
+            {
+                var tillAccId = await _coa.GetTillAccountIdAsync(outletId);
+                LineById(ts, outletId, tillAccId, 0m, sale.CashAmount, GlDocType.SaleReturn, sale.Id, "Refund from Till");
+            }
+            if (sale.CardAmount > 0m)
+            {
+                await LineAsync(ts, outletId, BANK, 0m, sale.CardAmount, GlDocType.SaleReturn, sale.Id, "Refund via bank/card");
+            }
 
             if (creditReversed > 0m)
                 await LineAsync(ts, outletId, AR, 0m, creditReversed, GlDocType.SaleReturn, sale.Id, "Reverse AR");
@@ -192,6 +166,7 @@ namespace Pos.Client.Wpf.Services
             if (tax > 0m)
                 await LineAsync(ts, outletId, TAX, tax, 0m, GlDocType.SaleReturn, sale.Id, "Reverse output tax");
 
+            // Inventory back
             var cost = await _db.StockEntries.AsNoTracking()
                 .Where(se => se.RefType == "SaleReturn" && se.RefId == sale.Id && se.QtyChange > 0m)
                 .SumAsync(se => (se.QtyChange) * se.UnitCost);
@@ -205,33 +180,34 @@ namespace Pos.Client.Wpf.Services
             await _db.SaveChangesAsync();
         }
 
+        // ----- Purchases -----------------------------------------------------
 
         public async Task PostPurchaseAsync(Purchase p)
         {
             var ts = p.ReceivedAtUtc ?? p.PurchaseDate;
             var outletId = p.OutletId;
 
-            // Inventory at net-of-tax (if your policy is to capitalize only the net)
             var goodsValue = p.GrandTotal - p.Tax;
             if (goodsValue != 0m)
                 await LineAsync(ts, outletId, INV, goodsValue, 0m, GlDocType.Purchase, p.Id, "Inventory in");
 
-            // Payment vs AP
             var paid = p.CashPaid;
             var due = p.GrandTotal - paid;
 
+            // IMPORTANT: purchases "paid now" usually come from Cash in Hand (not Till)
             if (paid > 0m)
-                await LineAsync(ts, outletId, CASH, 0m, paid, GlDocType.Purchase, p.Id, "Paid now");
+            {
+                var handAccId = await _coa.GetCashAccountIdAsync(outletId);
+                LineById(ts, outletId, handAccId, 0m, paid, GlDocType.Purchase, p.Id, "Paid now (from Cash in Hand)");
+            }
 
             if (due > 0m)
                 await LineAsync(ts, outletId, AP, 0m, due, GlDocType.Purchase, p.Id, "AP created");
 
-            // If you treat VAT as input-tax asset instead of part of inventory, add:
-            // if (p.Tax > 0m) await LineAsync(ts, outletId, INPUT_TAX, p.Tax, 0m, GlDocType.Purchase, p.Id, "Input tax");
+            // If you treat VAT as input-tax asset: add here to your input-tax account.
 
             await _db.SaveChangesAsync();
         }
-
 
         public async Task PostPurchaseReturnAsync(Purchase p)
         {
@@ -245,26 +221,27 @@ namespace Pos.Client.Wpf.Services
             var paid = p.CashPaid;
             var due = p.GrandTotal - paid;
 
+            // Refund received comes into Cash in Hand
             if (paid > 0m)
-                await LineAsync(ts, outletId, CASH, paid, 0m, GlDocType.PurchaseReturn, p.Id, "Refund received");
+            {
+                var handAccId = await _coa.GetCashAccountIdAsync(outletId);
+                LineById(ts, outletId, handAccId, paid, 0m, GlDocType.PurchaseReturn, p.Id, "Refund received (to Cash in Hand)");
+            }
 
             if (due > 0m)
                 await LineAsync(ts, outletId, AP, due, 0m, GlDocType.PurchaseReturn, p.Id, "Reduce AP");
 
-            // If using input-tax separately:
-            // if (p.Tax > 0m) await LineAsync(ts, outletId, INPUT_TAX, 0m, p.Tax, GlDocType.PurchaseReturn, p.Id, "Reverse input tax");
-
             await _db.SaveChangesAsync();
         }
 
+        // ----- Vouchers ------------------------------------------------------
 
         public async Task PostVoucherAsync(Voucher v)
         {
+            // Leave as-is: UI controls which accounts to hit (receipt/payment)
+            // Tip: default the "cash" picker in UI to CoaService.GetCashAccountIdAsync(v.OutletId)
             foreach (var ln in v.Lines)
             {
-                var acc = await _db.Accounts.FindAsync(ln.AccountId);
-                if (acc == null) continue;
-
                 _db.GlEntries.Add(new GlEntry
                 {
                     TsUtc = v.TsUtc,
@@ -280,11 +257,13 @@ namespace Pos.Client.Wpf.Services
             await _db.SaveChangesAsync();
         }
 
+        // ----- Payroll -------------------------------------------------------
+
         public async Task PostPayrollAccrualAsync(PayrollRun run)
         {
             // Dr Salaries Expense (5130), Cr Salaries Payable (2200)
             var ts = run.CreatedAtUtc;
-            var total = run.TotalNet; // you can post gross/deductions separately if needed
+            var total = run.TotalNet;
 
             if (total != 0m)
             {
@@ -296,41 +275,43 @@ namespace Pos.Client.Wpf.Services
 
         public async Task PostPayrollPaymentAsync(PayrollRun run)
         {
-            // Dr Salaries Payable (2200), Cr Cash (1000) or Bank (1010)
+            // Dr Salaries Payable (2200), Cr Cash in Hand (company/outlet as you prefer)
             var ts = DateTime.UtcNow;
             var total = run.TotalNet;
+
             if (total != 0m)
             {
                 await LineAsync(ts, null, SALP, total, 0, GlDocType.PayrollPayment, run.Id, "Clear payable");
-                await LineAsync(ts, null, CASH, 0, total, GlDocType.PayrollPayment, run.Id, "Payout");
+
+                // If payroll is paid at a specific outlet, swap null with outletId and use Cash in Hand (outlet)
+                var handAccId = await _coa.GetCashAccountIdAsync(outletId: null); // company-scope by default
+                LineById(ts, null, handAccId, 0, total, GlDocType.PayrollPayment, run.Id, "Payout (Cash)");
+
                 await _db.SaveChangesAsync();
             }
         }
 
+        // ----- Revisions -----------------------------------------------------
+
         public async Task PostSaleRevisionAsync(Sale newSale, decimal deltaSub, decimal deltaTax)
         {
-            // We post ONLY the delta vs. the original (your UI blocks negative deltas)
             var ts = newSale.UpdatedAtUtc ?? newSale.Ts;
             var outletId = newSale.OutletId;
             var deltaGrand = deltaSub + deltaTax;
 
-            if (deltaGrand <= 0.005m)
-                return; // nothing material to post
+            if (deltaGrand <= 0.005m) return;
 
-            // 1) Money side (assume difference was collected now → Cash; 
-            // if you ever allow partial credit on amendments, split to AR similarly)
-            await LineAsync(ts, outletId, CASH, deltaGrand, 0, GlDocType.SaleRevision, newSale.Id, "Amendment: collect difference");
+            // Cash part of amendment collected at counter => Till
+            var tillAccId = await _coa.GetTillAccountIdAsync(outletId);
+            LineById(ts, outletId, tillAccId, deltaGrand, 0, GlDocType.SaleRevision, newSale.Id, "Amendment: collect difference (Till)");
 
-            // 2) Revenue & tax deltas
             if (deltaSub > 0) await LineAsync(ts, outletId, SALES, 0, deltaSub, GlDocType.SaleRevision, newSale.Id, "Amendment: revenue");
             if (deltaTax > 0) await LineAsync(ts, outletId, TAX, 0, deltaTax, GlDocType.SaleRevision, newSale.Id, "Amendment: tax");
 
-            // 3) COGS & Inventory: compute from "SaleRev" stock entries for this revision
             var se = await _db.StockEntries.AsNoTracking()
                 .Where(x => x.RefType == "SaleRev" && x.RefId == newSale.Id)
                 .ToListAsync();
 
-            // OUT lines (QtyChange < 0) increase COGS
             var costOut = se.Where(x => x.QtyChange < 0).Sum(x => (-x.QtyChange) * x.UnitCost);
             if (costOut > 0)
             {
@@ -338,7 +319,6 @@ namespace Pos.Client.Wpf.Services
                 await LineAsync(ts, outletId, INV, 0, costOut, GlDocType.SaleRevision, newSale.Id, "Amendment: inventory out");
             }
 
-            // IN lines (QtyChange > 0) reduce COGS (this can appear even if net revenue ↑)
             var costIn = se.Where(x => x.QtyChange > 0).Sum(x => (x.QtyChange) * x.UnitCost);
             if (costIn > 0)
             {
@@ -351,45 +331,26 @@ namespace Pos.Client.Wpf.Services
 
         public async Task PostReturnRevisionAsync(Sale amended, decimal deltaSub, decimal deltaTax)
         {
-            // deltaSub and deltaTax are signed differences between the NEW return revision
-            // and the previous return revision.
-            // Returns usually store negative totals; so:
-            //   Example: latest.Subtotal = -100, amended.Subtotal = -120  => deltaSub = -20
-            // Meaning: extra refund of 20 (+tax delta) compared to prior revision.
-
             var ts = amended.UpdatedAtUtc ?? amended.Ts;
             var outletId = amended.OutletId;
             var deltaGrand = deltaSub + deltaTax;
 
-            // If essentially zero movement and no stock deltas, nothing to do.
-            if (Math.Abs(deltaGrand) <= 0.005m)
-            {
-                // still check stock deltas below; if both sides zero, exit after stock part
-            }
-
-            // --- Money + Revenue/Tax (delta only) ---
-            // For a RETURN, revenue was reversed in the base document.
-            // If deltaGrand < 0  => more refund now:
-            //   Dr Sales Revenue (abs deltaSub), Dr Output Tax (abs deltaTax), Cr Cash
-            // If deltaGrand > 0  => customer returns some refund (collection):
-            //   Dr Cash, Cr Sales Revenue (abs deltaSub), Cr Output Tax (abs deltaTax)
             if (deltaGrand < -0.005m)
             {
-                var amt = Math.Abs(deltaGrand);
+                // extra refund now -> credit Till
                 if (Math.Abs(deltaSub) > 0.005m)
                     await LineAsync(ts, outletId, SALES, Math.Abs(deltaSub), 0, GlDocType.SaleReturnRevision, amended.Id, "Return amend: increase revenue reversal");
                 if (Math.Abs(deltaTax) > 0.005m)
                     await LineAsync(ts, outletId, TAX, Math.Abs(deltaTax), 0, GlDocType.SaleReturnRevision, amended.Id, "Return amend: increase tax reversal");
 
-                // Money out (refund extra). If you capture split in the UI, you can split to CASH/BANK here.
-                await LineAsync(ts, outletId, CASH, 0, amt, GlDocType.SaleReturnRevision, amended.Id, "Return amend: extra refund");
+                var tillAccId = await _coa.GetTillAccountIdAsync(outletId);
+                LineById(ts, outletId, tillAccId, 0, Math.Abs(deltaGrand), GlDocType.SaleReturnRevision, amended.Id, "Return amend: extra refund (Till)");
             }
             else if (deltaGrand > 0.005m)
             {
-                var amt = deltaGrand;
-
-                // Money in (customer gives some back)
-                await LineAsync(ts, outletId, CASH, amt, 0, GlDocType.SaleReturnRevision, amended.Id, "Return amend: collect back");
+                // customer returns some refund -> debit Till
+                var tillAccId = await _coa.GetTillAccountIdAsync(outletId);
+                LineById(ts, outletId, tillAccId, deltaGrand, 0, GlDocType.SaleReturnRevision, amended.Id, "Return amend: collect back (Till)");
 
                 if (Math.Abs(deltaSub) > 0.005m)
                     await LineAsync(ts, outletId, SALES, 0, Math.Abs(deltaSub), GlDocType.SaleReturnRevision, amended.Id, "Return amend: reduce revenue reversal");
@@ -397,13 +358,11 @@ namespace Pos.Client.Wpf.Services
                     await LineAsync(ts, outletId, TAX, 0, Math.Abs(deltaTax), GlDocType.SaleReturnRevision, amended.Id, "Return amend: reduce tax reversal");
             }
 
-            // --- COGS & Inventory from the stock deltas you wrote for this revision ---
-            // Your EditReturn flow writes entries with RefType="Amend" and RefId=amended.Id
+            // Stock deltas
             var se = await _db.StockEntries.AsNoTracking()
                 .Where(x => x.RefType == "Amend" && x.RefId == amended.Id)
                 .ToListAsync();
 
-            // QtyChange > 0 => inventory IN (return increased) -> Dr Inventory, Cr COGS
             var costIn = se.Where(x => x.QtyChange > 0).Sum(x => x.QtyChange * x.UnitCost);
             if (costIn > 0.005m)
             {
@@ -411,7 +370,6 @@ namespace Pos.Client.Wpf.Services
                 await LineAsync(ts, outletId, COGS, 0, costIn, GlDocType.SaleReturnRevision, amended.Id, "Return amend: reduce COGS");
             }
 
-            // QtyChange < 0 => inventory OUT (return decreased) -> Dr COGS, Cr Inventory
             var costOut = se.Where(x => x.QtyChange < 0).Sum(x => (-x.QtyChange) * x.UnitCost);
             if (costOut > 0.005m)
             {
@@ -422,7 +380,43 @@ namespace Pos.Client.Wpf.Services
             await _db.SaveChangesAsync();
         }
 
+        // ----- Till Close (Z) ------------------------------------------------
 
+        public async Task PostTillCloseAsync(TillSession session, decimal declaredCash, decimal systemCash)
+        {
+            var ts = session.CloseTs ?? DateTime.UtcNow;
+            var outletId = session.OutletId;
 
+            var tillId = await _coa.GetTillAccountIdAsync(outletId);
+            var handId = await _coa.GetCashAccountIdAsync(outletId);
+
+            var move = declaredCash;                  // physically moved to Cash in Hand
+            var overShort = declaredCash - systemCash;
+
+            // Move: DR Cash in Hand, CR Cash in Till
+            if (move != 0m)
+            {
+                LineById(ts, outletId, handId, move, 0m, GlDocType.TillClose, session.Id, "Till close: move declared cash to Hand");
+                LineById(ts, outletId, tillId, 0m, move, GlDocType.TillClose, session.Id, "Till close");
+            }
+
+            // Over/Short
+            if (Math.Abs(overShort) > 0.005m)
+            {
+                if (overShort > 0) // overage → credit income (use your preferred income account code)
+                {
+                    // using "49" Other incomes if you have it; adjust as needed:
+                    var otherIncomeId = await IdOfAsync("49");
+                    LineById(ts, outletId, otherIncomeId, 0m, overShort, GlDocType.TillClose, session.Id, "Cash over");
+                }
+                else // shortage → debit expense (your template: 541 Cash short)
+                {
+                    var cashShortId = await IdOfAsync("541");
+                    LineById(ts, outletId, cashShortId, -overShort, 0m, GlDocType.TillClose, session.Id, "Cash short");
+                }
+            }
+
+            await _db.SaveChangesAsync();
+        }
     }
 }

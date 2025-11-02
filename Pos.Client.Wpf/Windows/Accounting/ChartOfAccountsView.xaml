@@ -11,15 +11,12 @@
                     ToolTip="Create a posting account under the selected header (disabled inside Parties)"/>
 
             <Separator/>
-            <Button Content="Edit"              Command="{Binding EditAccountCommand}" 
+            <Button Content="Edit"              Command="{Binding EditAccountCommand}" IsEnabled="{Binding CanRename}" 
                             ToolTip="Edit selected account (disabled for Parties)"/>
 
-            <Button Content="Delete"            Command="{Binding DeleteAccountCommand}" 
+            <Button Content="Delete"            Command="{Binding DeleteAccountCommand}" IsEnabled="{Binding CanDelete}"
                             ToolTip="Delete selected account (disabled for Parties)"/>
-            
-            <Separator/>
-            <Button Content="Add Cash (Outlet)" Command="{Binding AddCashForOutletCommand}" />
-            
+                        
             <Separator/>
             <Button Content="Save Openings"     Command="{Binding SaveOpeningsCommand}" />
             <Button Content="Lock Openings"     Command="{Binding LockOpeningsCommand}" />

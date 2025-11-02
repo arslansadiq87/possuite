@@ -10,12 +10,15 @@ public sealed class TillService : ITillService
 {
     private readonly DbContextOptions<PosClientDbContext> _dbOptions;
     private readonly ITerminalContext _ctx;
-        
-    public TillService(DbContextOptions<PosClientDbContext> dbOptions, ITerminalContext ctx)
+    private readonly IGlPostingService _gl;
+
+    public TillService(DbContextOptions<PosClientDbContext> dbOptions, ITerminalContext ctx, IGlPostingService gl)
     {
         _dbOptions = dbOptions;
         _ctx = ctx;
+        _gl = gl;
     }
+
     private int OutletId => _ctx.OutletId;
     private int CounterId => _ctx.CounterId;
     public async Task<bool> OpenTillAsync()
@@ -74,7 +77,7 @@ public sealed class TillService : ITillService
                      && s.VoidedAtUtc == null)
             .ToList();
 
-        // Cash from sales: sign-preserving (amendments that reduce cash will be negative)
+        // Cash from sales: sign-preserving (amendments reducing cash will be negative)
         var salesCash = moves.Where(s => !s.IsReturn).Sum(s => s.CashAmount);
 
         // Cash refunds: subtract absolute magnitude (polarity-safe for how returns are stored)
@@ -90,7 +93,6 @@ public sealed class TillService : ITillService
         if (!decimal.TryParse(declaredStr, System.Globalization.NumberStyles.Number,
                               System.Globalization.CultureInfo.CurrentCulture, out var declaredCash))
         {
-            // try invariant as a fallback (e.g., 1234.56 typed with dot)
             if (!decimal.TryParse(declaredStr, System.Globalization.NumberStyles.Number,
                                   System.Globalization.CultureInfo.InvariantCulture, out declaredCash))
             {
@@ -105,6 +107,13 @@ public sealed class TillService : ITillService
         open.DeclaredCash = declaredCash;
         open.OverShort = overShort;
         await db.SaveChangesAsync();
+
+        // --- GL: move declared cash from Till -> Cash in Hand and post over/short ---
+        var systemCash = salesCash - refundsCashAbs;                 // exclude opening float
+        var declaredToMove = declaredCash - open.OpeningFloat;       // keep float in till
+        if (declaredToMove < 0m) declaredToMove = 0m;
+
+        await _gl.PostTillCloseAsync(open, declaredToMove, systemCash);
 
         var z = new StringBuilder();
         z.AppendLine($"=== Z REPORT (Till {open.Id}) ===");
@@ -122,6 +131,7 @@ public sealed class TillService : ITillService
         MessageBox.Show(z.ToString(), "Z Report");
         return true;
     }
+
 
 
     public string GetStatusText()

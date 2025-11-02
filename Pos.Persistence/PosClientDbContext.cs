@@ -487,13 +487,34 @@ namespace Pos.Persistence
 
             // Accounts
             // ---- Accounting (GL) ----
+            // Accounts
             b.Entity<Account>(e =>
             {
-                e.HasIndex(x => new { x.OutletId, x.Code }).IsUnique(); // unique code per scope
-                e.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
-                e.Property(x => x.Code).HasMaxLength(32);
-                e.Property(x => x.Name).HasMaxLength(200);
+                // ---- fields & sizes ----
+                e.Property(x => x.Code).IsRequired().HasMaxLength(32);
+                e.Property(x => x.Name).IsRequired().HasMaxLength(200);
+
+                // If you store enum AccountType, ensure conversion if it’s an enum (optional):
+                // e.Property(x => x.Type).HasConversion<int>();
+
+                // ---- relationships ----
+                e.HasOne(x => x.Parent)
+                 .WithMany()
+                 .HasForeignKey(x => x.ParentId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                // ---- indexes/uniques ----
+                // Your current rule: code unique within an outlet (global header has OutletId = null)
+                e.HasIndex(x => new { x.OutletId, x.Code }).IsUnique();
+
+                // Fast lookup for system accounts per outlet
+                e.HasIndex(x => new { x.SystemKey, x.OutletId })
+                 .HasDatabaseName("IX_Account_SystemKey_Outlet");
+
+                // Sibling names unique under the same parent (keeps tree tidy)
+                e.HasIndex(x => new { x.ParentId, x.Name }).IsUnique();
             });
+
 
             b.Entity<Journal>(e =>
             {

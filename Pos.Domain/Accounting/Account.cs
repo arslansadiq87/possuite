@@ -1,5 +1,6 @@
 ﻿// Pos.Domain/Entities/Account.cs
 using Pos.Domain.Abstractions;
+using Pos.Domain.Accounting;
 
 namespace Pos.Domain.Entities
 {
@@ -8,6 +9,13 @@ namespace Pos.Domain.Entities
         Asset = 1, Liability = 2, Equity = 3, Income = 4, Expense = 5, // GAAP buckets
         Parties = 90,  // virtual root under which Customer/Supplier/Other party accounts live
         System = 99    // internal/system roots if needed
+    }
+
+    public enum AccountKind
+    {
+        General = 0,
+        Party = 1,   // Customer/Supplier/Party
+        Staff = 2    // Employees (subset may be Salesmen)
     }
 
     public enum NormalSide { Debit = 0, Credit = 1 }
@@ -36,6 +44,8 @@ namespace Pos.Domain.Entities
 
         public bool IsActive { get; set; } = true;
         public bool IsSystem { get; set; } = false;    // prevents delete/rename for seeded roots
+        public SystemAccountKey? SystemKey { get; set; } // stable key for lookup
+
     }
 
     // Simple GL journal; append-only

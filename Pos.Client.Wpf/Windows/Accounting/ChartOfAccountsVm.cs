@@ -14,6 +14,7 @@ using Pos.Persistence;
 using System.Windows.Threading;
 using Pos.Client.Wpf.Infrastructure;
 using System; // <-- add this
+using Pos.Domain.Accounting; // 👈 add this
 
 
 namespace Pos.Client.Wpf.Windows.Accounting
@@ -30,13 +31,21 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [ObservableProperty] private decimal openingDebit;
         [ObservableProperty] private decimal openingCredit;
         [ObservableProperty] private bool isOpeningLocked;
+        [ObservableProperty] private bool isSystem;   // <- NEW: for UI guard rails
+        [ObservableProperty] private SystemAccountKey? systemKey; // 👈 NEW
+
+        public bool IsOpeningEditable =>
+            !IsHeader
+            && !IsOpeningLocked
+            && CanEditOpenings
+            && SystemKey != SystemAccountKey.CashInTillOutlet;   // 👈 block Till accounts
 
         // Set from VM based on current user's permissions
         public bool CanEditOpenings { get; set; }
 
         public ObservableCollection<AccountNode> Children { get; } = new();
 
-        public bool IsOpeningEditable => !IsHeader && !IsOpeningLocked && CanEditOpenings;
+        //public bool IsOpeningEditable => !IsHeader && !IsOpeningLocked && CanEditOpenings;
     }
 
     // ---------- Flat row for the GridView pseudo-tree ----------
@@ -112,6 +121,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     // NEW:
                     NewHeaderCommand.NotifyCanExecuteChanged();
                     NewAccountCommand.NotifyCanExecuteChanged();
+                    OnPropertyChanged(nameof(CanRename));
+                    OnPropertyChanged(nameof(CanDelete));
                 }
             }
         }
@@ -216,7 +227,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     OpeningDebit = a.OpeningDebit,
                     OpeningCredit = a.OpeningCredit,
                     IsOpeningLocked = a.IsOpeningLocked,
-                    CanEditOpenings = canEdit
+                    CanEditOpenings = canEdit,
+                    IsSystem = a.IsSystem,          // <- NEW
+                    SystemKey = a.SystemKey   // 👈 add this line
                 });
 
             Roots.Clear();
@@ -238,6 +251,23 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
             RebuildFlat();
         }
+
+        private bool CanRenameSelected()
+    => SelectedNode != null
+    && !IsPartyTree(SelectedNode)
+    && !(SelectedNode?.IsSystem ?? true);                // cannot rename system nodes
+
+        private bool CanDeleteSelected()
+            => SelectedNode != null
+            && !IsPartyTree(SelectedNode)
+            && !(SelectedNode?.IsSystem ?? true)                 // cannot delete system nodes
+            && (SelectedNode?.AllowPosting ?? false)             // only delete posting leaves
+            && !(SelectedNode?.IsHeader ?? false);               // (redundant with AllowPosting, but explicit)
+
+        // Passthrough props for XAML bindings if buttons use IsEnabled directly
+        public bool CanRename => CanRenameSelected();
+        public bool CanDelete => CanDeleteSelected();
+
 
         // ---- New header/account ----
         [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
@@ -407,7 +437,12 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
             using var db = _dbf.CreateDbContext();
 
-            var editable = AllNodes().Where(n => !n.IsHeader && !n.IsOpeningLocked && n.CanEditOpenings).ToList();
+            var editable = AllNodes()
+                .Where(n => !n.IsHeader
+                && !n.IsOpeningLocked 
+                && n.CanEditOpenings
+                && n.SystemKey != SystemAccountKey.CashInTillOutlet)
+              .ToList();
             if (editable.Count == 0) return;
 
             var ids = editable.Select(n => n.Id).ToArray();
@@ -420,6 +455,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     MessageBox.Show($"Opening for {a.Code} has both Dr and Cr. Please keep only one side.", "Openings");
                     return;
                 }
+                if (a.SystemKey == SystemAccountKey.CashInTillOutlet)
+                    throw new InvalidOperationException("Opening balance is not allowed for 'Cash in Till' accounts.");
+
                 var vm = editable.First(n => n.Id == a.Id);
                 a.OpeningDebit = vm.OpeningDebit;
                 a.OpeningCredit = vm.OpeningCredit;
@@ -430,7 +468,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         }
 
         // ---- Edit/Delete ----
-        [RelayCommand(CanExecute = nameof(CanEditOrDelete))]
+        [RelayCommand(CanExecute = nameof(CanRenameSelected))]
         public async Task EditAccountAsync()
         {
             if (!CanManageCoA()) return;
@@ -459,7 +497,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             await LoadAsync();
         }
 
-        [RelayCommand(CanExecute = nameof(CanEditOrDelete))]
+        [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
         public async Task DeleteAccountAsync()
         {
             if (!CanManageCoA()) return;

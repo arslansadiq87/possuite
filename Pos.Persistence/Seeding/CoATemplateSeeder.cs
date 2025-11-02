@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
 
 namespace Pos.Persistence.Seeding
@@ -27,24 +28,20 @@ namespace Pos.Persistence.Seeding
                 // 1 Assets
                 new("1",    "Assets",                 AccountType.Asset,  null,   true,  false, NormalSide.Debit),
                 new("11",   "Current Assets",        AccountType.Asset,  "1",    true,  false, NormalSide.Debit),
-                new("111",  "Cash In Hand",          AccountType.Asset,  "11",   false, true,  NormalSide.Debit),
-                new("112",  "Bank Accounts",         AccountType.Asset,  "11",   false, true,  NormalSide.Debit),
-                new("113",  "Inventory",             AccountType.Asset,  "11",   true,  false, NormalSide.Debit),
-                new("1131", "Stock openings",        AccountType.Asset,  "113",  true,  false, NormalSide.Debit),
-                new("11311","Opening stock",         AccountType.Asset,  "1131", false, true,  NormalSide.Debit),
-                new("11312","Opening salesmen stock",AccountType.Asset,  "1131", false, true,  NormalSide.Debit),
+                new("111",  "Cash In Hand",          AccountType.Asset,  "11",   true, false,  NormalSide.Debit),
+                new("113",  "Bank Accounts",         AccountType.Asset,  "11",   false, true,  NormalSide.Debit),
+                new("114",  "Inventory",             AccountType.Asset,  "11",   true,  false, NormalSide.Debit),
+                new("1141", "Stock openings",        AccountType.Asset,  "114",  true,  false, NormalSide.Debit),
+                new("11411","Opening stock",         AccountType.Asset,  "1141", false, true,  NormalSide.Debit),
                 // your VB had "11131" here—correcting to "1131" (same parent)
-                new("11313","Opening stores stock",  AccountType.Asset,  "1131", false, true,  NormalSide.Debit),
-
-                new("1132", "Stock purchased",       AccountType.Asset,  "113",  true,  false, NormalSide.Debit),
-                new("11321","Purchase stock value",  AccountType.Asset,  "1132", false, true,  NormalSide.Debit),
-                new("11322","Purchase return stock", AccountType.Asset,  "1132", false, true,  NormalSide.Debit),
-
-                new("1133", "Stock sold",            AccountType.Asset,  "113",  true,  false, NormalSide.Debit),
-                new("11331","Sold stock cost",       AccountType.Asset,  "1133", false, true,  NormalSide.Debit),
-                new("11332","Sold return cost",      AccountType.Asset,  "1133", false, true,  NormalSide.Debit),
-
-                new("1134","Expired & Damaged stock",AccountType.Asset,  "113",  false, true,  NormalSide.Debit),
+                new("11412","Opening Warehouse stock",        AccountType.Asset, "1141", false, true,  NormalSide.Debit),
+                new("1142", "Stock purchased",             AccountType.Asset, "114",  true,  false, NormalSide.Debit),
+                new("11421","Purchase stock value",        AccountType.Asset, "1142", false, true,  NormalSide.Debit),
+                new("11422","Purchase return stock",       AccountType.Asset, "1142", false, true,  NormalSide.Debit),
+                new("1143", "Stock sold",                  AccountType.Asset, "114",  true,  false, NormalSide.Debit),
+                new("11431","Sold stock cost",             AccountType.Asset, "1143", false, true,  NormalSide.Debit),
+                new("11432","Sold return cost",            AccountType.Asset, "1143", false, true,  NormalSide.Debit),
+                new("1144","Expired & Damaged stock",      AccountType.Asset, "114",  false, true,  NormalSide.Debit),
 
                 new("12",   "Fixed Assets",          AccountType.Asset,  "1",    true,  false, NormalSide.Debit),
                 new("121",  "Auto vehicles",         AccountType.Asset,  "12",   true,  false, NormalSide.Debit),
@@ -222,6 +219,80 @@ namespace Pos.Persistence.Seeding
             }
             if (toUpdate.Count > 0)
                 await db.SaveChangesAsync();
+
+            // Find existing header "111 Cash In Hand"
+            var cashHeader = db.Accounts.Single(a => a.Code == "111");
+
+            // Tag it with a SystemKey (idempotent)
+            if (cashHeader.SystemKey != SystemAccountKey.CashInHandHeader)
+            {
+                cashHeader.IsSystem = true;
+                cashHeader.SystemKey = SystemAccountKey.CashInHandHeader;
+                db.SaveChanges();
+            }
+
+            // For every outlet, ensure child accounts exist and are tagged
+            var outlets = db.Outlets.AsNoTracking().ToList();
+            foreach (var o in outlets)
+            {
+                // e.g., 11101-OUTCODE and 11102-OUTCODE (or any code pattern you prefer)
+                EnsureAccount(
+                    code: $"11101-{o.Code}",
+                    name: $"Cash in Hand — {o.Name}",
+                    type: AccountType.Asset,
+                    parentId: cashHeader.Id,
+                    systemKey: SystemAccountKey.CashInHandOutlet,
+                    outletId: o.Id);
+
+                EnsureAccount(
+                    code: $"11102-{o.Code}",
+                    name: $"Cash in Till — {o.Name}",
+                    type: AccountType.Asset,
+                    parentId: cashHeader.Id,
+                    systemKey: SystemAccountKey.CashInTillOutlet,
+                    outletId: o.Id);
+            }
+
+            Account EnsureAccount(string code, string name, AccountType type, int parentId,
+                                  SystemAccountKey systemKey, int outletId)
+            {
+                var a = db.Accounts.FirstOrDefault(x => x.Code == code);
+                if (a == null)
+                {
+                    a = new Account
+                    {
+                        Code = code,
+                        Name = name,
+                        Type = type,
+                        ParentId = parentId,
+                        IsHeader = false,
+                        AllowPosting = false,              // 👈 not postable by user
+                        IsSystem = true,
+                        SystemKey = systemKey,
+                        OutletId = outletId,
+                        OpeningDebit = 0m,                 // 👈 no OB
+                        OpeningCredit = 0m                 // 👈 no OB
+                    };
+                    db.Accounts.Add(a);
+                    db.SaveChanges();
+                }
+                else
+                {
+                    // make sure the tags are correct if row was created earlier
+                    if (!a.IsSystem || a.SystemKey != systemKey || a.OutletId != outletId)
+                    {
+                        a.AllowPosting = false;           // 👈 enforce non-postable
+                        a.OpeningDebit = 0m;
+                        a.OpeningCredit = 0m;
+                        a.IsSystem = true;
+                        a.SystemKey = systemKey;
+                        a.OutletId = outletId;
+                        db.SaveChanges();
+                    }
+                }
+                return a;
+            }
+
         }
     }
 }

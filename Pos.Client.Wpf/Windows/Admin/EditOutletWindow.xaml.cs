@@ -4,8 +4,12 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Services;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+
+using static Pos.Client.Wpf.Windows.Admin.EditPartyWindow;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -92,11 +96,9 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // ---------------- Save / Cancel ----------------
-
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
-            // Basic validation (mirrors your XAML MaxLength but also guards back-end)
+            // --- Basic validation (mirrors your XAML MaxLength but also guards back-end) ---
             var code = (VM.Code ?? "").Trim();
             var name = (VM.Name ?? "").Trim();
             var address = string.IsNullOrWhiteSpace(VM.Address) ? null : VM.Address!.Trim();
@@ -108,13 +110,14 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             try
             {
+                // Resolve OutletService from DI container
+                using var scope = App.Services.CreateScope();
+                var outletSvc = scope.ServiceProvider.GetRequiredService<IOutletService>();
+
+                // Validate code uniqueness quickly using raw context (optional but fast precheck)
                 await using var db = await _dbf.CreateDbContextAsync();
-
-                // Unique Code check (case-insensitive). Adjust if you want per-tenant rules, etc.
                 var codeExists = await db.Outlets
-                    .AnyAsync(o => o.Id != VM.Id &&
-                                   o.Code.ToLower() == code.ToLower());
-
+                    .AnyAsync(o => o.Id != VM.Id && o.Code.ToLower() == code.ToLower());
                 if (codeExists)
                 {
                     MessageBox.Show("Another outlet already uses this Code. Choose a different one.",
@@ -124,6 +127,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
                 if (_mode == Mode.Create)
                 {
+                    // --- Create new outlet ---
                     var entity = new Outlet
                     {
                         Code = code,
@@ -131,31 +135,26 @@ namespace Pos.Client.Wpf.Windows.Admin
                         Address = address,
                         IsActive = VM.IsActive
                     };
-                    db.Outlets.Add(entity);
-                    await db.SaveChangesAsync();
 
-                    SavedOutletId = entity.Id;
+                    // This automatically creates Cash-in-Hand and Cash-in-Till accounts
+                    SavedOutletId = await outletSvc.CreateAsync(entity);
                 }
-                else // Edit
+                else // --- Edit existing outlet ---
                 {
-                    var entity = await db.Outlets.FirstOrDefaultAsync(o => o.Id == VM.Id);
-                    if (entity == null)
+                    var entity = new Outlet
                     {
-                        MessageBox.Show("Outlet not found.", "Outlets",
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
+                        Id = VM.Id,
+                        Code = code,
+                        Name = name,
+                        Address = address,
+                        IsActive = VM.IsActive
+                    };
 
-                    entity.Code = code;
-                    entity.Name = name;
-                    entity.Address = address;
-                    entity.IsActive = VM.IsActive;
-
-                    await db.SaveChangesAsync();
+                    await outletSvc.UpdateAsync(entity);
                     SavedOutletId = entity.Id;
                 }
 
-                DialogResult = true; // closes the window
+                DialogResult = true; // close the dialog
             }
             catch (Exception ex)
             {
@@ -163,5 +162,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
     }
 }
