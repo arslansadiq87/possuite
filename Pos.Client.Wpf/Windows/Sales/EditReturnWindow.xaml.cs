@@ -372,9 +372,33 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 db.SaveChanges();
             }
+            // === GL delta basis (signed) between the new amended return and the previous revision ===
+            var deltaSub = amended.Subtotal - latest.Subtotal; // e.g., -20 means extra refund on net
+            var deltaTax = amended.TaxTotal - latest.TaxTotal; // signed tax delta
 
 
             tx.Commit();
+            // === GL POST: Return amendment delta (runs once per revision) ===
+            try
+            {
+                using (var chk = new PosClientDbContext(_opts))
+                {
+                    var already = chk.GlEntries.AsNoTracking().Any(g =>
+                        g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturnRevision &&
+                        g.DocId == amended.Id);
+
+                    if (!already)
+                    {
+                        var gl = App.Services.GetRequiredService<IGlPostingService>();
+                        await gl.PostReturnRevisionAsync(amended, deltaSub, deltaTax);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("GL post (return revision) failed: " + ex);
+            }
+
             Confirmed = true;
             NewRevision = amended.Revision;
 

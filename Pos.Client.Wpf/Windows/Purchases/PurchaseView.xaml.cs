@@ -925,6 +925,27 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 try
                 {
                     _model = await _purchaseSvc.ReceiveAsync(_model, lines, user);
+                    // === GL POST: Purchase (post-once guard) ===
+                    try
+                    {
+                        // Prevent duplicate posting if user double-clicked Save
+                        var already = await _db.GlEntries
+                            .AsNoTracking()
+                            .AnyAsync(g => g.DocType == Pos.Domain.Accounting.GlDocType.Purchase
+                                        && g.DocId == _model.Id);
+
+                        if (!already)
+                        {
+                            var gl = App.Services.GetRequiredService<IGlPostingService>();
+                            await gl.PostPurchaseAsync(_model);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("GL post (Purchase) failed: " + ex);
+                        // Non-fatal: purchase is saved; you can log or show a toast if you want
+                    }
+
 
                     MessageBox.Show(
                         $"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}",

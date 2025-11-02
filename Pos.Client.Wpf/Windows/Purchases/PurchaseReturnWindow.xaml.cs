@@ -18,6 +18,8 @@ using System.Xml.Linq;
 using Pos.Domain;
 using Pos.Client.Wpf.Controls;          // ItemSearchBox user control
 using Pos.Domain.DTO;                   // ItemIndexDto
+using Microsoft.Extensions.DependencyInjection;         // for GetRequiredService
+using Pos.Domain.Accounting;                            // for GlDocType
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
@@ -755,6 +757,29 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     tillSessionId: AppState.Current?.CurrentTillSessionId,
                     counterId: AppState.Current?.CurrentCounterId
                 );
+                // === GL POST: Purchase Return (post-once guard) ===
+                try
+                {
+                    // Use a fresh context for the guard (this window keeps _opts)
+                    using var gldb = new PosClientDbContext(_opts);
+
+                    var posted = await gldb.GlEntries
+                        .AsNoTracking()
+                        .AnyAsync(g => g.DocType == GlDocType.PurchaseReturn
+                                    && g.DocId == model.Id);
+
+                    if (!posted)
+                    {
+                        var gl = App.Services.GetRequiredService<IGlPostingService>();
+                        await gl.PostPurchaseReturnAsync(model);   // model.Id should be set by SaveReturnAsync
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("GL post (PurchaseReturn) failed: " + ex);
+                    // Non-fatal: the return is saved; consider logging/toast
+                }
+
                 MessageBox.Show("Purchase Return saved.");
                 this.DialogResult = true;
                 Close();

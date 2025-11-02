@@ -153,6 +153,15 @@
                     </Fluent:Button>
                 </Fluent:RibbonGroupBox>
 
+                <Fluent:RibbonGroupBox Header="Accounts">
+                    <Fluent:Button Header="Chart of Accounts" Command="{Binding OpenChartOfAccountsCmd}"/>
+                    <Fluent:Button Header="Voucher" Command="{Binding OpenVoucherEditorCmd}"/>
+                </Fluent:RibbonGroupBox>
+
+                <Fluent:RibbonGroupBox Header="Payrolls">
+                    <Fluent:Button Header="Payroll" Command="{Binding OpenPayrollCmd}"/>
+                    <Fluent:Button Header="Attendance" Command="{Binding OpenAttendanceCmd}"/>
+                </Fluent:RibbonGroupBox>
 
             </Fluent:RibbonTabItem>
 

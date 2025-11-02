@@ -3,6 +3,7 @@ using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
+using Pos.Persistence.Seeding;   // <-- add this
 
 
 // REMOVE: using System.Security.Cryptography;
@@ -38,11 +39,12 @@ namespace Pos.Persistence
             EnsureBasicItems(db, now);
             EnsureProductWithVariants(db, now);
             EnsureProductWithVariants_Jeans(db, now);
-
+            // Ensure Chart of Accounts exists (idempotent)
+            CoATemplateSeeder.SeedFromTemplateAsync(db).GetAwaiter().GetResult();
+            
             // finally opening stock (uses new header+lines model)
             //EnsureOpeningStock_UsingHeader(db, outletId: 1, openingQty: 50m, now);
         }
-
 
         // ------------------------------
         // 0) USERS  (BCrypt string hashes)

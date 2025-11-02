@@ -1,0 +1,31 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Accounting.AttendancePunchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Staff:" VerticalAlignment="Center"/>
+            <ComboBox Width="280" Margin="6,0,16,0" 
+                      ItemsSource="{Binding Staff}" 
+                      SelectedItem="{Binding SelectedStaff}" 
+                      DisplayMemberPath="FullName"/>
+
+            <Button Content="Punch IN" Width="120" Command="{Binding PunchInCmd}" IsEnabled="{Binding SelectedStaff}"/>
+            <Button Content="Punch OUT" Width="120" Margin="8,0,0,0" Command="{Binding PunchOutCmd}" IsEnabled="{Binding SelectedStaff}"/>
+
+            <Button Content="Compute Today" Margin="16,0,0,0" Command="{Binding ComputeTodayCmd}" IsEnabled="{Binding SelectedStaff}"/>
+        </StackPanel>
+
+        <DataGrid Grid.Row="1" ItemsSource="{Binding TodayPunches}" AutoGenerateColumns="False" CanUserAddRows="False" Margin="0,8,0,0">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Time (UTC)" Binding="{Binding TsUtc}" Width="*"/>
+                <DataGridTextColumn Header="In/Out" Binding="{Binding IsIn}" Width="120"/>
+                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="200"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>

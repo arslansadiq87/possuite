@@ -685,6 +685,30 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             db.SaveChanges();
             tx.Commit();
+            // === GL POST: Amendment delta (runs once after revision commit) ===
+            try
+            {
+                // Guard against accidental double-post if handler is re-entered
+                using (var chk = new PosClientDbContext(_dbOptions))
+                {
+                    var already = chk.GlEntries.AsNoTracking().Any(g =>
+                        g.DocType == Pos.Domain.Accounting.GlDocType.SaleRevision &&
+                        g.DocId == newSale.Id);
+
+                    if (!already)
+                    {
+                        var gl = App.Services.GetRequiredService<IGlPostingService>();
+
+                        // We already computed these earlier in SaveRevision_Click:
+                        //   deltaSub, deltaTax, deltaGrand = deltaSub + deltaTax (non-negative)
+                        await gl.PostSaleRevisionAsync(newSale, deltaSub, deltaTax);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("GL post (revision) failed: " + ex);
+            }
 
             try
             {

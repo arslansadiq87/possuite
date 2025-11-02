@@ -3,6 +3,7 @@ using System.Reflection.Emit;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain.Abstractions;
+using Pos.Domain.Accounting;
 
 
 namespace Pos.Persistence
@@ -45,6 +46,26 @@ namespace Pos.Persistence
         public DbSet<InvoiceLocalization> InvoiceLocalizations { get; set; } = default!;
         public DbSet<BarcodeLabelSettings> BarcodeLabelSettings { get; set; } = default!;
         public DbSet<UserPreference> UserPreferences { get; set; }   // ✅ add this line
+                                                                     // GL
+        public DbSet<Account> Accounts { get; set; }
+        public DbSet<Journal> Journals { get; set; }
+        public DbSet<JournalLine> JournalLines { get; set; }
+
+        public DbSet<Pos.Domain.Accounting.GlEntry> GlEntries { get; set; } = null!;
+        public DbSet<Pos.Domain.Accounting.Voucher> Vouchers { get; set; } = null!;
+        public DbSet<Pos.Domain.Accounting.VoucherLine> VoucherLines { get; set; } = null!;
+
+        // HR/Payroll
+        public DbSet<Pos.Domain.Hr.Staff> Staff { get; set; } = null!;
+        public DbSet<Pos.Domain.Hr.Shift> Shifts { get; set; } = null!;
+        public DbSet<Pos.Domain.Hr.ShiftAssignment> ShiftAssignments { get; set; } = null!;
+        public DbSet<Pos.Domain.Hr.AttendancePunch> AttendancePunches { get; set; } = null!;
+        public DbSet<Pos.Domain.Hr.AttendanceDay> AttendanceDays { get; set; } = null!;
+        public DbSet<Pos.Domain.Hr.PayrollRun> PayrollRuns { get; set; } = null!;
+        public DbSet<Pos.Domain.Hr.PayrollItem> PayrollItems { get; set; } = null!;
+        //public DbSet<OpeningBalance> OpeningBalances => Set<OpeningBalance>();
+        //public DbSet<OpeningBalanceLine> OpeningBalanceLines => Set<OpeningBalanceLine>();
+
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -461,6 +482,103 @@ namespace Pos.Persistence
             b.Entity<UserPreference>()
             .HasIndex(p => p.MachineName)
             .IsUnique();
+
+            // Accounts
+            // ---- Accounting (GL) ----
+            b.Entity<Account>(e =>
+            {
+                e.HasIndex(x => new { x.OutletId, x.Code }).IsUnique(); // unique code per scope
+                e.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
+                e.Property(x => x.Code).HasMaxLength(32);
+                e.Property(x => x.Name).HasMaxLength(200);
+            });
+
+            b.Entity<Journal>(e =>
+            {
+                e.HasIndex(x => x.TsUtc);
+                e.Property(x => x.RefType).HasMaxLength(40);
+            });
+
+            b.Entity<JournalLine>(e =>
+            {
+                e.HasIndex(x => x.AccountId);
+                e.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.Party).WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Party → Account (optional)
+            b.Entity<Party>()
+             .HasOne(p => p.Account)
+             .WithMany()
+             .HasForeignKey(p => p.AccountId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+
+            // Voucher + VoucherLine
+            b.Entity<Pos.Domain.Accounting.Voucher>(e =>
+            {
+                e.Property(x => x.RefNo).HasMaxLength(64);
+                e.HasMany(v => v.Lines).WithOne(l => l.Voucher)
+                 .HasForeignKey(l => l.VoucherId)
+                 .OnDelete(DeleteBehavior.Cascade);
+            });
+            b.Entity<Pos.Domain.Accounting.VoucherLine>(e =>
+            {
+                e.Property(x => x.Debit).HasColumnType("decimal(18,2)");
+                e.Property(x => x.Credit).HasColumnType("decimal(18,2)");
+            });
+
+            // HR/Payroll
+            b.Entity<Pos.Domain.Hr.Staff>(e =>
+            {
+                e.HasIndex(x => x.Code).IsUnique();
+                e.Property(x => x.Code).HasMaxLength(32).IsRequired();
+                e.Property(x => x.FullName).HasMaxLength(128).IsRequired();
+            });
+
+            b.Entity<Pos.Domain.Hr.Shift>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(64).IsRequired();
+            });
+
+            b.Entity<Pos.Domain.Hr.ShiftAssignment>(e =>
+            {
+                e.HasIndex(x => new { x.StaffId, x.FromDateUtc });
+                e.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.Shift).WithMany().HasForeignKey(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            b.Entity<Pos.Domain.Hr.AttendancePunch>(e =>
+            {
+                e.HasIndex(x => new { x.StaffId, x.TsUtc });
+            });
+
+            b.Entity<Pos.Domain.Hr.AttendanceDay>(e =>
+            {
+                e.HasIndex(x => new { x.StaffId, x.DayUtc }).IsUnique();
+            });
+
+            b.Entity<Pos.Domain.Hr.PayrollRun>(e =>
+            {
+                e.Property(x => x.TotalGross).HasColumnType("decimal(18,2)");
+                e.Property(x => x.TotalDeductions).HasColumnType("decimal(18,2)");
+                e.Property(x => x.TotalNet).HasColumnType("decimal(18,2)");
+            });
+
+            b.Entity<Pos.Domain.Hr.PayrollItem>(e =>
+            {
+                e.Property(x => x.Basic).HasColumnType("decimal(18,2)");
+                e.Property(x => x.Allowances).HasColumnType("decimal(18,2)");
+                e.Property(x => x.Overtime).HasColumnType("decimal(18,2)");
+                e.Property(x => x.Deductions).HasColumnType("decimal(18,2)");
+                e.HasOne(x => x.PayrollRun).WithMany().HasForeignKey(x => x.PayrollRunId).OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Pos.Persistence/PosClientDbContext.cs  -> OnModelCreating
+           
+
+
 
             // ---- Provider-aware RowVersion mapping for ALL BaseEntity types ----
             var provider = Database.ProviderName ?? string.Empty;

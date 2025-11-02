@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251101065223_accounts-opening")]
+    partial class accountsopening
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -161,6 +164,68 @@ namespace Pos.Persistence.Migrations
                     b.ToTable("InvoiceSettings", (string)null);
                 });
 
+            modelBuilder.Entity("Pos.Domain.Accounting.Account", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsOutletScoped")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Normal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ParentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("BLOB")
+                        .HasDefaultValueSql("X''");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("ParentId");
+
+                    b.ToTable("Accounts");
+                });
+
             modelBuilder.Entity("Pos.Domain.Accounting.GlEntry", b =>
                 {
                     b.Property<int>("Id")
@@ -177,10 +242,10 @@ namespace Pos.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("Credit")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("Debit")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("DocId")
                         .HasColumnType("INTEGER");
@@ -215,6 +280,10 @@ namespace Pos.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AccountId");
+
+                    b.HasIndex("TsUtc");
+
+                    b.HasIndex("DocType", "DocId");
 
                     b.ToTable("GlEntries");
                 });
@@ -314,86 +383,6 @@ namespace Pos.Persistence.Migrations
                     b.HasIndex("VoucherId");
 
                     b.ToTable("VoucherLines");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.Account", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("AllowPosting")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsHeader")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsOpeningLocked")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsSystem")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("NormalSide")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("OpeningCredit")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("OpeningDebit")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("OutletId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("ParentId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ParentId");
-
-                    b.HasIndex("OutletId", "Code")
-                        .IsUnique();
-
-                    b.ToTable("Accounts");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.BarcodeLabelSettings", b =>
@@ -980,114 +969,6 @@ namespace Pos.Persistence.Migrations
                     b.ToTable("ItemBarcodes");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.Journal", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Memo")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("OutletId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("RefId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("RefType")
-                        .HasMaxLength(40)
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
-
-                    b.Property<DateTime>("TsUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OutletId");
-
-                    b.HasIndex("TsUtc");
-
-                    b.ToTable("Journals");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.JournalLine", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("AccountId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Credit")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Debit")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("JournalId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Memo")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("PartyId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PublicId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AccountId");
-
-                    b.HasIndex("JournalId");
-
-                    b.HasIndex("PartyId");
-
-                    b.ToTable("JournalLines");
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.OpeningStock", b =>
                 {
                     b.Property<int>("Id")
@@ -1286,9 +1167,6 @@ namespace Pos.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("AccountId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -1334,8 +1212,6 @@ namespace Pos.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AccountId");
 
                     b.HasIndex("IsActive", "Name");
 
@@ -3013,12 +2889,22 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Outlet");
                 });
 
+            modelBuilder.Entity("Pos.Domain.Accounting.Account", b =>
+                {
+                    b.HasOne("Pos.Domain.Accounting.Account", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Parent");
+                });
+
             modelBuilder.Entity("Pos.Domain.Accounting.GlEntry", b =>
                 {
-                    b.HasOne("Pos.Domain.Entities.Account", "Account")
+                    b.HasOne("Pos.Domain.Accounting.Account", "Account")
                         .WithMany()
                         .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Account");
@@ -3033,22 +2919,6 @@ namespace Pos.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Voucher");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.Account", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
-                        .WithMany()
-                        .HasForeignKey("OutletId");
-
-                    b.HasOne("Pos.Domain.Entities.Account", "Parent")
-                        .WithMany()
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Outlet");
-
-                    b.Navigation("Parent");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Counter", b =>
@@ -3124,41 +2994,6 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Item");
                 });
 
-            modelBuilder.Entity("Pos.Domain.Entities.Journal", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
-                        .WithMany()
-                        .HasForeignKey("OutletId");
-
-                    b.Navigation("Outlet");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.JournalLine", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.Account", "Account")
-                        .WithMany()
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Pos.Domain.Entities.Journal", "Journal")
-                        .WithMany()
-                        .HasForeignKey("JournalId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Pos.Domain.Entities.Party", "Party")
-                        .WithMany()
-                        .HasForeignKey("PartyId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Account");
-
-                    b.Navigation("Journal");
-
-                    b.Navigation("Party");
-                });
-
             modelBuilder.Entity("Pos.Domain.Entities.OpeningStockLine", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.OpeningStock", "OpeningStock")
@@ -3168,16 +3003,6 @@ namespace Pos.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("OpeningStock");
-                });
-
-            modelBuilder.Entity("Pos.Domain.Entities.Party", b =>
-                {
-                    b.HasOne("Pos.Domain.Entities.Account", "Account")
-                        .WithMany()
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Account");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.PartyLedger", b =>
@@ -3462,6 +3287,11 @@ namespace Pos.Persistence.Migrations
             modelBuilder.Entity("InvoiceSettings", b =>
                 {
                     b.Navigation("Localizations");
+                });
+
+            modelBuilder.Entity("Pos.Domain.Accounting.Account", b =>
+                {
+                    b.Navigation("Children");
                 });
 
             modelBuilder.Entity("Pos.Domain.Accounting.Voucher", b =>

@@ -95,6 +95,24 @@ public sealed class DashboardVm : ObservableObject
         CloseOthersCmd = new RelayCommand(CloseOtherTabs);
         CloseLeftCmd = new RelayCommand(CloseLeftTabs);
         CloseRightCmd = new RelayCommand(CloseRightTabs);
+        //OpenOpeningBalanceCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>());
+
+        OpenChartOfAccountsCmd = new RelayCommand(OpenChartOfAccountsTab);
+
+    //    OpenChartOfAccountsCmd = new RelayCommand(() =>
+    //_nav.Show<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsWindow>());
+
+        OpenVoucherEditorCmd = new RelayCommand(() =>
+            _nav.Show<Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow>());
+
+        OpenPayrollCmd = new RelayCommand(() =>
+            _nav.Show<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>());
+
+        OpenAttendanceCmd = new RelayCommand(() =>
+            _nav.Show<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>());
+
+        
+
 
         RefreshCmd = new AsyncRelayCommand(RefreshAsync);
         SyncTillUi();                      // <-- NEW
@@ -197,6 +215,13 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand CloseRightCmd { get; }
 
     public IRelayCommand OpenStockCheckCmd { get; }
+
+    public IRelayCommand OpenChartOfAccountsCmd { get; }
+    public IRelayCommand OpenVoucherEditorCmd { get; }
+    public IRelayCommand OpenPayrollCmd { get; }
+    public IRelayCommand OpenAttendanceCmd { get; }
+    //public IRelayCommand OpenOpeningBalanceCmd { get; }
+
     public IAsyncRelayCommand RefreshCmd { get; }
     public IAsyncRelayCommand OpenTillSummaryCmd { get; }
     // NEW commands
@@ -256,6 +281,12 @@ public sealed class DashboardVm : ObservableObject
     {
         if (TryActivateTab<Pos.Client.Wpf.Windows.Admin.PartiesView>()) return;
         _views.OpenTab<Pos.Client.Wpf.Windows.Admin.PartiesView>("Parties", "Parties");
+    }
+
+    private void OpenChartOfAccountsTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView>("Chart Of Accounts", "Chart Of Accounts");
     }
 
     private void OpenOutletCountersTab()

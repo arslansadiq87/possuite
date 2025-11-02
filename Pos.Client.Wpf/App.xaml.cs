@@ -17,6 +17,7 @@ using ControlzEx.Theming;
 using Pos.Client.Wpf.Windows.Inventory;
 using Pos.Domain.Entities;
 using Pos.Client.Wpf.Windows.Settings;
+using Pos.Client.Wpf.Windows.Accounting;
 
 
 
@@ -60,6 +61,19 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<IPaymentDialogService, PaymentDialogService>();
             sc.AddSingleton<ITillService, TillService>();
             sc.AddSingleton<ITerminalContext, TerminalContext>();
+            // Party posting (build a DbContext instance from the factory for each use)
+            sc.AddTransient<PartyPostingService>(sp =>
+            {
+                var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+                return new PartyPostingService(dbf.CreateDbContext());
+            });
+            // Party lookup (construct DbContext per resolve so queries use a fresh context)
+            sc.AddTransient<PartyLookupService>(sp =>
+            {
+                var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+                return new PartyLookupService(dbf.CreateDbContext());
+            });
+
 
             sc.AddSingleton<ResetStockService>();
             sc.AddSingleton<IUserPreferencesService, UserPreferencesService>();
@@ -124,6 +138,23 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditWarehouseWindow>();
             sc.AddTransient<PreferencesViewModel>();
             sc.AddTransient<PreferencesPage>();
+            //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
+            //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
+
+
+            // Windows (transient)
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchView>(); // UserControl; may be hosted in a window
+
+            // ViewModels (scoped or transient)
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsVm>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.VoucherEditorVm>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.PayrollRunVm>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchVm>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>();
+
 
             sc.AddSingleton<IInvoiceSettingsService, InvoiceSettingsService>();
             sc.AddTransient<InvoiceSettingsViewModel>();
@@ -136,6 +167,15 @@ namespace Pos.Client.Wpf
             sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();
             sc.AddScoped<ITransferQueries, TransferQueries>();
             sc.AddScoped<ItemsService>();
+            sc.AddScoped<IGlPostingService, GlPostingService>();
+            sc.AddScoped<IAttendanceService, AttendanceService>();
+            sc.AddScoped<IPayrollService, PayrollService>();
+            // VM & window
+            //sc.AddTransient<OpeningBalanceVm>();
+            //sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>();
+
+            // Posting service (if not already added earlier)
+            //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
 
 
             //sc.AddTransient<UsersWindow>(sp =>

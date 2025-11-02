@@ -1,0 +1,158 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:acc="clr-namespace:Pos.Client.Wpf.Windows.Accounting">
+
+    <DockPanel>
+        <ToolBar DockPanel.Dock="Top">
+            <Button Content="New Header"        Command="{Binding NewHeaderCommand}" />
+            <Button Content="New Account"       Command="{Binding NewAccountCommand}" />
+            <Separator/>
+            <Button Content="Edit"              Command="{Binding EditAccountCommand}" />
+            <Button Content="Delete"            Command="{Binding DeleteAccountCommand}" />
+            <Separator/>
+            <Button Content="Add Cash (Outlet)" Command="{Binding AddCashForOutletCommand}" />
+            <Button Content="Add Staff"         Command="{Binding AddStaffAccountCommand}" />
+            <Separator/>
+            <Button Content="Save Openings"     Command="{Binding SaveOpeningsCommand}" />
+            <Button Content="Lock Openings"     Command="{Binding LockOpeningsCommand}" />
+            <Separator/>
+            <Button Content="Refresh"           Command="{Binding LoadCommand}" />
+        </ToolBar>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- header -->
+                <RowDefinition Height="*"/>
+                <!-- tree   -->
+            </Grid.RowDefinitions>
+
+            <!-- ===== Flat tree rendered as GridView (always aligned columns) ===== -->
+            <ListView x:Name="CoaTree"
+                  Grid.Row="1"
+                  ItemsSource="{Binding Flat}"
+                  BorderThickness="1"
+                  BorderBrush="#CCC"
+                  Margin="0,0,0,4">
+                <ListView.Resources>
+                    <acc:LevelToIndentConverter x:Key="IndentConv" />
+                    <Style x:Key="ExpanderGlyph" TargetType="TextBlock">
+                        <Setter Property="FontWeight" Value="Bold"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasChildren}" Value="False">
+                                <Setter Property="Visibility" Value="Hidden"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                <Setter Property="Text" Value="▾"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="False">
+                                <Setter Property="Text" Value="▸"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                    <Style TargetType="GridViewColumnHeader">
+                        <Setter Property="FontWeight" Value="Bold"/>
+                    </Style>
+                </ListView.Resources>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="FontWeight" Value="Normal"/>
+                        <!-- Optional: subtle background & full-row selection -->
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Node.IsHeader}" Value="True">
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Background" Value="#FFF7F7F7"/>
+                                <!-- optional, remove if you want -->
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.ItemContainerStyle>
+
+                <ListView.View>
+                    <GridView AllowsColumnReorder="False">
+                        <!-- Expander column -->
+                        <GridViewColumn Width="22">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource ExpanderGlyph}">
+                                        <TextBlock.InputBindings>
+                                            <MouseBinding MouseAction="LeftClick"
+                                              Command="{Binding DataContext.ToggleExpandCmdCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                              CommandParameter="{Binding}" />
+                                        </TextBlock.InputBindings>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+
+                        <!-- Code -->
+                        <GridViewColumn Header="Code" Width="120"
+                            DisplayMemberBinding="{Binding Node.Code}" />
+
+                        <!-- Name (indented by Level) -->
+                        <GridViewColumn Header="Name" Width="260">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Node.Name}" VerticalAlignment="Center">
+                                        <TextBlock.Margin>
+                                            <MultiBinding Converter="{StaticResource IndentConv}">
+                                                <Binding Path="Level" />
+                                                <Binding RelativeSource="{RelativeSource AncestorType=ListViewItem}" />
+                                            </MultiBinding>
+                                        </TextBlock.Margin>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+
+                        <!-- Type -->
+                        <GridViewColumn Header="Type" Width="120"
+                            DisplayMemberBinding="{Binding Node.Type}" />
+
+                        <!-- Header -->
+                        <GridViewColumn Header="Header" Width="100">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding Node.IsHeader}" IsEnabled="False"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+
+                        <!-- Opening Debit -->
+                        <GridViewColumn Header="Opening Debit" Width="140">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Node.OpeningDebit, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
+                     IsEnabled="{Binding Node.IsOpeningEditable}"
+                     TextAlignment="Right"
+                     HorizontalAlignment="Stretch"
+                     MinWidth="120"
+                     Padding="2"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+
+                        <!-- Opening Credit -->
+                        <GridViewColumn Header="Opening Credit" Width="140">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Node.OpeningCredit, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
+                     IsEnabled="{Binding Node.IsOpeningEditable}"
+                     TextAlignment="Right"
+                     HorizontalAlignment="Stretch"
+                     MinWidth="120"
+                     Padding="2"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+        </Grid>
+    </DockPanel>
+</UserControl>

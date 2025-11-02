@@ -35,6 +35,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
         private readonly ITerminalContext _ctx;
+        private int? _selectedCustomerId;
 
         private readonly IInvoiceSettingsService _invSettings;
         private bool _printOnSave;
@@ -80,7 +81,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             LoadSalesmen();
             AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), /*handledEventsToo:*/ true);
             FooterBox.Text = _invoiceFooter;
-            CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
+            //CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
 
 
             Loaded += (_, __) =>
@@ -98,6 +99,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 UpdateInvoicePreview();
                 UpdateInvoiceDateNow();
                 UpdateLocationUi();
+                WalkInCheck_Changed(WalkInCheck!, new RoutedEventArgs());
 
                 // Sync once when everything exists
                 if (Window.GetWindow(this) is Window w)
@@ -426,19 +428,35 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private void WalkInCheck_Changed(object sender, RoutedEventArgs e)
         {
-            bool isWalkIn = (sender as CheckBox)?.IsChecked == true;
-            if (!isWalkIn && WalkInCheck != null)
-                isWalkIn = WalkInCheck.IsChecked == true;
-            _isWalkIn = isWalkIn;
-            bool enable = !isWalkIn;
-            if (CustNameBox != null) CustNameBox.IsEnabled = enable;
-            if (CustPhoneBox != null) CustPhoneBox.IsEnabled = enable;
+            var isWalkIn = WalkInCheck?.IsChecked == true;
+
+            // Enable name/phone for Walk-in; disable for Registered
+            if (CustNameBox != null) CustNameBox.IsEnabled = isWalkIn;
+            if (CustPhoneBox != null) CustPhoneBox.IsEnabled = isWalkIn;
+
             if (isWalkIn)
             {
-                if (CustNameBox != null) CustNameBox.Text = string.Empty;
-                if (CustPhoneBox != null) CustPhoneBox.Text = string.Empty;
+                // Switching to Walk-in → clear registered selection
+                _selectedCustomerId = null;
+                if (CustomerPicker != null)
+                {
+                    CustomerPicker.SelectedCustomer = null;
+                    CustomerPicker.SelectedCustomerId = null;
+                    CustomerPicker.Query = "";
+                }
+                // Keep any typed name/phone (useful for receipts). If you prefer to clear:
+                // CustNameBox.Text = "";
+                // CustPhoneBox.Text = "";
+            }
+            else
+            {
+                // Switching to Registered → hide walk-in fields (XAML triggers) and clear their text
+                if (CustNameBox != null) CustNameBox.Text = "";
+                if (CustPhoneBox != null) CustPhoneBox.Text = "";
             }
         }
+
+
 
         private void ReturnCheck_Changed(object sender, RoutedEventArgs e)
         {
@@ -693,9 +711,27 @@ namespace Pos.Client.Wpf.Windows.Sales
             // ========== Customer ==========
             bool isWalkIn = (WalkInCheck?.IsChecked == true);
             var customerKind = isWalkIn ? CustomerKind.WalkIn : CustomerKind.Registered;
-            int? customerId = null;
+            int? customerId = isWalkIn ? null : _selectedCustomerId;
             string? customerName = isWalkIn ? null : (CustNameBox?.Text?.Trim());
             string? customerPhone = isWalkIn ? null : (CustPhoneBox?.Text?.Trim());
+
+            // ===== Credit guard: on-account sales require a registered customer =====
+                           // already computed above
+            if (grand <= 0m) { MessageBox.Show("Total must be greater than 0."); return; }
+
+            var creditPortion = grand - paid;              // amount to post to customer ledger
+                                                           // allow tiny rounding slack
+            bool wantsCredit = (creditPortion > 0.009m);
+
+            if (wantsCredit && (customerId == null))
+            {
+                MessageBox.Show(
+                    "This invoice has an unpaid (on-account) amount.\n\n" +
+                    "Please select a registered customer to continue.",
+                    "Customer required for credit", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             // ========== Return flag ==========
             bool isReturnFlow = (ReturnCheck?.IsChecked == true);
             // ========== E-receipt & footer ==========
@@ -809,6 +845,66 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             db.SaveChanges();
             tx.Commit();
+            // --- Lines & stock ---
+            foreach (var line in _cart)
+            {
+                db.SaleLines.Add(new SaleLine
+                {
+                    // ...
+                });
+                db.StockEntries.Add(new StockEntry
+                {
+                    // ...
+                });
+            }
+            db.SaveChanges();
+            tx.Commit();
+
+            // === GL POST: Sale / SaleReturn (runs once per finalized doc) ===
+            try
+            {
+                // (Optional) "post-once" guard — prevents accidental double posting
+                using (var chk = new PosClientDbContext(_dbOptions))
+                {
+                    var already = chk.GlEntries.AsNoTracking()
+                        .Any(g => (g.DocType == Pos.Domain.Accounting.GlDocType.Sale
+                                    && !sale.IsReturn
+                                    && g.DocId == sale.Id)
+                               || (g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn
+                                    && sale.IsReturn
+                                    && g.DocId == sale.Id));
+                    if (!already)
+                    {
+                        var gl = App.Services.GetRequiredService<IGlPostingService>();
+                        if (!sale.IsReturn)
+                            await gl.PostSaleAsync(sale);
+                        else
+                            await gl.PostSaleReturnAsync(sale);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal: sale is saved; log and continue
+                System.Diagnostics.Debug.WriteLine("GL post failed: " + ex);
+            }
+
+            // If this sale came from a held draft, mark the draft as voided (or delete it)
+            if (_currentHeldSaleId.HasValue)
+            {
+                using var db2 = new PosClientDbContext(_dbOptions);
+                var draft = db2.Sales.FirstOrDefault(x => x.Id == _currentHeldSaleId.Value && x.Status == SaleStatus.Draft);
+                if (draft != null)
+                {
+                    draft.Status = SaleStatus.Voided;
+                    draft.RevisedToSaleId = sale.Id;
+                    draft.VoidedAtUtc = DateTime.UtcNow;
+                    draft.VoidReason = "Finalized from held draft";
+                    db2.SaveChanges();
+                }
+                _currentHeldSaleId = null;
+            }
+
             // If this sale came from a held draft, mark the draft as voided (or delete it)
             if (_currentHeldSaleId.HasValue)
             {
@@ -828,6 +924,39 @@ namespace Pos.Client.Wpf.Windows.Sales
             MessageBox.Show(
                 $"Sale saved. ID: {sale.Id}\nInvoice: {CounterId}-{sale.InvoiceNumber}\nTotal: {sale.Total:0.00}",
                 "Success");
+            // ===== Post credit (A/R) to customer ledger if unpaid portion exists =====
+            try
+            {
+                var poster = App.Services.GetRequiredService<PartyPostingService>();
+
+                // paidNow uses the same values you saved into the sale (non-nullable decimals)
+                var paidNow = sale.CashAmount + sale.CardAmount;
+
+                // Reuse the outer computed creditPortion, OR recompute from the saved sale.
+                // Prefer recompute from the saved sale to avoid any future mismatch:
+                var unpaid = sale.Total - paidNow;
+
+                if (unpaid > 0.009m && sale.CustomerId.HasValue)
+                {
+                    await poster.PostAsync(
+                        partyId: sale.CustomerId.Value,
+                        scope: BillingScope.Outlet,
+                        outletId: sale.OutletId,
+                        docType: PartyLedgerDocType.Sale,
+                        docId: sale.Id,
+                        debit: unpaid,        // +A/R
+                        credit: 0m,
+                        memo: $"On-account sale #{sale.CounterId}-{sale.InvoiceNumber}"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Sale saved, but posting to customer ledger failed:\n" + ex.Message,
+                    "Ledger warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+
             UpdateInvoicePreview();  // show the next invoice that will be used
             UpdateInvoiceDateNow();  // timestamp of current screen state
             try
@@ -1065,6 +1194,35 @@ namespace Pos.Client.Wpf.Windows.Sales
                 return false;
             }
         }
+
+        private void CustomerPicker_CustomerPicked(object sender, RoutedEventArgs e)
+        {
+            var picked = CustomerPicker.SelectedCustomer;
+            if (picked == null) return;
+
+            _selectedCustomerId = picked.Id;
+
+            // Switch to Registered flow
+            if (WalkInCheck != null) WalkInCheck.IsChecked = false;
+
+            // Fill for receipt; still editable
+            if (CustNameBox != null) CustNameBox.Text = picked.Name;
+            if (CustPhoneBox != null) CustPhoneBox.Text = picked.Phone;
+        }
+
+        private void CustomerClearBtn_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedCustomerId = null;
+            if (WalkInCheck != null) WalkInCheck.IsChecked = true; // Walk-in
+
+            // Clear UI
+            CustomerPicker.SelectedCustomer = null;
+            CustomerPicker.SelectedCustomerId = null;
+            CustomerPicker.Query = "";
+            if (CustNameBox != null) CustNameBox.Text = "";
+            if (CustPhoneBox != null) CustPhoneBox.Text = "";
+        }
+
 
     }
 }

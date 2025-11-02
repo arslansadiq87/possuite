@@ -352,8 +352,28 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 db.SaveChanges();
                 tx.Commit();
+            // === GL POST: Sale Return (full document linked to original) ===
+            try
+            {
+                using (var chk = new PosClientDbContext(_opts))
+                {
+                    var already = chk.GlEntries.AsNoTracking().Any(g =>
+                        g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn &&
+                        g.DocId == ret.Id);
 
-                Confirmed = true;
+                    if (!already)
+                    {
+                        var gl = App.Services.GetRequiredService<IGlPostingService>();
+                        await gl.PostSaleReturnAsync(ret);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("GL post (return-from-invoice) failed: " + ex);
+            }
+
+            Confirmed = true;
                 RefundMagnitude = magGrand;
 
                 try

@@ -1,0 +1,59 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Voucher Editor" Height="560" Width="900"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Type:" VerticalAlignment="Center"/>
+            <ComboBox Width="130" Margin="6,0"
+                      ItemsSource="{Binding VoucherTypes}"
+                      SelectedItem="{Binding Type}"/>
+
+            <TextBlock Text="Outlet:" Margin="16,0,0,0" VerticalAlignment="Center"/>
+            <ComboBox Width="160" Margin="6,0"
+                      ItemsSource="{Binding Outlets}" 
+                      SelectedItem="{Binding SelectedOutlet}"/>
+
+            <TextBlock Text="Ref No:" Margin="16,0,0,0" VerticalAlignment="Center"/>
+            <TextBox Width="140" Margin="6,0" Text="{Binding RefNo}"/>
+
+            <Button Content="Add Line" Margin="16,0,0,0" Command="{Binding AddLineCmd}"/>
+            <Button Content="Remove Line" Margin="6,0,0,0" Command="{Binding RemoveLineCmd}" IsEnabled="{Binding SelectedLine}"/>
+            <Button Content="Save &amp; Post" Margin="16,0,0,0" Command="{Binding SaveCmd}"/>
+        </StackPanel>
+
+        <DataGrid ItemsSource="{Binding Lines}" SelectedItem="{Binding SelectedLine}"
+                  AutoGenerateColumns="False" CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridComboBoxColumn Header="Account"
+                                        SelectedItemBinding="{Binding Account, UpdateSourceTrigger=PropertyChanged}"
+                                        DisplayMemberPath="Name" Width="*"
+                                        SelectedValuePath="Id">
+                    <DataGridComboBoxColumn.ElementStyle>
+                        <Style TargetType="ComboBox">
+                            <Setter Property="ItemsSource" Value="{Binding DataContext.Accounts, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        </Style>
+                    </DataGridComboBoxColumn.ElementStyle>
+                    <DataGridComboBoxColumn.EditingElementStyle>
+                        <Style TargetType="ComboBox">
+                            <Setter Property="ItemsSource" Value="{Binding DataContext.Accounts, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        </Style>
+                    </DataGridComboBoxColumn.EditingElementStyle>
+                </DataGridComboBoxColumn>
+                <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="2*"/>
+                <DataGridTextColumn Header="Debit" Binding="{Binding Debit, StringFormat=N2}" Width="120"/>
+                <DataGridTextColumn Header="Credit" Binding="{Binding Credit, StringFormat=N2}" Width="120"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <TextBlock Text="Debits:" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding TotalDebit, StringFormat=N2}" Margin="6,0,16,0" FontWeight="Bold"/>
+            <TextBlock Text="Credits:" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding TotalCredit, StringFormat=N2}" Margin="6,0,16,0" FontWeight="Bold"/>
+            <TextBlock Text="Memo:" VerticalAlignment="Center"/>
+            <TextBox Width="260" Margin="6,0" Text="{Binding Memo}"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

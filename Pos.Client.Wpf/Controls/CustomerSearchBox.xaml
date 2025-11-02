@@ -1,0 +1,75 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Controls.CustomerSearchBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             MinWidth="260">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- The textbox -->
+        <TextBox x:Name="QueryBox"
+           Margin="0"
+           Padding="8,6"
+           VerticalContentAlignment="Center"
+           Text="{Binding Query, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}"
+           ToolTip="Type name or phone (min 2 chars)." />
+
+        <!-- Watermark overlay (shows when Text is empty and not focused) -->
+        <TextBlock Text="Type customer's name or phone"
+             Foreground="#888"
+             Margin="12,0,0,0"
+             VerticalAlignment="Center"
+             IsHitTestVisible="False">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <!-- Empty textbox -->
+                                <Condition Binding="{Binding Text, ElementName=QueryBox}" Value=""/>
+                                <!-- Not focused -->
+                                <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=QueryBox}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- Suggestions popup -->
+        <Popup x:Name="SuggestPopup"
+         PlacementTarget="{Binding ElementName=QueryBox}"
+         Placement="Bottom"
+         StaysOpen="False"
+         AllowsTransparency="True">
+            <Border Background="White"
+            BorderBrush="#DDD"
+            BorderThickness="1"
+            CornerRadius="4"
+            Padding="4"
+            Width="{Binding ElementName=QueryBox, Path=ActualWidth}">
+                <ListBox x:Name="SuggestList"
+               MouseDoubleClick="SuggestList_MouseDoubleClick"
+               ItemsSource="{Binding Suggestions, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="8,4">
+                                <TextBlock Text="{Binding Name}"/>
+                                <TextBlock Text="  "/>
+                                <TextBlock Text="{Binding Phone}" Foreground="Gray"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Popup>
+    </Grid>
+
+</UserControl>

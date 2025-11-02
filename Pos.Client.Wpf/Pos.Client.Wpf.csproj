@@ -3,8 +3,18 @@
   <ItemGroup>
     <Compile Remove="Contracts\IScanFocusable.cs" />
     <Compile Remove="Services\CurrentUserService.cs" />
+    <Compile Remove="Services\OpeningBalanceService.cs" />
     <Compile Remove="Services\StockGuard_old.cs" />
     <Compile Remove="Services\WindowNavigator.cs" />
+    <Compile Remove="Windows\Accounting\AccountDialog.xaml.cs" />
+    <Compile Remove="Windows\Accounting\AccountFlatRow.cs" />
+    <Compile Remove="Windows\Accounting\OpeningBalanceVm.cs" />
+    <Compile Remove="Windows\Accounting\OpeningBalanceWindow.xaml.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="Windows\Accounting\AccountDialog.xaml" />
+    <Page Remove="Windows\Accounting\OpeningBalanceWindow.xaml" />
   </ItemGroup>
   
 	<ItemGroup>

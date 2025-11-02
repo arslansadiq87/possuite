@@ -108,12 +108,23 @@ namespace Pos.Client.Wpf.Services
 
             if (!string.IsNullOrWhiteSpace(term))
             {
+                // Escape wildcards (optional safety for LIKE)
+                string Escape(string s) => s
+                    .Replace("[", "[[]")
+                    .Replace("%", "[%]")
+                    .Replace("_", "[_]")
+                    .Replace("'", "''");
+
+                var like = $"%{Escape(term.Trim())}%";
+
                 q = q.Where(p =>
-                    p.Name.Contains(term) ||
-                    (p.Phone != null && p.Phone.Contains(term)) ||
-                    (p.Email != null && p.Email.Contains(term)) ||
-                    (p.TaxNumber != null && p.TaxNumber.Contains(term)));
+                    EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), like) ||
+                    (p.Phone != null && EF.Functions.Like(EF.Functions.Collate(p.Phone, "NOCASE"), like)) ||
+                    (p.Email != null && EF.Functions.Like(EF.Functions.Collate(p.Email, "NOCASE"), like)) ||
+                    (p.TaxNumber != null && EF.Functions.Like(EF.Functions.Collate(p.TaxNumber, "NOCASE"), like))
+                );
             }
+
 
             return await q
                 .OrderBy(p => p.Name)

@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Accounting\AccountType.cs" />
+    <Compile Remove="Accounting\OpeningBalance.cs" />
     <Compile Remove="Entities\Customer.cs" />
     <Compile Remove="Entities\ReceiptProfile.cs" />
     <Compile Remove="Entities\SaleLine.cs" />

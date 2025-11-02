@@ -452,6 +452,21 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show("Refund split is less than total.");
                 return;
             }
+
+            // ===== Credit-remaining guard for return =====
+            var refunded = refundCash + refundCard;
+            var storeCredit = grand - refunded;             // amount left as credit to customer
+
+            bool leavesStoreCredit = (storeCredit > 0.009m);
+            if (leavesStoreCredit && (customerId == null))
+            {
+                MessageBox.Show(
+                    "This return leaves a credit balance for the customer.\n\n" +
+                    "Please select a registered customer to continue.",
+                    "Customer required for store credit", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             var paymentMethod =
                 (refundCash > 0 && refundCard > 0) ? PaymentMethod.Mixed :
                 (refundCash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
@@ -545,8 +560,56 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             db.SaveChanges();
             tx.Commit();
+            // === GL POST: Sale Return (full document) ===
+            try
+            {
+                using (var chk = new PosClientDbContext(_dbOptions))
+                {
+                    var already = chk.GlEntries.AsNoTracking().Any(g =>
+                        g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn &&
+                        g.DocId == sale.Id);
+
+                    if (!already)
+                    {
+                        var gl = App.Services.GetRequiredService<IGlPostingService>();
+                        await gl.PostSaleReturnAsync(sale);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("GL post (return) failed: " + ex);
+            }
+
 
             MessageBox.Show($"Return saved. ID: {sale.Id}\nInvoice: {_counterId}-{sale.InvoiceNumber}\nRefund: {sale.Total:0.00}", "Success");
+            // ===== Post customer store credit if not fully refunded =====
+            try
+            {
+                var poster = App.Services.GetRequiredService<PartyPostingService>();
+
+                var refundedNow = sale.CashAmount + sale.CardAmount; // both decimals
+                var leftoverCredit = sale.Total - refundedNow;       // store credit / A/R decrease
+
+                if (leftoverCredit > 0.009m && sale.CustomerId.HasValue)
+                {
+                    await poster.PostAsync(
+                        partyId: sale.CustomerId.Value,
+                        scope: BillingScope.Outlet,
+                        outletId: sale.OutletId,
+                        docType: PartyLedgerDocType.SaleReturn,
+                        docId: sale.Id,
+                        debit: 0m,
+                        credit: leftoverCredit, // -A/R
+                        memo: $"Return (store credit) #{sale.CounterId}-{sale.InvoiceNumber}"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Return saved, but posting to customer ledger failed:\n" + ex.Message,
+                    "Ledger warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
 
             try
             {

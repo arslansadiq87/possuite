@@ -9,6 +9,9 @@ namespace Pos.Domain.Entities
         public string? Email { get; set; }
         public string? TaxNumber { get; set; }
         public bool IsActive { get; set; } = true;
+         // GL link (each party has its own account under the Parties header)
+        public int? AccountId { get; set; }
+        public Account? Account { get; set; }
 
         // Visibility & defaults
         public bool IsSharedAcrossOutlets { get; set; } = true;

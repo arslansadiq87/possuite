@@ -34,13 +34,63 @@
                 <TextBlock x:Name="InvoiceDateText" VerticalAlignment="Center"/>
             </StackPanel>
             <!-- Right: Only ONE button shown at a time -->
-            <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
-                <CheckBox x:Name="WalkInCheck" Content="Walk-in Customer" IsChecked="True" Checked="WalkInCheck_Changed" Unchecked="WalkInCheck_Changed" VerticalAlignment="Center"/>
-                <TextBlock Text="Name:" VerticalAlignment="Center" Margin="6,0,6,0"/>
-                <TextBox x:Name="CustNameBox" Width="180" Height="28" VerticalContentAlignment="Center"/>
-                <TextBlock Text="   Phone:" VerticalAlignment="Center" Margin="6,0,6,0"/>
-                <TextBox x:Name="CustPhoneBox" Width="130" Height="28" VerticalContentAlignment="Center"/>
+            <!-- Customer Picker Row -->
+            <!-- Customer UI -->
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,6" Grid.Column="1">
+                <!-- Mode toggle -->
+                <CheckBox x:Name="WalkInCheck"
+            Content="Walk-in" VerticalAlignment="Center"
+            Margin="0,0,12,0"
+            IsChecked="True"
+            Checked="WalkInCheck_Changed"
+            Unchecked="WalkInCheck_Changed"/>
+
+                <!-- Registered customer panel (visible when Walk-in = false) -->
+                <StackPanel x:Name="RegisteredPanel" Orientation="Horizontal" Margin="0,0,0,0">
+                    <TextBlock Text="Customer:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Controls:CustomerSearchBox x:Name="CustomerPicker"
+                                Width="320"
+                                CustomerPicked="CustomerPicker_CustomerPicked"/>
+                    <Button x:Name="CustomerClearBtn"
+            Content="Clear"
+            Margin="6,0,0,0"
+            Padding="8,2"
+            Click="CustomerClearBtn_Click" />
+                    <!-- Visibility rules -->
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=WalkInCheck}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                </StackPanel>
+
+                <!-- Walk-in panel (visible when Walk-in = true) -->
+                <StackPanel x:Name="WalkInPanel" Orientation="Horizontal" Margin="12,0,0,0">
+                    <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="CustNameBox" Width="200" Margin="0,0,12,0" Padding="6"/>
+                    <TextBlock Text="Phone:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="CustPhoneBox" Width="150" Padding="6"/>
+                    <!-- Visibility rules -->
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=WalkInCheck}" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                </StackPanel>
             </StackPanel>
+
+
+
         </Grid>
         <Grid Grid.Row="1" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
