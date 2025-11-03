@@ -158,6 +158,8 @@
                 <Fluent:RibbonGroupBox Header="Accounts">
                     <Fluent:Button Header="Chart of Accounts" Command="{Binding OpenChartOfAccountsCmd}"/>
                     <Fluent:Button Header="Voucher" Command="{Binding OpenVoucherEditorCmd}"/>
+                    <Fluent:Button Header="Voucher Center" Command="{Binding OpenVoucherCenterCmd}"/>
+
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Payrolls">

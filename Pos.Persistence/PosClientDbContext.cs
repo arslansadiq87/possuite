@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain.Abstractions;
 using Pos.Domain.Accounting;
+using Microsoft.Data.Sqlite;
 
 
 namespace Pos.Persistence
@@ -72,8 +73,29 @@ namespace Pos.Persistence
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
-                optionsBuilder.UseSqlite(DbPath.ConnectionString);
+            {
+                // Example: adjust your actual path/name as needed
+                var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+                {
+                    DataSource = "posclient.db",
+                    Mode = SqliteOpenMode.ReadWriteCreate,
+                    Cache = SqliteCacheMode.Shared,
+                    Pooling = true,
+                    // 5s “busy timeout” so transient locks don’t instantly blow up:
+                    // (This maps to PRAGMA busy_timeout)
+                    // NOTE: for Microsoft.Data.Sqlite you can set BusyTimeout via connection string keyword.
+                    // If your package version doesn't support the property directly, append ";BusyTimeout=5000" to the raw string.
+                }.ToString() + ";BusyTimeout=5000");
+
+                optionsBuilder
+                    .UseSqlite(conn, o =>
+                    {
+                        // Helpful on bigger queries (optional):
+                        o.CommandTimeout(30);
+                    });
+            }
         }
+
 
         protected override void OnModelCreating(ModelBuilder b)
         {
@@ -544,6 +566,9 @@ namespace Pos.Persistence
                 e.HasMany(v => v.Lines).WithOne(l => l.Voucher)
                  .HasForeignKey(l => l.VoucherId)
                  .OnDelete(DeleteBehavior.Cascade);
+                e.Property(x => x.Status).HasDefaultValue(VoucherStatus.Posted);
+                e.Property(x => x.RevisionNo).HasDefaultValue(1);
+                e.HasIndex(x => x.AmendedFromId);
             });
             b.Entity<Pos.Domain.Accounting.VoucherLine>(e =>
             {

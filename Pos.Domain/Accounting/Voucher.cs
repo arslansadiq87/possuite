@@ -5,6 +5,7 @@ using System.Collections.Generic;
 namespace Pos.Domain.Accounting
 {
     public enum VoucherType { Debit, Credit, Journal }
+    public enum VoucherStatus { Draft = 0, Posted = 1, Amended = 2, Voided = 3 }
 
     public class Voucher : BaseEntity
     {
@@ -14,6 +15,15 @@ namespace Pos.Domain.Accounting
         public string? RefNo { get; set; }
         public string? Memo { get; set; }
         public List<VoucherLine> Lines { get; set; } = new();
+
+        public VoucherStatus Status { get; set; } = VoucherStatus.Posted; // matches current behavior (save → posted)
+        public int RevisionNo { get; set; } = 1;
+
+        public int? AmendedFromId { get; set; }
+        public DateTime? AmendedAtUtc { get; set; }
+
+        public DateTime? VoidedAtUtc { get; set; }
+        public string? VoidReason { get; set; }
     }
 
     public class VoucherLine : BaseEntity

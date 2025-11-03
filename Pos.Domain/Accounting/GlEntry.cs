@@ -10,7 +10,8 @@ namespace Pos.Domain.Accounting
         TillOpen, TillClose, CashReceipt, CashPayment,
         StockAdjust, JournalVoucher, PayrollAccrual, PayrollPayment,
         SaleRevision,
-        SaleReturnRevision
+        SaleReturnRevision, VoucherRevision = 98, 
+        VoucherVoid = 99
     }
 
     public class GlEntry : BaseEntity

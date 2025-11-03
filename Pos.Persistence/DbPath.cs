@@ -15,6 +15,8 @@ namespace Pos.Persistence
             return Path.Combine(dir, "posclient.db");
         }
 
-        public static string ConnectionString => $"Data Source={Get()}";
+        //public static string ConnectionString => $"Data Source={Get()}";
+        public static string ConnectionString => $"Data Source={Get()};Cache=Shared;Pooling=True;Default Timeout=5";
+
     }
 }

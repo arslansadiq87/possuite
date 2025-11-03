@@ -97,15 +97,18 @@ public sealed class DashboardVm : ObservableObject
         CloseLeftCmd = new RelayCommand(CloseLeftTabs);
         CloseRightCmd = new RelayCommand(CloseRightTabs);
         OpenOtherAccountsCmd = new RelayCommand(OpenOtherAccountsTab);
+        OpenVoucherEditorCmd = new RelayCommand(OpenVouchersTab);
         //OpenOpeningBalanceCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>());
 
         OpenChartOfAccountsCmd = new RelayCommand(OpenChartOfAccountsTab);
 
-    //    OpenChartOfAccountsCmd = new RelayCommand(() =>
-    //_nav.Show<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsWindow>());
+        OpenVoucherCenterCmd = new RelayCommand(OpenVoucherCenterTab);
 
-        OpenVoucherEditorCmd = new RelayCommand(() =>
-            _nav.Show<Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow>());
+        //    OpenChartOfAccountsCmd = new RelayCommand(() =>
+        //_nav.Show<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsWindow>());
+
+        //OpenVoucherEditorCmd = new RelayCommand(() =>
+        //    _nav.Show<Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow>());
 
         OpenPayrollCmd = new RelayCommand(() =>
             _nav.Show<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>());
@@ -219,7 +222,9 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand OpenStockCheckCmd { get; }
 
     public IRelayCommand OpenChartOfAccountsCmd { get; }
+    public IRelayCommand OpenVouchersCmd { get; }
     public IRelayCommand OpenVoucherEditorCmd { get; }
+    public IRelayCommand OpenVoucherCenterCmd { get; }
     public IRelayCommand OpenPayrollCmd { get; }
     public IRelayCommand OpenAttendanceCmd { get; }
     //public IRelayCommand OpenOpeningBalanceCmd { get; }
@@ -230,6 +235,8 @@ public sealed class DashboardVm : ObservableObject
     // NEW commands
     public IAsyncRelayCommand OpenTillCmd { get; }
     public IAsyncRelayCommand CloseTillCmd { get; }
+
+    
     // Notify views if you want (optional hook from window/tabs)
     public event Action? TillChanged;
 
@@ -244,6 +251,7 @@ public sealed class DashboardVm : ObservableObject
         ActiveTab = existing;
         return true;
     }
+
 
 
     // ---------- Openers => Tabs ----------
@@ -298,7 +306,11 @@ public sealed class DashboardVm : ObservableObject
         _views.OpenTab<Pos.Client.Wpf.Windows.Admin.OtherAccountsView>("Other Accounts", "Other Accounts");
     }
 
-
+    private void OpenVouchersTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.VoucherEditorView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.VoucherEditorView>("Vourchers", "Vouchers");
+    }
 
     private void OpenChartOfAccountsTab()
     {
@@ -328,6 +340,13 @@ public sealed class DashboardVm : ObservableObject
         if (TryActivateTab<Pos.Client.Wpf.Windows.Sales.StockReportView>()) return;
         _views.OpenTab<Pos.Client.Wpf.Windows.Sales.StockReportView>("Stock Check", "Stock Check");
     }
+
+    private void OpenVoucherCenterTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.VoucherCenterView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.VoucherCenterView>("Voucher Center", "Voucher Center");
+    }
+
     //private void OpenReportsTab()
     //    => _views.OpenTab<Pos.Client.Wpf.Windows.Reports.ReportsView>("Reports", "Reports");
 

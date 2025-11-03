@@ -1,0 +1,306 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Accounting.VoucherCenterView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:acc="clr-namespace:Pos.Domain.Accounting;assembly=Pos.Domain"
+             xmlns:local="clr-namespace:Pos.Client.Wpf.Windows.Accounting"
+             MinHeight="600">
+
+    <UserControl.Resources>
+        <!-- RoutedUICommands so XAML can always see them -->
+        <!--<RoutedUICommand x:Key="CmdEdit"    Text="Edit"/>-->
+        <RoutedUICommand x:Key="CmdAmend"   Text="Amend / Revision"/>
+        <RoutedUICommand x:Key="CmdVoid"    Text="Void"/>
+        <RoutedUICommand x:Key="CmdRefresh" Text="Refresh"/>
+
+
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Badge palette (mirrors Sales center) -->
+        <SolidColorBrush x:Key="BadgeBorder"   Color="#D0D0D0"/>
+        <SolidColorBrush x:Key="BadgeFg"       Color="#202124"/>
+
+        <SolidColorBrush x:Key="BadgeDraft"    Color="#FFF9C4"/>
+        <!-- Draft -->
+        <SolidColorBrush x:Key="BadgePosted"   Color="#C8E6C9"/>
+        <!-- Posted -->
+        <SolidColorBrush x:Key="BadgeAmended"  Color="#BBDEFB"/>
+        <!-- Amended -->
+        <SolidColorBrush x:Key="BadgeVoided"   Color="#E0E0E0"/>
+        <!-- Voided -->
+
+        <!-- List cell styles (same pattern as Sales center to force a dark fg on selection) -->
+        <Style TargetType="DataGridCell">
+            <Setter Property="Foreground" Value="#111111"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="#111111"/>
+                </Trigger>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsSelected" Value="True"/>
+                        <Condition Property="IsKeyboardFocusWithin" Value="False"/>
+                    </MultiTrigger.Conditions>
+                    <Setter Property="Foreground" Value="#111111"/>
+                </MultiTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Status badge style -->
+        <Style x:Key="StatusBadge" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BadgeBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="#F3F3F3"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static acc:VoucherStatus.Draft}">
+                    <Setter Property="Background" Value="{StaticResource BadgeDraft}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static acc:VoucherStatus.Posted}">
+                    <Setter Property="Background" Value="{StaticResource BadgePosted}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static acc:VoucherStatus.Amended}">
+                    <Setter Property="Background" Value="{StaticResource BadgeAmended}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static acc:VoucherStatus.Voided}">
+                    <Setter Property="Background" Value="{StaticResource BadgeVoided}"/>
+                    <Setter Property="Opacity" Value="0.9"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Keyboard: global shortcuts (like Sales) -->
+    <UserControl.InputBindings>
+        <!--<KeyBinding Key="E" Modifiers="Alt"     Command="{StaticResource CmdEdit}"/>-->
+        <KeyBinding Key="A" Modifiers="Alt"     Command="{StaticResource CmdAmend}"/>
+        <KeyBinding Key="D" Modifiers="Alt"     Command="{StaticResource CmdVoid}"/>
+        <!-- was ApplicationCommands.Refresh -->
+        <KeyBinding Key="F5" Command="{StaticResource CmdRefresh}"/>
+        <KeyBinding Key="F2" Command="{x:Static ApplicationCommands.Find}"/>
+    </UserControl.InputBindings>
+
+    <UserControl.CommandBindings>
+        <CommandBinding Command="{StaticResource CmdRefresh}" Executed="Refresh_Executed"/>
+        <CommandBinding Command="{x:Static ApplicationCommands.Find}" Executed="Search_Executed"/>
+
+        <!--<CommandBinding Command="{StaticResource CmdEdit}"   Executed="Edit_Executed"/>-->
+        <CommandBinding Command="{StaticResource CmdAmend}"  Executed="Amend_Executed"/>
+        <CommandBinding Command="{StaticResource CmdVoid}"   Executed="Void_Executed"/>
+    </UserControl.CommandBindings>
+    <!--<Button Content="_Edit (Alt+E)"  Height="30" Margin="0,0,8,0" Click="Edit_Click"/>-->
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- TOP TOOLBAR -->
+        <ToolBar Grid.Row="0" Margin="0,0,0,8">
+            <!--<Button Content="_Edit (Alt+E)"  Height="30" Margin="0,0,8,0" Click="Edit_Click"/>-->
+            <Button Content="_Amend (Alt+A)" Height="30" Margin="0,0,8,0" Click="Amend_Click"/>
+            <Button Content="_Void  (Alt+D)" Height="30" Margin="0,0,8,0" Click="Void_Click"/>
+        </ToolBar>
+
+        <!-- Filter row: Search, Date, Popup filters (type/status) -->
+        <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="0,0,0,8">
+            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="SearchBox" Width="220" Height="28" VerticalContentAlignment="Center"
+                     ToolTip="Voucher # or memo"/>
+
+            <TextBlock Text=" From:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <DatePicker x:Name="FromDate" Width="140"/>
+
+            <TextBlock Text=" To:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+            <DatePicker x:Name="ToDate" Width="140"/>
+
+            <!-- Compact filter dropdown -->
+            <Grid Margin="12,0,0,0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <ToggleButton x:Name="BtnFilter" Grid.Column="0" Height="28" Padding="10,0"
+                              Content="Filter ▾"
+                              IsChecked="{Binding IsOpen, ElementName=PopupFilter, Mode=TwoWay}"
+                              ToolTip="Open filters"/>
+
+                <Popup x:Name="PopupFilter" Placement="Bottom" PlacementTarget="{Binding ElementName=BtnFilter}"
+                       StaysOpen="False" AllowsTransparency="True" Focusable="False">
+                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+                        </Border.Effect>
+
+                        <StackPanel MinWidth="380">
+                            <TextBlock Text="Filter vouchers" FontWeight="Bold" Margin="0,0,0,8"/>
+
+                            <!-- Type -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Type:" Width="60" VerticalAlignment="Center"/>
+                                <CheckBox x:Name="ChkJournal" Content="Journal" IsChecked="True" Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkDebit"   Content="Debit"   IsChecked="True" Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkCredit"  Content="Credit"  IsChecked="True"/>
+                            </StackPanel>
+
+                            <!-- Status -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Status:" Width="60" VerticalAlignment="Center"/>
+                                <CheckBox x:Name="ChkPosted"  Content="Posted"  IsChecked="True" Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkDraft"   Content="Draft"   IsChecked="True" Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkAmended" Content="Amended" IsChecked="True" Margin="0,0,10,0"/>
+                                <CheckBox x:Name="ChkVoided"  Content="Voided"  IsChecked="False"/>
+                            </StackPanel>
+
+                            <!-- Actions -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Clear" Width="80" Margin="0,0,8,0" Click="ClearFilter_Click"/>
+                                <Button Content="Apply" Width="80" Click="ApplyFilter_Click"
+                                        Style="{StaticResource Btn.GlobalPrimary}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </Grid>
+
+            <Button Content="Search _F2" Width="120" Height="28" Margin="12,0,0,0"
+                    Click="Search_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+            <Button x:Name="BtnRefresh" Content="Refresh" Click="Refresh_Click" Width="120" Height="28"
+                    Margin="12,0,0,0" Style="{StaticResource Btn.GlobalSecondary}"/>
+        </StackPanel>
+
+        <!-- Middle: list | details -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="1.75*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: vouchers grid with compact template column (like Sales) -->
+            <DataGrid x:Name="VouchersGrid"
+          Grid.Column="0"
+          AutoGenerateColumns="False"
+          CanUserAddRows="False"
+          IsReadOnly="True"
+          RowHeaderWidth="0"
+          FontSize="13"
+          HeadersVisibility="Column"
+          SelectionChanged="VouchersGrid_SelectionChanged"
+          HorizontalScrollBarVisibility="Disabled"
+          ItemsSource="{Binding Rows}"
+          SelectedItem="{Binding Selected, Mode=TwoWay}">
+
+
+                <DataGrid.Columns>
+                    <!-- COMPACT “Voucher” column -->
+                    <DataGridTemplateColumn Header="Voucher" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2,0,2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Line 1: #123   Type   Rev 2   [Status] -->
+                                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.Column="0">
+                                        <TextBlock FontWeight="SemiBold">
+                                            <Run Text="#"/>
+                                            <Run Text="{Binding Id}"/>
+                                        </TextBlock>
+
+                                        <TextBlock Text="{Binding Type}" Margin="8,0,0,0"/>
+
+                                        <TextBlock Margin="8,0,0,0"
+                                                Visibility="{Binding HasRevisions, Converter={StaticResource BoolToVis}}">
+                                                <Run Text="Rev "/><Run Text="{Binding RevisionNo}"/>
+                                        </TextBlock>
+
+                                        <Border Style="{StaticResource StatusBadge}">
+                                            <TextBlock Text="{Binding Status}" FontSize="11" Margin="4,0,4,0"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Line 2: Outlet • Date -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Foreground="#666" FontSize="12"
+                                               TextTrimming="CharacterEllipsis">
+                                        <Run Text="{Binding OutletId}"/>
+                                        <Run Text=" • "/>
+                                        <Run Text="{Binding TsUtc}"/>
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Totals narrow columns -->
+                    <DataGridTextColumn Header="Debit"  Binding="{Binding TotalDebit,  StringFormat=0.00}" Width="95">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <DataGridTextColumn Header="Credit" Binding="{Binding TotalCredit, StringFormat=0.00}" Width="95">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                </DataGrid.Columns>
+
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <!--<MenuItem Header="Edit"               Command="{StaticResource CmdEdit}"/>-->
+                        <MenuItem Header="Amend / Revision"   Command="{StaticResource CmdAmend}"/>
+                        <Separator/>
+                        <MenuItem Header="Void"               Command="{StaticResource CmdVoid}"/>
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
+            </DataGrid>
+
+            <Separator Grid.Column="1" Margin="8,0" Width="1" Background="#DDD"/>
+
+            <!-- Right: details -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                <DataGrid x:Name="LinesGrid"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          IsReadOnly="True"
+                          Grid.Row="1"
+                          Style="{StaticResource ModernDataGrid}"
+                          ItemsSource="{Binding Lines}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="AccountId"   Binding="{Binding AccountId}" Width="80"/>
+                        <DataGridTextColumn Header="Account"     Binding="{Binding AccountName}" Width="220"/>
+                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
+                        <DataGridTextColumn Header="Debit"       Binding="{Binding Debit,  StringFormat=0.00}" Width="90"/>
+                        <DataGridTextColumn Header="Credit"      Binding="{Binding Credit, StringFormat=0.00}" Width="90"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

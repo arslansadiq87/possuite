@@ -10,11 +10,13 @@
     <Compile Remove="Windows\Accounting\AccountFlatRow.cs" />
     <Compile Remove="Windows\Accounting\OpeningBalanceVm.cs" />
     <Compile Remove="Windows\Accounting\OpeningBalanceWindow.xaml.cs" />
+    <Compile Remove="Windows\Accounting\VoucherEditorWindow.xaml.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <Page Remove="Windows\Accounting\AccountDialog.xaml" />
     <Page Remove="Windows\Accounting\OpeningBalanceWindow.xaml" />
+    <Page Remove="Windows\Accounting\VoucherEditorWindow.xaml" />
   </ItemGroup>
   
 	<ItemGroup>

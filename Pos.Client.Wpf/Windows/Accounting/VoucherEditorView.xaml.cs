@@ -16,7 +16,7 @@ using System.Globalization;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
-    public partial class VoucherEditorWindow : Window
+    public partial class VoucherEditorView : UserControl
     {
         private ListCollectionView? _accountView;   // per-active editor
         private ComboBox? _activeAccountCombo;      // current cell's editor
@@ -27,39 +27,24 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private bool _lastEditCancelled = false;
         private bool _suppressNextAmountValidation = false;
 
-        private static bool AccountMatches(Account a, string query)
-        {
-            if (string.IsNullOrWhiteSpace(query)) return true;
-            var q = query.Trim().ToLowerInvariant();
-            var tokens = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            var name = (a.Name ?? "").ToLowerInvariant();
-            var code = (a.Code ?? "").ToLowerInvariant();
+        private bool _wired;
 
-            foreach (var t in tokens)
-                if (!(name.Contains(t) || code.Contains(t))) return false;
-
-            return true;
-        }
-
-        private void AccountEditor_TextChanged(object? sender, TextChangedEventArgs e)
-        {
-            if (_activeAccountCombo == null) return;
-
-            _pendingQuery = (sender as TextBox)?.Text ?? "";
-            EnsureDebouncer();
-            _accountDebounce!.Stop();
-            _accountDebounce!.Start();
-
-            // UX: keep list open and no selection while user types
-            _activeAccountCombo.IsDropDownOpen = true;
-            _activeAccountCombo.SelectedIndex = -1;
-            _activeAccountCombo.SelectedItem = null;
-        }
-
-        public VoucherEditorWindow(VoucherEditorVm vm)
+        public VoucherEditorView()
         {
             InitializeComponent();
+        }
+
+        public VoucherEditorView(VoucherEditorVm vm) : this()
+        {
+            AttachVm(vm);
+        }
+
+        public void AttachVm(VoucherEditorVm vm)
+        {
+            if (_wired) return;   // prevents double wiring
+            _wired = true;
             DataContext = vm;
+            
             LinesGrid.CellEditEnding += LinesGrid_CellEditEnding_ValidateAmountAndDescription;
 
             Loaded += async (_, __) =>
@@ -76,16 +61,12 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 var col = LinesGrid.CurrentColumn?.Header?.ToString();
                 if (col == "Account")
                 {
-                    // Defer so WPF can realize the cell first
                     LinesGrid.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                     {
                         LinesGrid.BeginEdit(); // will run AccountCombo_Loaded and focus textbox
                     }));
                 }
             };
-
-
-            
 
             // --- Enter navigation on header controls ---
             TypeBox.PreviewKeyDown += (s, e) =>
@@ -125,38 +106,29 @@ namespace Pos.Client.Wpf.Windows.Accounting
             LinesGrid.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key != Key.Enter) return;
-
                 var col = LinesGrid.CurrentColumn?.Header?.ToString();
                 if (string.IsNullOrEmpty(col)) return;
-
                 if (col == "Description")
                 {
                     e.Handled = true;   // stop DataGrid’s default commit navigation
                     MoveToAmountColumn();
                     return;
                 }
-
                 if (col == "Debit" || col == "Credit")
                 {
                     e.Handled = true;
                     CommitCurrentCell();
-
                     if (_lastEditCancelled)
                     {
                         _lastEditCancelled = false; // reset
                         return;                     // stay on the same cell; no new row
                     }
-
-
                     var vm = (VoucherEditorVm)DataContext;
                     vm.AddLine();
                     LinesGrid.SelectedIndex = LinesGrid.Items.Count - 1;
-
-                    // jump to new row's Account in edit mode
                     var newItem = LinesGrid.Items[LinesGrid.SelectedIndex];
                     var accountCol = LinesGrid.Columns.FirstOrDefault(c => (c.Header?.ToString() ?? "") == "Account")
                                      ?? LinesGrid.Columns.ElementAtOrDefault(1);
-
                     if (accountCol != null)
                     {
                         LinesGrid.CurrentCell = new DataGridCellInfo(newItem, accountCol);
@@ -172,6 +144,21 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
 
 
+        }
+
+        private void AccountEditor_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (_activeAccountCombo == null) return;
+
+            _pendingQuery = (sender as TextBox)?.Text ?? "";
+            EnsureDebouncer();
+            _accountDebounce!.Stop();
+            _accountDebounce!.Start();
+
+            // UX: keep list open and no selection while user types
+            _activeAccountCombo.IsDropDownOpen = true;
+            _activeAccountCombo.SelectedIndex = -1;
+            _activeAccountCombo.SelectedItem = null;
         }
 
         private static TextBox? GetInnerTextBox(FrameworkElement root)
@@ -276,7 +263,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                                 tb.SelectAll();
                             }));
                         }
-                        
+
 
                         MessageBox.Show("For Journal, either Debit or Credit must be greater than zero on each row.",
                             "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -575,7 +562,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-  
+
         private void CommitAccountAndGoToDescription()
         {
             LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
@@ -592,8 +579,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
             e.Handled = true;
         }
 
-        
-    private void CommitCurrentCell()
+
+        private void CommitCurrentCell()
         {
             LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
             LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
@@ -628,7 +615,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-     
+
         private static TChild? FindVisualChild<TChild>(DependencyObject parent, Func<TChild, bool>? predicate = null)
             where TChild : DependencyObject
         {

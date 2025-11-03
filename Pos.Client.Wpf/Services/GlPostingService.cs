@@ -19,6 +19,10 @@ namespace Pos.Client.Wpf.Services
         Task PostPurchaseReturnAsync(Purchase p);
 
         Task PostVoucherAsync(Voucher v);
+        Task PostVoucherAsync(PosClientDbContext db, Voucher v);
+        Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid);
+        Task PostVoucherRevisionAsync(PosClientDbContext db, Voucher newVoucher, IReadOnlyList<VoucherLine> oldLines);
+
         Task PostPayrollAccrualAsync(PayrollRun run);   // Dr Salaries Expense, Cr Salaries Payable
         Task PostPayrollPaymentAsync(PayrollRun run);   // Dr Salaries Payable, Cr Cash/Bank
         Task PostSaleRevisionAsync(Sale newSale, decimal deltaSub, decimal deltaTax);
@@ -235,7 +239,77 @@ namespace Pos.Client.Wpf.Services
         }
 
         // ----- Vouchers ------------------------------------------------------
+        // ----- Vouchers (overload that uses caller's DbContext) ----------------------
+        public async Task PostVoucherAsync(PosClientDbContext db, Voucher v)
+        {
+            // Load lines once using the shared context
+            await db.Entry(v).Collection(x => x.Lines).LoadAsync();
+            var outletId = v.OutletId;
+            var ts = v.TsUtc;
 
+            // Helper to add a line by account Id on the shared context
+            void LineByIdLocal(int accountId, decimal dr, decimal cr, GlDocType dt, string? memo = null)
+            {
+                db.GlEntries.Add(new GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = outletId,
+                    AccountId = accountId,
+                    Debit = dr,
+                    Credit = cr,
+                    DocType = dt,
+                    DocId = v.Id,
+                    Memo = memo
+                });
+            }
+
+            // 1) Push user-entered lines as-is
+            decimal totalDr = 0m, totalCr = 0m;
+            foreach (var ln in v.Lines)
+            {
+                totalDr += ln.Debit;
+                totalCr += ln.Credit;
+
+                db.GlEntries.Add(new GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = outletId,
+                    AccountId = ln.AccountId,
+                    Debit = ln.Debit,
+                    Credit = ln.Credit,
+                    DocType = v.Type == VoucherType.Journal ? GlDocType.JournalVoucher
+            : v.Type == VoucherType.Debit ? GlDocType.CashPayment
+            : GlDocType.CashReceipt,
+                    DocId = v.Id,
+                    Memo = ln.Description ?? v.Memo
+                });
+
+            }
+
+            // 2) Auto cash side for Debit/Credit vouchers (per-outlet cash in hand)
+            if (v.Type == VoucherType.Debit)
+            {
+                if (totalDr <= 0m) throw new InvalidOperationException("Debit Voucher must have Debit > 0.");
+                var cashId = await _coa.GetCashAccountIdAsync(db, outletId);
+                LineByIdLocal(cashId, 0m, totalDr, GlDocType.CashPayment, "Cash payment (auto)");
+            }
+            else if (v.Type == VoucherType.Credit)
+            {
+                if (totalCr <= 0m) throw new InvalidOperationException("Credit Voucher must have Credit > 0.");
+                var cashId = await _coa.GetCashAccountIdAsync(db, outletId);
+                LineByIdLocal(cashId, totalCr, 0m, GlDocType.CashReceipt, "Cash receipt (auto)");
+            }
+            else
+            {
+                if (Math.Abs(totalDr - totalCr) > 0.004m)
+                    throw new InvalidOperationException("Journal Voucher must balance.");
+            }
+
+            // Persist GL entries using the SAME DbContext/transaction
+            await db.SaveChangesAsync();
+        }
+
+        
         public async Task PostVoucherAsync(Voucher v)
         {
             // Load lines and outlet once
@@ -306,9 +380,126 @@ namespace Pos.Client.Wpf.Services
         }
 
 
-        // ----- Payroll -------------------------------------------------------
+    public async Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid)
+    {
+        // Reverse *only* the GL rows created for this voucher.
+        // We tagged voucher user-lines as Journal/CashPayment/CashReceipt in your PostVoucherAsync.
+        var baseDocTypes = new[] { GlDocType.JournalVoucher, GlDocType.CashPayment, GlDocType.CashReceipt };
 
-        public async Task PostPayrollAccrualAsync(PayrollRun run)
+        var lines = await db.GlEntries
+            .Where(g => g.DocId == voucherToVoid.Id && baseDocTypes.Contains(g.DocType))
+            .AsNoTracking()
+            .ToListAsync();
+
+        if (lines.Count == 0) return;
+
+        var ts = DateTime.UtcNow;
+        foreach (var g in lines)
+        {
+            db.GlEntries.Add(new GlEntry
+            {
+                TsUtc = ts,
+                OutletId = g.OutletId,
+                AccountId = g.AccountId,
+                Debit = g.Credit,         // swap
+                Credit = g.Debit,         // swap
+                DocType = GlDocType.VoucherVoid,
+                DocId = voucherToVoid.Id,
+                Memo = $"VOID of voucher #{voucherToVoid.Id}"
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    public async Task PostVoucherRevisionAsync(PosClientDbContext db, Voucher newVoucher, IReadOnlyList<VoucherLine> oldLines)
+    {
+        // Load NEW lines (ensure attached)
+        await db.Entry(newVoucher).Collection(x => x.Lines).LoadAsync();
+
+        // Aggregate by AccountId (old vs new)
+        var oldByAcc = oldLines.GroupBy(l => l.AccountId)
+            .ToDictionary(g => g.Key, g => (dr: g.Sum(x => x.Debit), cr: g.Sum(x => x.Credit)));
+        var newByAcc = newVoucher.Lines.GroupBy(l => l.AccountId)
+            .ToDictionary(g => g.Key, g => (dr: g.Sum(x => x.Debit), cr: g.Sum(x => x.Credit)));
+
+        var allAccs = oldByAcc.Keys.Union(newByAcc.Keys);
+
+        var ts = DateTime.UtcNow;
+        var outletId = newVoucher.OutletId;
+
+        decimal deltaDrTotal = 0m, deltaCrTotal = 0m;
+
+        foreach (var accId in allAccs)
+        {
+            oldByAcc.TryGetValue(accId, out var o);
+            newByAcc.TryGetValue(accId, out var n);
+
+            var deltaDr = n.dr - o.dr;
+            var deltaCr = n.cr - o.cr;
+
+            if (Math.Abs(deltaDr) < 0.0005m && Math.Abs(deltaCr) < 0.0005m) continue;
+
+            deltaDrTotal += deltaDr;
+            deltaCrTotal += deltaCr;
+
+            db.GlEntries.Add(new GlEntry
+            {
+                TsUtc = ts,
+                OutletId = outletId,
+                AccountId = accId,
+                Debit = Math.Max(0, deltaDr),
+                Credit = Math.Max(0, deltaCr),
+                DocType = GlDocType.VoucherRevision,
+                DocId = newVoucher.Id,
+                Memo = $"Revision delta vs #{newVoucher.AmendedFromId}"
+            });
+        }
+
+        // Handle auto cash line deltas for Debit/Credit vouchers
+        if (newVoucher.Type == VoucherType.Debit || newVoucher.Type == VoucherType.Credit)
+        {
+            // deltaDrTotal and deltaCrTotal reflect summed line deltas (positive means more of that side)
+            // For Debit voucher: cash was auto-credited by totalDr; apply delta accordingly
+            // For Credit voucher: cash was auto-debited by totalCr; apply delta accordingly
+            var cashId = await _coa.GetCashAccountIdAsync(db, newVoucher.OutletId);
+
+            if (newVoucher.Type == VoucherType.Debit && Math.Abs(deltaDrTotal) > 0.0005m)
+            {
+                db.GlEntries.Add(new GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = outletId,
+                    AccountId = cashId,
+                    Debit = 0m,
+                    Credit = Math.Max(0, deltaDrTotal),
+                    DocType = GlDocType.VoucherRevision,
+                    DocId = newVoucher.Id,
+                    Memo = "Auto cash delta (Debit voucher)"
+                });
+            }
+            else if (newVoucher.Type == VoucherType.Credit && Math.Abs(deltaCrTotal) > 0.0005m)
+            {
+                db.GlEntries.Add(new GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = outletId,
+                    AccountId = cashId,
+                    Debit = Math.Max(0, deltaCrTotal),
+                    Credit = 0m,
+                    DocType = GlDocType.VoucherRevision,
+                    DocId = newVoucher.Id,
+                    Memo = "Auto cash delta (Credit voucher)"
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    // ----- Payroll -------------------------------------------------------
+
+    public async Task PostPayrollAccrualAsync(PayrollRun run)
         {
             // Dr Salaries Expense (5130), Cr Salaries Payable (2200)
             var ts = run.CreatedAtUtc;

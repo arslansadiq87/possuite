@@ -870,19 +870,19 @@ namespace Pos.Client.Wpf.Windows.Sales
             db.SaveChanges();
             tx.Commit();
             // --- Lines & stock ---
-            foreach (var line in _cart)
-            {
-                db.SaleLines.Add(new SaleLine
-                {
-                    // ...
-                });
-                db.StockEntries.Add(new StockEntry
-                {
-                    // ...
-                });
-            }
-            db.SaveChanges();
-            tx.Commit();
+            //foreach (var line in _cart)
+            //{
+            //    db.SaleLines.Add(new SaleLine
+            //    {
+            //        // ...
+            //    });
+            //    db.StockEntries.Add(new StockEntry
+            //    {
+            //        // ...
+            //    });
+            //}
+            //db.SaveChanges();
+            //tx.Commit();
 
             // === GL POST: Sale / SaleReturn (runs once per finalized doc) ===
             try

@@ -150,7 +150,7 @@ namespace Pos.Client.Wpf
 
             // Windows (transient)
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.VoucherEditorView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchView>(); // UserControl; may be hosted in a window
 
@@ -179,6 +179,8 @@ namespace Pos.Client.Wpf
             // after DbContext/ITerminalContext registrations
             sc.AddScoped<Pos.Client.Wpf.Services.ICoaService, Pos.Client.Wpf.Services.CoaService>();
             sc.AddScoped<Pos.Client.Wpf.Services.IOutletService, Pos.Client.Wpf.Services.OutletService>();
+            sc.AddTransient<VoucherCenterVm>();
+            sc.AddTransient<VoucherCenterView>();
 
             // VM & window
             //sc.AddTransient<OpeningBalanceVm>();
@@ -218,6 +220,14 @@ namespace Pos.Client.Wpf
 
                 db.Database.Migrate();
                 Seed.Ensure(db);  // make sure this seeds bcrypt admin/admin123
+                try
+                {
+                    // Ensure WAL, reasonable sync, and a busy timeout
+                    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+                    db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;");
+                    db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;");
+                }
+                catch { /* swallow if not supported */ }
                 DataFixups.NormalizeUsers(db);  // <-- add this line
 
             }
