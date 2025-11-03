@@ -238,24 +238,73 @@ namespace Pos.Client.Wpf.Services
 
         public async Task PostVoucherAsync(Voucher v)
         {
-            // Leave as-is: UI controls which accounts to hit (receipt/payment)
-            // Tip: default the "cash" picker in UI to CoaService.GetCashAccountIdAsync(v.OutletId)
+            // Load lines and outlet once
+            await _db.Entry(v).Collection(x => x.Lines).LoadAsync();
+            var outletId = v.OutletId;
+            var ts = v.TsUtc;
+
+            // Helper to add a line by account Id
+            void LineByIdLocal(int accountId, decimal dr, decimal cr, GlDocType dt, string? memo = null)
+            {
+                _db.GlEntries.Add(new GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = outletId,
+                    AccountId = accountId,
+                    Debit = dr,
+                    Credit = cr,
+                    DocType = dt,
+                    DocId = v.Id,
+                    Memo = memo
+                });
+            }
+
+            var totalDr = v.Lines.Sum(l => l.Debit);
+            var totalCr = v.Lines.Sum(l => l.Credit);
+
+            // 1) Always post user lines exactly as entered
             foreach (var ln in v.Lines)
             {
                 _db.GlEntries.Add(new GlEntry
                 {
-                    TsUtc = v.TsUtc,
-                    OutletId = v.OutletId,
+                    TsUtc = ts,
+                    OutletId = outletId,
                     AccountId = ln.AccountId,
                     Debit = ln.Debit,
                     Credit = ln.Credit,
-                    DocType = GlDocType.JournalVoucher,
+                    DocType = v.Type == VoucherType.Journal ? GlDocType.JournalVoucher
+                            : v.Type == VoucherType.Debit ? GlDocType.CashPayment
+                            : GlDocType.CashReceipt,
                     DocId = v.Id,
-                    Memo = v.Memo
+                    Memo = ln.Description ?? v.Memo
                 });
             }
+
+            // 2) Auto cash side for Debit/Credit vouchers (Cash in Hand per-outlet)
+            if (v.Type == VoucherType.Debit)
+            {
+                if (totalDr <= 0m) throw new InvalidOperationException("Debit Voucher must have Debit > 0.");
+                var cashId = await _coa.GetCashAccountIdAsync(outletId);
+                // Cash goes OUT: credit cash for total
+                LineByIdLocal(cashId, 0m, totalDr, GlDocType.CashPayment, "Cash payment (auto)");
+            }
+            else if (v.Type == VoucherType.Credit)
+            {
+                if (totalCr <= 0m) throw new InvalidOperationException("Credit Voucher must have Credit > 0.");
+                var cashId = await _coa.GetCashAccountIdAsync(outletId);
+                // Cash comes IN: debit cash for total
+                LineByIdLocal(cashId, totalCr, 0m, GlDocType.CashReceipt, "Cash receipt (auto)");
+            }
+            else
+            {
+                // Journal Voucher: no auto cash line
+                if (Math.Abs(totalDr - totalCr) > 0.004m)
+                    throw new InvalidOperationException("Journal Voucher must balance.");
+            }
+
             await _db.SaveChangesAsync();
         }
+
 
         // ----- Payroll -------------------------------------------------------
 
