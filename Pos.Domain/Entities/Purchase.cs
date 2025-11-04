@@ -86,6 +86,7 @@ namespace Pos.Domain.Entities
 
         public PurchasePaymentKind Kind { get; set; }
         public TenderMethod Method { get; set; }
+        public int? BankAccountId { get; set; }   // NEW: when Method==Bank, the selected bank account (required at runtime)
 
         public decimal Amount { get; set; }
         public string? Note { get; set; }

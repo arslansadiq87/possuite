@@ -1,4 +1,4 @@
-﻿// Pos.Client.Wpf/Windows/Purchases/PurchaseWindow.xaml.cs
+﻿// Pos.Client.Wpf/Windows/Purchases/PurchaseView.xaml.cs
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
@@ -23,6 +23,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
 {
     public partial class PurchaseView : UserControl
     {
+        private bool _uiReady;
+        // BANK UI state
+        private readonly ObservableCollection<Account> _bankAccounts = new();
+        private bool _bankPaymentsAllowed; // true only if InvoiceSettings.PurchaseBankAccountId is set for the outlet
         public enum PurchaseEditorMode { Auto, Draft, Amend }
         public static readonly DependencyProperty ModeProperty =
            DependencyProperty.Register(
@@ -85,6 +89,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         public class PurchaseEditorVM : INotifyPropertyChanged
         {
+
             public int PurchaseId { get => _purchaseId; set { _purchaseId = value; OnChanged(); } }
             private int _purchaseId;
             public int SupplierId { get => _supplierId; set { _supplierId = value; OnChanged(); } }
@@ -175,6 +180,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 await InitDestinationsAsync();
                 await ApplyUserPrefsToDestinationAsync();
                 ApplyDestinationPermissionGuard();
+                // NEW: Load banks + apply config rules
+                await LoadBanksForCurrentOutletAsync();
+                ApplyBankConfigToUi();
                 SupplierText.Focus();
                 SupplierText.CaretIndex = SupplierText.Text?.Length ?? 0;
             };
@@ -188,6 +196,123 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 if (e.Key == Key.F8) { _ = HoldCurrentPurchaseQuickAsync(); e.Handled = true; return; }
                 if (e.Key == Key.F9) { BtnSaveFinal_Click(s, e); e.Handled = true; return; }
             };
+        }
+
+        private void AdvanceMethodBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Ignore noisy selection changes fired during init
+            if (!_uiReady) return;
+
+            if (sender is not ComboBox cb) return;
+
+            // Read selection safely, whether you bound SelectedItem, SelectedValue, or just text
+            var sel =
+                (cb.SelectedItem as ComboBoxItem)?.Content?.ToString()
+                ?? cb.SelectedValue?.ToString()
+                ?? cb.Text
+                ?? "Cash";
+
+            var isBank = string.Equals(sel, "Bank", StringComparison.OrdinalIgnoreCase);
+
+            if (!_bankPaymentsAllowed && isBank)
+            {
+                MessageBox.Show("Bank payments are disabled. Configure a Purchase Bank Account in Invoice Settings for this outlet.");
+                // Safer than referencing a named item (which could be null here)
+                try { cb.SelectedIndex = 0; } catch { }
+                isBank = false;
+            }
+
+            // Bank picker panel might not exist yet in some XAML variants — guard it
+            try
+            {
+                BankPickerPanel.Visibility = isBank ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch
+            {
+                // swallow — control not present in a particular template
+            }
+        }
+
+
+
+        private int? GetCurrentOutletIdForHeader()
+        {
+            // Prefer selected outlet (when destination is Outlet)
+            try
+            {
+                if (DestOutletRadio.IsChecked == true && OutletBox.SelectedItem is Outlet ot)
+                    return ot.Id;
+            }
+            catch { }
+            // Fallback: use model’s outlet (if any)
+            return _model?.OutletId ?? AppState.Current?.CurrentOutletId;
+        }
+
+        private async Task<bool> IsPurchaseBankConfiguredAsync(int outletId)
+        {
+            var s = await _db.InvoiceSettings.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.OutletId == outletId);
+            return s?.PurchaseBankAccountId != null;
+        }
+
+        private async Task LoadBanksForCurrentOutletAsync()
+        {
+            BankAccountBox.ItemsSource = null;
+            _bankAccounts.Clear();
+
+            var outletId = GetCurrentOutletIdForHeader() ?? 0;
+            if (outletId == 0) { _bankPaymentsAllowed = false; return; }
+
+            // Check config: require PurchaseBankAccountId set
+            _bankPaymentsAllowed = await IsPurchaseBankConfiguredAsync(outletId);
+
+            // Load candidate bank accounts for this outlet (multiple supported)
+            var banks = await _db.Accounts.AsNoTracking()
+                .Where(a => a.OutletId == outletId
+                         && a.AllowPosting
+                         && !a.IsHeader
+                         && (a.Name.Contains("Bank") || a.Code.StartsWith("101"))) // adjust to your COA pattern
+                .OrderBy(a => a.Name)
+                .ToListAsync();
+
+            foreach (var b in banks) _bankAccounts.Add(b);
+            BankAccountBox.ItemsSource = _bankAccounts;
+
+            // pick the configured default if present
+            try
+            {
+                var s = await _db.InvoiceSettings.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.OutletId == outletId);
+                if (s?.PurchaseBankAccountId is int defId)
+                {
+                    var match = _bankAccounts.FirstOrDefault(x => x.Id == defId);
+                    if (match != null) BankAccountBox.SelectedItem = match;
+                }
+            }
+            catch { }
+        }
+
+        private void ApplyBankConfigToUi()
+        {
+            // If bank not allowed, force method to Cash and hide picker
+            if (!_bankPaymentsAllowed)
+            {
+                try
+                {
+                    AdvanceMethodBankItem.IsEnabled = false;
+                    BankPickerPanel.Visibility = Visibility.Collapsed;
+
+                    // if Bank is currently selected, reset to Cash
+                    var sel = (AdvanceMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Cash";
+                    if (!string.Equals(sel, "Cash", StringComparison.OrdinalIgnoreCase))
+                        AdvanceMethodBox.SelectedItem = AdvanceMethodCashItem;
+                }
+                catch { }
+            }
+            else
+            {
+                try { AdvanceMethodBankItem.IsEnabled = true; } catch { }
+            }
         }
 
         private void ApplyDestinationPermissionGuard()
@@ -662,6 +787,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 await ApplyLastDefaultsAsync(vm);          // may adjust UnitCost/Discount/TaxRate
                 vm.ForceRecalc();
+                await LoadBanksForCurrentOutletAsync();
+                ApplyBankConfigToUi();
                 RecomputeAndUpdateTotals();
             });
 
@@ -971,14 +1098,41 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private async void BtnAddAdvance_Click(object sender, RoutedEventArgs e)
         {
             if (!await EnsurePurchasePersistedAsync()) return;
-            if (!decimal.TryParse(AdvanceAmtBox.Text, out var amt) || amt <= 0)
-            {
-                MessageBox.Show("Enter amount > 0"); return;
-            }
+
+            if (!decimal.TryParse(AdvanceAmtBox.Text, out var amt) || amt <= 0m)
+            { MessageBox.Show("Enter amount > 0"); return; }
+
             var sel = (AdvanceMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Cash";
             var method = Enum.TryParse<TenderMethod>(sel, out var m) ? m : TenderMethod.Cash;
-            var outletId = _model.OutletId ?? 0;
-            // Draft => Advance; Final/Amend => OnReceive (per service rules)
+
+            var outletId = _model.OutletId ?? GetCurrentOutletIdForHeader() ?? 0;
+            if (outletId <= 0) { MessageBox.Show("Pick an outlet/destination first."); return; }
+
+            // Enforce: only Cash or Bank
+            if (method != TenderMethod.Cash && method != TenderMethod.Bank)
+            {
+                MessageBox.Show("Only Cash or Bank are allowed for purchase payments.");
+                return;
+            }
+
+            int? bankAccountId = null;
+            if (method == TenderMethod.Bank)
+            {
+                // Must be configured at outlet level
+                if (!_bankPaymentsAllowed)
+                {
+                    MessageBox.Show("Bank payments are disabled. Configure a Purchase Bank Account in Invoice Settings for this outlet.");
+                    return;
+                }
+
+                if (BankAccountBox.SelectedItem is not Account bank)
+                {
+                    MessageBox.Show("Select a bank account for this payment.");
+                    return;
+                }
+                bankAccountId = bank.Id;
+            }
+
             var kind = _model.Status == PurchaseStatus.Draft
                 ? PurchasePaymentKind.Advance
                 : PurchasePaymentKind.OnReceive;
@@ -993,12 +1147,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 supplierId: _model.PartyId,
                 tillSessionId: null,
                 counterId: null,
-                user: "admin");
+                user: "admin",
+                bankAccountId: bankAccountId   // NEW: pass selected bank (or null for Cash)
+            );
 
             await RefreshPaymentsAsync();
             AdvanceAmtBox.Clear();
-            AdvanceMethodBox.SelectedIndex = 0;
+            AdvanceMethodBox.SelectedItem = AdvanceMethodCashItem;
+            BankPickerPanel.Visibility = Visibility.Collapsed;
         }
+
 
         private async Task<bool> EnsurePurchasePersistedAsync()
         {
@@ -1539,8 +1697,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private PurchaseStatus? _loadedStatus;
         private PurchaseEditorMode _currentMode = PurchaseEditorMode.Draft;
         private bool _firstLoadComplete;
+        
+
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
+            _uiReady = true; // <-- add this line
             if (_firstLoadComplete) return;
             _firstLoadComplete = true;
             // your existing init code will run; then:

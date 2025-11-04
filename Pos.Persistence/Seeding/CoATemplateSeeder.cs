@@ -31,6 +31,7 @@ namespace Pos.Persistence.Seeding
                 new("111",  "Cash In Hand",          AccountType.Asset,  "11",   true, false,  NormalSide.Debit),
                 new("113",  "Bank Accounts",         AccountType.Asset,  "11",   false, true,  NormalSide.Debit),
                 new("114",  "Inventory",             AccountType.Asset,  "11",   true,  false, NormalSide.Debit),
+                new("1140", "Inventory on hand",     AccountType.Asset,     "114", false, true,  NormalSide.Debit),
                 new("1141", "Stock openings",        AccountType.Asset,  "114",  true,  false, NormalSide.Debit),
                 new("11411","Opening stock",         AccountType.Asset,  "1141", false, true,  NormalSide.Debit),
                 // your VB had "11131" here—correcting to "1131" (same parent)
@@ -73,6 +74,8 @@ namespace Pos.Persistence.Seeding
                 // 2 Liabilities
                 new("2",    "Liabilities",           AccountType.Liability, null, true,  false, NormalSide.Credit),
                 new("21",   "Short term liabilities",AccountType.Liability, "2",  true,  false, NormalSide.Credit),
+                new("2110", "Sales tax payable (output)", AccountType.Liability, "21", false, true, NormalSide.Credit),
+                new("2111", "Salaries payable",           AccountType.Liability, "21", false, true, NormalSide.Credit),
                 new("22",   "Long term liabilities", AccountType.Liability, "2",  true,  false, NormalSide.Credit),
 
                 // 3 Equity
@@ -164,7 +167,10 @@ namespace Pos.Persistence.Seeding
                 // 6 Parties
                 new("6",    "Parties",              AccountType.Parties, null,  true,  false, NormalSide.Debit),
                 new("61",   "Suppliers",              AccountType.Parties, "6",   true,  false, NormalSide.Credit),
+                new("6100", "Suppliers (control)",   AccountType.Parties,   "61",  false, true,  NormalSide.Credit),
                 new("62",   "Customers",            AccountType.Parties, "6",   true,  false, NormalSide.Debit),
+                new("6200", "Customers (control)",   AccountType.Parties,   "62",  false, true,  NormalSide.Debit),
+
                 new("63",   "Staff",               AccountType.Parties, "6",   true,  false, NormalSide.Debit),
                 new("64",   "Others",               AccountType.Parties, "6",   true,  false, NormalSide.Debit),
                 

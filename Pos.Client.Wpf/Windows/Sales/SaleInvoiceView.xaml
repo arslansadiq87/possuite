@@ -5,9 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls"
+        xmlns:Conv="clr-namespace:Pos.Client.Wpf.Converters"
         mc:Ignorable="d"
         MinHeight="400" MinWidth="800" FocusManager.IsFocusScope="True">
-   
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <Conv:BoolToVisibilityInverseConverter x:Key="BoolToVisibilityInverse"/>
+    </UserControl.Resources>
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>        <!-- Till bar -->
@@ -201,7 +205,15 @@
                             <TextBox x:Name="FooterBox" Width="300" Height="28"
                              VerticalContentAlignment="Center"
                              TextChanged="FooterBox_TextChanged"/>
+                            
                         </StackPanel>
+                        <TextBlock Text="Card disabled for this outlet"
+           Foreground="OrangeRed"
+           FontWeight="SemiBold"
+           Visibility="{Binding ElementName=RootSaleView, Path=IsCardEnabled,
+                                Converter={StaticResource BoolToVisibilityInverse}}" />
+
+
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Left">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">

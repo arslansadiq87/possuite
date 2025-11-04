@@ -69,4 +69,9 @@ public class InvoiceSettings
 
     public Outlet? Outlet { get; set; }
     public ICollection<InvoiceLocalization> Localizations { get; set; } = new List<InvoiceLocalization>();
+    // --- NEW: per-outlet posting defaults ---
+    public int? PurchaseBankAccountId { get; set; }          // default bank/clearing for supplier payments (Bank/Card)
+    public int? SalesCardClearingAccountId { get; set; }     // default bank/clearing for sales card receipts
+                                                             // --- END NEW ---
+
 }

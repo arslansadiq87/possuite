@@ -303,20 +303,48 @@
                         <StackPanel Grid.Column="1" Margin="0,0,0,0" VerticalAlignment="Bottom">
                             <GroupBox Header="Payments">
                                 <StackPanel>
+                                    <!-- Advance row -->
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Advance:" Margin="0,0,6,0"/>
                                         <TextBox x:Name="AdvanceAmtBox" Width="80"/>
-                                        <ComboBox x:Name="AdvanceMethodBox" Width="77" Margin="6,0,0,0" SelectedIndex="0">
-                                            <ComboBoxItem Content="Cash"/>
-                                            <ComboBoxItem Content="Card"/>
-                                            <ComboBoxItem Content="Bank"/>
-                                            <ComboBoxItem Content="Other"/>
+
+                                        <!-- Methods: ONLY Cash + Bank -->
+                                        <ComboBox x:Name="AdvanceMethodBox"
+                      Width="100"
+                      Margin="6,0,0,0"
+                      SelectedIndex="0"
+                      SelectionChanged="AdvanceMethodBox_SelectionChanged">
+                                            <ComboBoxItem x:Name="AdvanceMethodCashItem" Content="Cash"/>
+                                            <ComboBoxItem x:Name="AdvanceMethodBankItem" Content="Bank"/>
                                         </ComboBox>
-                                        <Button Content="Add Advance" Margin="6,0,0,0" Click="BtnAddAdvance_Click" Width="85"/>
+
+                                        <!-- Bank picker: visible only when Method==Bank -->
+                                        <StackPanel x:Name="BankPickerPanel"
+                        Orientation="Horizontal"
+                        Margin="8,0,0,0"
+                        Visibility="Collapsed">
+                                            <TextBlock Text="Bank:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <ComboBox x:Name="BankAccountBox"
+                          Width="260"
+                          DisplayMemberPath="Name"
+                          SelectedValuePath="Id"/>
+                                        </StackPanel>
+
+                                        <Button Content="Add Advance"
+                    Margin="6,0,0,0"
+                    Width="100"
+                    Click="BtnAddAdvance_Click"/>
                                     </StackPanel>
 
-                                    <DataGrid x:Name="PaymentsGrid" AutoGenerateColumns="False" Height="120" Margin="0,6,0,0"
-                                        CanUserAddRows="False" IsReadOnly="True" MouseDoubleClick="PaymentsGrid_MouseDoubleClick">
+                                    <!-- keep the payments grid unchanged -->
+                                    <DataGrid x:Name="PaymentsGrid"
+                  AutoGenerateColumns="False"
+                  Height="120"
+                  Margin="0,6,0,0"
+                  CanUserAddRows="False"
+                  IsReadOnly="True"
+                  MouseDoubleClick="PaymentsGrid_MouseDoubleClick"
+                  ContextMenuOpening="PaymentsGrid_ContextMenuOpening">
                                         <DataGrid.ContextMenu>
                                             <ContextMenu>
                                                 <MenuItem Header="Edit…" Click="EditPayment_Click"/>
@@ -333,6 +361,7 @@
                                     </DataGrid>
                                 </StackPanel>
                             </GroupBox>
+
                         </StackPanel>
                     </Grid>
 

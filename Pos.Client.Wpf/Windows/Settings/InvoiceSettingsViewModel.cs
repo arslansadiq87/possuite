@@ -83,6 +83,12 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
     // Footer
     [ObservableProperty] private bool showFooter = true;
+    // ADD — bank defaults
+    [ObservableProperty] private Account? selectedPurchaseBankAccount;
+    [ObservableProperty] private Account? selectedSalesCardClearingAccount;
+
+    // Bank list for the picker
+    public ObservableCollection<Account> BankAccounts { get; } = new();
 
 
     private InvoiceSettings? _loadedSettings;
@@ -171,6 +177,17 @@ public partial class InvoiceSettingsViewModel : ObservableObject
         ShowQr = _loadedSettings.ShowQr;
         ShowCustomerOnReceipt = _loadedSettings.ShowCustomerOnReceipt;
         ShowCashierOnReceipt = _loadedSettings.ShowCashierOnReceipt;
+
+        // --- Bank defaults (Sales card clearing / Purchase bank) ---
+        await LoadBankAccountsAsync(outletId);
+        SelectedPurchaseBankAccount = (_loadedSettings.PurchaseBankAccountId is int pid)
+            ? BankAccounts.FirstOrDefault(a => a.Id == pid)
+            : null;
+        SelectedSalesCardClearingAccount = (_loadedSettings.SalesCardClearingAccountId is int sid)
+            ? BankAccounts.FirstOrDefault(a => a.Id == sid)
+            : null;
+        // ------------------------------------------------------------
+
         PrintOnSave = _loadedSettings.PrintOnSave;
         AskToPrintOnSave = _loadedSettings.AskToPrintOnSave;
         PrintBarcodeOnReceipt = _loadedSettings.PrintBarcodeOnReceipt;
@@ -212,6 +229,25 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
     }
 
+    private async Task LoadBankAccountsAsync(int? outletId)
+    {
+        BankAccounts.Clear();
+        await using var db = await _dbf.CreateDbContextAsync();
+        var q = db.Accounts.AsNoTracking()
+            .Where(a => a.AllowPosting && !a.IsHeader);
+
+        // Prefer outlet-scoped accounts when editing outlet-scoped settings
+        if (outletId != null)
+            q = q.Where(a => a.OutletId == outletId);
+        else
+            q = q.Where(a => a.OutletId == null);
+
+        // Heuristic: same you used in PurchaseView (Name contains “Bank” or code prefix)
+        q = q.Where(a => a.Name.Contains("Bank") || a.Code.StartsWith("101"));
+
+        var list = await q.OrderBy(a => a.Code).ThenBy(a => a.Name).ToListAsync();
+        foreach (var a in list) BankAccounts.Add(a);
+    }
 
 
     private void UpdateCurrentLocalization()
@@ -280,6 +316,10 @@ public partial class InvoiceSettingsViewModel : ObservableObject
         _loadedSettings.TotalsShowBalance = TotalsShowBalance;
 
         _loadedSettings.ShowFooter = ShowFooter;
+        // --- Save bank defaults ---
+        _loadedSettings.PurchaseBankAccountId = SelectedPurchaseBankAccount?.Id;
+        _loadedSettings.SalesCardClearingAccountId = SelectedSalesCardClearingAccount?.Id;
+        // ---------------------------
 
         if (isNew) db.InvoiceSettings.Add(_loadedSettings);
         else db.InvoiceSettings.Update(_loadedSettings);

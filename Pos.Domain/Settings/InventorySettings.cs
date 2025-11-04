@@ -12,5 +12,6 @@ namespace Pos.Domain.Settings
         /// If false: dispatch only posts OUT; a separate Receive step posts IN.
         /// </summary>
         public const bool OneStepTransfers = true;
+
     }
 }

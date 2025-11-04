@@ -18,7 +18,6 @@ using Microsoft.Extensions.DependencyInjection;   // GetRequiredService
 using Pos.Client.Wpf.Services;                    // IPaymentDialogService, PaymentResult
 using System.Linq;
 
-
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class EditSaleWindow : Window
@@ -40,9 +39,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private string? _selectedSalesmanName = null;
         private decimal _invDiscPct = 0m;
         private decimal _invDiscAmt = 0m;
-        // Footer
         private string _invoiceFooter = "";
-
         public bool Confirmed { get; private set; } = false;
         public int NewRevision { get; private set; } = 0;
         public EditSaleWindow(int saleId)
@@ -96,19 +93,15 @@ namespace Pos.Client.Wpf.Windows.Sales
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
             var pick = box.SelectedItem; // Pos.Domain.DTO.ItemIndexDto from the control
             if (pick is null) return;
-
             var adapted = AdaptItem(pick);
-
             // Proposed total in the edit cart (existing + 1)
             var existing = _cart.FirstOrDefault(c => c.ItemId == adapted.Id);
             var proposedCartQty = (existing?.Qty ?? 0m) + 1m;
-
             if (!await GuardEditLineQtyAsync(adapted.Id, proposedCartQty))
             {
                 try { ItemSearch?.FocusSearch(); } catch { }
                 return;
             }
-
             // OK – proceed
             AddItemToCart(adapted);
             try { ItemSearch?.FocusSearch(); } catch { }
@@ -281,7 +274,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 }
             }
         }
-
         
         private void AddItemToCart(ItemIndexDto item)
         {
@@ -330,17 +322,14 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
         {
             if (e.EditAction != DataGridEditAction.Commit) return;
-
             Dispatcher.BeginInvoke(new Action(async () =>
             {
                 if (e.Row?.Item is CartLine l)
                 {
                     var header = (e.Column.Header as string) ?? string.Empty;
-
                     if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
                     {
                         if (l.Qty <= 0) l.Qty = 1;                            // ← ints
-
                         var ok = await GuardEditLineQtyAsync(l.ItemId, l.Qty); // int → decimal (implicit) is OK
                         if (!ok)
                         {
@@ -348,7 +337,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                             if (l.Qty < 1) l.Qty = 1;
                         }
                     }
-
                     // existing discount/price logic…
                     if (header.Contains("Disc %"))
                     {
@@ -358,13 +346,11 @@ namespace Pos.Client.Wpf.Windows.Sales
                     {
                         if ((l.DiscountAmt ?? 0) > 0) l.DiscountPct = null;
                     }
-
                     RecalcLineShared(l);
                     UpdateTotal();
                 }
             }), DispatcherPriority.Background);
         }
-
 
         private async void QtyPlus_Click(object sender, RoutedEventArgs e)
         {
@@ -372,14 +358,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 var proposedCartQty = l.Qty + 1;                  // ← int
                 if (!await GuardEditLineQtyAsync(l.ItemId, proposedCartQty)) return;
-
                 l.Qty = proposedCartQty;                          // ← int to int
                 RecalcLineShared(l);
                 UpdateTotal();
             }
         }
-
-
 
         private void QtyMinus_Click(object sender, RoutedEventArgs e)
         {
@@ -448,7 +431,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 adjNetSum += adjNet;
                 adjTaxSum += adjTax;
             }
-
             var subtotal = adjNetSum;
             var tax = adjTaxSum;
             var grand = subtotal + tax;
@@ -610,23 +592,18 @@ namespace Pos.Client.Wpf.Windows.Sales
             var origQtyByItem = _origLines
                 .GroupBy(x => x.ItemId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
-
             var newQtyByItem = _cart
                 .GroupBy(x => x.ItemId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
-
             var allItemIds = origQtyByItem.Keys.Union(newQtyByItem.Keys).Distinct().ToList();
-
             // Collect OUT deltas for guard and all StockEntry rows to write
             var pendingOutDeltas = new List<(int itemId, int outletId, InventoryLocationType locType, int locId, decimal delta)>();
             var pendingEntries = new List<StockEntry>();
-
             foreach (var itemId in allItemIds)
             {
                 var oldQty = origQtyByItem.TryGetValue(itemId, out var oq) ? oq : 0m;
                 var newQty = newQtyByItem.TryGetValue(itemId, out var nq) ? nq : 0m;
                 var deltaQty = newQty - oldQty; // +ve => extra sold (OUT); -ve => reduced (IN)
-
                 if (deltaQty > 0m)
                 {
                     // More being sold in this revision -> OUT (negative)
@@ -668,21 +645,17 @@ namespace Pos.Client.Wpf.Windows.Sales
                 }
                 // deltaQty == 0m -> nothing to write for this item
             }
-
             // Link original -> revised (make sure it's tracked in this context)
             var origTracked = db.Sales.First(s => s.Id == _orig.Id);
             origTracked.RevisedToSaleId = newSale.Id;
-
             // Guard once for all OUT deltas (will throw if any would go negative)
             if (pendingOutDeltas.Count > 0)
             {
                 var guard = new StockGuard(db);
                 await guard.EnsureNoNegativeAtLocationAsync(pendingOutDeltas.ToArray());
             }
-
             // Now it’s safe to write stock entries
             db.StockEntries.AddRange(pendingEntries);
-
             db.SaveChanges();
             tx.Commit();
             // === GL POST: Amendment delta (runs once after revision commit) ===
@@ -698,7 +671,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                     if (!already)
                     {
                         var gl = App.Services.GetRequiredService<IGlPostingService>();
-
                         // We already computed these earlier in SaveRevision_Click:
                         //   deltaSub, deltaTax, deltaGrand = deltaSub + deltaTax (non-negative)
                         await gl.PostSaleRevisionAsync(newSale, deltaSub, deltaTax);
@@ -709,7 +681,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 System.Diagnostics.Debug.WriteLine("GL post (revision) failed: " + ex);
             }
-
             try
             {
                 Pos.Client.Wpf.Printing.ReceiptPrinter.PrintSale(
@@ -724,7 +695,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 MessageBox.Show("Printed with error: " + ex.Message, "Print");
             }
-
             Confirmed = true;
             NewRevision = newSale.Revision;
             MessageBox.Show($"Amendment saved.\nInvoice {_orig.CounterId}-{_orig.InvoiceNumber}\nRevision {newSale.Revision}\nDifference: {(deltaGrand >= 0 ? "+" : "")}{deltaGrand:N2}", "Success");
@@ -756,7 +726,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                     LineTotal = l.LineTotal
                 });
             }
-
             _invDiscPct = _orig.InvoiceDiscountAmt.HasValue ? 0m : (_orig.InvoiceDiscountPct ?? 0m);
             _invDiscAmt = _orig.InvoiceDiscountAmt ?? 0m;
             InvDiscPctBox.Text = (_invDiscPct > 0m) ? _invDiscPct.ToString(CultureInfo.InvariantCulture) : "";
@@ -771,11 +740,9 @@ namespace Pos.Client.Wpf.Windows.Sales
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
-
         // Original qty of this item on the ORIGINAL invoice (already deducted from stock)
         private decimal GetOriginalQty(int itemId)
             => _origLines?.Where(l => l.ItemId == itemId).Sum(l => l.Qty) ?? 0m;
-
         /// <summary>
         /// In amendments, only the "extra OUT" beyond original needs guarding.
         /// proposedCartQty = qty for this item currently in the edit cart (after user's change).
@@ -787,22 +754,19 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             var originalQty = GetOriginalQty(itemId);
             var extraOut = proposedCartQty - originalQty;
-
             if (extraOut <= 0m) return true; // no additional OUT, always OK
-
             using var db = new PosClientDbContext(_dbOptions);
             var guard = new StockGuard(db);
             try
             {
                 await guard.EnsureNoNegativeAtLocationAsync(new[]
-{
-    (itemId: itemId,
-     outletId: (int)_orig.OutletId,
-     locType: InventoryLocationType.Outlet,
-     locId: (int)_orig.OutletId,
-     delta: -extraOut)
-});
-
+                {
+                    (itemId: itemId,
+                     outletId: (int)_orig.OutletId,
+                     locType: InventoryLocationType.Outlet,
+                     locId: (int)_orig.OutletId,
+                     delta: -extraOut)
+                });
                 return true;
             }
             catch (InvalidOperationException ex)

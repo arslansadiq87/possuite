@@ -520,6 +520,45 @@ namespace Pos.Persistence.Services
 
         }
 
+        // Resolve or create per-outlet "Supplier Advances" posting account without using WPF services.
+        private async Task<int> GetSupplierAdvancesAccountIdAsync(int outletId)
+        {
+            // Need outlet code to build our deterministic account code
+            var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
+            var code = $"113-{outlet.Code}-ADV";
+
+            // If exists, return it
+            var existingId = await _db.Accounts
+                .AsNoTracking()
+                .Where(a => a.OutletId == outletId && a.Code == code)
+                .Select(a => a.Id)
+                .FirstOrDefaultAsync();
+            if (existingId != 0) return existingId;
+
+            // Try to find an "Assets" header to attach under; if not found, parent is null
+            int? assetHeaderId = await _db.Accounts
+                .AsNoTracking()
+                .Where(a => a.OutletId == outletId && a.IsHeader &&
+                            (a.Code == "1" || a.Name == "Assets"))     // adjust if your chart differs
+                .Select(a => (int?)a.Id)
+                .FirstOrDefaultAsync();
+
+            var acc = new Pos.Domain.Entities.Account
+            {
+                OutletId = outletId,
+                Code = code,
+                Name = "Supplier Advances",
+                Type = Pos.Domain.Entities.AccountType.Asset,
+                IsHeader = false,
+                AllowPosting = true,
+                ParentId = assetHeaderId,
+                IsSystem = true
+            };
+
+            _db.Accounts.Add(acc);
+            await _db.SaveChangesAsync();
+            return acc.Id;
+        }
 
 
 
@@ -543,18 +582,19 @@ namespace Pos.Persistence.Services
 
         // (Optional convenience) add/record a payment against a purchase
         public async Task<PurchasePayment> AddPaymentAsync(
-            int purchaseId,
-            PurchasePaymentKind kind,
-            TenderMethod method,
-            decimal amount,
-            string? note,
-            int outletId,
-            int supplierId,
-            int? tillSessionId,
-            int? counterId,
-            string user)
+    int purchaseId,
+    PurchasePaymentKind kind,
+    TenderMethod method,
+    decimal amount,
+    string? note,
+    int outletId,
+    int supplierId,
+    int? tillSessionId,
+    int? counterId,
+    string user,
+    int? bankAccountId = null) // NEW
         {
-            // ----- Load & basic guards -----
+            // ---------- Load & basic guards ----------
             var purchase = await _db.Purchases
                 .Include(p => p.Payments)
                 .FirstAsync(p => p.Id == purchaseId);
@@ -563,73 +603,168 @@ namespace Pos.Persistence.Services
                 throw new InvalidOperationException("Cannot pay a voided purchase.");
 
             var amt = Math.Round(amount, 2);
-            if (amt <= 0)
+            if (amt <= 0m)
                 throw new InvalidOperationException("Amount must be > 0.");
 
-            // ----- Business rules by status -----
-            // Draft (Held): only ADVANCE allowed (cash actually taken, but invoice not posted)
-            // Final (Posted): ON_RECEIVE and ADJUSTMENT allowed; ADVANCE is not logical anymore
+            // ---------- Business rules by status ----------
             switch (purchase.Status)
             {
                 case PurchaseStatus.Draft:
+                    // Only ADVANCE allowed on held (draft) purchases
                     if (kind != PurchasePaymentKind.Advance)
                         throw new InvalidOperationException("Only Advance payments are allowed on held (draft) purchases.");
                     break;
 
                 case PurchaseStatus.Final:
+                    // For finalized purchases, use OnReceive or Adjustment
                     if (kind == PurchasePaymentKind.Advance)
                         throw new InvalidOperationException("Use OnReceive or Adjustment for finalized purchases.");
                     break;
 
                 default:
-                    // Revised behaves like Final for payments, but keep it simple for now:
                     break;
             }
 
-            // Prevent overpayment
+            // Prevent overpayment (against GrandTotal)
             var currentPaid = purchase.Payments.Sum(p => p.Amount);
             if (currentPaid + amt > purchase.GrandTotal)
                 throw new InvalidOperationException("Payment exceeds total.");
 
-            // Ensure consistent Supplier/Outlet on the payment row
-            var paySupplierId = purchase.PartyId; // trust the purchase
-            int payOutletId;
+            // Determine outlet on which to record the payment
+            var payOutletId =
+                (purchase.TargetType == StockTargetType.Outlet && purchase.OutletId is int po && po > 0)
+                ? po
+                : (outletId > 0 ? outletId : throw new InvalidOperationException("Outlet is required for recording the payment."));
 
-            if (purchase.TargetType == StockTargetType.Outlet && purchase.OutletId is int po && po > 0)
+            // ---------- Method constraints ----------
+            if (method != TenderMethod.Cash && method != TenderMethod.Bank)
+                throw new NotSupportedException("Only Cash and Bank methods are allowed for purchase payments.");
+
+            if (method == TenderMethod.Bank)
             {
-                payOutletId = po; // tie to the outlet that received stock
-            }
-            else
-            {
-                if (outletId <= 0)
-                    throw new InvalidOperationException("Outlet is required for recording the payment.");
-                payOutletId = outletId;
+                // Require PurchaseBankAccountId configured for the outlet
+                var settings = await _db.InvoiceSettings.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.OutletId == payOutletId);
+
+                if (settings?.PurchaseBankAccountId is null)
+                    throw new InvalidOperationException("Bank payments are disabled: configure Purchase Bank Account in Invoice Settings for this outlet.");
+
+                if (bankAccountId is null)
+                    throw new InvalidOperationException("Select a bank account for this payment.");
             }
 
-            // ----- Atomic write: payment + optional cash ledger + snapshots -----
+            // ---------- Atomic write: payment + GL + (cash ledger) ----------
             using var tx = await _db.Database.BeginTransactionAsync();
 
             var pay = new PurchasePayment
             {
                 PurchaseId = purchase.Id,
-                SupplierId = paySupplierId,
+                SupplierId = purchase.PartyId, // trust the purchase header
                 OutletId = payOutletId,
                 TsUtc = DateTime.UtcNow,
                 Kind = kind,
                 Method = method,
                 Amount = amt,
-                Note = note,
+                Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
                 CreatedAtUtc = DateTime.UtcNow,
-                CreatedBy = user
+                CreatedBy = user,
+                BankAccountId = bankAccountId // null for Cash; required for Bank (validated above)
             };
 
             _db.PurchasePayments.Add(pay);
             await _db.SaveChangesAsync();
 
-            // Cash ledger only for cash movements
+            // ---------- GL Posting ----------
+            // Resolve credit account for payment: Cash (per-outlet) OR chosen Bank account
+            var ts = DateTime.UtcNow;
+
+            int creditAccountId;
             if (method == TenderMethod.Cash)
             {
-                var cash = new CashLedger
+                // Cash-in-Hand account per outlet: code "111-{Outlet.Code}"
+                var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == payOutletId);
+                var cashCode = $"11101-{outlet.Code}";
+                creditAccountId = await _db.Accounts.AsNoTracking()
+                    .Where(a => a.Code == cashCode && a.OutletId == payOutletId)
+                    .Select(a => a.Id)
+                    .FirstAsync();
+            }
+            else // Bank
+            {
+                creditAccountId = pay.BankAccountId!.Value; // enforced above
+            }
+
+            if (purchase.Status == PurchaseStatus.Draft)
+            {
+                // DRAFT: Dr Supplier Advances, Cr Cash/Bank
+                //var coa = App.Services.GetRequiredService<ICoaService>();
+                var advancesId = await ResolveSupplierAdvancesAccountIdAsync(payOutletId);
+
+
+                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = payOutletId,
+                    AccountId = advancesId,
+                    Debit = amt,
+                    Credit = 0m,
+                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
+                    DocId = purchase.Id,
+                    Memo = $"Advance to supplier ({method})"
+                });
+                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = payOutletId,
+                    AccountId = creditAccountId,
+                    Debit = 0m,
+                    Credit = amt,
+                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
+                    DocId = purchase.Id,
+                    Memo = $"Advance to supplier ({method})"
+                });
+
+                await _db.SaveChangesAsync();
+            }
+            else if (purchase.Status == PurchaseStatus.Final)
+            {
+                // FINAL: Dr Accounts Payable (AP), Cr Cash/Bank
+                // NOTE: adjust "6100" if your AP code is different.
+                var apId = await _db.Accounts.AsNoTracking()
+                    .Where(a => a.Code == "6100")
+                    .Select(a => a.Id)
+                    .FirstAsync();
+
+                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = payOutletId,
+                    AccountId = apId,
+                    Debit = amt,
+                    Credit = 0m,
+                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
+                    DocId = purchase.Id,
+                    Memo = $"Supplier payment ({kind}, {method})"
+                });
+                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
+                {
+                    TsUtc = ts,
+                    OutletId = payOutletId,
+                    AccountId = creditAccountId,
+                    Debit = 0m,
+                    Credit = amt,
+                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
+                    DocId = purchase.Id,
+                    Memo = $"Supplier payment ({kind}, {method})"
+                });
+
+                await _db.SaveChangesAsync();
+            }
+
+            // ---------- Cash drawer (only for Cash) ----------
+            if (method == TenderMethod.Cash)
+            {
+                _db.CashLedgers.Add(new CashLedger
                 {
                     OutletId = payOutletId,
                     CounterId = counterId,
@@ -641,13 +776,16 @@ namespace Pos.Persistence.Services
                     Note = note,
                     CreatedAtUtc = DateTime.UtcNow,
                     CreatedBy = user
-                };
-                _db.CashLedgers.Add(cash);
+                });
                 await _db.SaveChangesAsync();
             }
 
-            // Refresh snapshots
-            var newPaid = purchase.Payments.Sum(p => p.Amount); // includes the one we just added
+            // ---------- Snapshots (paid/due) ----------
+            // Recompute from DB to include this brand-new row reliably
+            var newPaid = await _db.PurchasePayments
+                .Where(p => p.PurchaseId == purchase.Id)
+                .SumAsync(p => p.Amount);
+
             purchase.CashPaid = newPaid;
             purchase.CreditDue = Math.Max(0, purchase.GrandTotal - newPaid);
             await _db.SaveChangesAsync();
@@ -655,6 +793,72 @@ namespace Pos.Persistence.Services
             await tx.CommitAsync();
             return pay;
         }
+
+        // ----------------- Account resolvers (no App / no ICoaService) -----------------
+
+        /// <summary>
+        /// Returns the Outlet Cash-in-Hand account id using code pattern "111-{Outlet.Code}".
+        /// Throws a clear error if not found (so you notice missing seeding).
+        /// </summary>
+        private async Task<int> ResolveCashAccountIdAsync(int outletId)
+        {
+            var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
+            var cashCode = $"11101-{outlet.Code}";
+            var cashId = await _db.Accounts.AsNoTracking()
+                .Where(a => a.Code == cashCode && a.OutletId == outletId)
+                .Select(a => a.Id)
+                .FirstOrDefaultAsync();
+
+            if (cashId == 0)
+                throw new InvalidOperationException($"Cash account '{cashCode}' not found for outlet #{outletId}. Make sure COA seeding created it.");
+
+            return cashId;
+        }
+
+        /// <summary>
+        /// Returns (or creates) the per-outlet "Supplier Advances" posting account under Assets.
+        /// Code pattern: "113-{Outlet.Code}-ADV".
+        /// If the asset header cannot be found, throws with a clear message.
+        /// </summary>
+        private async Task<int> ResolveSupplierAdvancesAccountIdAsync(int outletId)
+        {
+            var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
+            var code = $"113-{outlet.Code}-ADV";
+
+            // Try existing
+            var existingId = await _db.Accounts.AsNoTracking()
+                .Where(a => a.Code == code && a.OutletId == outletId)
+                .Select(a => a.Id)
+                .FirstOrDefaultAsync();
+            if (existingId != 0) return existingId;
+
+            // Find an Assets header for this outlet (preferred) or a shared one.
+            var assetHeader = await _db.Accounts
+                .Where(a => a.IsHeader && a.AllowPosting == false && a.Type == Pos.Domain.Entities.AccountType.Asset
+                            && (a.OutletId == outletId || a.OutletId == null))
+                .OrderByDescending(a => a.OutletId) // prefer outlet-specific over shared
+                .FirstOrDefaultAsync();
+
+            if (assetHeader == null)
+                throw new InvalidOperationException("Assets header account not found. Ensure your Chart of Accounts seeding includes an Asset header.");
+
+            var acc = new Pos.Domain.Entities.Account
+            {
+                OutletId = outletId,
+                Code = code,
+                Name = "Supplier Advances",
+                Type = Pos.Domain.Entities.AccountType.Asset,
+                IsHeader = false,
+                AllowPosting = true,
+                ParentId = assetHeader.Id,
+                IsSystem = true
+            };
+
+            _db.Accounts.Add(acc);
+            await _db.SaveChangesAsync();
+            return acc.Id;
+        }
+
 
         public async Task<(Purchase purchase, List<PurchasePayment> payments)> GetWithPaymentsAsync(int purchaseId)
         {

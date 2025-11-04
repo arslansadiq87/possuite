@@ -24,22 +24,31 @@ using Pos.Persistence.Services;
 using System.Linq;
 using Pos.Client.Wpf.Printing;
 
-
-//using Pos.Client.Wpf.Contracts; // for App.Services.GetRequiredService
-
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class SaleInvoiceView : UserControl
     {
+
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
         private readonly ITerminalContext _ctx;
         private int? _selectedCustomerId;
-
         private readonly IInvoiceSettingsService _invSettings;
         private bool _printOnSave;
         private bool _askBeforePrintOnSave;
+        // --- NEW: card enable/disable flag based on invoice settings ---
+        private bool _isCardEnabled = false;
+        //public bool IsCardEnabled => _isCardEnabled;  // optional: for XAML binding if you add any indicator later
+                                                      // --- END NEW ---
+        public static readonly DependencyProperty IsCardEnabledProperty =
+            DependencyProperty.Register(nameof(IsCardEnabled), typeof(bool), typeof(SaleInvoiceView), new PropertyMetadata(false));
+
+        public bool IsCardEnabled
+        {
+            get => (bool)GetValue(IsCardEnabledProperty);
+            set => SetValue(IsCardEnabledProperty, value);
+        }
 
         private int OutletId => AppState.Current?.CurrentOutletId ?? 1;
         private int CounterId => AppState.Current?.CurrentCounterId ?? 1;
@@ -49,7 +58,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         private string? _enteredCustomerName;
         private string? _enteredCustomerPhone;
         //private readonly IStaffDirectory _staff;
-
         private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
         private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
         private int? _selectedSalesmanId = null;
@@ -63,18 +71,13 @@ namespace Pos.Client.Wpf.Windows.Sales
         public SaleInvoiceView(IDialogService dialogs, ITerminalContext ctx)
         {
             InitializeComponent();
-
             _ctx = ctx;
             _dialogs = dialogs;
-            
             _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>();
-
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
-
             _dbOptions = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString)   // <-- use the SAME connection string
                 .Options;
-
             CartGrid.ItemsSource = _cart;
             UpdateTotal();
             LoadItemIndex();
@@ -83,26 +86,19 @@ namespace Pos.Client.Wpf.Windows.Sales
             AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), /*handledEventsToo:*/ true);
             FooterBox.Text = _invoiceFooter;
             //CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
-
-
             Loaded += (_, __) =>
             {
-                // 1) Load invoice settings (async)
-                //var (s, _) = await _invSettings.GetAsync(_ctx.OutletId, lang: "en");
-
-
                 var (s, _) = _invSettings.GetAsync(_ctx.OutletId, "en").GetAwaiter().GetResult();
-
-
                 _printOnSave = s.PrintOnSave;
                 _askBeforePrintOnSave = s.AskToPrintOnSave;
+                // --- NEW: set card availability for this outlet ---
+                IsCardEnabled = (s.SalesCardClearingAccountId != null);
+                // --- END NEW ---
 
                 UpdateInvoicePreview();
                 UpdateInvoiceDateNow();
                 UpdateLocationUi();
                 WalkInCheck_Changed(WalkInCheck!, new RoutedEventArgs());
-
-                // Sync once when everything exists
                 if (Window.GetWindow(this) is Window w)
                     w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
                 FocusScan();
@@ -111,9 +107,7 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async Task MaybePrintReceiptAsync(Sale sale, TillSession? open)
         {
-            // _printOnSave and _askBeforePrintOnSave should already be set from _invSettings.GetAsync(...)
             var doPrint = _printOnSave;
-
             if (_askBeforePrintOnSave)
             {
                 var ans = MessageBox.Show(
@@ -121,15 +115,11 @@ namespace Pos.Client.Wpf.Windows.Sales
                     "Print",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
-
                 doPrint = (ans == MessageBoxResult.Yes);
             }
-
             if (!doPrint) return;
-
             try
             {
-                // Uses per-outlet settings (printer name, outlet display name)
                 await ReceiptPrinter.PrintSaleAsync(
                     sale: sale,
                     cart: _cart,
@@ -167,20 +157,14 @@ namespace Pos.Client.Wpf.Windows.Sales
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
             var pick = box.SelectedItem;
             if (pick is null) return;
-
             var itemId = pick.Id;
-            // Proposed total = existing qty in cart (for the same item) + 1
             var existing = _cart.FirstOrDefault(c => c.ItemId == itemId);
             var proposedTotal = (existing?.Qty ?? 0) + 1;
-
             if (!await GuardSaleQtyAsync(itemId, proposedTotal))
             {
-                // Do not add
                 try { ItemSearch?.FocusSearch(); } catch { }
                 return;
             }
-
-            // OK – proceed to add/increment
             if (existing != null)
             {
                 existing.Qty += 1;
@@ -193,7 +177,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
             try { ItemSearch?.FocusSearch(); } catch { }
         }
-
 
         private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
         {
@@ -215,17 +198,14 @@ namespace Pos.Client.Wpf.Windows.Sales
                 "Choose an action:\n\nYes = CLEAR this invoice (reset form)\nNo = HOLD this invoice for later\nCancel = Do nothing",
                 "Clear or Hold?",
                 DialogButtons.YesNoCancel);
-
             switch (res)
             {
                 case DialogResult.Yes:
                     ClearCurrentInvoice(confirm: true);
                     break;
-
                 case DialogResult.No:
                     HoldCurrentInvoiceQuick();
                     break;
-
                 default:
                     return;
             }
@@ -255,7 +235,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (CustNameBox != null) CustNameBox.Text = "";
             if (CustPhoneBox != null) CustPhoneBox.Text = "";
             if (ReturnCheck != null) ReturnCheck.IsChecked = false;
-
             _currentHeldSaleId = null; // no longer editing a held draft
             UpdateTotal();
         }
@@ -266,7 +245,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             var lines = _cart.ToList();
             var lineNetSum = lines.Sum(l => l.LineNet);
             var lineTaxSum = lines.Sum(l => l.LineTax);
-
             if (_invDiscPct > 100m) _invDiscPct = 100m;
             var baseForInvDisc = lineNetSum;
             var invDiscValue = 0m;
@@ -276,7 +254,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                     ? Math.Min(_invDiscAmt, baseForInvDisc)
                     : PricingMath.RoundMoney(baseForInvDisc * (_invDiscPct / 100m));
             }
-
             var factor = (baseForInvDisc > 0m) ? (baseForInvDisc - invDiscValue) / baseForInvDisc : 1m;
             decimal adjNetSum = 0m, adjTaxSum = 0m;
             foreach (var l in lines)
@@ -353,7 +330,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             };
             db.Sales.Add(sale);
             db.SaveChanges();
-
             foreach (var l in _cart)
             {
                 db.SaleLines.Add(new SaleLine
@@ -396,23 +372,17 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void LoadSalesmen()
         {
             using var db = new PosClientDbContext(_dbOptions);
-
-            // Pull active staff who are marked as salesmen
             var list = db.Staff
                 .AsNoTracking()
                 .Where(s => s.IsActive && s.ActsAsSalesman)
                 .OrderBy(s => s.FullName)
                 .ToList();
-
-            // Optional first row: "-- None --"
             list.Insert(0, new Pos.Domain.Hr.Staff { Id = 0, FullName = "-- None --", IsActive = true });
-
             SalesmanBox.ItemsSource = list;
             SalesmanBox.DisplayMemberPath = "FullName";
             SalesmanBox.SelectedValuePath = "Id";
             SalesmanBox.SelectedIndex = list.Count > 0 ? 0 : -1;
         }
-
 
         private void SalesmanBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -445,14 +415,11 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void WalkInCheck_Changed(object sender, RoutedEventArgs e)
         {
             var isWalkIn = WalkInCheck?.IsChecked == true;
-
             // Enable name/phone for Walk-in; disable for Registered
             if (CustNameBox != null) CustNameBox.IsEnabled = isWalkIn;
             if (CustPhoneBox != null) CustPhoneBox.IsEnabled = isWalkIn;
-
             if (isWalkIn)
             {
-                // Switching to Walk-in → clear registered selection
                 _selectedCustomerId = null;
                 if (CustomerPicker != null)
                 {
@@ -460,9 +427,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                     CustomerPicker.SelectedCustomerId = null;
                     CustomerPicker.Query = "";
                 }
-                // Keep any typed name/phone (useful for receipts). If you prefer to clear:
-                // CustNameBox.Text = "";
-                // CustPhoneBox.Text = "";
             }
             else
             {
@@ -471,8 +435,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if (CustPhoneBox != null) CustPhoneBox.Text = "";
             }
         }
-
-
 
         private void ReturnCheck_Changed(object sender, RoutedEventArgs e)
         {
@@ -525,7 +487,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                        .Where(b => b.ItemId == i.Id)
                        .Select(b => b.Code)
                        .FirstOrDefault()
-
                  orderby i.Name
                  select new ItemIndexDto(
                      i.Id,
@@ -542,7 +503,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                      i.Variant1Name, i.Variant1Value,
                      i.Variant2Name, i.Variant2Value
                  )).ToList();
-
             DataContextItemIndex.Clear();
             foreach (var it in list) DataContextItemIndex.Add(it);
         }
@@ -592,10 +552,6 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             InventoryLocationText.Text = $"Outlet: {_ctx.OutletName}";
         }
-
-
-
-
         private void UpdateTotal()
         {
             // 1) sum current lines (they already include per-line discounts/tax calculations)
@@ -685,10 +641,41 @@ namespace Pos.Client.Wpf.Windows.Sales
                 RestoreFocusToScan();
                 return;
             }
-
+            //var enteredCash = payResult.Cash;
+            //var enteredCard = payResult.Card;
+            //var paid = enteredCash + enteredCard;
             var enteredCash = payResult.Cash;
             var enteredCard = payResult.Card;
+
+            // --- NEW: block card if not configured; force collect remaining as cash ---
+            if (!_isCardEnabled && enteredCard > 0m)
+            {
+                MessageBox.Show(
+                    "Card payments are disabled for this outlet. Please collect cash.",
+                    "Card Disabled", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // Ask for the card portion as cash using your difference mode
+                var cashOnly = await paySvc.ShowAsync(
+                    subtotal, invDiscValue, taxtotal, grand,
+                    itemsCount, qtySum,
+                    differenceMode: true,                 // collect only the difference
+                    amountDelta: enteredCard,             // need to cover the previously-entered card amount
+                    title: "Collect Remaining (Cash Only)");
+
+                if (!cashOnly.Confirmed)
+                {
+                    RestoreFocusToScan();
+                    return;
+                }
+
+                // Add the difference to cash; zero-out card since it’s not allowed
+                enteredCash += cashOnly.Cash;
+                enteredCard = 0m;
+            }
+            // --- END NEW ---
+
             var paid = enteredCash + enteredCard;
+
             if (paid + 0.01m < grand) // safety check; PayWindow already enforces this
             {
                 MessageBox.Show("Payment is less than total.");
@@ -709,13 +696,10 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             int cashierIdLocal = cashier.Id;
             string cashierDisplay = cashier.DisplayName ?? "Unknown";
-
             int? salesmanIdLocal = _selectedSalesmanId;
-
             // If not set via _selectedSalesmanId, try from the combobox
             if (!salesmanIdLocal.HasValue && SalesmanBox?.SelectedItem is Pos.Domain.Hr.Staff selStaff)
                 salesmanIdLocal = (selStaff.Id == 0) ? (int?)null : selStaff.Id;
-
             // Validate salesman against Staff (ActsAsSalesman + IsActive)
             if (salesmanIdLocal.HasValue)
             {
@@ -725,28 +709,21 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 if (!exists) salesmanIdLocal = null;
             }
-
-
             if (!db.Users.AsNoTracking().Any(x => x.Id == cashierIdLocal))
             {
                 MessageBox.Show("Cashier not found in Users table."); return;
             }
-            
             // ========== Customer ==========
             bool isWalkIn = (WalkInCheck?.IsChecked == true);
             var customerKind = isWalkIn ? CustomerKind.WalkIn : CustomerKind.Registered;
             int? customerId = isWalkIn ? null : _selectedCustomerId;
             string? customerName = isWalkIn ? null : (CustNameBox?.Text?.Trim());
             string? customerPhone = isWalkIn ? null : (CustPhoneBox?.Text?.Trim());
-
             // ===== Credit guard: on-account sales require a registered customer =====
                            // already computed above
             if (grand <= 0m) { MessageBox.Show("Total must be greater than 0."); return; }
-
             var creditPortion = grand - paid;              // amount to post to customer ledger
-                                                           // allow tiny rounding slack
             bool wantsCredit = (creditPortion > 0.009m);
-
             if (wantsCredit && (customerId == null))
             {
                 MessageBox.Show(
@@ -755,14 +732,13 @@ namespace Pos.Client.Wpf.Windows.Sales
                     "Customer required for credit", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             // ========== Return flag ==========
             bool isReturnFlow = (ReturnCheck?.IsChecked == true);
             // ========== E-receipt & footer ==========
             string eReceiptToken = Guid.NewGuid().ToString("N");
             string? eReceiptUrl = null;
             string? invoiceFooter = string.IsNullOrWhiteSpace(FooterBox?.Text) ? null : FooterBox!.Text;
-            
+           
             // --- Negative stock guard (Outlet) BEFORE we allocate invoice or write anything
             {
                 var guard = new StockGuard(db);
@@ -778,11 +754,9 @@ namespace Pos.Client.Wpf.Windows.Sales
                         delta: -g.Sum(x => Convert.ToDecimal(x.Qty))
                     ))
                     .ToArray();
-
                 // Will throw InvalidOperationException if any item would go < 0
                 await guard.EnsureNoNegativeAtLocationAsync(deltas);
             }
-
             // ===== Start a transaction only AFTER the user confirms =====
             using var tx = db.Database.BeginTransaction();
             // ===================== Allocate invoice number per counter (inside tx) =====================
@@ -869,21 +843,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             db.SaveChanges();
             tx.Commit();
-            // --- Lines & stock ---
-            //foreach (var line in _cart)
-            //{
-            //    db.SaleLines.Add(new SaleLine
-            //    {
-            //        // ...
-            //    });
-            //    db.StockEntries.Add(new StockEntry
-            //    {
-            //        // ...
-            //    });
-            //}
-            //db.SaveChanges();
-            //tx.Commit();
-
             // === GL POST: Sale / SaleReturn (runs once per finalized doc) ===
             try
             {
@@ -912,7 +871,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 // Non-fatal: sale is saved; log and continue
                 System.Diagnostics.Debug.WriteLine("GL post failed: " + ex);
             }
-
             // If this sale came from a held draft, mark the draft as voided (or delete it)
             if (_currentHeldSaleId.HasValue)
             {
@@ -928,7 +886,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 }
                 _currentHeldSaleId = null;
             }
-
             // If this sale came from a held draft, mark the draft as voided (or delete it)
             if (_currentHeldSaleId.HasValue)
             {
@@ -952,14 +909,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             try
             {
                 var poster = App.Services.GetRequiredService<PartyPostingService>();
-
                 // paidNow uses the same values you saved into the sale (non-nullable decimals)
                 var paidNow = sale.CashAmount + sale.CardAmount;
-
                 // Reuse the outer computed creditPortion, OR recompute from the saved sale.
                 // Prefer recompute from the saved sale to avoid any future mismatch:
                 var unpaid = sale.Total - paidNow;
-
                 if (unpaid > 0.009m && sale.CustomerId.HasValue)
                 {
                     await poster.PostAsync(
@@ -979,27 +933,19 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show("Sale saved, but posting to customer ledger failed:\n" + ex.Message,
                     "Ledger warning", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-
-
             UpdateInvoicePreview();  // show the next invoice that will be used
             UpdateInvoiceDateNow();  // timestamp of current screen state
             try
             {
-                //Pos.Client.Wpf.Printing.ReceiptPrinter.PrintSale(
-                //    sale, _cart, open /* TillSession */, cashierDisplay, _selectedSalesmanName
-                //);
-                // NEW (after db.SaveChangesAsync succeeds and status = Final)
                 await MaybePrintReceiptAsync(sale, open);
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Printed with error: " + ex.Message, "Print");
             }
-            // --- Reset UI for next sale ---
             _cart.Clear();
             _invDiscPct = 0m; _invDiscAmt = 0m;
             InvDiscPctBox.Text = ""; InvDiscAmtBox.Text = "";
-            // NOTE: CashBox/CardBox live in PayWindow now, so do NOT reference them here
             if (WalkInCheck != null) WalkInCheck.IsChecked = true;
             if (CustNameBox != null) CustNameBox.Text = "";
             if (CustPhoneBox != null) CustPhoneBox.Text = "";
@@ -1015,7 +961,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 var proposedTotal = l.Qty + 1;
                 if (!await GuardSaleQtyAsync(l.ItemId, proposedTotal)) return;
-
                 l.Qty = proposedTotal;
                 RecalcLineShared(l);
                 UpdateTotal();
@@ -1060,7 +1005,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
         {
             if (e.EditAction != DataGridEditAction.Commit) return;
-
             // Defer until edit box value is applied to the bound object
             Dispatcher.BeginInvoke(new Action(async () =>
             {
@@ -1070,15 +1014,10 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                     if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
                     {
-                        // Ensure positive integer/decimal if you support decimals
                         if (l.Qty <= 0) { l.Qty = 1; }
-
                         var ok = await GuardSaleQtyAsync(l.ItemId, l.Qty);
                         if (!ok)
                         {
-                            // Roll back one step (previous valid state). If you track old value, set that;
-                            // otherwise clamp to the maximum allowed by calling guard in a quick bisection,
-                            // but simplest UX is: revert to 1 or previous qty - 1:
                             l.Qty -= 1;
                             if (l.Qty < 1) l.Qty = 1;
                         }
@@ -1093,13 +1032,11 @@ namespace Pos.Client.Wpf.Windows.Sales
                     {
                         if ((l.DiscountAmt ?? 0) > 0) l.DiscountPct = null;
                     }
-
                     RecalcLineShared(l);
                     UpdateTotal();
                 }
             }), DispatcherPriority.Background);
         }
-
 
         private void ResumeHeld(int saleId)
         {
@@ -1141,7 +1078,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (!string.IsNullOrWhiteSpace(s.InvoiceFooter) && FooterBox != null) FooterBox.Text = s.InvoiceFooter;
             if (SalesmanBox != null)
                 SalesmanBox.SelectedValue = _selectedSalesmanId ?? 0;
-
             // optional: set SalesmanBox.SelectedValue = s.SalesmanId ?? 0;
             _currentHeldSaleId = s.Id;
             UpdateTotal();
@@ -1163,7 +1099,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 var now = DateTime.UtcNow;
                 _escCount = (now - _lastEsc).TotalMilliseconds <= EscChordMs ? _escCount + 1 : 1;
                 _lastEsc = now;
-
                 if (_escCount >= 2)
                 {
                     _escCount = 0;
@@ -1190,8 +1125,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         }
         public void RestoreFocusToScan() => FocusScan();
 
-        // Validate a single line's proposed qty (total to sell for this item in this invoice)
-        // We pass the proposed total OUT delta (-qty) to the shared StockGuard.
         private async Task<bool> GuardSaleQtyAsync(int itemId, decimal proposedQty)
         {
             if (proposedQty <= 0) return true; // nothing to guard
@@ -1225,12 +1158,9 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             var picked = CustomerPicker.SelectedCustomer;
             if (picked == null) return;
-
             _selectedCustomerId = picked.Id;
-
             // Switch to Registered flow
             if (WalkInCheck != null) WalkInCheck.IsChecked = false;
-
             // Fill for receipt; still editable
             if (CustNameBox != null) CustNameBox.Text = picked.Name;
             if (CustPhoneBox != null) CustPhoneBox.Text = picked.Phone;
@@ -1240,7 +1170,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             _selectedCustomerId = null;
             if (WalkInCheck != null) WalkInCheck.IsChecked = true; // Walk-in
-
             // Clear UI
             CustomerPicker.SelectedCustomer = null;
             CustomerPicker.SelectedCustomerId = null;
@@ -1248,8 +1177,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (CustNameBox != null) CustNameBox.Text = "";
             if (CustPhoneBox != null) CustPhoneBox.Text = "";
         }
-
-
     }
 }
     

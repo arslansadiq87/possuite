@@ -10,6 +10,7 @@ namespace Pos.Client.Wpf.Services
     {
         Task<int> EnsureOutletCashAccountAsync(int outletId);
         Task<int> GetCashAccountIdAsync(int? outletId);
+        Task<int> GetSupplierAdvancesAccountIdAsync(int outletId);
 
         // NEW: add Till helpers (non-breaking addition)
         Task<int> EnsureOutletTillAccountAsync(int outletId);
@@ -27,20 +28,23 @@ namespace Pos.Client.Wpf.Services
         private readonly PosClientDbContext _db;
         public CoaService(PosClientDbContext db) => _db = db;
 
-        private const string CASH_CODE = "111"; // company-level header code for Cash in Hand
-        private const string TILL_CODE = "112";
+        //private const string CASH_CODE = "111"; // company-level header code for Cash in Hand
+        //private const string TILL_CODE = "112";
+        private const string CASH_HEADER = "111";  // header under which both live
+        private const string CASH_CHILD = "11101"; // Cash in Hand
+        private const string TILL_CHILD = "11102"; // Cash in Till
 
         public async Task<int> EnsureOutletCashAccountAsync(int outletId)
         {
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
 
             // Ensure company-level CASH header exists and is marked as header/system
-            var header = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_CODE && a.OutletId == null);
+            var header = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
             if (header == null)
             {
                 header = new Account
                 {
-                    Code = CASH_CODE,
+                    Code = CASH_HEADER,
                     Name = "Cash in Hand",
                     Type = AccountType.Asset,
                     NormalSide = NormalSide.Debit,
@@ -64,7 +68,7 @@ namespace Pos.Client.Wpf.Services
             }
 
             // Child code is “111-{OutletCode}”
-            var childCode = $"{CASH_CODE}-{outlet.Code}";
+            var childCode = $"{CASH_CHILD}-{outlet.Code}";
             var child = await _db.Accounts
                 .FirstOrDefaultAsync(a => a.Code == childCode && a.OutletId == outletId);
 
@@ -94,12 +98,12 @@ namespace Pos.Client.Wpf.Services
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
 
             // Ensure "Cash in Till" HEADER exists (company-level)
-            var header = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == TILL_CODE && a.OutletId == null);
+            var header = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
             if (header == null)
             {
                 header = new Account
                 {
-                    Code = TILL_CODE,
+                    Code = CASH_HEADER,
                     Name = "Cash in Till",
                     Type = AccountType.Asset,
                     NormalSide = NormalSide.Debit,
@@ -122,7 +126,7 @@ namespace Pos.Client.Wpf.Services
             }
 
             // Child code is “112-{OutletCode}”
-            var childCode = $"{TILL_CODE}-{outlet.Code}";
+            var childCode = $"{TILL_CHILD}-{outlet.Code}";
             var child = await _db.Accounts
                 .FirstOrDefaultAsync(a => a.Code == childCode && a.OutletId == outletId);
 
@@ -151,12 +155,12 @@ namespace Pos.Client.Wpf.Services
         {
             if (outletId == null)
             {
-                var h = await _db.Accounts.AsNoTracking().FirstAsync(a => a.Code == CASH_CODE && a.OutletId == null);
+                var h = await _db.Accounts.AsNoTracking().FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
                 return h.Id;
             }
 
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId.Value);
-            var code = $"{CASH_CODE}-{outlet.Code}";
+            var code = $"{CASH_CHILD}-{outlet.Code}";
             var acc = await _db.Accounts.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.Code == code && a.OutletId == outlet.Id);
             if (acc != null) return acc.Id;
@@ -168,7 +172,7 @@ namespace Pos.Client.Wpf.Services
         public async Task<int> GetTillAccountIdAsync(int outletId)
         {
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
-            var code = $"{TILL_CODE}-{outlet.Code}";
+            var code = $"{TILL_CHILD}-{outlet.Code}";
             var acc = await _db.Accounts.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.Code == code && a.OutletId == outlet.Id);
             if (acc != null) return acc.Id;
@@ -181,12 +185,12 @@ namespace Pos.Client.Wpf.Services
         {
             var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
 
-            var header = await db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_CODE && a.OutletId == null);
+            var header = await db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
             if (header == null)
             {
                 header = new Account
                 {
-                    Code = CASH_CODE,
+                    Code = CASH_HEADER,
                     Name = "Cash in Hand",
                     Type = AccountType.Asset,
                     NormalSide = NormalSide.Debit,
@@ -208,7 +212,7 @@ namespace Pos.Client.Wpf.Services
                 await db.SaveChangesAsync();
             }
 
-            var childCode = $"{CASH_CODE}-{outlet.Code}";
+            var childCode = $"{CASH_CHILD}-{outlet.Code}";
             var child = await db.Accounts
                 .FirstOrDefaultAsync(a => a.Code == childCode && a.OutletId == outletId);
 
@@ -236,12 +240,12 @@ namespace Pos.Client.Wpf.Services
         {
             var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
 
-            var header = await db.Accounts.FirstOrDefaultAsync(a => a.Code == TILL_CODE && a.OutletId == null);
+            var header = await db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
             if (header == null)
             {
                 header = new Account
                 {
-                    Code = TILL_CODE,
+                    Code = CASH_HEADER,
                     Name = "Cash in Till",
                     Type = AccountType.Asset,
                     NormalSide = NormalSide.Debit,
@@ -263,7 +267,7 @@ namespace Pos.Client.Wpf.Services
                 await db.SaveChangesAsync();
             }
 
-            var childCode = $"{TILL_CODE}-{outlet.Code}";
+            var childCode = $"{TILL_CHILD}-{outlet.Code}";
             var child = await db.Accounts
                 .FirstOrDefaultAsync(a => a.Code == childCode && a.OutletId == outletId);
 
@@ -292,21 +296,58 @@ namespace Pos.Client.Wpf.Services
             if (outletId == null)
             {
                 var h = await db.Accounts.AsNoTracking()
-                    .FirstAsync(a => a.Code == CASH_CODE && a.OutletId == null);
+                    .FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
                 return h.Id;
             }
 
             var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId.Value);
-            var code = $"{CASH_CODE}-{outlet.Code}";
+            var code = $"{CASH_CHILD}-{outlet.Code}";
             var acc = await db.Accounts.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.Code == code && a.OutletId == outlet.Id);
             return acc?.Id ?? await EnsureOutletCashAccountAsync(db, outlet.Id);
         }
 
+        public async Task<int> GetSupplierAdvancesAccountIdAsync(int outletId)
+        {
+            // Code pattern: "113-{OUTLET}-ADV" (Assets: 11x range typically)
+            var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
+            var code = $"113-{outlet.Code}-ADV";
+
+            var existing = await _db.Accounts
+                .AsNoTracking()
+                .Where(a => a.Code == code && a.OutletId == outletId)
+                .Select(a => a.Id)
+                .FirstOrDefaultAsync();
+
+            if (existing != 0) return existing;
+
+            // Create if missing (under Assets header). Adjust parent/header lookups to your structure if needed.
+            var assetHeaderId = await _db.Accounts
+                .Where(a => a.IsHeader && a.Code == "1") // your Asset root/header
+                .Select(a => a.Id)
+                .FirstAsync();
+
+            var acc = new Pos.Domain.Entities.Account
+            {
+                OutletId = outletId,
+                Code = code,
+                Name = "Supplier Advances",
+                Type = Pos.Domain.Entities.AccountType.Asset,
+                IsHeader = false,
+                AllowPosting = true,
+                ParentId = assetHeaderId,
+                IsSystem = true
+            };
+            _db.Accounts.Add(acc);
+            await _db.SaveChangesAsync();
+            return acc.Id;
+        }
+
+
         public async Task<int> GetTillAccountIdAsync(PosClientDbContext db, int outletId)
         {
             var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
-            var code = $"{TILL_CODE}-{outlet.Code}";
+            var code = $"{TILL_CHILD}-{outlet.Code}";
             var acc = await db.Accounts.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.Code == code && a.OutletId == outlet.Id);
             return acc?.Id ?? await EnsureOutletTillAccountAsync(db, outlet.Id);
