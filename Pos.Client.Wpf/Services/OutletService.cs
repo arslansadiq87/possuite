@@ -10,6 +10,8 @@ namespace Pos.Client.Wpf.Services
     {
         Task<int> CreateAsync(Outlet o, CancellationToken ct = default);
         Task UpdateAsync(Outlet o, CancellationToken ct = default);
+        Task<List<Outlet>> GetAllAsync();
+
     }
 
     public sealed class OutletService : IOutletService
@@ -31,6 +33,12 @@ namespace Pos.Client.Wpf.Services
 
             return o.Id;
         }
+        public async Task<List<Outlet>> GetAllAsync()
+        {
+            
+            return await _db.Outlets.AsNoTracking().OrderBy(o => o.Name).ToListAsync();
+        }
+
 
         public async Task UpdateAsync(Outlet o, CancellationToken ct = default)
         {

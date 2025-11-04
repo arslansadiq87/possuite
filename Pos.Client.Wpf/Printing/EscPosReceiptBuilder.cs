@@ -93,10 +93,17 @@ namespace Pos.Client.Wpf.Printing
             var tsLocal = DateTime.Now;
             // If you store sale.Ts in UTC, prefer that:
             // tsLocal = sale.Ts.Kind == DateTimeKind.Utc ? sale.Ts.ToLocalTime() : sale.Ts;
-            Txt($"{tsLocal:yyyy-MM-dd HH:mm}\n");
+            //Txt($"{tsLocal:yyyy-MM-dd HH:mm}\n");
+            // Use UTC from the entity and convert to user display zone
+            var tsText = Pos.Client.Wpf.Services.TimeService.Format(
+                sale.Ts, "yyyy-MM-dd HH:mm");  // if sale.Ts is stored UTC; if not, wrap with SpecifyKind(UTC)
+            Txt($"{tsText}\n");
+
             if (till != null)
             {
-                Txt($"Till: {till.Id}   Opened: {till.OpenTs.ToLocalTime():HH:mm}\n");
+                var openedText = Pos.Client.Wpf.Services.TimeService.Format(
+                    till.OpenTs, "HH:mm");      // same assumption about UTC storage
+                Txt($"Till: {till.Id}   Opened: {openedText}\n");
             }
             if (sale.IsReturn) { Underline(true); Txt("** RETURN / REFUND **\n"); Underline(false); }
             Feed();

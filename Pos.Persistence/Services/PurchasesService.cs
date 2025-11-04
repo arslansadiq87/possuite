@@ -1440,10 +1440,8 @@ namespace Pos.Persistence.Services
             entity2.Status = PurchaseStatus.Voided;
             entity2.UpdatedAtUtc = DateTime.UtcNow;
             entity2.UpdatedBy = user;
-
             // (Optional) record audit row if you keep one
             //_db.AuditLogs.Add(new AuditLog { ... });
-
             await _db.SaveChangesAsync();
             await tx.CommitAsync();
         }
@@ -1453,9 +1451,7 @@ namespace Pos.Persistence.Services
         {
             var r = await _db.Purchases.Include(x => x.Lines)
                                        .FirstAsync(x => x.Id == returnId && x.IsReturn);
-
             if (r.Status == PurchaseStatus.Voided) return;
-
             var postings = await _db.StockEntries
                 .Where(se => se.RefType == "PurchaseReturn" && se.RefId == r.Id)
                 .ToListAsync();
@@ -1494,7 +1490,6 @@ namespace Pos.Persistence.Services
                     TaxRate = g.Any() ? Math.Round(g.Average(x => x.TaxRate), 2) : 0m,
                 })
                 .ToDictionaryAsync(x => x.ItemId, x => x);
-
             // prior amendment deltas (qty only)
             var amendQty = await _db.StockEntries
                 .AsNoTracking()
@@ -1502,11 +1497,9 @@ namespace Pos.Persistence.Services
                 .GroupBy(se => se.ItemId)
                 .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
                 .ToDictionaryAsync(x => x.ItemId, x => x.Qty);
-
             // build effective map
             var ids = baseLines.Keys.Union(amendQty.Keys).ToList();
             var effective = new List<PurchaseLineEffective>(ids.Count);
-
             // minimal item meta
             var itemsMeta = await _db.Items
                 .AsNoTracking()
@@ -1518,12 +1511,9 @@ namespace Pos.Persistence.Services
             {
                 baseLines.TryGetValue(id, out var b);
                 amendQty.TryGetValue(id, out var aQty);
-
                 var qty = (b?.Qty ?? 0m) + (aQty);
                 if (qty <= 0) continue; // nothing left to show
-
                 var meta = itemsMeta.TryGetValue(id, out var m) ? m : null;
-
                 effective.Add(new PurchaseLineEffective
                 {
                     ItemId = id,
@@ -1535,14 +1525,10 @@ namespace Pos.Persistence.Services
                     TaxRate = b?.TaxRate ?? (meta?.DefaultTaxRatePct ?? 0m)
                 });
             }
-
             return effective
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
-
-        // at file top if missing
-
 
         public async Task<decimal> GetRemainingReturnableQtyAsync(int purchaseLineId)
         {
@@ -1554,7 +1540,6 @@ namespace Pos.Persistence.Services
                 .FirstOrDefaultAsync();
 
             if (orig is null) return 0m;
-
             // SUM of positive magnitudes for all returns that reference this line
             // Use ternary to emulate ABS() and nullable SUM to handle empty set => 0
             var returned = await _db.PurchaseLines
@@ -1568,7 +1553,6 @@ namespace Pos.Persistence.Services
             return remaining;
         }
     }
-
     // ---------- Simple DTOs for Return Draft ----------
 
     public class PurchaseReturnDraft
@@ -1590,6 +1574,4 @@ namespace Pos.Persistence.Services
         public decimal MaxReturnQty { get; set; }
         public decimal ReturnQty { get; set; }
     }
-
-
 }

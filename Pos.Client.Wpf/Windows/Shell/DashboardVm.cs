@@ -109,6 +109,12 @@ public sealed class DashboardVm : ObservableObject
 
         //OpenVoucherEditorCmd = new RelayCommand(() =>
         //    _nav.Show<Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow>());
+        OpenAccounteLedgerCmd = new RelayCommand(() =>
+            _nav.Show<Pos.Client.Wpf.Windows.Accounting.AccountLedgerWindow>());
+
+        OpenCashBookCmd = new RelayCommand(() =>
+            _nav.Show<Pos.Client.Wpf.Windows.Accounting.CashBookWindow>());
+
 
         OpenPayrollCmd = new RelayCommand(() =>
             _nav.Show<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>());
@@ -116,7 +122,9 @@ public sealed class DashboardVm : ObservableObject
         OpenAttendanceCmd = new RelayCommand(() =>
             _nav.Show<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>());
 
-        
+        OpenArApReportCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Accounting.ArApReportWindow>());
+
+
 
 
         RefreshCmd = new AsyncRelayCommand(RefreshAsync);
@@ -226,6 +234,11 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand OpenVoucherEditorCmd { get; }
     public IRelayCommand OpenVoucherCenterCmd { get; }
     public IRelayCommand OpenPayrollCmd { get; }
+
+    public IRelayCommand OpenAccounteLedgerCmd { get; }
+    public IRelayCommand OpenCashBookCmd { get; }
+    public IRelayCommand OpenArApReportCmd { get; }
+    
     public IRelayCommand OpenAttendanceCmd { get; }
     //public IRelayCommand OpenOpeningBalanceCmd { get; }
     public IRelayCommand OpenStaffCmd { get; }

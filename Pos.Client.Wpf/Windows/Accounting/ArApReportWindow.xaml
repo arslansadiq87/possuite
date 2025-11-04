@@ -1,0 +1,53 @@
+﻿<!-- Pos.Client.Wpf/Windows/Accounting/ArApReportWindow.xaml -->
+<Window x:Class="Pos.Client.Wpf.Windows.Accounting.ArApReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:Pos.Client.Wpf.Windows.Accounting"
+        mc:Ignorable="d"
+        Title="Accounts Receivable / Payable" Height="600" Width="900"
+        WindowStartupLocation="CenterOwner">
+    
+    <DockPanel>
+        <!-- Filters -->
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="8">
+            <TextBlock Text="Outlet:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox Width="220"
+                      ItemsSource="{Binding Outlets}"
+                      SelectedItem="{Binding SelectedOutlet, Mode=TwoWay}"
+                      DisplayMemberPath="Name" />
+            <CheckBox Content="Include zero balances"
+                      IsChecked="{Binding IncludeZero, Mode=TwoWay}"
+                      Margin="16,0,0,0"/>
+            <Button Content="Refresh" Command="{Binding RefreshCmd}" Margin="16,0,0,0" />
+            <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="AR Total:" Margin="0,0,4,0" />
+                <TextBlock Text="{Binding ArTotal, StringFormat={}{0:N2}}" FontWeight="Bold"/>
+                <TextBlock Text="   AP Total:" Margin="12,0,4,0" />
+                <TextBlock Text="{Binding ApTotal, StringFormat={}{0:N2}}" FontWeight="Bold"/>
+            </StackPanel>
+        </StackPanel>
+
+        <TabControl Margin="8">
+            <TabItem Header="Accounts Receivable (Customers)">
+                <DataGrid ItemsSource="{Binding ArRows}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Margin="0,6,0,0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Party" Binding="{Binding PartyName}" Width="*" />
+                        <DataGridTextColumn Header="Outlet" Binding="{Binding OutletName}" Width="200" />
+                        <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat={}{0:N2}}" Width="150"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="Accounts Payable (Suppliers)">
+                <DataGrid ItemsSource="{Binding ApRows}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Margin="0,6,0,0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Party" Binding="{Binding PartyName}" Width="*" />
+                        <DataGridTextColumn Header="Outlet" Binding="{Binding OutletName}" Width="200" />
+                        <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat={}{0:N2}}" Width="150"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

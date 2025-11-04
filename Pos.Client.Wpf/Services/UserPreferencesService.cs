@@ -24,9 +24,30 @@ public sealed class UserPreferencesService : IUserPreferencesService
     public async Task SaveAsync(UserPreference p, CancellationToken ct = default)
     {
         await using var db = await _dbf.CreateDbContextAsync(ct);
-        var existing = await db.UserPreferences.FirstOrDefaultAsync(x => x.MachineName == p.MachineName, ct);
-        if (existing == null) db.UserPreferences.Add(p);
-        else db.Entry(existing).CurrentValues.SetValues(p);
+
+        var m = string.IsNullOrWhiteSpace(p.MachineName) ? Environment.MachineName : p.MachineName;
+
+        // Read without tracking so we can Update() a new instance safely
+        var existing = await db.UserPreferences.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.MachineName == m, ct);
+
+        if (existing == null)
+        {
+            // brand-new row
+            p.MachineName = m;             // ensure it’s set
+            db.UserPreferences.Add(p);
+        }
+        else
+        {
+            // keep the key & principal columns, update the rest
+            p.Id = existing.Id;            // PRESERVE KEY
+            p.MachineName = existing.MachineName;
+
+            // This marks all scalars as modified without trying to change the key
+            db.UserPreferences.Update(p);
+        }
+
         await db.SaveChangesAsync(ct);
     }
+
 }

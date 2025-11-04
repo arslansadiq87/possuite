@@ -14,4 +14,6 @@ public class UserPreference : BaseEntity
     public string DefaultBarcodeType { get; set; } = "EAN13"; // EAN13/Code128/QR...
 
     // Extend later (default language, default paper, etc.)
+    // NEW: display timezone (IANA/Windows TZ Id, e.g., "Asia/Karachi", "UTC")
+    public string? DisplayTimeZoneId { get; set; }   // <--- ADD THIS
 }

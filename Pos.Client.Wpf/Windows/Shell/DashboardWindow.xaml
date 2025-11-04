@@ -159,16 +159,21 @@
                     <Fluent:Button Header="Chart of Accounts" Command="{Binding OpenChartOfAccountsCmd}"/>
                     <Fluent:Button Header="Voucher" Command="{Binding OpenVoucherEditorCmd}"/>
                     <Fluent:Button Header="Voucher Center" Command="{Binding OpenVoucherCenterCmd}"/>
+                    <Fluent:Button Header="Account Ledger" Command="{Binding OpenAccounteLedgerCmd}"/>
+                    <Fluent:Button Header="Cash Book" Command="{Binding OpenCashBookCmd}"/>
+                    <Fluent:Button Header="AR / AP Report" Command="{Binding OpenArApReportCmd}"/>
+
 
                 </Fluent:RibbonGroupBox>
 
-                <Fluent:RibbonGroupBox Header="Payrolls">
+                
+                <!--<Fluent:RibbonGroupBox Header="Payrolls">
                     <Fluent:Button Header="Payroll" Command="{Binding OpenPayrollCmd}"/>
                     <Fluent:Button Header="Attendance" Command="{Binding OpenAttendanceCmd}"/>
-                </Fluent:RibbonGroupBox>
+                </Fluent:RibbonGroupBox>-->
 
             </Fluent:RibbonTabItem>
-
+            
             <!-- Contextual tab: associate via Group -->
             <Fluent:RibbonTabItem Header="Transfer Tools" Group="{Binding Source={x:Reference transferGroup}}">
                 <Fluent:RibbonGroupBox Header="Receive">

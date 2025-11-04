@@ -153,6 +153,12 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.VoucherEditorView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchView>(); // UserControl; may be hosted in a window
+            
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AccountLedgerWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.CashBookWindow>();
+            // VMs
+            sc.AddTransient<AccountLedgerVm>();
+            sc.AddTransient<CashBookVm>();   // (for the other window as well)
 
             // ViewModels (scoped or transient)
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsVm>();
@@ -185,6 +191,11 @@ namespace Pos.Client.Wpf
             // VM & window
             //sc.AddTransient<OpeningBalanceVm>();
             //sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>();
+            sc.AddScoped<ILedgerQueryService, LedgerQueryService>();
+            // Query service for AR/AP
+            sc.AddScoped<IArApQueryService, ArApQueryService>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportVm>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportWindow>();
 
             // Posting service (if not already added earlier)
             //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
@@ -205,6 +216,17 @@ namespace Pos.Client.Wpf
             });
 
             Services = sc.BuildServiceProvider();
+            var prefs = Services.GetRequiredService<IUserPreferencesService>();
+            try
+            {
+                var p = prefs.GetAsync().GetAwaiter().GetResult();  // sync call
+                TimeService.SetTimeZone(p.DisplayTimeZoneId);
+            }
+            catch
+            {
+                TimeService.SetTimeZone(null);
+            }
+
 
             // 5) Ensure DB + seed
             try

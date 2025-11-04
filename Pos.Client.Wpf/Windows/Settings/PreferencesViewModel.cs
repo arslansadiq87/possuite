@@ -8,14 +8,17 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Client.Wpf.Windows.Settings;
-
+using System;
+using System.Linq;
 namespace Pos.Client.Wpf.Windows.Settings;
 
 public partial class PreferencesViewModel : ObservableObject
 {
     private readonly IDbContextFactory<PosClientDbContext> _dbf;
     private readonly IUserPreferencesService _svc;
-
+    // inside class PreferencesViewModel
+    public ObservableCollection<TimeZoneInfo> TimeZones { get; } = new();
+    public string? SelectedTimeZoneId { get; set; }
     public ObservableCollection<Outlet> Outlets { get; } = new();
     public ObservableCollection<Warehouse> Warehouses { get; } = new();
     public string[] BarcodeTypes { get; } = new[] { "EAN13", "Code128", "QR" };
@@ -54,6 +57,15 @@ public partial class PreferencesViewModel : ObservableObject
             PurchaseDestinationScope = p.PurchaseDestinationScope ?? "Outlet";
             PurchaseDestinationId = p.PurchaseDestinationId;
             DefaultBarcodeType = string.IsNullOrWhiteSpace(p.DefaultBarcodeType) ? "EAN13" : p.DefaultBarcodeType;
+
+            // in LoadAsync(), after you load outlets/warehouses and p:
+            TimeZones.Clear();
+            foreach (var tz in TimeZoneInfo.GetSystemTimeZones())
+                TimeZones.Add(tz);
+
+            SelectedTimeZoneId = string.IsNullOrWhiteSpace(p.DisplayTimeZoneId)
+                ? TimeZoneInfo.Local.Id
+                : p.DisplayTimeZoneId;
         }
         finally { IsBusy = false; }
     }
@@ -70,8 +82,11 @@ public partial class PreferencesViewModel : ObservableObject
                 PurchaseDestinationScope = PurchaseDestinationScope,
                 PurchaseDestinationId = PurchaseDestinationId,
                 DefaultBarcodeType = DefaultBarcodeType
+
             };
+            p.DisplayTimeZoneId = SelectedTimeZoneId;
             await _svc.SaveAsync(p);
+            Pos.Client.Wpf.Services.TimeService.SetTimeZone(SelectedTimeZoneId);
             MessageBox.Show("Preferences saved.", "Preferences", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         finally { IsBusy = false; }

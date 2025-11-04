@@ -12,6 +12,8 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="12"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -96,9 +98,27 @@
                     Width="220"/>
                 </Grid>
             </GroupBox>
+            <!-- Date & Time -->
+            <GroupBox Grid.Row="6" Header="Date &amp; Time" Padding="12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="Display Time Zone:" VerticalAlignment="Center"/>
+
+                    <ComboBox Grid.Column="1"
+              ItemsSource="{Binding TimeZones}"
+              SelectedValue="{Binding SelectedTimeZoneId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+              SelectedValuePath="Id"
+              DisplayMemberPath="DisplayName"
+              Width="360"/>
+                </Grid>
+            </GroupBox>
 
             <!-- Buttons -->
-            <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Save" Width="120"
                 Command="{Binding SaveCommand}"
                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanConverter}}">
