@@ -187,6 +187,7 @@ namespace Pos.Client.Wpf
             sc.AddScoped<Pos.Client.Wpf.Services.IOutletService, Pos.Client.Wpf.Services.OutletService>();
             sc.AddTransient<VoucherCenterVm>();
             sc.AddTransient<VoucherCenterView>();
+            sc.AddTransient<GlPostingService>();
 
             // VM & window
             //sc.AddTransient<OpeningBalanceVm>();

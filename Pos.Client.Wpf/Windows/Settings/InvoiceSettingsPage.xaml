@@ -8,8 +8,9 @@
         <conv:BytesToBitmapConverter x:Key="BytesToBitmap"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
 
-    <Grid Margin="16">
+        <Grid Margin="16">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="2*"/>
             <ColumnDefinition Width="3*"/>
@@ -102,18 +103,29 @@
                             <TextBlock Text="Max width (px):" VerticalAlignment="Center"/>
                             <TextBox Text="{Binding LogoMaxWidthPx}" Width="80" Margin="8,0,0,0"/>
                             <TextBlock Text="Alignment:" Margin="16,0,0,0" VerticalAlignment="Center"/>
-                            <ComboBox Width="100" SelectedItem="{Binding LogoAlignment}">
+
+                            <ComboBox Width="100"
+                                  SelectedValue="{Binding LogoAlignment, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  SelectedValuePath="Content">
                                 <ComboBoxItem Content="Left"/>
                                 <ComboBoxItem Content="Center"/>
                                 <ComboBoxItem Content="Right"/>
                             </ComboBox>
+
                         </StackPanel>
 
                         <!-- Quick preview (PNG bytes) -->
-                        <Border BorderBrush="#DDD" BorderThickness="1" Padding="6">
-                            <Image Stretch="None"
-                                   Source="{Binding LogoPng, Converter={StaticResource BytesToBitmap}}"/>
+                        <Border BorderBrush="#DDD" BorderThickness="1" Padding="6" Height="120">
+                            <Grid Width="{Binding LogoMaxWidthPx}" HorizontalAlignment="Left">
+                                <Image
+                                  Source="{Binding LogoPng, Converter={StaticResource BytesToBitmap}}"
+                                  Stretch="Uniform"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Center"
+                                  MaxWidth="{Binding LogoMaxWidthPx}"/>
+                            </Grid>
                         </Border>
+
                     </StackPanel>
                 </Grid>
             </GroupBox>
@@ -283,4 +295,6 @@
 
         </StackPanel>
     </Grid>
+    </ScrollViewer>
+
 </UserControl>

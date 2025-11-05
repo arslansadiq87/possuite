@@ -27,6 +27,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private readonly ILedgerQueryService _ledger;
         private readonly IOutletService _outlets;
         [ObservableProperty] private bool includeVoided;  // bound to checkbox
+        [ObservableProperty] private CashBookScope scope = CashBookScope.HandOnly; // NEW
 
         public ObservableCollection<Outlet> OutletChoices { get; } = new();
         [ObservableProperty] private Outlet? selectedOutlet;
@@ -84,11 +85,19 @@ namespace Pos.Client.Wpf.Windows.Accounting
             try
             {
                 // NEW: use outlet directly so we can attach till/source/void filters
+                //var (op2, rows2, cl2) = await _ledger.GetCashBookAsync(
+                //    SelectedOutlet.Id,
+                //    FromDate,
+                //    ToDate.AddDays(1).AddTicks(-1),
+                //    IncludeVoided);
+
                 var (op2, rows2, cl2) = await _ledger.GetCashBookAsync(
                     SelectedOutlet.Id,
                     FromDate,
                     ToDate.AddDays(1).AddTicks(-1),
-                    IncludeVoided);
+                    IncludeVoided,
+                    Scope); // NEW
+
 
                 Opening = op2; Closing = cl2;
 

@@ -18,7 +18,9 @@ public partial class PreferencesViewModel : ObservableObject
     private readonly IUserPreferencesService _svc;
     // inside class PreferencesViewModel
     public ObservableCollection<TimeZoneInfo> TimeZones { get; } = new();
-    public string? SelectedTimeZoneId { get; set; }
+
+    [ObservableProperty] private string? selectedTimeZoneId;
+
     public ObservableCollection<Outlet> Outlets { get; } = new();
     public ObservableCollection<Warehouse> Warehouses { get; } = new();
     public string[] BarcodeTypes { get; } = new[] { "EAN13", "Code128", "QR" };

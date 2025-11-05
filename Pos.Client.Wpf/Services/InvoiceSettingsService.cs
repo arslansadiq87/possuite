@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using System.Threading; // ← ensure this is present (for CancellationToken)
 
 namespace Pos.Client.Wpf.Services;
 
@@ -12,6 +13,9 @@ public interface IInvoiceSettingsService
 
     Task<string?> GetPrinterAsync(int? outletId, CancellationToken ct = default);
     Task<int> GetPaperWidthAsync(int? outletId, CancellationToken ct = default);
+    // >>> ADD THESE TWO LINES <<<
+    Task<int?> GetSalesCardClearingAccountIdAsync(int? outletId, CancellationToken ct = default);
+    Task<int?> GetPurchaseBankAccountIdAsync(int? outletId, CancellationToken ct = default);
 }
 
 public class InvoiceSettingsService : IInvoiceSettingsService
@@ -19,6 +23,18 @@ public class InvoiceSettingsService : IInvoiceSettingsService
     private readonly IDbContextFactory<PosClientDbContext> _dbf;
 
     public InvoiceSettingsService(IDbContextFactory<PosClientDbContext> dbf) => _dbf = dbf;
+
+    public async Task<int?> GetSalesCardClearingAccountIdAsync(int? outletId, CancellationToken ct = default)
+    {
+        var (s, _) = await GetAsync(outletId, "en", ct);
+        return s.SalesCardClearingAccountId;
+    }
+
+    public async Task<int?> GetPurchaseBankAccountIdAsync(int? outletId, CancellationToken ct = default)
+    {
+        var (s, _) = await GetAsync(outletId, "en", ct);
+        return s.PurchaseBankAccountId;
+    }
 
     public async Task<(InvoiceSettings, InvoiceLocalization)> GetAsync(
         int? outletId, string? lang, CancellationToken ct = default)

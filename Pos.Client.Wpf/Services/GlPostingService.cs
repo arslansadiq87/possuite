@@ -17,20 +17,15 @@ namespace Pos.Client.Wpf.Services
         Task PostSaleReturnAsync(Sale sale);
         Task PostPurchaseAsync(Purchase p);
         Task PostPurchaseReturnAsync(Purchase p);
-
         Task PostVoucherAsync(Voucher v);
         Task PostVoucherAsync(PosClientDbContext db, Voucher v);
         Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid);
         Task PostVoucherRevisionAsync(PosClientDbContext db, Voucher newVoucher, IReadOnlyList<VoucherLine> oldLines);
-
         Task PostPayrollAccrualAsync(PayrollRun run);   // Dr Salaries Expense, Cr Salaries Payable
         Task PostPayrollPaymentAsync(PayrollRun run);   // Dr Salaries Payable, Cr Cash/Bank
         Task PostSaleRevisionAsync(Sale newSale, decimal deltaSub, decimal deltaTax);
         Task PostReturnRevisionAsync(Sale amended, decimal deltaSub, decimal deltaTax);
-
-        // NEW: Move declared cash from Till -> Cash in Hand and post over/short
         Task PostTillCloseAsync(TillSession session, decimal declaredCash, decimal systemCash);
-
     }
 
     public sealed class GlPostingService : IGlPostingService
@@ -46,7 +41,6 @@ namespace Pos.Client.Wpf.Services
             _invSettings = invSettings;    // NEW
         }
 
-        // Keep your existing codes for non-cash accounts (safe with your current seeding)
         // Aligned with CoATemplateSeeder
         private const string BANK = "113";    // Bank Accounts
         private const string INV = "1140";   // Inventory on hand (leaf we added)
@@ -112,12 +106,9 @@ namespace Pos.Client.Wpf.Services
                 var (s, _) = await _invSettings.GetAsync(outletId, "en");
                 if (s?.SalesCardClearingAccountId is null)
                     throw new InvalidOperationException("Cannot take CARD payments: configure a Sales Card Clearing Account in Invoice Settings for this outlet.");
-
                 var bankId = s!.SalesCardClearingAccountId.Value;
                 LineById(ts, outletId, bankId, sale.CardAmount, 0m, GlDocType.Sale, sale.Id, "Sale card receipt");
             }
-
-
             if (credit > 0m)
                 await LineAsync(ts, outletId, AR, credit, 0m, GlDocType.Sale, sale.Id, "Sale on credit");
             // CR: Revenue and Output Tax
@@ -155,7 +146,6 @@ namespace Pos.Client.Wpf.Services
             {
                 await LineAsync(ts, outletId, BANK, 0m, sale.CardAmount, GlDocType.SaleReturn, sale.Id, "Refund via bank/card");
             }
-
             if (creditReversed > 0m)
                 await LineAsync(ts, outletId, AR, 0m, creditReversed, GlDocType.SaleReturn, sale.Id, "Reverse AR");
             // Reverse revenue and output tax
@@ -180,44 +170,45 @@ namespace Pos.Client.Wpf.Services
         {
             var ts = p.ReceivedAtUtc ?? p.PurchaseDate;
             var outletId = p.OutletId;
-            var goodsValue = p.GrandTotal - p.Tax;
-            if (goodsValue != 0m)
-                await LineAsync(ts, outletId, INV, goodsValue, 0m, GlDocType.Purchase, p.Id, "Inventory in");
-            var paid = p.CashPaid;
-            var due = p.GrandTotal - paid;
-            // IMPORTANT: purchases "paid now" usually come from Cash in Hand (not Till)
-            if (paid > 0m)
+
+            // ACCOUNTING CHOICE: Capitalize tax into inventory (gross) to avoid a separate Input-Tax account.
+            // If you later add an Input Tax asset (e.g., 1160), split grand total into goods+tax and DR that asset instead.
+            var gross = p.GrandTotal;
+
+            // DR Inventory (gross), CR Accounts Payable (gross)
+            if (gross != 0m)
             {
-                var handAccId = await _coa.GetCashAccountIdAsync(outletId);
-                LineById(ts, outletId, handAccId, 0m, paid, GlDocType.Purchase, p.Id, "Paid now (from Cash in Hand)");
+                await LineAsync(ts, outletId, INV, gross, 0m, GlDocType.Purchase, p.Id, $"PO #{p.DocNo} · Inventory in (gross)");
+                await LineAsync(ts, outletId, AP, 0m, gross, GlDocType.Purchase, p.Id, $"PO #{p.DocNo} · To AP (gross)");
             }
-            if (due > 0m)
-                await LineAsync(ts, outletId, AP, 0m, due, GlDocType.Purchase, p.Id, "AP created");
-            // If you treat VAT as input-tax asset: add here to your input-tax account.
+
+            // IMPORTANT: Do NOT post any cash/bank here.
+            // All settlements must go through PurchasesService.AddPaymentAsync(...).
+
             await _db.SaveChangesAsync();
         }
+
 
         public async Task PostPurchaseReturnAsync(Purchase p)
         {
             var ts = p.ReceivedAtUtc ?? p.PurchaseDate;
             var outletId = p.OutletId;
-            var goodsValue = p.GrandTotal - p.Tax;
-            if (goodsValue != 0m)
-                await LineAsync(ts, outletId, INV, 0m, goodsValue, GlDocType.PurchaseReturn, p.Id, "Inventory out");
-            var paid = p.CashPaid;
-            var due = p.GrandTotal - paid;
-            // Refund received comes into Cash in Hand
-            if (paid > 0m)
+
+            var gross = p.GrandTotal;
+
+            // Reverse the above: CR Inventory (gross), DR Accounts Payable (gross)
+            if (gross != 0m)
             {
-                var handAccId = await _coa.GetCashAccountIdAsync(outletId);
-                LineById(ts, outletId, handAccId, paid, 0m, GlDocType.PurchaseReturn, p.Id, "Refund received (to Cash in Hand)");
+                await LineAsync(ts, outletId, INV, 0m, gross, GlDocType.PurchaseReturn, p.Id, $"PR #{p.DocNo} · Inventory out (gross)");
+                await LineAsync(ts, outletId, AP, gross, 0m, GlDocType.PurchaseReturn, p.Id, $"PR #{p.DocNo} · Reduce AP (gross)");
             }
 
-            if (due > 0m)
-                await LineAsync(ts, outletId, AP, due, 0m, GlDocType.PurchaseReturn, p.Id, "Reduce AP");
+            // IMPORTANT: Do NOT post refund cash/bank here.
+            // If supplier refunds immediately, record it via AddPaymentAsync(...).
 
             await _db.SaveChangesAsync();
         }
+
         // ----- Vouchers ------------------------------------------------------
         public async Task PostVoucherAsync(PosClientDbContext db, Voucher v)
         {
@@ -240,7 +231,6 @@ namespace Pos.Client.Wpf.Services
                     Memo = memo
                 });
             }
-
             // 1) Push user-entered lines as-is
             decimal totalDr = 0m, totalCr = 0m;
             foreach (var ln in v.Lines)
@@ -261,7 +251,6 @@ namespace Pos.Client.Wpf.Services
                     Memo = ln.Description ?? v.Memo
                 });
             }
-
             // 2) Auto cash side for Debit/Credit vouchers (per-outlet cash in hand)
             if (v.Type == VoucherType.Debit)
             {
@@ -283,11 +272,15 @@ namespace Pos.Client.Wpf.Services
             // Persist GL entries using the SAME DbContext/transaction
             await db.SaveChangesAsync();
         }
-
         
         public async Task PostVoucherAsync(Voucher v)
         {
-            // Load lines and outlet once
+            // 🔒 Guard: cash vouchers must have an outlet (cash account is per-outlet)
+            if (v.Type != VoucherType.Journal && v.OutletId == null)
+            {
+                throw new InvalidOperationException(
+                    "Debit/Credit voucher requires OutletId to resolve Cash in Hand account.");
+            }
             await _db.Entry(v).Collection(x => x.Lines).LoadAsync();
             var outletId = v.OutletId;
             var ts = v.TsUtc;
@@ -306,7 +299,6 @@ namespace Pos.Client.Wpf.Services
                     Memo = memo
                 });
             }
-
             var totalDr = v.Lines.Sum(l => l.Debit);
             var totalCr = v.Lines.Sum(l => l.Credit);
             // 1) Always post user lines exactly as entered
@@ -331,29 +323,24 @@ namespace Pos.Client.Wpf.Services
             {
                 if (totalDr <= 0m) throw new InvalidOperationException("Debit Voucher must have Debit > 0.");
                 var cashId = await _coa.GetCashAccountIdAsync(outletId);
-                // Cash goes OUT: credit cash for total
                 LineByIdLocal(cashId, 0m, totalDr, GlDocType.CashPayment, "Cash payment (auto)");
             }
             else if (v.Type == VoucherType.Credit)
             {
                 if (totalCr <= 0m) throw new InvalidOperationException("Credit Voucher must have Credit > 0.");
                 var cashId = await _coa.GetCashAccountIdAsync(outletId);
-                // Cash comes IN: debit cash for total
                 LineByIdLocal(cashId, totalCr, 0m, GlDocType.CashReceipt, "Cash receipt (auto)");
             }
             else
             {
-                // Journal Voucher: no auto cash line
                 if (Math.Abs(totalDr - totalCr) > 0.004m)
                     throw new InvalidOperationException("Journal Voucher must balance.");
             }
             await _db.SaveChangesAsync();
         }
 
-
     public async Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid)
     {
-        // Reverse *only* the GL rows created for this voucher.
         // We tagged voucher user-lines as Journal/CashPayment/CashReceipt in your PostVoucherAsync.
         var baseDocTypes = new[] { GlDocType.JournalVoucher, GlDocType.CashPayment, GlDocType.CashReceipt };
         var lines = await db.GlEntries
@@ -416,8 +403,6 @@ namespace Pos.Client.Wpf.Services
         // Handle auto cash line deltas for Debit/Credit vouchers
         if (newVoucher.Type == VoucherType.Debit || newVoucher.Type == VoucherType.Credit)
         {
-            // deltaDrTotal and deltaCrTotal reflect summed line deltas (positive means more of that side)
-            // For Debit voucher: cash was auto-credited by totalDr; apply delta accordingly
             // For Credit voucher: cash was auto-debited by totalCr; apply delta accordingly
             var cashId = await _coa.GetCashAccountIdAsync(db, newVoucher.OutletId);
             if (newVoucher.Type == VoucherType.Debit && Math.Abs(deltaDrTotal) > 0.0005m)
@@ -451,8 +436,6 @@ namespace Pos.Client.Wpf.Services
         }
         await db.SaveChangesAsync();
     }
-
-    // ----- Payroll -------------------------------------------------------
 
     public async Task PostPayrollAccrualAsync(PayrollRun run)
         {
@@ -555,7 +538,6 @@ namespace Pos.Client.Wpf.Services
             }
             await _db.SaveChangesAsync();
         }
-
         // ----- Till Close (Z) ------------------------------------------------
         public async Task PostTillCloseAsync(TillSession session, decimal declaredCash, decimal systemCash)
         {

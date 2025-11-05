@@ -115,6 +115,10 @@ namespace Pos.Persistence.Services
         {
             // 0) Normalize + compute monetary totals on incoming UI payload
             ValidateDestination(model);
+            // SAFETY RAIL: all settlements must be recorded via AddPaymentAsync (OnReceive/Adjustment).
+            if (model.CashPaid > 0m)
+                throw new InvalidOperationException(
+                    "Paid-now must be recorded via AddPaymentAsync (OnReceive). Remove header snapshot usage.");
 
             var lineList = NormalizeAndCompute(lines);   // your helper
             ComputeHeaderTotals(model, lineList);        // sets Subtotal/Discount/Tax/GrandTotal on model
@@ -877,6 +881,12 @@ namespace Pos.Persistence.Services
             int? counterId,
             string user)
         {
+            // SAFETY RAIL: all settlements must be recorded via AddPaymentAsync (OnReceive/Adjustment).
+            if (purchase.CashPaid > 0m)
+                throw new InvalidOperationException(
+                    "Paid-now must be recorded via AddPaymentAsync (OnReceive). Remove header snapshot usage.");
+
+
             // 1) Finalize the purchase
             var model = await ReceiveAsync(purchase, lines, user);
 

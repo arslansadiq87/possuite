@@ -22,6 +22,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [ObservableProperty] private decimal debit;
         [ObservableProperty] private decimal credit;
         // NOTE: no command aliases here — commands live on VoucherEditorVm
+
     }
 
     public partial class VoucherEditorVm : ObservableObject
@@ -31,6 +32,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         // Editing state: null => creating new; value => editing this voucher
         private int? _editingVoucherId = null;
         // inside VoucherEditorVm
+
         public bool WasSaved { get; private set; } = false;
         public event Action<bool>? CloseRequested; // true = saved, false = cancel/close
 
@@ -305,6 +307,20 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 .ToList();
             if (linesToSave.Count == 0)
                 throw new InvalidOperationException("Enter at least one non-zero line.");
+
+            // 🔎 INSERT near the top of SaveAsync(), after basic null/line checks
+            if (!string.Equals(Type, "Journal", StringComparison.OrdinalIgnoreCase) && SelectedOutlet == null)
+            {
+                System.Windows.MessageBox.Show(
+                    "Select an Outlet for Debit/Credit vouchers (cash side).",
+                    "Outlet Required",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+
+
+
             // STRICT per-type validation (kept from your original intent)
             var totalDebit = linesToSave.Sum(l => l.Debit);
             var totalCredit = linesToSave.Sum(l => l.Credit);
@@ -428,6 +444,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
+     
         // Your XAML uses DeleteLineCmd / SaveCmd / ClearCmd
         public IRelayCommand DeleteLineCmd => DeleteLineCommand;
         public IRelayCommand SaveCmd => SaveCommand;

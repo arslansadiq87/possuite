@@ -39,7 +39,7 @@
             <TextBlock Text="{Binding Closing, StringFormat= 0.##}" Margin="6,0,0,0"/>
         </StackPanel>
 
-        <DataGrid ItemsSource="{Binding Rows}" AutoGenerateColumns="False" CanUserAddRows="False">
+        <DataGrid ItemsSource="{Binding Rows}" AutoGenerateColumns="False" CanUserAddRows="False" Style="{StaticResource ModernDataGrid}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Date/Time"
                     Binding="{Binding TsUtc, Converter={StaticResource UtcTimeConv}, ConverterParameter=yyyy-MM-dd HH:mm}" Width="*"/>

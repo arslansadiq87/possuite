@@ -560,26 +560,27 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             db.SaveChanges();
             tx.Commit();
-            // === GL POST: Sale Return (full document) ===
+            // === GL POST: Sale Return (single-parameter overload) ===
             try
             {
-                using (var chk = new PosClientDbContext(_dbOptions))
-                {
-                    var already = chk.GlEntries.AsNoTracking().Any(g =>
-                        g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn &&
-                        g.DocId == sale.Id);
+                var gl = App.Services.GetRequiredService<IGlPostingService>();
 
-                    if (!already)
-                    {
-                        var gl = App.Services.GetRequiredService<IGlPostingService>();
-                        await gl.PostSaleReturnAsync(sale);
-                    }
+                // Optional duplicate guard
+                var already = db.GlEntries.AsNoTracking().Any(g =>
+                    g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn &&
+                    g.DocId == sale.Id);
+                if (!already)
+                {
+                    await gl.PostSaleReturnAsync(sale); // ✅ your existing one-argument overload
+                    await db.SaveChangesAsync();
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("GL post (return) failed: " + ex);
             }
+
+
 
 
             MessageBox.Show($"Return saved. ID: {sale.Id}\nInvoice: {_counterId}-{sale.InvoiceNumber}\nRefund: {sale.Total:0.00}", "Success");

@@ -11,8 +11,8 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    [Migration("20251104081716_vouchers2")]
-    partial class vouchers2
+    [Migration("20251105121024_init")]
+    partial class init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -88,6 +88,9 @@ namespace Pos.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("PurchaseBankAccountId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("RowShowLineDiscount")
                         .HasColumnType("INTEGER");
 
@@ -104,6 +107,9 @@ namespace Pos.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("RowShowUnitPrice")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SalesCardClearingAccountId")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("ShowAddress")
@@ -1856,6 +1862,9 @@ namespace Pos.Persistence.Migrations
 
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("BankAccountId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");

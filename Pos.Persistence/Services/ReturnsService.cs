@@ -1,5 +1,4 @@
 ﻿// Pos.Persistence/Services/ReturnsService.cs
-using System.Reflection.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
@@ -12,7 +11,14 @@ namespace Pos.Persistence.Services
         private readonly PosClientDbContext _db;
         public ReturnsService(PosClientDbContext db) => _db = db;
 
-        // Pos.Persistence/Services/ReturnsService.cs  (REPLACE the method body)
+        /// <summary>
+        /// Create a finalized Sale (IsReturn = true) without linking to an original invoice.
+        /// - Validates lines
+        /// - Computes totals (no tax logic here)
+        /// - Writes stock entries to add stock back to the outlet
+        /// - Assigns a new return invoice number (SR series via local helper)
+        /// NOTE: No GL posting here (Client layer triggers it).
+        /// </summary>
         public async Task<int> CreateReturnWithoutInvoiceAsync(
             int outletId,
             int counterId,
@@ -25,67 +31,86 @@ namespace Pos.Persistence.Services
             string? reason = null)
         {
             var list = (lines ?? Enumerable.Empty<ReturnNoInvLine>())
-                       .Where(l => l.ItemId > 0 && l.Qty > 0).ToList();
+                       .Where(l => l.ItemId > 0 && l.Qty > 0m)
+                       .ToList();
             if (list.Count == 0)
                 throw new InvalidOperationException("Add at least one item.");
 
-            // 1) Create a FINAL return sale header (IsReturn = true)
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            // 1) Return header (FINAL)
+            var nowUtc = DateTime.UtcNow;
             var ret = new Sale
             {
-                Ts = DateTime.UtcNow,
+                Ts = nowUtc,
                 OutletId = outletId,
                 CounterId = counterId,
                 TillSessionId = tillSessionId,
+
                 IsReturn = true,
                 OriginalSaleId = null,
                 Revision = 0,
                 RevisedFromSaleId = null,
                 RevisedToSaleId = null,
+
                 Status = SaleStatus.Final,
                 HoldTag = null,
-                CustomerName = customerName,
-                Note = reason,
-                InvoiceNumber = await NextReturnInvoiceNumber(counterId),
+
                 CustomerKind = customerId.HasValue ? CustomerKind.Registered : CustomerKind.WalkIn,
                 CustomerId = customerId,
+                CustomerName = customerName,
                 CustomerPhone = customerPhone,
+
+                Note = reason,
+
+                CashAmount = 0m,
+                CardAmount = 0m,
                 PaymentMethod = PaymentMethod.Cash
             };
 
-            // 2) Compute totals (basic: no tax logic here — keep your existing tax path)
+            // 2) Totals (tax = 0 for this path)
             decimal subtotal = 0m;
             foreach (var l in list)
             {
-                var lineNet = (l.UnitPrice - l.Discount) * l.Qty;
-                subtotal += lineNet;
+                var net = (l.UnitPrice - l.Discount) * l.Qty;
+                subtotal += net;
+            }
 
-                // STOCK IN (return): only fields we are sure about
+            ret.Subtotal = subtotal;
+            ret.TaxTotal = 0m;
+            ret.Total = ret.Subtotal + ret.TaxTotal;
+
+            // immediate refund recorded on Sale (GL will credit Till later from client)
+            ret.CashAmount = ret.Total;
+            ret.CardAmount = 0m;
+
+            // 3) SR numbering (local helper)
+            ret.InvoiceNumber = await NextReturnInvoiceNumber(counterId);
+
+            // 4) Save header
+            _db.Sales.Add(ret);
+            await _db.SaveChangesAsync();
+
+            // 5) Stock back to outlet
+            foreach (var l in list)
+            {
                 _db.StockEntries.Add(new StockEntry
                 {
                     LocationType = InventoryLocationType.Outlet,
                     LocationId = outletId,
                     OutletId = outletId,
                     ItemId = l.ItemId,
-                    QtyChange = (int)l.Qty   // your StockEntries query showed int, cast from decimal
+                    QtyChange = (int)l.Qty
                 });
             }
 
-            ret.Subtotal = subtotal;
-            ret.TaxTotal = 0m;          // plug your tax logic if applicable
-            ret.Total = ret.Subtotal + ret.TaxTotal;
-
-            // If you DON'T have a CashMovement entity, do not write one.
-            // Record cash in the Sale header fields only:
-            ret.CashAmount = ret.Total;
-            ret.CardAmount = 0m;
-
-            _db.Sales.Add(ret);
             await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+
             return ret.Id;
         }
 
-
-        // Replace with your existing numbering logic; placeholder shows one way.
+        // Project-local numbering helper
         private async Task<int> NextReturnInvoiceNumber(int counterId)
         {
             var last = await _db.Sales

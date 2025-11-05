@@ -278,7 +278,12 @@ namespace Pos.Client.Wpf.Windows.Sales
                     Ts = DateTime.UtcNow,
                     OutletId = orig.OutletId,
                     CounterId = orig.CounterId,
-                    TillSessionId = orig.TillSessionId,
+                    TillSessionId = db.TillSessions
+                        .OrderByDescending(t => t.Id)
+                        .Where(t => t.OutletId == orig.OutletId && t.CounterId == orig.CounterId && t.CloseTs == null)
+                        .Select(t => (int?)t.Id)
+                        .FirstOrDefault() ?? orig.TillSessionId,
+
 
                     IsReturn = true,
                     OriginalSaleId = _origSaleId,
@@ -286,9 +291,9 @@ namespace Pos.Client.Wpf.Windows.Sales
                     Revision = 0,
                     InvoiceNumber = allocatedInvoiceNo,
 
-                    Subtotal = -magSubtotal,
-                    TaxTotal = -magTax,
-                    Total = -magGrand,
+                    Subtotal = magSubtotal,
+                    TaxTotal = magTax,
+                    Total = magGrand,
 
                     CashierId = orig.CashierId,
                     SalesmanId = orig.SalesmanId,
@@ -298,8 +303,8 @@ namespace Pos.Client.Wpf.Windows.Sales
                     CustomerName = orig.CustomerName,
                     CustomerPhone = orig.CustomerPhone,
 
-                    CashAmount = -payResult.Cash,   // negative = refund
-                    CardAmount = -payResult.Card,
+                    CashAmount = payResult.Cash,   // positive = cash paid out (refund)
+                    CardAmount = payResult.Card,
                     PaymentMethod =
                         (payResult.Cash > 0 && payResult.Card > 0) ? PaymentMethod.Mixed :
                         (payResult.Cash > 0) ? PaymentMethod.Cash : PaymentMethod.Card,
@@ -352,26 +357,26 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 db.SaveChanges();
                 tx.Commit();
-            // === GL POST: Sale Return (full document linked to original) ===
+            // === GL POST: Sale Return (same DbContext) ===
             try
             {
-                using (var chk = new PosClientDbContext(_opts))
-                {
-                    var already = chk.GlEntries.AsNoTracking().Any(g =>
-                        g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn &&
-                        g.DocId == ret.Id);
+                var gl = App.Services.GetRequiredService<IGlPostingService>();
 
-                    if (!already)
-                    {
-                        var gl = App.Services.GetRequiredService<IGlPostingService>();
-                        await gl.PostSaleReturnAsync(ret);
-                    }
+                var already = db.GlEntries.AsNoTracking().Any(g =>
+                    g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn &&
+                    g.DocId == ret.Id);
+
+                if (!already)
+                {
+                    await gl.PostSaleReturnAsync(ret);  // one-arg overload
+                    await db.SaveChangesAsync();
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("GL post (return-from-invoice) failed: " + ex);
             }
+
 
             Confirmed = true;
                 RefundMagnitude = magGrand;

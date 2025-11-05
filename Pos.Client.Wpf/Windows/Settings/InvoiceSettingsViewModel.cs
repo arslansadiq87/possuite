@@ -26,6 +26,15 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
     [ObservableProperty] private bool isGlobal = true;
     [ObservableProperty] private Outlet? selectedOutlet;
+    // Keep Global/Outlet radios in sync (your XAML binds the second radio to IsOutlet)
+    [ObservableProperty] private bool isOutlet;
+
+    partial void OnIsOutletChanged(bool value)
+    {
+        // Flip IsGlobal when user selects Outlet scope
+        if (IsGlobal == value) IsGlobal = !value;
+    }
+
 
     [ObservableProperty] private string? outletDisplayName;
     [ObservableProperty] private string? addressLine1;
@@ -99,6 +108,8 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     {
         _dbf = dbf;
         _ = InitAsync();
+        IsOutlet = !IsGlobal; // initialize radio sync
+
         PropertyChanged += (_, e) =>
         {
             switch (e.PropertyName)
@@ -233,6 +244,7 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     {
         BankAccounts.Clear();
         await using var db = await _dbf.CreateDbContextAsync();
+
         var q = db.Accounts.AsNoTracking()
             .Where(a => a.AllowPosting && !a.IsHeader);
 
@@ -242,12 +254,19 @@ public partial class InvoiceSettingsViewModel : ObservableObject
         else
             q = q.Where(a => a.OutletId == null);
 
-        // Heuristic: same you used in PurchaseView (Name contains “Bank” or code prefix)
-        q = q.Where(a => a.Name.Contains("Bank") || a.Code.StartsWith("101"));
+        // Include typical bank & card-clearing ledgers:
+        // - CoA prefix "113" (Bank & equivalents in your seeding)
+        // - Names that contain "Bank", "Card", or "Clearing"
+        q = q.Where(a =>
+             a.Code.StartsWith("113")
+          || a.Name.Contains("Bank")
+          || a.Name.Contains("Card")
+          || a.Name.Contains("Clearing"));
 
         var list = await q.OrderBy(a => a.Code).ThenBy(a => a.Name).ToListAsync();
         foreach (var a in list) BankAccounts.Add(a);
     }
+
 
 
     private void UpdateCurrentLocalization()
@@ -265,6 +284,22 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     private async Task SaveAsync()
     {
         await using var db = await _dbf.CreateDbContextAsync();
+        // --- Guardrails for missing selections (optional but recommended) ---
+        //if (SelectedSalesCardClearingAccount == null)
+        //{
+        //    System.Windows.MessageBox.Show(
+        //        "Please select a 'Sales card clearing' account in Payments section.",
+        //        "Missing setting", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        //    return;
+        //}
+        //if (SelectedPurchaseBankAccount == null)
+        //{
+        //    System.Windows.MessageBox.Show(
+        //        "Please select a default 'Purchase bank (card)' account in Payments section.",
+        //        "Missing setting", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        //    return;
+        //}
+        // -------------------------------------------------------------------
 
         // attach or add
         var isNew = _loadedSettings!.Id == 0;
@@ -446,12 +481,4 @@ public partial class InvoiceSettingsViewModel : ObservableObject
             PreviewText = $"[Preview error]\n{ex.Message}\n\n{new string('-', width)}\n";
         }
     }
-
-
-
-
-
-
-
-
 }

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows.Controls.Primitives;
 using System.Windows;
+using System.ComponentModel;
 
 namespace Pos.Client.Wpf.Windows.Settings;
 
@@ -10,9 +11,18 @@ public partial class BarcodeLabelSettingsPage : UserControl
     public BarcodeLabelSettingsPage()
     {
         InitializeComponent();
-        DataContext = App.Services.GetRequiredService<BarcodeLabelSettingsViewModel>();
-        this.Loaded += (_, __) =>
-            (DataContext as BarcodeLabelSettingsViewModel)?.ForceRefreshPreview();
+        if (DesignerProperties.GetIsInDesignMode(this)) return;
+
+        var sp = App.Services;
+        if (sp is not null)
+        { 
+            DataContext = sp.GetRequiredService<BarcodeLabelSettingsViewModel>();
+            this.Loaded += (_, __) =>
+                (DataContext as BarcodeLabelSettingsViewModel)?.ForceRefreshPreview();
+        }
+        //DataContext = App.Services.GetRequiredService<BarcodeLabelSettingsViewModel>();
+        //this.Loaded += (_, __) =>
+        //    (DataContext as BarcodeLabelSettingsViewModel)?.ForceRefreshPreview();
     }
 
     private void OnDragDelta(object sender, DragDeltaEventArgs e)

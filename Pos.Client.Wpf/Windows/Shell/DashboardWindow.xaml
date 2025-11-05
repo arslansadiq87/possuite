@@ -23,6 +23,11 @@
 
         <!-- Ribbon -->
         <Fluent:Ribbon x:Name="MainRibbon" VerticalAlignment="Bottom">
+            <Fluent:Ribbon.Resources>
+                <Style TargetType="Fluent:Button">
+                    <Setter Property="att:IconProps.IconSize" Value="12"/>
+                </Style>
+            </Fluent:Ribbon.Resources>
 
             <!-- Backstage (MUST wrap in BackstageTabControl) -->
             <Fluent:Ribbon.Menu>
@@ -84,35 +89,97 @@
 
             <!-- Contextual Tab Groups MUST be in this collection -->
             <Fluent:Ribbon.ContextualGroups>
-                <Fluent:RibbonContextualTabGroup x:Name="transferGroup"
-                                         Header="Transfer"
-                                         Visibility="{Binding TransferTabVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <Fluent:RibbonContextualTabGroup x:Name="transferGroup" Header="Transfer" Visibility="{Binding TransferTabVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </Fluent:Ribbon.ContextualGroups>
 
             <!-- Normal tabs -->
             <Fluent:RibbonTabItem Header="Home" KeyTip="H">
                 <Fluent:RibbonGroupBox Header="Sales" >
+                    <Fluent:Button x:Name="BtnNewSale" IsTabStop="False" Header="New&#160;Sale" KeyTip="N" Command="{Binding NewSaleCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                            Source="{StaticResource Icon.SaleRegister}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Sale Center" Command="{Binding OpenSaleCenterCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.SaleCenter}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
 
-                    <Fluent:Button x:Name="BtnNewSale" IsTabStop="False" Header="New&#160;Sale"
-                         KeyTip="N" Command="{Binding NewSaleCmd}" Icon="{StaticResource Icon.Add}"/>
-                    <Fluent:Button Header="Sale Center" Command="{Binding OpenSaleCenterCmd}"/>
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Inventory">
-                    <Fluent:Button Header="Purchase" Command="{Binding OpenPurchaseCmd}"/>
-                    <Fluent:Button Header="Purchase Center" Command="{Binding OpenPurchaseInvoiceCenterCmd}"/>
-                    <Fluent:Button Header="Transfer" Command="{Binding OpenTransferCmd}"/>
-                    <Fluent:Button Header="Stock" Command="{Binding OpenStockCheckCmd}"/>
+                    <Fluent:Button Header="Purchase" Command="{Binding OpenPurchaseCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Purchase}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Purchase Center" Command="{Binding OpenPurchaseInvoiceCenterCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.PurchaseCenter}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Transfer" Command="{Binding OpenTransferCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Transfer}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Stock" Command="{Binding OpenStockCheckCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Inventory}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Admin">
-                    <Fluent:Button Header="Products"          Command="{Binding OpenProductsCmd}"/>
-                    <Fluent:Button Header="Parties"         Command="{Binding OpenPartiesCmd}"/>
-                    <Fluent:Button Header="Staff"         Command="{Binding OpenStaffCmd}"/>
-                    <Fluent:Button Header="Other Accounts" Command="{Binding OpenOtherAccountsCmd}"/>
-                    <Fluent:Button Header="Outlets/Counters"  Command="{Binding OpenOutletsCountersCmd}"/>
-                    <Fluent:Button Header="Warehouses"  Command="{Binding OpenWarehousesCmd}"/>
-                    <Fluent:Button Header="Users"             Command="{Binding OpenUsersCmd}"/>
+                    <Fluent:Button Header="Products" Command="{Binding OpenProductsCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Products}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Parties" Command="{Binding OpenPartiesCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Party}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Staff" Command="{Binding OpenStaffCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Staff}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Other Accounts" Command="{Binding OpenOtherAccountsCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.OtherAccounts}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Outlets &amp; Counters" Command="{Binding OpenOutletsCountersCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Outlet}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Warehouse" Command="{Binding OpenWarehousesCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Warehouse}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Users" Command="{Binding OpenUsersCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.User}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Reports">
@@ -121,9 +188,47 @@
                          Command="{Binding OpenReportsCmd}"/>
                 </Fluent:RibbonGroupBox>
 
+                
+
+                <Fluent:RibbonGroupBox Header="Accounts">
+                    <Fluent:Button Header="Chart of Accounts" Command="{Binding OpenChartOfAccountsCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.ChartOfAccounts}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Voucher" Command="{Binding OpenVoucherEditorCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Voucher}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Voucher Center" Command="{Binding OpenVoucherCenterCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.VoucherCenter}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Account Ledger" Command="{Binding OpenAccounteLedgerCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.Ledger}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="Cash Book" Command="{Binding OpenCashBookCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                                Source="{StaticResource Icon.CashBook}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
+                    <Fluent:Button Header="AR / AP Report" Command="{Binding OpenArApReportCmd}"/>
+
+
+                </Fluent:RibbonGroupBox>
+
                 <Fluent:RibbonGroupBox Header="Till">
                     <Fluent:Button Header="Open Till"
-                 Command="{Binding OpenTillCmd}">
+  Command="{Binding OpenTillCmd}">
                         <Fluent:Button.Style>
                             <Style TargetType="{x:Type Fluent:Button}">
                                 <Setter Property="Visibility" Value="Visible"/>
@@ -136,12 +241,12 @@
                         </Fluent:Button.Style>
                     </Fluent:Button>
                     <Fluent:Button Header="Till Summary"
-               KeyTip="TS"
-               Command="{Binding OpenTillSummaryCmd}"/>
+KeyTip="TS"
+Command="{Binding OpenTillSummaryCmd}"/>
 
 
                     <Fluent:Button Header="Close Till"
-                 Command="{Binding CloseTillCmd}">
+  Command="{Binding CloseTillCmd}">
                         <Fluent:Button.Style>
                             <Style TargetType="{x:Type Fluent:Button}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -154,19 +259,6 @@
                         </Fluent:Button.Style>
                     </Fluent:Button>
                 </Fluent:RibbonGroupBox>
-
-                <Fluent:RibbonGroupBox Header="Accounts">
-                    <Fluent:Button Header="Chart of Accounts" Command="{Binding OpenChartOfAccountsCmd}"/>
-                    <Fluent:Button Header="Voucher" Command="{Binding OpenVoucherEditorCmd}"/>
-                    <Fluent:Button Header="Voucher Center" Command="{Binding OpenVoucherCenterCmd}"/>
-                    <Fluent:Button Header="Account Ledger" Command="{Binding OpenAccounteLedgerCmd}"/>
-                    <Fluent:Button Header="Cash Book" Command="{Binding OpenCashBookCmd}"/>
-                    <Fluent:Button Header="AR / AP Report" Command="{Binding OpenArApReportCmd}"/>
-
-
-                </Fluent:RibbonGroupBox>
-
-                
                 <!--<Fluent:RibbonGroupBox Header="Payrolls">
                     <Fluent:Button Header="Payroll" Command="{Binding OpenPayrollCmd}"/>
                     <Fluent:Button Header="Attendance" Command="{Binding OpenAttendanceCmd}"/>
