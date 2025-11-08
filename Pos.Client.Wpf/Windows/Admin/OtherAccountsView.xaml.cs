@@ -1,81 +1,119 @@
-﻿using System.Linq;
+﻿using System;
+using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.EntityFrameworkCore;
+using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Client.Wpf.Services;      // AppEvents, AuthZ
+using Pos.Persistence.Services;     // OtherAccountService
 using Pos.Client.Wpf.Infrastructure;
-using System.Windows.Controls;
+
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OtherAccountsView : UserControl
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private OtherAccountService? _svc;
+        private Func<OtherAccountDialog>? _dialogFactory;
+        private readonly bool _design;
 
         public OtherAccountsView()
         {
             InitializeComponent();
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+
+            _design = DesignerProperties.GetIsInDesignMode(this);
+            if (_design) return;
+
+            _svc = App.Services.GetRequiredService<OtherAccountService>();
+            _dialogFactory = () => App.Services.GetRequiredService<OtherAccountDialog>();
+
             Loaded += async (_, __) => await RefreshAsync();
         }
 
+        private bool Ready => !_design && _svc != null;
+
+        // ---------------- REFRESH ----------------
         private async Task RefreshAsync()
         {
-            using var db = _dbf.CreateDbContext();
-            Grid.ItemsSource = await db.OtherAccounts.AsNoTracking()
-                                 .OrderBy(x => x.Name)
-                                 .ToListAsync();
+            if (!Ready) return;
+            try
+            {
+                Grid.ItemsSource = await _svc!.GetAllAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to load accounts: " + ex.Message, "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
+        // ---------------- BUTTONS ----------------
         private async void New_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OtherAccountDialog(_dbf);
+            if (!AuthZ.IsManagerOrAbove())
+            {
+                MessageBox.Show("Only Manager or Admin can create new accounts.", "Access Denied",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var dlg = _dialogFactory!();
             dlg.Configure(null);
-            if (dlg.ShowDialog() == true) await RefreshAsync();
+            if (dlg.ShowDialog() == true)
+                await RefreshAsync();
         }
 
         private async void Edit_Click(object sender, RoutedEventArgs e)
         {
-            if (Grid.SelectedItem is OtherAccount row)
+            if (Grid.SelectedItem is not OtherAccount row) return;
+
+            if (!AuthZ.IsManagerOrAbove())
             {
-                var dlg = new OtherAccountDialog(_dbf);
-                dlg.Configure(row.Id);
-                if (dlg.ShowDialog() == true) await RefreshAsync();
+                MessageBox.Show("Only Manager or Admin can edit accounts.", "Access Denied",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
+
+            var dlg = _dialogFactory!();
+            dlg.Configure(row.Id);
+            if (dlg.ShowDialog() == true)
+                await RefreshAsync();
         }
 
         private async void Delete_Click(object sender, RoutedEventArgs e)
         {
             if (Grid.SelectedItem is not OtherAccount row) return;
 
-            using var db = _dbf.CreateDbContext();
-            var entity = await db.OtherAccounts.FirstAsync(x => x.Id == row.Id);
-
-            // Safety: prevent delete if GL or usage exists
-            if (entity.AccountId.HasValue)
+            if (!AuthZ.IsAdmin())
             {
-                var usedInGl = await db.JournalLines.AnyAsync(l => l.AccountId == entity.AccountId.Value);
-                if (usedInGl)
-                {
-                    MessageBox.Show("This account is used in GL and cannot be deleted.", "Other Accounts");
-                    return;
-                }
-                // Also block if the Account is system (rare for Others, but check)
-                var acc = await db.Accounts.FirstOrDefaultAsync(a => a.Id == entity.AccountId.Value);
-                if (acc?.IsSystem == true)
-                {
-                    MessageBox.Show("Cannot delete a system-linked account.", "Other Accounts");
-                    return;
-                }
-                if (acc != null) db.Accounts.Remove(acc);
+                MessageBox.Show("Only Admin can delete accounts.", "Access Denied",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
 
-            db.OtherAccounts.Remove(entity);
-            await db.SaveChangesAsync();
-            AppEvents.RaiseAccountsChanged();
-            await RefreshAsync();
+            if (MessageBox.Show($"Delete account “{row.Name}”?", "Confirm",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                var ok = await _svc!.DeleteAsync(row.Id);
+                if (!ok)
+                {
+                    MessageBox.Show("Account could not be deleted. It may be linked or used in GL.",
+                        "Other Accounts", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                AppEvents.RaiseAccountsChanged();
+                await RefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Delete failed: " + ex.Message, "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAsync();

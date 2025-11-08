@@ -2,44 +2,36 @@
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Hr;
-using Pos.Persistence;
+using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class StaffView : UserControl
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly StaffService _svc;
 
-        public StaffView(IDbContextFactory<PosClientDbContext> dbf)
+        public StaffView()
         {
             InitializeComponent();
-            _dbf = dbf;
+            _svc = App.Services.GetRequiredService<StaffService>();
             Loaded += async (_, __) => await RefreshAsync();
         }
 
         private async Task RefreshAsync()
         {
-            using var db = _dbf.CreateDbContext();
-            Grid.ItemsSource = await db.Staff
-                .AsNoTracking()
-                .OrderBy(s => s.FullName)
-                .ToListAsync();
+            Grid.ItemsSource = await _svc.GetAllAsync();
         }
-
 
         private async void New_Click(object sender, RoutedEventArgs e)
         {
             var dlg = App.Services.GetRequiredService<StaffDialog>();
             dlg.Configure(null); // New mode
 
-            // find the host window for this UserControl
             var owner = Window.GetWindow(this)
                        ?? Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
                        ?? Application.Current.MainWindow;
-
             if (owner != null) dlg.Owner = owner;
 
             if (dlg.ShowDialog() == true)
@@ -48,7 +40,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void Edit_Click(object sender, RoutedEventArgs e)
         {
-            if (Grid.SelectedItem is not Pos.Domain.Hr.Staff s)
+            if (Grid.SelectedItem is not Staff s)
             {
                 MessageBox.Show("Select a staff row first.");
                 return;
@@ -60,13 +52,11 @@ namespace Pos.Client.Wpf.Windows.Admin
             var owner = Window.GetWindow(this)
                        ?? Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
                        ?? Application.Current.MainWindow;
-
             if (owner != null) dlg.Owner = owner;
 
             if (dlg.ShowDialog() == true)
                 await RefreshAsync();
         }
-
 
         private async void Delete_Click(object sender, RoutedEventArgs e)
         {
@@ -78,11 +68,16 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (MessageBox.Show($"Delete {s.FullName}?", "Confirm", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                 return;
 
-            using var db = _dbf.CreateDbContext();
-            var ent = await db.Staff.FirstAsync(x => x.Id == s.Id);
-            db.Remove(ent);
-            await db.SaveChangesAsync();
-            await RefreshAsync();
+            try
+            {
+                await _svc.DeleteAsync(s.Id);
+                await RefreshAsync();
+            }
+            catch (System.Exception ex)
+            {
+                MessageBox.Show("Failed to delete staff:\n\n" + ex.Message, "Staff",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAsync();

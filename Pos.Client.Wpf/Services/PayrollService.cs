@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Hr;
 using Pos.Persistence;
+using Pos.Persistence.Sync; // ⬅️ add
 
 namespace Pos.Client.Wpf.Services
 {
@@ -18,10 +19,13 @@ namespace Pos.Client.Wpf.Services
     {
         private readonly PosClientDbContext _db;
         private readonly IGlPostingService _gl;
+        private readonly IOutboxWriter _outbox; // ⬅️ add
 
-        public PayrollService(PosClientDbContext db, IGlPostingService gl)
+
+
+        public PayrollService(PosClientDbContext db, IGlPostingService gl, IOutboxWriter outbox) // ⬅️ change
         {
-            _db = db; _gl = gl;
+            _db = db; _gl = gl; _outbox = outbox; // ⬅️ add
         }
 
         public async Task<PayrollRun> CreateDraftAsync(DateTime startUtc, DateTime endUtc)
@@ -57,6 +61,9 @@ namespace Pos.Client.Wpf.Services
             run.TotalNet = run.TotalGross - run.TotalDeductions;
 
             await _db.SaveChangesAsync();
+            // === SYNC: payroll run created/updated ===
+            await _outbox.EnqueueUpsertAsync(_db, run, default);
+            await _db.SaveChangesAsync();
             return run;
         }
 
@@ -71,6 +78,10 @@ namespace Pos.Client.Wpf.Services
 
             // Post GL accrual
             await _gl.PostPayrollAccrualAsync(run);
+            // === SYNC: payroll run finalized ===
+            await _outbox.EnqueueUpsertAsync(_db, run, default);
+            await _db.SaveChangesAsync();
+
         }
 
         public async Task PayAsync(int runId)
@@ -80,6 +91,10 @@ namespace Pos.Client.Wpf.Services
             if (!run.IsFinalized) throw new InvalidOperationException("Finalize payroll first.");
 
             await _gl.PostPayrollPaymentAsync(run);
+            // === SYNC: payroll run paid ===
+            await _outbox.EnqueueUpsertAsync(_db, run, default);
+            await _db.SaveChangesAsync();
+
         }
     }
 }

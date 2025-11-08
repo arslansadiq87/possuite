@@ -7,6 +7,7 @@ using Pos.Domain.Entities;
 using Pos.Domain;
 using Pos.Domain.Settings;
 using Pos.Persistence.Services;
+using Pos.Persistence.Sync;   // NEW
 
 namespace Pos.Persistence.Features.Transfers
 {
@@ -14,14 +15,22 @@ namespace Pos.Persistence.Features.Transfers
     {
         private readonly Pos.Persistence.PosClientDbContext _db;
         private readonly StockGuard _guard; // add this
+        private readonly IOutboxWriter _outbox;   // NEW
 
-        public TransferService(PosClientDbContext db, StockGuard guard) // inject
+        public TransferService(PosClientDbContext db, StockGuard guard, IOutboxWriter outbox)
         {
             _db = db;
             _guard = guard;
+            _outbox = outbox;
         }
 
-        public TransferService(Pos.Persistence.PosClientDbContext db) => _db = db;
+        public TransferService(PosClientDbContext db, IOutboxWriter outbox)
+        {
+            _db = db;
+            _guard = new StockGuard(db);
+            _outbox = outbox;
+        }
+
 
         private static bool IsAdminOrManager(User u) =>
     u.IsGlobalAdmin || u.Role == UserRole.Admin || u.Role == UserRole.Manager;
@@ -77,7 +86,13 @@ namespace Pos.Persistence.Features.Transfers
             doc.UpdatedAtUtc = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+
+            // === SYNC: dispatch undone → back to Draft ===
+            await _outbox.EnqueueUpsertAsync(_db, doc, default);
+            await _db.SaveChangesAsync();
+
             return doc;
+
         }
 
         public async Task<StockDoc> UndoReceiveAsync(int stockDocId, DateTime effectiveDateUtc, int actedByUserId, string? reason = null)
@@ -184,7 +199,13 @@ namespace Pos.Persistence.Features.Transfers
             doc.UpdatedAtUtc = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+
+            // === SYNC: receive undone → back to Dispatched ===
+            await _outbox.EnqueueUpsertAsync(_db, doc, default);
+            await _db.SaveChangesAsync();
+
             return doc;
+
         }
 
 
@@ -499,9 +520,16 @@ namespace Pos.Persistence.Features.Transfers
             }
             doc.UpdatedAtUtc = DateTime.UtcNow;
 
+            // Persist transfer header/lines/entries
             await _db.SaveChangesAsync();
+
+            // === SYNC: transfer state finalized to Dispatched (or Received if autoReceive) ===
+            await _outbox.EnqueueUpsertAsync(_db, doc, default);
+            await _db.SaveChangesAsync();          // persist outbox row in the SAME transaction
+
             await tx.CommitAsync();
             return doc;
+
         }
 
 
@@ -581,7 +609,13 @@ namespace Pos.Persistence.Features.Transfers
             doc.UpdatedAtUtc = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+
+            // === SYNC: transfer received (primary + any overage recorded) ===
+            await _outbox.EnqueueUpsertAsync(_db, doc, default);
+            await _db.SaveChangesAsync();
+
             return doc;
+
         }
 
 

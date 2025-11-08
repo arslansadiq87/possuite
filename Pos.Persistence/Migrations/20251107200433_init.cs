@@ -68,7 +68,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -94,7 +94,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -114,7 +114,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -134,7 +134,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -180,7 +180,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -205,7 +205,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -227,7 +227,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -249,7 +249,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -273,7 +273,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -304,7 +304,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -326,7 +326,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -354,7 +354,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -392,7 +392,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -414,11 +414,61 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_SupplierCredits", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SyncCursors",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    LastToken = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SyncCursors", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SyncInbox",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Entity = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Op = table.Column<int>(type: "INTEGER", nullable: false),
+                    PayloadJson = table.Column<string>(type: "TEXT", nullable: false),
+                    TsUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Token = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SyncInbox", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SyncOutbox",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Entity = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Op = table.Column<int>(type: "INTEGER", nullable: false),
+                    PayloadJson = table.Column<string>(type: "TEXT", nullable: false),
+                    TsUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Token = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SyncOutbox", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -439,7 +489,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -462,7 +512,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -486,7 +536,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -515,7 +565,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -540,7 +590,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -566,7 +616,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -599,7 +649,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -637,7 +687,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -669,7 +719,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -759,7 +809,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -787,7 +837,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -815,7 +865,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -846,7 +896,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -880,7 +930,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -919,7 +969,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -954,12 +1004,12 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_StockEntries", x => x.Id);
-                    table.CheckConstraint("CK_StockEntry_StockDoc_Requirement", "CASE  WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL  ELSE 1 END");
+                    table.CheckConstraint("CK_StockEntry_StockDoc_Requirement", "CASE WHEN RefType IN ('Opening','TransferOut','TransferIn') THEN StockDocId IS NOT NULL ELSE 1 END");
                     table.ForeignKey(
                         name: "FK_StockEntries_StockDocs_StockDocId",
                         column: x => x.StockDocId,
@@ -1014,7 +1064,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1079,7 +1129,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1123,7 +1173,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1146,6 +1196,41 @@ namespace Pos.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ProductImages",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    ProductId = table.Column<int>(type: "INTEGER", nullable: false),
+                    IsPrimary = table.Column<bool>(type: "INTEGER", nullable: false),
+                    SortOrder = table.Column<int>(type: "INTEGER", nullable: false),
+                    LocalOriginalPath = table.Column<string>(type: "TEXT", nullable: true),
+                    LocalThumbPath = table.Column<string>(type: "TEXT", nullable: true),
+                    ServerOriginalUrl = table.Column<string>(type: "TEXT", nullable: true),
+                    ServerThumbUrl = table.Column<string>(type: "TEXT", nullable: true),
+                    Width = table.Column<int>(type: "INTEGER", nullable: true),
+                    Height = table.Column<int>(type: "INTEGER", nullable: true),
+                    SizeBytes = table.Column<long>(type: "INTEGER", nullable: true),
+                    ContentHashSha1 = table.Column<string>(type: "TEXT", nullable: true),
+                    PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProductImages", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ProductImages_Products_ProductId",
+                        column: x => x.ProductId,
+                        principalTable: "Products",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "GlEntries",
                 columns: table => new
                 {
@@ -1164,7 +1249,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1195,7 +1280,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1225,7 +1310,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1295,6 +1380,41 @@ namespace Pos.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ItemImages",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    ItemId = table.Column<int>(type: "INTEGER", nullable: false),
+                    IsPrimary = table.Column<bool>(type: "INTEGER", nullable: false),
+                    SortOrder = table.Column<int>(type: "INTEGER", nullable: false),
+                    LocalOriginalPath = table.Column<string>(type: "TEXT", nullable: true),
+                    LocalThumbPath = table.Column<string>(type: "TEXT", nullable: true),
+                    ServerOriginalUrl = table.Column<string>(type: "TEXT", nullable: true),
+                    ServerThumbUrl = table.Column<string>(type: "TEXT", nullable: true),
+                    Width = table.Column<int>(type: "INTEGER", nullable: true),
+                    Height = table.Column<int>(type: "INTEGER", nullable: true),
+                    SizeBytes = table.Column<long>(type: "INTEGER", nullable: true),
+                    ContentHashSha1 = table.Column<string>(type: "TEXT", nullable: true),
+                    PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ItemImages", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ItemImages_Items_ItemId",
+                        column: x => x.ItemId,
+                        principalTable: "Items",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "JournalLines",
                 columns: table => new
                 {
@@ -1311,7 +1431,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1355,7 +1475,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1390,12 +1510,12 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_PartyOutlets", x => x.Id);
-                    table.CheckConstraint("CK_PartyOutlet_CreditLimit_NonNegative", "[CreditLimit] IS NULL OR [CreditLimit] >= 0");
+                    table.CheckConstraint("CK_PartyOutlet_CreditLimit_NonNegative", "CreditLimit IS NULL OR CreditLimit >= 0");
                     table.ForeignKey(
                         name: "FK_PartyOutlets_Outlets_OutletId",
                         column: x => x.OutletId,
@@ -1423,7 +1543,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1471,12 +1591,12 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Purchases", x => x.Id);
-                    table.CheckConstraint("CK_Purchase_Target", "( [TargetType] = 1 AND [OutletId] IS NOT NULL AND [WarehouseId] IS NULL ) OR ( [TargetType] = 2 AND [WarehouseId] IS NOT NULL AND [OutletId] IS NULL )");
+                    table.CheckConstraint("CK_Purchase_Target", "(TargetType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (TargetType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
                     table.ForeignKey(
                         name: "FK_Purchases_Outlets_OutletId",
                         column: x => x.OutletId,
@@ -1552,7 +1672,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1607,7 +1727,7 @@ namespace Pos.Persistence.Migrations
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "X''")
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
@@ -1728,6 +1848,11 @@ namespace Pos.Persistence.Migrations
                 filter: "IsPrimary = 1");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ItemImages_ItemId_IsPrimary",
+                table: "ItemImages",
+                columns: new[] { "ItemId", "IsPrimary" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Items_BrandId",
                 table: "Items",
                 column: "BrandId");
@@ -1836,6 +1961,11 @@ namespace Pos.Persistence.Migrations
                 name: "IX_PayrollItems_StaffId",
                 table: "PayrollItems",
                 column: "StaffId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProductImages_ProductId_IsPrimary",
+                table: "ProductImages",
+                columns: new[] { "ProductId", "IsPrimary" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Products_BrandId",
@@ -2031,6 +2161,18 @@ namespace Pos.Persistence.Migrations
                 column: "Ts");
 
             migrationBuilder.CreateIndex(
+                name: "IX_SyncInbox_Token",
+                table: "SyncInbox",
+                column: "Token",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SyncOutbox_Token",
+                table: "SyncOutbox",
+                column: "Token",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_UserOutlets_OutletId",
                 table: "UserOutlets",
                 column: "OutletId");
@@ -2106,6 +2248,9 @@ namespace Pos.Persistence.Migrations
                 name: "ItemBarcodes");
 
             migrationBuilder.DropTable(
+                name: "ItemImages");
+
+            migrationBuilder.DropTable(
                 name: "JournalLines");
 
             migrationBuilder.DropTable(
@@ -2133,6 +2278,9 @@ namespace Pos.Persistence.Migrations
                 name: "PayrollItems");
 
             migrationBuilder.DropTable(
+                name: "ProductImages");
+
+            migrationBuilder.DropTable(
                 name: "PurchaseLines");
 
             migrationBuilder.DropTable(
@@ -2155,6 +2303,15 @@ namespace Pos.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "SupplierCredits");
+
+            migrationBuilder.DropTable(
+                name: "SyncCursors");
+
+            migrationBuilder.DropTable(
+                name: "SyncInbox");
+
+            migrationBuilder.DropTable(
+                name: "SyncOutbox");
 
             migrationBuilder.DropTable(
                 name: "TillSessions");

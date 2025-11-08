@@ -23,11 +23,15 @@ using System.Windows.Media;
 using Pos.Persistence.Services;
 using System.Linq;
 using Pos.Client.Wpf.Printing;
+using Pos.Persistence.Sync;                 // IOutboxWriter
+using Pos.Client.Wpf.Services.Sync;         // EnqueueAfterSaveAsync extension (if you created it)
+
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class SaleInvoiceView : UserControl
     {
+        
 
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
@@ -843,6 +847,10 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             db.SaveChanges();
             tx.Commit();
+            // === SYNC OUTBOX: record this finalized sale once it's fully committed ===
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            await outbox.EnqueueAfterSaveAsync(db, sale, default);
+
             // === GL POST: Sale / SaleReturn (runs once per finalized doc) ===
             try
             {

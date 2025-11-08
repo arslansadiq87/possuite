@@ -108,7 +108,7 @@
                                 <!-- RIGHT: icon + count pinned to edge -->
                                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                         VerticalAlignment="Center" HorizontalAlignment="Right">
-                                    <Image Source="{StaticResource Icon.Product}"
+                                    <Image Source="{StaticResource Icon.Products}"
                      Width="{DynamicResource Icon.Size}" Height="{DynamicResource Icon.Size}" Stretch="Uniform"/>
                                     <TextBlock Text="{Binding ItemCount}" FontWeight="SemiBold" Margin="6,0,0,0"/>
                                 </StackPanel>

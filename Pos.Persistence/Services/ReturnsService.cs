@@ -3,14 +3,20 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
 using Pos.Domain.Services;
+using Pos.Persistence.Sync;   // ← add this
 
 namespace Pos.Persistence.Services
 {
     public class ReturnsService : IReturnsService
     {
         private readonly PosClientDbContext _db;
-        public ReturnsService(PosClientDbContext db) => _db = db;
+        private readonly IOutboxWriter _outbox;   // ← add
 
+        public ReturnsService(PosClientDbContext db, IOutboxWriter outbox) // ← inject
+        {
+            _db = db;
+            _outbox = outbox;
+        }
         /// <summary>
         /// Create a finalized Sale (IsReturn = true) without linking to an original invoice.
         /// - Validates lines
@@ -107,6 +113,9 @@ namespace Pos.Persistence.Services
             await _db.SaveChangesAsync();
             await tx.CommitAsync();
 
+            // === SYNC: enqueue finalized Sale Return (IsReturn = true) inside the same TX ===
+            await _outbox.EnqueueUpsertAsync(_db, ret, default);  // record the return document
+            await _db.SaveChangesAsync();                          // persist the outbox row
             return ret.Id;
         }
 

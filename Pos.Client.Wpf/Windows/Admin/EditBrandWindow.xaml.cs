@@ -1,18 +1,17 @@
 ﻿using System;
-using System.Linq;
-using System.Windows;
 using System.ComponentModel;
-using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
+using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Persistence.Services;   // BrandService
 using Pos.Domain.Entities;
-using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class EditBrandWindow : Window
     {
-        private IDbContextFactory<PosClientDbContext>? _dbf;
         private readonly bool _design;
+        private BrandService? _svc;
 
         public int? EditId { get; set; }
 
@@ -23,48 +22,46 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-            Loaded += (_, __) => LoadOrInit();
+            _svc = App.Services.GetRequiredService<BrandService>();
+            Loaded += async (_, __) => await LoadOrInitAsync();
         }
 
-        private bool Ready => !_design && _dbf != null;
-
-        private void LoadOrInit()
+        private async Task LoadOrInitAsync()
         {
-            if (!Ready || EditId is null) return;
-            using var db = _dbf!.CreateDbContext();
-            var row = db.Brands.AsNoTracking().FirstOrDefault(b => b.Id == EditId.Value);
+            if (_design || _svc == null) return;
+
+            if (EditId is null) return; // creating new
+
+            var row = await _svc.GetBrandAsync(EditId.Value);
             if (row is null) { DialogResult = false; Close(); return; }
+
             NameBox.Text = row.Name;
             IsActiveBox.IsChecked = row.IsActive;
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
+        private async void Save_Click(object sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
+            if (_svc == null) return;
 
             var name = (NameBox.Text ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(name)) { MessageBox.Show("Name is required."); return; }
+            var active = IsActiveBox.IsChecked ?? true;
 
-            using var db = _dbf!.CreateDbContext();
-            var exists = db.Brands.Any(b => b.Name.ToLower() == name.ToLower() && b.Id != (EditId ?? 0));
-            if (exists) { MessageBox.Show("A brand with this name already exists."); return; }
-
-            if (EditId is null)
+            try
             {
-                var now = DateTime.UtcNow;
-                db.Brands.Add(new Brand { Name = name, IsActive = IsActiveBox.IsChecked ?? true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                await _svc.SaveBrandAsync(EditId, name, active);
+                DialogResult = true;
+                Close();
             }
-            else
+            catch (Exception ex)
             {
-                var row = db.Brands.First(b => b.Id == EditId.Value);
-                row.Name = name; row.IsActive = IsActiveBox.IsChecked ?? true; row.UpdatedAtUtc = DateTime.UtcNow;
+                MessageBox.Show(ex.Message, "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-
-            db.SaveChanges();
-            DialogResult = true; Close();
         }
 
-        private void Cancel_Click(object s, RoutedEventArgs e) { DialogResult = false; Close(); }
+        private void Cancel_Click(object s, RoutedEventArgs e)
+        {
+            DialogResult = false;
+            Close();
+        }
     }
 }

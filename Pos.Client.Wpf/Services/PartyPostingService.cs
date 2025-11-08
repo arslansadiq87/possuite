@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using Pos.Persistence.Sync;
 
 namespace Pos.Client.Wpf.Services
 {
@@ -11,7 +12,13 @@ namespace Pos.Client.Wpf.Services
     public sealed class PartyPostingService
     {
         private readonly PosClientDbContext _db;
-        public PartyPostingService(PosClientDbContext db) => _db = db;
+        private readonly IOutboxWriter _outbox; // ⬅️ add
+
+        public PartyPostingService(PosClientDbContext db, IOutboxWriter outbox) // ⬅️ change
+        {
+            _db = db;
+            _outbox = outbox; // ⬅️ add
+        }
 
         public async Task PostAsync(int partyId, BillingScope scope, int? outletId,
             PartyLedgerDocType docType, int docId, decimal debit, decimal credit, string? memo = null)
@@ -32,6 +39,10 @@ namespace Pos.Client.Wpf.Services
 
             _db.PartyLedgers.Add(row);
             await _db.SaveChangesAsync();
+            // === SYNC: replicate this ledger entry ===
+            await _outbox.EnqueueUpsertAsync(_db, row, default);
+            await _db.SaveChangesAsync();
+
 
             // Update snapshot
             await UpsertBalanceAsync(partyId, ledgerOutletId, debit - credit);

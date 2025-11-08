@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Hr;
 using Pos.Persistence;
+using Pos.Persistence.Sync; // ⬅️ add
 
 namespace Pos.Client.Wpf.Services
 {
@@ -16,7 +17,12 @@ namespace Pos.Client.Wpf.Services
     public sealed class AttendanceService : IAttendanceService
     {
         private readonly PosClientDbContext _db;
-        public AttendanceService(PosClientDbContext db) => _db = db;
+        private readonly IOutboxWriter _outbox; // ⬅️ add
+
+        public AttendanceService(PosClientDbContext db, IOutboxWriter outbox) // ⬅️ change
+        {
+            _db = db; _outbox = outbox; // ⬅️ add
+        }
 
         public async Task PunchAsync(int staffId, bool isIn, string? source = null)
         {
@@ -27,6 +33,10 @@ namespace Pos.Client.Wpf.Services
                 TsUtc = DateTime.UtcNow,
                 Source = source
             });
+            await _db.SaveChangesAsync();
+            // === SYNC: punch event ===
+            await _outbox.EnqueueUpsertAsync(_db,
+                await _db.AttendancePunches.OrderByDescending(p => p.Id).FirstAsync(), default);
             await _db.SaveChangesAsync();
         }
 
@@ -70,6 +80,10 @@ namespace Pos.Client.Wpf.Services
             day.LateBy = lateBy;
 
             await _db.SaveChangesAsync();
+            // === SYNC: daily summary ===
+            await _outbox.EnqueueUpsertAsync(_db, day, default);
+            await _db.SaveChangesAsync();
+
         }
     }
 }

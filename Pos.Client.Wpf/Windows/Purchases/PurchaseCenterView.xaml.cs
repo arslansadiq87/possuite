@@ -12,6 +12,8 @@ using Pos.Persistence.Services;
 using Pos.Client.Wpf.Services;
 using System.Windows.Controls;       // AppState / AppCtx
 using Pos.Client.Wpf.Infrastructure;
+using Pos.Persistence.Sync; // for IOutboxWriter
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -63,7 +65,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
 
-            _svc = new PurchasesService(new PosClientDbContext(_opts));
+            //_svc = new PurchasesService(new PosClientDbContext(_opts));
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
 
             PurchasesGrid.ItemsSource = _purchases;
             LinesGrid.ItemsSource = _lines;
@@ -375,8 +379,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             try
             {
+                //using var db = new PosClientDbContext(_opts);
+                //var svc = new PurchasesService(db);
                 using var db = new PosClientDbContext(_opts);
-                var svc = new PurchasesService(db);
+                var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+                var svc = new PurchasesService(db, outbox);
+
 
                 // Load draft header + lines
                 var draft = await db.Purchases

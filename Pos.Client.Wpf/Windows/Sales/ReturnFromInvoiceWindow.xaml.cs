@@ -12,6 +12,8 @@ using Pos.Domain.Pricing;           // PricingMath
 using Pos.Persistence;
 using Microsoft.Extensions.DependencyInjection;   // GetRequiredService
 using Pos.Client.Wpf.Services;                    // IPaymentDialogService, PaymentResult
+using Pos.Persistence.Sync;                 // IOutboxWriter
+using Pos.Client.Wpf.Services.Sync;         // EnqueueAfterSaveAsync extension (if you created it)
 
 
 namespace Pos.Client.Wpf.Windows.Sales
@@ -357,6 +359,10 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 db.SaveChanges();
                 tx.Commit();
+
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            await outbox.EnqueueAfterSaveAsync(db, ret, default);
+
             // === GL POST: Sale Return (same DbContext) ===
             try
             {

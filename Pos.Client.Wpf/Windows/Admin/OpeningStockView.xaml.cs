@@ -18,19 +18,15 @@ using Pos.Persistence.Features.OpeningStock;
 using Pos.Persistence.Services;
 using Microsoft.Win32;
 using System.Text;
-using Microsoft.Win32;
 using System.Globalization;
 using System.IO;
-using System.Text;
-
-
+using CommunityToolkit.Mvvm.DependencyInjection;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OpeningStockView : UserControl, INotifyPropertyChanged
     {
         public event EventHandler? CloseRequested;
-
         private bool _dirty;
         private StockDocStatus _docStatus = StockDocStatus.Draft;
         public bool IsLocked => _docStatus == StockDocStatus.Locked;
@@ -127,8 +123,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         private void RaiseUndo() => Raise(nameof(HasUndo));
 
         private readonly IOpeningStockService _svc;
-        private readonly IDbContextFactory<Pos.Persistence.PosClientDbContext> _dbf;
-        private readonly CatalogService _catalog;
+        //private readonly IDbContextFactory<Pos.Persistence.PosClientDbContext> _dbf;
+        //private readonly CatalogService _catalog;
 
         private int _colSku = 0, _colItemName = 1, _colQty = 2, _colUnitCost = 3, _colSubtotal = 4, _colNote = 5;
 
@@ -210,7 +206,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             return lines;
         }
 
-
         private static int FindHeaderIndex(List<string> headers, string[] candidates)
         {
             for (int i = 0; i < headers.Count; i++)
@@ -220,7 +215,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         }
 
         private static string? GetCol(List<string> cols, int idx) => idx >= 0 && idx < cols.Count ? cols[idx] : null;
-
         // Basic CSV split supporting commas and quoted fields
         private static List<string> SplitCsvLine(string line)
         {
@@ -258,8 +252,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             return res;
         }
 
-
-
         // Header / doc
         public int StockDocId { get; private set; } // 0 until draft created
         public DateTime EffectiveDateLocal
@@ -292,8 +284,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             DataContext = this;
 
             _svc = App.Services.GetRequiredService<IOpeningStockService>();
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<Pos.Persistence.PosClientDbContext>>();
-            _catalog = App.Services.GetRequiredService<CatalogService>();
+            //_dbf = App.Services.GetRequiredService<IDbContextFactory<Pos.Persistence.PosClientDbContext>>();
+            //_catalog = App.Services.GetRequiredService<CatalogService>();
             _state = App.Services.GetRequiredService<AppState>();
 
             Grid.PreviewKeyDown += Grid_PreviewKeyDown;
@@ -412,41 +404,49 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async Task<string> BuildSampleCsvOnlyMissingAsync()
         {
             // Items that DO NOT have any StockEntry with RefType="Opening" for this LocationType/Id
-            await using var db = await _dbf.CreateDbContextAsync();
+            //await using var db = await _dbf.CreateDbContextAsync();
 
-            var rows = await db.Items
-                .AsNoTracking()
-                .Where(i => !i.IsVoided && i.IsActive)
-                .Where(i => !db.StockEntries.Any(se =>
-                    se.ItemId == i.Id
-                    && se.RefType == "Opening"
-                    && se.LocationType == LocationType
-                    && se.LocationId == LocationId))
-                .Include(i => i.Product)
-                .OrderBy(i => i.Sku)
-                .Select(i => new
-                {
-                    i.Sku,
-                    ItemName = ComposeDisplayName(
-                        i.Product != null ? i.Product.Name : null,
-                        i.Name,
-                        i.Variant1Name, i.Variant1Value,
-                        i.Variant2Name, i.Variant2Value)
-                })
-                .ToListAsync();
+            //var rows = await db.Items
+            //    .AsNoTracking()
+            //    .Where(i => !i.IsVoided && i.IsActive)
+            //    .Where(i => !db.StockEntries.Any(se =>
+            //        se.ItemId == i.Id
+            //        && se.RefType == "Opening"
+            //        && se.LocationType == LocationType
+            //        && se.LocationId == LocationId))
+            //    .Include(i => i.Product)
+            //    .OrderBy(i => i.Sku)
+            //    .Select(i => new
+            //    {
+            //        i.Sku,
+            //        ItemName = ComposeDisplayName(
+            //            i.Product != null ? i.Product.Name : null,
+            //            i.Name,
+            //            i.Variant1Name, i.Variant1Value,
+            //            i.Variant2Name, i.Variant2Value)
+            //    })
+            //    .ToListAsync();
+            var rows = await _svc.GetMissingOpeningItemDisplaysAsync(LocationType, LocationId);
 
             var sb = new StringBuilder();
             sb.AppendLine("SKU,ItemName,Qty,UnitCost,Note");
-            foreach (var r in rows)
-            {
-                sb.Append(EscapeCsv(r.Sku)); sb.Append(',');
-                sb.Append(EscapeCsv(r.ItemName)); sb.Append(',');
-                sb.Append(','); // Qty (user fills)
-                sb.Append(','); // UnitCost (user fills)
-                                // Note (blank)
+            //foreach (var r in rows)
+            //{
+            //    sb.Append(EscapeCsv(r.Sku)); sb.Append(',');
+            //    sb.Append(EscapeCsv(r.ItemName)); sb.Append(',');
+            //    sb.Append(','); // Qty (user fills)
+            //    sb.Append(','); // UnitCost (user fills)
+            //                    // Note (blank)
+            //    sb.AppendLine();
+            //}
+            foreach (var (sku, display) in rows)
+                {
+                sb.Append(EscapeCsv(sku)); sb.Append(',');
+                sb.Append(EscapeCsv(display)); sb.Append(',');
+                sb.Append(','); // Qty
+                sb.Append(','); // UnitCost
                 sb.AppendLine();
-            }
-
+                }
             // If no rows, still return headers so the user sees a valid template.
             return sb.ToString();
         }
@@ -460,33 +460,42 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async Task<string> BuildSampleCsvIncludingProductsAsync()
         {
-            await using var db = await _dbf.CreateDbContextAsync();
-            var rows = await db.Items
-                .AsNoTracking()
-                .Where(i => !i.IsVoided && i.IsActive)
-                .Include(i => i.Product)
-                .OrderBy(i => i.Sku)
-                .Select(i => new
-                {
-                    i.Sku,
-                    ItemName = ComposeDisplayName(
-                        i.Product != null ? i.Product.Name : null,
-                        i.Name,
-                        i.Variant1Name, i.Variant1Value,
-                        i.Variant2Name, i.Variant2Value)
-                })
-                .ToListAsync();
+            //await using var db = await _dbf.CreateDbContextAsync();
+            //var rows = await db.Items
+            //    .AsNoTracking()
+            //    .Where(i => !i.IsVoided && i.IsActive)
+            //    .Include(i => i.Product)
+            //    .OrderBy(i => i.Sku)
+            //    .Select(i => new
+            //    {
+            //        i.Sku,
+            //        ItemName = ComposeDisplayName(
+            //            i.Product != null ? i.Product.Name : null,
+            //            i.Name,
+            //            i.Variant1Name, i.Variant1Value,
+            //            i.Variant2Name, i.Variant2Value)
+            //    })
+            //    .ToListAsync();
+            var rows = await _svc.GetAllActiveItemDisplaysAsync();
 
             var sb = new StringBuilder();
             sb.AppendLine("SKU,ItemName,Qty,UnitCost,Note");
-            foreach (var r in rows)
+            //foreach (var r in rows)
+            //{
+            //    // Leave Qty/UnitCost empty so user fills them
+            //    sb.Append(EscapeCsv(r.Sku)); sb.Append(',');
+            //    sb.Append(EscapeCsv(r.ItemName)); sb.Append(',');
+            //    sb.Append(','); // Qty
+            //    sb.Append(','); // UnitCost
+            //                    // Note (blank)
+            //    sb.AppendLine();
+            //}
+            foreach (var (sku, display) in rows)
             {
-                // Leave Qty/UnitCost empty so user fills them
-                sb.Append(EscapeCsv(r.Sku)); sb.Append(',');
-                sb.Append(EscapeCsv(r.ItemName)); sb.Append(',');
+                sb.Append(EscapeCsv(sku)); sb.Append(',');
+                sb.Append(EscapeCsv(display)); sb.Append(',');
                 sb.Append(','); // Qty
                 sb.Append(','); // UnitCost
-                                // Note (blank)
                 sb.AppendLine();
             }
             return sb.ToString();
@@ -565,22 +574,23 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
 
                 // Ensure provided ItemName (if any) matches DB display name for the SKU
+                //var skus = parsed.Select(p => p.Sku).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                //await using var db = await _dbf.CreateDbContextAsync();
+                //var nameMap = await db.Items.AsNoTracking()
+                //    .Include(i => i.Product)
+                //    .Where(i => skus.Contains(i.Sku))
+                //    .Select(i => new
+                //    {
+                //        i.Sku,
+                //        Display = ComposeDisplayName(
+                //            i.Product != null ? i.Product.Name : null,
+                //            i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value)
+                //    })
+                //    .ToListAsync();
+
+                //var displayBySku = nameMap.ToDictionary(x => x.Sku, x => x.Display, StringComparer.OrdinalIgnoreCase);
                 var skus = parsed.Select(p => p.Sku).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                await using var db = await _dbf.CreateDbContextAsync();
-                var nameMap = await db.Items.AsNoTracking()
-                    .Include(i => i.Product)
-                    .Where(i => skus.Contains(i.Sku))
-                    .Select(i => new
-                    {
-                        i.Sku,
-                        Display = ComposeDisplayName(
-                            i.Product != null ? i.Product.Name : null,
-                            i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value)
-                    })
-                    .ToListAsync();
-
-                var displayBySku = nameMap.ToDictionary(x => x.Sku, x => x.Display, StringComparer.OrdinalIgnoreCase);
-
+                var displayBySku = await _svc.GetDisplayBySkuAsync(skus);
                 var mismatches = parsed
                     .Where(p => !string.IsNullOrWhiteSpace(p.ItemName))
                     .Where(p =>
@@ -720,20 +730,20 @@ namespace Pos.Client.Wpf.Windows.Admin
                 };
 
                 // Persist EffectiveDate change on the header (still Draft)
-                await using (var db = await _dbf.CreateDbContextAsync())
-                {
-                    var doc = await db.StockDocs.FirstAsync(d => d.Id == StockDocId);
-                    if (doc.Status != StockDocStatus.Draft)
-                        throw new InvalidOperationException("Document is locked.");
+                //await using (var db = await _dbf.CreateDbContextAsync())
+                //{
+                //    var doc = await db.StockDocs.FirstAsync(d => d.Id == StockDocId);
+                //    if (doc.Status != StockDocStatus.Draft)
+                //        throw new InvalidOperationException("Document is locked.");
 
-                    var newUtc = EffectiveDateLocal.ToUniversalTime();
-                    if (doc.EffectiveDateUtc != newUtc)
-                    {
-                        doc.EffectiveDateUtc = newUtc;
-                        await db.SaveChangesAsync();
-                    }
-                }
-
+                //    var newUtc = EffectiveDateLocal.ToUniversalTime();
+                //    if (doc.EffectiveDateUtc != newUtc)
+                //    {
+                //        doc.EffectiveDateUtc = newUtc;
+                //        await db.SaveChangesAsync();
+                //    }
+                //}
+                await _svc.UpdateEffectiveDateAsync(StockDocId, EffectiveDateLocal);
 
                 // server-side validation (SKU exist, etc.)
                 var val = await _svc.ValidateLinesAsync(StockDocId, req.Lines);
@@ -848,44 +858,50 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async Task AddByIdAsync(int itemId, decimal qty)
         {
-            await using var db = await _dbf.CreateDbContextAsync();
-            var it = await db.Items.AsNoTracking().FirstAsync(x => x.Id == itemId);
-            await AddOrIncrementRowAsync(it, qty);
+            //await using var db = await _dbf.CreateDbContextAsync();
+            //var it = await db.Items.AsNoTracking().FirstAsync(x => x.Id == itemId);
+            //await AddOrIncrementRowAsync(it, qty);
+            var meta = await _svc.GetItemDisplayByIdAsync(itemId); // (Sku, Display)
+            await AddOrIncrementRowAsync(meta.Sku, meta.Display, qty);
         }
 
-        private async Task AddOrIncrementRowAsync(Item item, decimal qty)
+        private Task AddOrIncrementRowAsync(string sku, string display, decimal qty)
         {
             // already there? increment + dirty
-            var existing = Rows.FirstOrDefault(r => string.Equals(r.Sku, item.Sku, StringComparison.OrdinalIgnoreCase));
+            //var existing = Rows.FirstOrDefault(r => string.Equals(r.Sku, item.Sku, StringComparison.OrdinalIgnoreCase));
+            var existing = Rows.FirstOrDefault(r => string.Equals(r.Sku, sku, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
             {
                 existing.Qty += qty;
                 MarkDirty();                       // <-- mark change
                 FocusCellForRow(existing, _colQty);
-                return;
+                //return;
+                return Task.CompletedTask;
             }
 
             // compute a friendly display name (fallback to item.Name)
-            string display = item.Name;
-            try
-            {
-                // If you want product + variant in the name:
-                await using var db = await _dbf.CreateDbContextAsync();
-                var i = await db.Items.AsNoTracking()
-                    .Include(x => x.Product)
-                    .FirstAsync(x => x.Id == item.Id);
-                display = ComposeDisplayName(
-                    i.Product != null ? i.Product.Name : null,
-                    i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value);
-            }
-            catch { /* ignore name enrich errors */ }
+            //string display = item.Name;
+            //try
+            //{
+            //    // If you want product + variant in the name:
+            //    await using var db = await _dbf.CreateDbContextAsync();
+            //    var i = await db.Items.AsNoTracking()
+            //        .Include(x => x.Product)
+            //        .FirstAsync(x => x.Id == item.Id);
+            //    display = ComposeDisplayName(
+            //        i.Product != null ? i.Product.Name : null,
+            //        i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value);
+            //}
+            //catch { /* ignore name enrich errors */ }
 
-            // NEW ROW → add + hook + dirty
-            var vm = new RowVM { Sku = item.Sku, ItemName = display, Qty = qty, UnitCost = 0m, Note = "" };
+            //// NEW ROW → add + hook + dirty
+            //var vm = new RowVM { Sku = item.Sku, ItemName = display, Qty = qty, UnitCost = 0m, Note = "" };
+            var vm = new RowVM { Sku = sku, ItemName = display, Qty = qty, UnitCost = 0m, Note = "" };
             Rows.Add(vm);
             HookRow(vm);                           // <-- hook here
             MarkDirty();                           // <-- and here
             FocusCellForRow(vm, _colQty);          // focus Qty as per flow
+            return Task.CompletedTask;
         }
 
 
@@ -1060,64 +1076,81 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async Task LoadExistingDraftIfAnyAsync()
         {
-            await using var db = await _dbf.CreateDbContextAsync();
+            //await using var db = await _dbf.CreateDbContextAsync();
 
-            var draft = await db.StockDocs
-                .AsNoTracking()
-                .Where(d => d.DocType == StockDocType.Opening
-                         && d.Status == StockDocStatus.Draft
-                         && d.LocationType == LocationType
-                         && d.LocationId == LocationId)
-                .OrderByDescending(d => d.Id)
-                .FirstOrDefaultAsync();
+            //var draft = await db.StockDocs
+            //    .AsNoTracking()
+            //    .Where(d => d.DocType == StockDocType.Opening
+            //             && d.Status == StockDocStatus.Draft
+            //             && d.LocationType == LocationType
+            //             && d.LocationId == LocationId)
+            //    .OrderByDescending(d => d.Id)
+            //    .FirstOrDefaultAsync();
 
-            if (draft == null) return;
+            //if (draft == null) return;
 
-            // Draft lines come from OpeningStockDraftLines
-            var dlines = await db.OpeningStockDraftLines
-                .AsNoTracking()
-                .Where(x => x.StockDocId == draft.Id)
-                .Select(x => new { x.ItemId, x.Qty, x.UnitCost, x.Note })
-                .ToListAsync();
+            //// Draft lines come from OpeningStockDraftLines
+            //var dlines = await db.OpeningStockDraftLines
+            //    .AsNoTracking()
+            //    .Where(x => x.StockDocId == draft.Id)
+            //    .Select(x => new { x.ItemId, x.Qty, x.UnitCost, x.Note })
+            //    .ToListAsync();
 
-            var itemIds = dlines.Select(l => l.ItemId).Distinct().ToList();
+            //var itemIds = dlines.Select(l => l.ItemId).Distinct().ToList();
 
-            var names = await db.Items
-                .AsNoTracking()
-                .Include(i => i.Product)
-                .Where(i => itemIds.Contains(i.Id))
-                .Select(i => new
-                {
-                    i.Id,
-                    i.Sku,
-                    Display = ComposeDisplayName(
-                        i.Product != null ? i.Product.Name : null,
-                        i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value)
-                })
-                .ToListAsync();
+            //var names = await db.Items
+            //    .AsNoTracking()
+            //    .Include(i => i.Product)
+            //    .Where(i => itemIds.Contains(i.Id))
+            //    .Select(i => new
+            //    {
+            //        i.Id,
+            //        i.Sku,
+            //        Display = ComposeDisplayName(
+            //            i.Product != null ? i.Product.Name : null,
+            //            i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value)
+            //    })
+            //    .ToListAsync();
 
-            var byId = names.ToDictionary(x => x.Id, x => x);
+            //var byId = names.ToDictionary(x => x.Id, x => x);
 
+            //Rows.Clear();
+            //foreach (var l in dlines)
+            //{
+            //    var meta = byId[l.ItemId];
+            //    var row = new RowVM
+            //    {
+            //        Sku = meta.Sku,
+            //        ItemName = meta.Display,
+            //        Qty = l.Qty,
+            //        UnitCost = l.UnitCost,
+            //        Note = l.Note ?? ""
+            //    };
+            //    Rows.Add(row);
+            //    HookRow(row);
+            //}
+
+            //StockDocId = draft.Id;
+            //EffectiveDateLocal = draft.EffectiveDateUtc.ToLocalTime();
+            //_docStatus = draft.Status;
+            var(doc, lines) = await _svc.GetLatestDraftForLocationAsync(LocationType, LocationId);
+             if (doc is null) return;
             Rows.Clear();
-            foreach (var l in dlines)
-            {
-                var meta = byId[l.ItemId];
-                var row = new RowVM
+             foreach (var l in lines)
+                 {
+                Rows.Add(new RowVM
                 {
-                    Sku = meta.Sku,
-                    ItemName = meta.Display,
+                    Sku = l.Sku,
+                    ItemName = l.Display,
                     Qty = l.Qty,
                     UnitCost = l.UnitCost,
                     Note = l.Note ?? ""
-                };
-                Rows.Add(row);
-                HookRow(row);
-            }
-
-            StockDocId = draft.Id;
-            EffectiveDateLocal = draft.EffectiveDateUtc.ToLocalTime();
-            _docStatus = draft.Status;
-
+                     });
+                 }
+             foreach (var r in Rows) HookRow(r);
+            StockDocId = doc.Id;
+            EffectiveDateLocal = doc.EffectiveDateUtc.ToLocalTime();
+            _docStatus = doc.Status;
             MarkClean();
             Raise(nameof(FooterSummary));
             RaiseLocksAndActions();
@@ -1244,82 +1277,113 @@ private async void CloseTab_Click(object sender, RoutedEventArgs e)
         private async void OpenDraft_Click(object sender, RoutedEventArgs e)
         {
             var owner = Window.GetWindow(this);
-            var dlg = new OpeningStockPickDialog(_dbf, LocationType, LocationId, OpeningStockPickDialog.Mode.Drafts)
-            { Owner = owner };
+
+            // 💡 get the service from DI (not the DbContextFactory)
+            var svc = App.Services.GetRequiredService<IOpeningStockService>();
+
+            var dlg = new OpeningStockPickDialog(
+                svc,
+                LocationType,
+                LocationId,
+                OpeningStockPickDialog.Mode.Drafts)
+            {
+                Owner = owner
+            };
+
             if (dlg.ShowDialog() == true && dlg.SelectedDocId is int id)
             {
                 await LoadSpecificDocAsync(id);
             }
         }
-               
+
 
         private async Task LoadSpecificDocAsync(int docId)
         {
-            await using var db = await _dbf.CreateDbContextAsync();
+            //await using var db = await _dbf.CreateDbContextAsync();
 
-            var doc = await db.StockDocs.AsNoTracking().FirstAsync(d => d.Id == docId);
-            List<(int ItemId, decimal Qty, decimal UnitCost, string? Note)> core;
+            //var doc = await db.StockDocs.AsNoTracking().FirstAsync(d => d.Id == docId);
+            //List<(int ItemId, decimal Qty, decimal UnitCost, string? Note)> core;
 
-            if (doc.Status == StockDocStatus.Draft)
-            {
-                var dlines = await db.OpeningStockDraftLines
-                    .AsNoTracking()
-                    .Where(x => x.StockDocId == docId)
-                    .Select(x => new { x.ItemId, x.Qty, x.UnitCost, x.Note })
-                    .ToListAsync();
-                core = dlines.Select(x => (x.ItemId, x.Qty, x.UnitCost, x.Note)).ToList();
-            }
-            else
-            {
-                // Posted/Locked/Void – read from ledger
-                var lines = await db.StockEntries
-                    .AsNoTracking()
-                    .Where(se => se.StockDocId == docId && (se.RefType == "Opening" || se.RefType == "OpeningVoid"))
-                    .Select(se => new { se.ItemId, se.QtyChange, se.UnitCost, se.Note })
-                    .ToListAsync();
+            //if (doc.Status == StockDocStatus.Draft)
+            //{
+            //    var dlines = await db.OpeningStockDraftLines
+            //        .AsNoTracking()
+            //        .Where(x => x.StockDocId == docId)
+            //        .Select(x => new { x.ItemId, x.Qty, x.UnitCost, x.Note })
+            //        .ToListAsync();
+            //    core = dlines.Select(x => (x.ItemId, x.Qty, x.UnitCost, x.Note)).ToList();
+            //}
+            //else
+            //{
+            //    // Posted/Locked/Void – read from ledger
+            //    var lines = await db.StockEntries
+            //        .AsNoTracking()
+            //        .Where(se => se.StockDocId == docId && (se.RefType == "Opening" || se.RefType == "OpeningVoid"))
+            //        .Select(se => new { se.ItemId, se.QtyChange, se.UnitCost, se.Note })
+            //        .ToListAsync();
 
-                // For Voided, you may want to show net (sum by item). For display simplicity, show the original IN lines:
-                var postedIn = lines.Where(l => l.QtyChange > 0).ToList();
-                core = postedIn.Select(l => (l.ItemId, l.QtyChange, l.UnitCost, l.Note)).ToList();
-            }
+            //    // For Voided, you may want to show net (sum by item). For display simplicity, show the original IN lines:
+            //    var postedIn = lines.Where(l => l.QtyChange > 0).ToList();
+            //    core = postedIn.Select(l => (l.ItemId, l.QtyChange, l.UnitCost, l.Note)).ToList();
+            //}
 
-            var itemIds = core.Select(l => l.ItemId).Distinct().ToList();
-            var names = await db.Items
-                .AsNoTracking()
-                .Include(i => i.Product)
-                .Where(i => itemIds.Contains(i.Id))
-                .Select(i => new
-                {
-                    i.Id,
-                    i.Sku,
-                    Display = ComposeDisplayName(
-                        i.Product != null ? i.Product.Name : null,
-                        i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value)
-                })
-                .ToListAsync();
+            //var itemIds = core.Select(l => l.ItemId).Distinct().ToList();
+            //var names = await db.Items
+            //    .AsNoTracking()
+            //    .Include(i => i.Product)
+            //    .Where(i => itemIds.Contains(i.Id))
+            //    .Select(i => new
+            //    {
+            //        i.Id,
+            //        i.Sku,
+            //        Display = ComposeDisplayName(
+            //            i.Product != null ? i.Product.Name : null,
+            //            i.Name, i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value)
+            //    })
+            //    .ToListAsync();
 
-            var byId = names.ToDictionary(x => x.Id, x => x);
+            //var byId = names.ToDictionary(x => x.Id, x => x);
 
+            //Rows.Clear();
+            //foreach (var l in core)
+            //{
+            //    var meta = byId[l.ItemId];
+            //    Rows.Add(new RowVM
+            //    {
+            //        Sku = meta.Sku,
+            //        ItemName = meta.Display,
+            //        Qty = l.Qty,
+            //        UnitCost = l.UnitCost,
+            //        Note = l.Note ?? ""
+            //    });
+            //}
+
+            //foreach (var r in Rows) HookRow(r);
+
+            //StockDocId = doc.Id;
+            //EffectiveDateLocal = doc.EffectiveDateUtc.ToLocalTime();
+            //_docStatus = doc.Status;
+
+            //MarkClean();
+            //Raise(nameof(FooterSummary));
+            //RaiseLocksAndActions();
+            var(doc, lines) = await _svc.ReadDocumentForUiAsync(docId);
             Rows.Clear();
-            foreach (var l in core)
-            {
-                var meta = byId[l.ItemId];
+             foreach (var l in lines)
+                 {
                 Rows.Add(new RowVM
                 {
-                    Sku = meta.Sku,
-                    ItemName = meta.Display,
+                    Sku = l.Sku,
+                    ItemName = l.Display,
                     Qty = l.Qty,
                     UnitCost = l.UnitCost,
                     Note = l.Note ?? ""
-                });
-            }
-
-            foreach (var r in Rows) HookRow(r);
-
+                     });
+                 }
+             foreach (var r in Rows) HookRow(r);
             StockDocId = doc.Id;
             EffectiveDateLocal = doc.EffectiveDateUtc.ToLocalTime();
             _docStatus = doc.Status;
-
             MarkClean();
             Raise(nameof(FooterSummary));
             RaiseLocksAndActions();
@@ -1467,25 +1531,15 @@ private async void CloseTab_Click(object sender, RoutedEventArgs e)
             ResetUiForNew();
         }
 
+        // Pos.Client.Wpf/Windows/Admin/OpeningStockView.xaml.cs
         private async Task DeleteDraftOnServerIfDraftAsync()
         {
             if (StockDocId == 0) return;
-
-            // Only delete if the document is still Draft; never delete Posted/Locked/Voided.
             if (_docStatus != StockDocStatus.Draft) return;
 
-            await using var db = await _dbf.CreateDbContextAsync();
-
-            // Remove draft lines, then header
-            var drafts = db.OpeningStockDraftLines.Where(x => x.StockDocId == StockDocId);
-            db.OpeningStockDraftLines.RemoveRange(drafts);
-
-            var doc = await db.StockDocs.FirstOrDefaultAsync(d => d.Id == StockDocId);
-            if (doc != null && doc.Status == StockDocStatus.Draft)
-                db.StockDocs.Remove(doc);
-
-            await db.SaveChangesAsync();
+            await _svc.DeleteDraftAsync(StockDocId);  // ← use service so sync events are emitted
         }
+
 
         /// <summary>
         /// Reset the UI to a brand-new entry while keeping the selected Location.

@@ -3,14 +3,20 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
 using Pos.Domain.Services;
+using Pos.Persistence.Sync;   // ← add this
 
 namespace Pos.Persistence.Services
 {
     public class SalesService : ISalesService
     {
         private readonly PosClientDbContext _db;
-        public SalesService(PosClientDbContext db) => _db = db;
+        private readonly IOutboxWriter _outbox;   // ← add
 
+        public SalesService(PosClientDbContext db, IOutboxWriter outbox) // ← inject
+        {
+            _db = db;
+            _outbox = outbox;
+        }
         /// <summary>
         /// Mark the original Final sale as Revised and create a new Draft sale with the same
         /// InvoiceNumber and Revision+1, linked via RevisedFromSaleId/RevisedToSaleId.
@@ -76,7 +82,9 @@ namespace Pos.Persistence.Services
 
             original.RevisedToSaleId = newSale.Id;
             await _db.SaveChangesAsync();
-
+            // === SYNC: enqueue finalized Sale Return (IsReturn = true) inside the same TX ===
+            await _outbox.EnqueueUpsertAsync(_db, newSale, default);  // record the return document
+            await _db.SaveChangesAsync();                          // persist the outbox row
             return newSale.Id;
         }
 

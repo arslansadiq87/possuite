@@ -6,6 +6,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Pos.Persistence.Sync; // add this
+
+
+
 
 namespace Pos.Persistence.Services
 {
@@ -15,8 +19,17 @@ namespace Pos.Persistence.Services
     public class PurchasesService
     {
         private readonly PosClientDbContext _db;
-        public PurchasesService(PosClientDbContext db) => _db = db;
+        private readonly IOutboxWriter _outbox; // NEW
 
+        public PurchasesService(PosClientDbContext db, IOutboxWriter outbox /* keep your other deps if any */)
+        {
+            _db = db;
+            _outbox = outbox;
+        }
+
+        //public PurchasesService(PosClientDbContext db) => _db = db;
+
+       
         // ---------- Public API ----------
 
         /// <summary>
@@ -157,6 +170,9 @@ namespace Pos.Persistence.Services
                         user: user ?? "system");
                 }
                 catch { /* ignore */ }
+                // === SYNC: finalized Purchase (first-time) ===
+                await _outbox.EnqueueUpsertAsync(_db, model, default);
+                await _db.SaveChangesAsync();
 
                 return model;
             }
@@ -328,6 +344,8 @@ namespace Pos.Persistence.Services
                         user: user ?? "system");
                 }
                 catch { /* ignore */ }
+                await _outbox.EnqueueUpsertAsync(_db, model, default);
+                await _db.SaveChangesAsync();
 
                 return existing;
             }
@@ -518,6 +536,9 @@ namespace Pos.Persistence.Services
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
+                await _outbox.EnqueueUpsertAsync(_db, model, default);
+                await _db.SaveChangesAsync();
+
             }
 
             return existing;
@@ -766,9 +787,10 @@ namespace Pos.Persistence.Services
             }
 
             // ---------- Cash drawer (only for Cash) ----------
+            CashLedger? cash = null;
             if (method == TenderMethod.Cash)
             {
-                _db.CashLedgers.Add(new CashLedger
+                cash = new CashLedger
                 {
                     OutletId = payOutletId,
                     CounterId = counterId,
@@ -780,9 +802,11 @@ namespace Pos.Persistence.Services
                     Note = note,
                     CreatedAtUtc = DateTime.UtcNow,
                     CreatedBy = user
-                });
+                };
+                _db.CashLedgers.Add(cash);
                 await _db.SaveChangesAsync();
             }
+
 
             // ---------- Snapshots (paid/due) ----------
             // Recompute from DB to include this brand-new row reliably
@@ -793,8 +817,16 @@ namespace Pos.Persistence.Services
             purchase.CashPaid = newPaid;
             purchase.CreditDue = Math.Max(0, purchase.GrandTotal - newPaid);
             await _db.SaveChangesAsync();
-
             await tx.CommitAsync();
+            // === SYNC: payment + (optional) cash ledger + purchase balance ===
+            await _outbox.EnqueueUpsertAsync(_db, pay, default);
+            if (cash != null)
+            {
+                await _outbox.EnqueueUpsertAsync(_db, cash, default);
+            }
+            await _outbox.EnqueueUpsertAsync(_db, purchase, default);
+            await _db.SaveChangesAsync();
+
             return pay;
         }
 
@@ -1154,6 +1186,9 @@ namespace Pos.Persistence.Services
                 };
                 _db.SupplierCredits.Add(credit);
                 await _db.SaveChangesAsync();
+                await _outbox.EnqueueUpsertAsync(_db, credit, default);
+                await _db.SaveChangesAsync();
+
             }
 
             // TODO: Post stock ledger with negative deltas for all lines:
@@ -1162,6 +1197,9 @@ namespace Pos.Persistence.Services
             // - Valuation: l.UnitCost (free-form uses edited cost; referenced uses locked cost)
 
             await tx.CommitAsync();
+            await _outbox.EnqueueUpsertAsync(_db, model, default);
+            await _db.SaveChangesAsync();
+
             return model;
         }
 
@@ -1420,6 +1458,7 @@ namespace Pos.Persistence.Services
                 .ToListAsync();
 
             decimal used = 0m;
+            var touched = new List<SupplierCredit>(); // track credits we modify
 
             foreach (var c in credits)
             {
@@ -1427,7 +1466,6 @@ namespace Pos.Persistence.Services
                 var take = Math.Min(c.Amount, need);
                 if (take <= 0) continue;
 
-                // Apply as non-cash adjustment to this purchase
                 await AddPaymentAsync(
                     purchaseId: purchase.Id,
                     kind: PurchasePaymentKind.Adjustment,
@@ -1441,11 +1479,12 @@ namespace Pos.Persistence.Services
                     user: user
                 );
 
-                // Reduce credit
                 c.Amount = Math.Round(c.Amount - take, 2);
+                touched.Add(c); // mark changed
                 used += take;
                 need -= take;
             }
+
 
             // Remove zeroed credits to keep table clean
             var zeroed = credits.Where(c => c.Amount <= 0.0001m).ToList();
@@ -1453,6 +1492,16 @@ namespace Pos.Persistence.Services
                 _db.SupplierCredits.RemoveRange(zeroed);
 
             await _db.SaveChangesAsync();
+            // === SYNC: updated credits + purchase balance
+            foreach (var c in touched.Where(x => x.Amount > 0.0001m))
+            {
+                await _outbox.EnqueueUpsertAsync(_db, c, default);
+            }
+            // For removed credits, you can skip (treat as fully consumed). If you want to mirror deletions,
+            // consider a soft-delete flag in the future.
+            await _outbox.EnqueueUpsertAsync(_db, purchase, default);
+            await _db.SaveChangesAsync();
+
             return used;
         }
 
@@ -1601,8 +1650,13 @@ namespace Pos.Persistence.Services
                 entity.UpdatedAtUtc = DateTime.UtcNow;
                 entity.UpdatedBy = user;
                 await _db.SaveChangesAsync();
+
+                // === SYNC: voided purchase
+                await _outbox.EnqueueUpsertAsync(_db, entity, default);
+                await _db.SaveChangesAsync();
                 return;
             }
+
 
             // Compute the net qty that will be REMOVED by voiding
             // (removing postings changes on-hand by: Δ = - Σ(post.QtyChange))
@@ -1658,6 +1712,11 @@ namespace Pos.Persistence.Services
             //_db.AuditLogs.Add(new AuditLog { ... });
             await _db.SaveChangesAsync();
             await tx.CommitAsync();
+            // === SYNC: voided purchase
+            var voided = await _db.Purchases.AsNoTracking().FirstAsync(x => x.Id == p.Id);
+            await _outbox.EnqueueUpsertAsync(_db, voided, default);
+            await _db.SaveChangesAsync();
+
         }
 
 
@@ -1675,6 +1734,10 @@ namespace Pos.Persistence.Services
             r.UpdatedAtUtc = DateTime.UtcNow;
             r.UpdatedBy = user;
             await _db.SaveChangesAsync();
+            // === SYNC: voided return
+            await _outbox.EnqueueUpsertAsync(_db, r, default);
+            await _db.SaveChangesAsync();
+
         }
 
         public sealed class PurchaseLineEffective

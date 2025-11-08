@@ -5,20 +5,20 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Media.Imaging;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Persistence.Services;   // BrandService
+using System.Threading.Tasks;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class BrandsWindow : Window
     {
-        private IDbContextFactory<PosClientDbContext>? _dbf;
+        private BrandService? _svc;
         private Func<EditBrandWindow>? _editBrandFactory;
         private readonly bool _design;
+        private bool _queuedVisibilityCheck;
+        private bool _inVisibilityUpdate;
+        private System.Windows.Threading.DispatcherOperation? _visOp;
 
         public BrandsWindow()
         {
@@ -27,16 +27,18 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            _svc = App.Services.GetRequiredService<BrandService>();
             _editBrandFactory = () => App.Services.GetRequiredService<EditBrandWindow>();
 
-            Loaded += (_, __) => LoadRows();
+            Loaded += async (_, __) =>
+            {
+                await LoadRowsAsync();
+                UpdateSearchVisibilitySoon();
+            };
             SizeChanged += (_, __) => UpdateSearchVisibilitySoon();
         }
 
-        private bool Ready => !_design && _dbf != null;
-
-        // Row view model for the list
+        // Row DTO for UI binding (mapped from BrandService.BrandRowDto)
         private sealed class BrandRow
         {
             public int Id { get; set; }
@@ -47,96 +49,18 @@ namespace Pos.Client.Wpf.Windows.Admin
             public DateTime? UpdatedAtUtc { get; set; }
         }
 
-        private void LoadRows()
+        private async Task LoadRowsAsync()
         {
-            if (!Ready) return;
+            if (_design || _svc == null) return;
 
             try
             {
-                using var db = _dbf!.CreateDbContext();
-
-                var term = (SearchBox.Text ?? "").Trim().ToLower();
-                var brands = db.Brands.AsNoTracking();
-
-                if (ShowInactive.IsChecked != true)
-                    brands = brands.Where(b => b.IsActive);
-
-                if (!string.IsNullOrWhiteSpace(term))
-                    brands = brands.Where(b => b.Name.ToLower().Contains(term));
-
-                // Pre-calc item counts by brand (Items.BrandId)
-                // Adjust "Items" & "BrandId" names if your DbSet/property differ
-                // Pre-calc item counts by brand (Items.BrandId)
-                // Adjust "Items" & "BrandId" names if your DbSet/property differ
-                // Filters
-                // --- filters ---
-                var products = db.Products.AsNoTracking()
-                    .Where(p => p.IsActive && !p.IsVoided && p.BrandId != null);
-
-                var items = db.Items.AsNoTracking()
-                    .Where(i => i.IsActive && !i.IsVoided);
-
-                // 1) products WITH variants → count variants per product, then sum per brand
-                var productsWithVariantsCounts =
-                    items.Where(i => i.ProductId != null)
-                         .GroupBy(i => i.ProductId!.Value)
-                         .Select(g => new { ProductId = g.Key, VariantCount = g.Count() })
-                         .Join(products,
-                               pvc => pvc.ProductId,
-                               p => p.Id,
-                               (pvc, p) => new { BrandId = p.BrandId!.Value, Count = pvc.VariantCount })
-                         .GroupBy(x => x.BrandId)
-                         .Select(g => new { BrandId = g.Key, Count = g.Sum(x => x.Count) });
-
-                // 2) products WITHOUT variants → each product counts as 1, sum per brand
-                var productsWithoutVariantsCounts =
-                    products
-                        .Where(p => !items.Any(i => i.ProductId == p.Id))   // no variants
-                        .GroupBy(p => p.BrandId!.Value)
-                        .Select(g => new { BrandId = g.Key, Count = g.Count() });
-
-                // 3) standalone items (no parent product) → each counts as 1, sum per brand
-                var standaloneItemCounts =
-                    items.Where(i => i.ProductId == null && i.BrandId != null)
-                         .GroupBy(i => i.BrandId!.Value)
-                         .Select(g => new { BrandId = g.Key, Count = g.Count() });
-
-                // combine all three
-                var skuCountsByBrand =
-                    productsWithVariantsCounts
-                        .Concat(productsWithoutVariantsCounts)
-                        .Concat(standaloneItemCounts)
-                        .GroupBy(x => x.BrandId)
-                        .Select(g => new { BrandId = g.Key, Count = g.Sum(x => x.Count) });
-
-                // build rows
-                var rows =
-                    brands
-                        .GroupJoin(skuCountsByBrand,
-                                   b => b.Id,
-                                   sc => sc.BrandId,
-                                   (b, sc) => new { b, sc = sc.FirstOrDefault() })
-                        .Select(x => new BrandRow
-                        {
-                            Id = x.b.Id,
-                            Name = x.b.Name,
-                            IsActive = x.b.IsActive,
-                            ItemCount = x.sc != null ? x.sc.Count : 0,
-                            CreatedAtUtc = x.b.CreatedAtUtc,
-                            UpdatedAtUtc = x.b.UpdatedAtUtc
-                        })
-                        .OrderBy(r => r.Name)
-                        .Take(2000)
-                        .ToList();
-
-
-
+                var term = (SearchBox.Text ?? "").Trim();
+                var includeInactive = ShowInactive.IsChecked == true;
+                var rows = await _svc.SearchAsync(term, includeInactive);
                 BrandsList.ItemsSource = rows;
-
                 UpdateActionButtons();
-                // Check whether list scrolls; if it does, show search
                 UpdateSearchVisibilitySoon();
-
                 System.Diagnostics.Debug.WriteLine($"[BrandsWindow] rows={rows.Count}");
             }
             catch (Exception ex)
@@ -148,38 +72,34 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void List_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (Ready) UpdateActionButtons();
+            UpdateActionButtons();
         }
 
         private void List_MouseDoubleClick(object s, MouseButtonEventArgs e)
         {
-            if (Ready) Edit_Click(s, e);
+            Edit_Click(s, e);
         }
 
-        private void SearchBox_TextChanged(object s, TextChangedEventArgs e)
+        private async void SearchBox_TextChanged(object s, TextChangedEventArgs e)
         {
-            if (Ready) LoadRows();
+            await LoadRowsAsync();
         }
 
-        private void FilterChanged(object s, RoutedEventArgs e)
+        private async void FilterChanged(object s, RoutedEventArgs e)
         {
-            if (Ready) LoadRows();
+            await LoadRowsAsync();
         }
 
-        private BrandRow? Selected() => BrandsList.SelectedItem as BrandRow;
+        private BrandService.BrandRowDto? Selected()
+            => BrandsList.SelectedItem as BrandService.BrandRowDto;
 
         private void UpdateActionButtons()
         {
-            if (!Ready)
-            {
-                EditBtn.Visibility = Visibility.Collapsed;
-                EnableBtn.Visibility = Visibility.Collapsed;
-                DisableBtn.Visibility = Visibility.Collapsed;
+            if (EditBtn == null || EnableBtn == null || DisableBtn == null)
                 return;
-            }
 
             var row = Selected();
-            if (row is null)
+            if (row == null)
             {
                 EditBtn.Visibility = Visibility.Collapsed;
                 EnableBtn.Visibility = Visibility.Collapsed;
@@ -202,53 +122,42 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void Add_Click(object sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
+            if (_design) return;
             var dlg = _editBrandFactory!();
             dlg.Owner = this;
             dlg.EditId = null;
-            if (dlg.ShowDialog() == true) LoadRows();
+            if (dlg.ShowDialog() == true)
+                _ = LoadRowsAsync();
         }
 
         private void Edit_Click(object? sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
+            if (_design) return;
             var row = Selected(); if (row is null) return;
 
             var dlg = _editBrandFactory!();
             dlg.Owner = this;
             dlg.EditId = row.Id;
-            if (dlg.ShowDialog() == true) LoadRows();
+            if (dlg.ShowDialog() == true)
+                _ = LoadRowsAsync();
         }
 
-        private void Disable_Click(object sender, RoutedEventArgs e)
+        private async void Disable_Click(object sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
-            var row = Selected(); if (row is null) return;
+            var row = Selected(); if (row is null || _svc == null) return;
 
             if (MessageBox.Show($"Disable brand “{row.Name}”?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
-            using var db = _dbf!.CreateDbContext();
-            var b = db.Brands.FirstOrDefault(x => x.Id == row.Id); if (b == null) return;
-            b.IsActive = false;
-            b.UpdatedAtUtc = DateTime.UtcNow;
-            db.SaveChanges();
-
-            LoadRows();
+            await _svc.SetActiveAsync(row.Id, false);
+            await LoadRowsAsync();
         }
 
-        private void Enable_Click(object sender, RoutedEventArgs e)
+        private async void Enable_Click(object sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
-            var row = Selected(); if (row is null) return;
-
-            using var db = _dbf!.CreateDbContext();
-            var b = db.Brands.FirstOrDefault(x => x.Id == row.Id); if (b == null) return;
-            b.IsActive = true;
-            b.UpdatedAtUtc = DateTime.UtcNow;
-            db.SaveChanges();
-
-            LoadRows();
+            var row = Selected(); if (row is null || _svc == null) return;
+            await _svc.SetActiveAsync(row.Id, true);
+            await LoadRowsAsync();
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -261,36 +170,52 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void UpdateSearchVisibilitySoon()
         {
-            // Defer till layout completes so ScrollViewer has correct size
-            Dispatcher.InvokeAsync(UpdateSearchVisibility);
+            if (_queuedVisibilityCheck) return;
+            _queuedVisibilityCheck = true;
+
+            _visOp = Dispatcher.InvokeAsync(() =>
+            {
+                _queuedVisibilityCheck = false;
+                UpdateSearchVisibility();
+            }, System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void UpdateSearchVisibility()
         {
-            var sv = FindDescendant<ScrollViewer>(BrandsList);
-            if (sv == null)
+            if (_inVisibilityUpdate) return;
+            _inVisibilityUpdate = true;
+
+            try
             {
-                SearchPanel.Visibility = Visibility.Collapsed;
-                return;
+                var sv = FindDescendantIter<ScrollViewer>(BrandsList);
+                var shouldShow = sv != null &&
+                                 (sv.ComputedVerticalScrollBarVisibility == Visibility.Visible ||
+                                  sv.ScrollableHeight > 0);
+
+                var target = shouldShow ? Visibility.Visible : Visibility.Collapsed;
+                if (SearchPanel.Visibility != target)
+                    SearchPanel.Visibility = target;
             }
-
-            // If vertical scroll bar is visible OR content is taller than viewport → show search
-            var needsSearch = sv.ComputedVerticalScrollBarVisibility == Visibility.Visible
-                              || sv.ScrollableHeight > 0;
-
-            SearchPanel.Visibility = needsSearch ? Visibility.Visible : Visibility.Collapsed;
+            finally
+            {
+                _inVisibilityUpdate = false;
+            }
         }
 
-        private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        private static T? FindDescendantIter<T>(DependencyObject root) where T : DependencyObject
         {
             if (root == null) return null;
-            var count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
+            var q = new System.Collections.Generic.Queue<DependencyObject>();
+            q.Enqueue(root);
+
+            while (q.Count > 0)
             {
-                var child = VisualTreeHelper.GetChild(root, i);
-                if (child is T t) return t;
-                var d = FindDescendant<T>(child);
-                if (d != null) return d;
+                var cur = q.Dequeue();
+                if (cur is T hit) return hit;
+
+                int count = VisualTreeHelper.GetChildrenCount(cur);
+                for (int i = 0; i < count; i++)
+                    q.Enqueue(VisualTreeHelper.GetChild(cur, i));
             }
             return null;
         }

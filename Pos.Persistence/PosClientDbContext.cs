@@ -1,10 +1,11 @@
 ﻿// Pos.Persistence/PosClientDbContext.cs
+using System;
 using System.Reflection.Emit;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain.Abstractions;
 using Pos.Domain.Accounting;
-using Microsoft.Data.Sqlite;
+
 
 
 namespace Pos.Persistence
@@ -12,6 +13,13 @@ namespace Pos.Persistence
     public class PosClientDbContext : DbContext
     {
         public PosClientDbContext(DbContextOptions<PosClientDbContext> options) : base(options) { }
+
+        // under other DbSets
+        public DbSet<Pos.Persistence.Sync.SyncOutbox> SyncOutbox => Set<Pos.Persistence.Sync.SyncOutbox>();
+        public DbSet<Pos.Persistence.Sync.SyncInbox> SyncInbox => Set<Pos.Persistence.Sync.SyncInbox>();
+        public DbSet<Pos.Persistence.Sync.SyncCursor> SyncCursors => Set<Pos.Persistence.Sync.SyncCursor>();
+
+
         public DbSet<User> Users { get; set; }
         public DbSet<Brand> Brands => Set<Brand>();
         public DbSet<Category> Categories => Set<Category>();
@@ -65,6 +73,8 @@ namespace Pos.Persistence
         public DbSet<Pos.Domain.Hr.PayrollRun> PayrollRuns { get; set; } = null!;
         public DbSet<Pos.Domain.Hr.PayrollItem> PayrollItems { get; set; } = null!;
         public DbSet<OtherAccount> OtherAccounts { get; set; } = null!;
+        public DbSet<ProductImage> ProductImages => Set<ProductImage>();
+        public DbSet<ItemImage> ItemImages => Set<ItemImage>();
 
         //public DbSet<OpeningBalance> OpeningBalances => Set<OpeningBalance>();
         //public DbSet<OpeningBalanceLine> OpeningBalanceLines => Set<OpeningBalanceLine>();
@@ -72,34 +82,25 @@ namespace Pos.Persistence
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
+            // Important: let DI configure the provider (SQLite in WPF).
+            // Only provide a safe SQLite fallback for design-time tools.
             if (!optionsBuilder.IsConfigured)
             {
-                // Example: adjust your actual path/name as needed
-                var conn = new SqliteConnection(new SqliteConnectionStringBuilder
-                {
-                    DataSource = "posclient.db",
-                    Mode = SqliteOpenMode.ReadWriteCreate,
-                    Cache = SqliteCacheMode.Shared,
-                    Pooling = true,
-                    // 5s “busy timeout” so transient locks don’t instantly blow up:
-                    // (This maps to PRAGMA busy_timeout)
-                    // NOTE: for Microsoft.Data.Sqlite you can set BusyTimeout via connection string keyword.
-                    // If your package version doesn't support the property directly, append ";BusyTimeout=5000" to the raw string.
-                }.ToString() + ";BusyTimeout=5000");
-
-                optionsBuilder
-                    .UseSqlite(conn, o =>
-                    {
-                        // Helpful on bigger queries (optional):
-                        o.CommandTimeout(30);
-                    });
+                var dbPath = System.IO.Path.Combine(AppContext.BaseDirectory, "posclient.db");
+                optionsBuilder.UseSqlite($"Data Source={dbPath};Cache=Shared");
             }
         }
+
 
 
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);
+            var provider = Database.ProviderName ?? string.Empty;
+            bool isSqlite = provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase);
+            bool isSqlServer = provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase);
+            bool isMySql = provider.Contains("MySql", StringComparison.OrdinalIgnoreCase);
+            bool isNpgsql = provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase);
 
             b.ApplyConfiguration(new Configurations.InvoiceSettingsConfig());
             b.ApplyConfiguration(new Configurations.InvoiceLocalizationConfig());
@@ -109,14 +110,39 @@ namespace Pos.Persistence
             .IsUnique();
             b.Entity<Item>(e =>
             {
-                string? skuFilter =
-                    Database.IsSqlite() ? "length(trim(Sku)) > 0" :
-                    Database.IsSqlServer() ? "[Sku] IS NOT NULL AND LTRIM(RTRIM([Sku])) <> ''" :
-                    Database.IsNpgsql() ? "\"Sku\" IS NOT NULL AND btrim(\"Sku\") <> ''" :
+                // Keep the provider local or reuse outer bools:
+                var provider = Database.ProviderName ?? string.Empty;
+                bool isMySqlLocal = provider.Contains("MySql", StringComparison.OrdinalIgnoreCase);
+                bool isSqlServerLocal = provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase);
+                bool isSqliteLocal = provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase);
+
+                if (isMySqlLocal)
+                {
+                    // MySQL: filtered index is not supported; use a stored generated column.
+                    e.Property<string?>("NormalizedSku")
+                     .HasColumnType("varchar(64)")
+                     .HasComputedColumnSql("NULLIF(TRIM(`Sku`), '')", stored: true);
+
+                    // Unique across non-empty SKUs; multiple NULLs are allowed → multiple blanks allowed.
+                    e.HasIndex("NormalizedSku").IsUnique();
+                }
+                else
+                {
+                    // SQLite / SQL Server: keep your filtered unique index.
+                    string? skuFilter =
+                    isSqlite ? "length(trim(Sku)) > 0" :
+                    isSqlServer ? "[Sku] IS NOT NULL AND LTRIM(RTRIM([Sku])) <> ''" :
+                    isNpgsql ? "length(btrim(\"Sku\")) > 0" :
                     null;
-                var skuIdx = e.HasIndex(x => x.Sku).IsUnique();
-                if (!string.IsNullOrWhiteSpace(skuFilter))
-                    skuIdx.HasFilter(skuFilter);
+
+                    var skuIdx = e.HasIndex(x => x.Sku).IsUnique();
+                    if (!string.IsNullOrWhiteSpace(skuFilter))
+                        skuIdx.HasFilter(skuFilter);
+
+                }
+
+
+
             });
             b.Entity<Product>(e =>
             {
@@ -124,25 +150,43 @@ namespace Pos.Persistence
             });
             b.Entity<ItemBarcode>(e =>
             {
-                e.Property(x => x.Code)
-                    .IsRequired()
-                    .HasMaxLength(64)
-                    ;
+                e.Property(x => x.Code).IsRequired().HasMaxLength(64);
                 e.HasIndex(x => x.Code).IsUnique();
+
                 e.HasOne(x => x.Item)
                  .WithMany(i => i.Barcodes)
                  .HasForeignKey(x => x.ItemId)
                  .OnDelete(DeleteBehavior.Cascade);
-                string provider = Database.ProviderName ?? string.Empty;
-                string? primaryFilter =
-                    provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) ? "IsPrimary = 1" :
-                    provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase) ? "[IsPrimary] = 1" :
-                    provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ? "\"IsPrimary\" = TRUE" :
-                    null;
-                var ixPrimary = e.HasIndex(x => x.ItemId).IsUnique();
-                if (!string.IsNullOrWhiteSpace(primaryFilter))
-                    ixPrimary.HasFilter(primaryFilter);
+
+                bool isMySqlLocal = provider.Contains("MySql", StringComparison.OrdinalIgnoreCase);
+                bool isSqlServerLocal = provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase);
+                bool isSqliteLocal = provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase);
+
+                if (isMySqlLocal)
+                {
+                    // Enforce "at most one primary per item" with a generated column
+                    e.Property<int?>("PrimarySlot")
+                     .HasColumnType("int")
+                     .HasComputedColumnSql("CASE WHEN `IsPrimary` = 1 THEN `ItemId` ELSE NULL END", stored: true);
+
+                    e.HasIndex("PrimarySlot").IsUnique();
+                }
+                else
+                {
+                    // Keep your filtered unique index (works on SQL Server, SQLite)
+                    string? primaryFilter =
+                        isSqlite ? "IsPrimary = 1" :
+                        isSqlServer ? "[IsPrimary] = 1" :
+                        isNpgsql ? "\"IsPrimary\" = TRUE" :
+                        null;
+
+                    var ixPrimary = e.HasIndex(x => x.ItemId).IsUnique();
+                    if (!string.IsNullOrWhiteSpace(primaryFilter))
+                        ixPrimary.HasFilter(primaryFilter);
+
+                }
             });
+
 
             b.Entity<Sale>()
                 .HasOne(s => s.RefSale)
@@ -229,9 +273,22 @@ namespace Pos.Persistence
                  .WithMany()
                  .HasForeignKey(x => x.WarehouseId)
                  .OnDelete(DeleteBehavior.Restrict);
-                e.HasCheckConstraint("CK_Purchase_Target",
-                    "( [TargetType] = 1 AND [OutletId] IS NOT NULL AND [WarehouseId] IS NULL ) OR " +
-                    "( [TargetType] = 2 AND [WarehouseId] IS NOT NULL AND [OutletId] IS NULL )");
+                var targetCheck =
+                    provider.Contains("MySql", StringComparison.OrdinalIgnoreCase)
+                        ? "((`TargetType` = 1 AND `OutletId` IS NOT NULL AND `WarehouseId` IS NULL) OR (`TargetType` = 2 AND `WarehouseId` IS NOT NULL AND `OutletId` IS NULL))"
+                : provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase)
+                        ? "([TargetType] = 1 AND [OutletId] IS NOT NULL AND [WarehouseId] IS NULL) OR ([TargetType] = 2 AND [WarehouseId] IS NOT NULL AND [OutletId] IS NULL)"
+                : provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase)
+                        ? "(TargetType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (TargetType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)"
+                : provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase)
+                        ? "((\"TargetType\" = 1 AND \"OutletId\" IS NOT NULL AND \"WarehouseId\" IS NULL) OR (\"TargetType\" = 2 AND \"WarehouseId\" IS NOT NULL AND \"OutletId\" IS NULL))"
+                : null;
+
+
+                if (!string.IsNullOrWhiteSpace(targetCheck))
+                    e.ToTable(t => t.HasCheckConstraint("CK_Purchase_Target", targetCheck!));
+
+
             });
 
             b.Entity<PurchaseLine>(e =>
@@ -339,7 +396,18 @@ namespace Pos.Persistence
                 e.Property(po => po.CreditLimit).HasPrecision(18, 2); // decimal(18,2)
                 e.Property(po => po.AllowCredit).HasDefaultValue(false);
                 e.Property(po => po.IsActive).HasDefaultValue(true);
-                e.HasCheckConstraint("CK_PartyOutlet_CreditLimit_NonNegative", "[CreditLimit] IS NULL OR [CreditLimit] >= 0");
+                var creditLimitCheck =
+    isMySql ? "`CreditLimit` IS NULL OR `CreditLimit` >= 0" :
+    isSqlServer ? "[CreditLimit] IS NULL OR [CreditLimit] >= 0" :
+    isSqlite ? "CreditLimit IS NULL OR CreditLimit >= 0" :
+    isNpgsql ? "\"CreditLimit\" IS NULL OR \"CreditLimit\" >= 0" :
+    null;
+
+
+                if (!string.IsNullOrWhiteSpace(creditLimitCheck))
+                    e.ToTable(t => t.HasCheckConstraint("CK_PartyOutlet_CreditLimit_NonNegative", creditLimitCheck!));
+
+
             });
 
             b.Entity<PartyLedger>(e =>
@@ -445,15 +513,22 @@ namespace Pos.Persistence
             });
 
 
-            b.Entity<StockEntry>().HasCheckConstraint(
-                "CK_StockEntry_StockDoc_Requirement",
-                // When RefType is Opening/TransferOut/TransferIn => StockDocId MUST be NOT NULL
-                // Otherwise (Sale, Purchase, etc.) it MAY be NULL
-                "CASE " +
-                " WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL " +
-                " ELSE 1 " +
-                "END"
-            );
+            var seCheck =
+    isMySql
+        ? "CASE WHEN `RefType` IN ('Opening','TransferOut','TransferIn') THEN `StockDocId` IS NOT NULL ELSE TRUE END"
+: isSqlServer
+        ? "CASE WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL ELSE 1 END"
+: isSqlite
+        ? "CASE WHEN RefType IN ('Opening','TransferOut','TransferIn') THEN StockDocId IS NOT NULL ELSE 1 END"
+: isNpgsql
+        ? "CASE WHEN \"RefType\" IN ('Opening','TransferOut','TransferIn') THEN \"StockDocId\" IS NOT NULL ELSE TRUE END"
+: null;
+
+
+            if (!string.IsNullOrWhiteSpace(seCheck))
+                b.Entity<StockEntry>().ToTable(t =>
+                    t.HasCheckConstraint("CK_StockEntry_StockDoc_Requirement", seCheck!));
+
 
 
             // optional: enum as int
@@ -623,33 +698,61 @@ namespace Pos.Persistence
                 e.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
             });
 
+            b.Entity<ProductImage>(eb =>
+            {
+                eb.HasIndex(x => new { x.ProductId, x.IsPrimary });
+                eb.HasOne(x => x.Product)
+                  .WithMany() // keep it simple; we don’t expose a nav prop on Product class now
+                  .HasForeignKey(x => x.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<ItemImage>(eb =>
+            {
+                eb.HasIndex(x => new { x.ItemId, x.IsPrimary });
+                eb.HasOne(x => x.Item)
+                  .WithMany()
+                  .HasForeignKey(x => x.ItemId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            });
+
+
             // Pos.Persistence/PosClientDbContext.cs  -> OnModelCreating
-           
-
-
 
             // ---- Provider-aware RowVersion mapping for ALL BaseEntity types ----
-            var provider = Database.ProviderName ?? string.Empty;
+            //var provider = Database.ProviderName ?? string.Empty;
             foreach (var et in b.Model.GetEntityTypes())
             {
                 if (typeof(BaseEntity).IsAssignableFrom(et.ClrType))
                 {
                     var eb = b.Entity(et.ClrType);
 
-                    if (provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase))
+                    if (isSqlServer)
                     {
-                        // SQL Server can use real rowversion/timestamp
                         eb.Property<byte[]>("RowVersion").IsRowVersion();
                     }
-                    else
+                    else if (isMySql)
                     {
-                        // SQLite: treat RowVersion as a plain concurrency token
-                        // and ensure a non-null default at the DB level.
                         eb.Property<byte[]>("RowVersion")
                           .IsConcurrencyToken()
-                          .ValueGeneratedNever()
-                          .HasDefaultValueSql("X''"); // empty BLOB default
+                          .ValueGeneratedNever();
                     }
+                    else if (isSqlite)
+                    {
+                        eb.Property<byte[]>("RowVersion")
+                          .IsConcurrencyToken()
+                          .HasColumnType("BLOB")
+                          .ValueGeneratedNever()
+                          .HasDefaultValueSql("randomblob(8)"); // ✅ valid SQLite default
+                    }
+                    else if (isNpgsql)
+                    {
+                        eb.Property<byte[]>("RowVersion")
+                          .IsConcurrencyToken()
+                          .ValueGeneratedNever();
+                    }
+
+
                 }
             }
 

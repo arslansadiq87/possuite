@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using Pos.Persistence.Sync; // ⬅️ add
 
 namespace Pos.Client.Wpf.Windows.Settings;
 
@@ -13,6 +15,7 @@ public interface IBarcodeLabelSettingsService
 public class BarcodeLabelSettingsService : IBarcodeLabelSettingsService
 {
     private readonly IDbContextFactory<PosClientDbContext> _dbf;
+
     public BarcodeLabelSettingsService(IDbContextFactory<PosClientDbContext> dbf) => _dbf = dbf;
 
     public async Task<BarcodeLabelSettings> GetAsync(int? outletId, CancellationToken ct = default)
@@ -44,6 +47,8 @@ public class BarcodeLabelSettingsService : IBarcodeLabelSettingsService
         else db.BarcodeLabelSettings.Update(s);
 
         s.UpdatedAtUtc = DateTime.UtcNow;
+        var outbox = App.Services.GetRequiredService<IOutboxWriter>(); // or inject via ctor if you prefer
+        await outbox.EnqueueUpsertAsync(db, s, ct);
         await db.SaveChangesAsync(ct);
     }
 }

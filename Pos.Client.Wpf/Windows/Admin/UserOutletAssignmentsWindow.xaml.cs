@@ -1,84 +1,133 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.EntityFrameworkCore;
+using System.Windows.Controls;
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Windows.Common;
 using Pos.Domain;
 using Pos.Domain.Entities;
-using Pos.Persistence;
-using Pos.Client.Wpf.Windows.Common;
-using Pos.Client.Wpf.Services;
+using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class UserOutletAssignmentsWindow : Window
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly OutletCounterService _svc;
         private readonly int _userId;
 
-        public UserOutletAssignmentsWindow(IDbContextFactory<PosClientDbContext> dbf, int userId)
+        public UserOutletAssignmentsWindow(int userId)
         {
             InitializeComponent();
-            _dbf = dbf; _userId = userId;
-            Loaded += (_, __) => LoadRows();
+            _svc = App.Services.GetRequiredService<OutletCounterService>();
+            _userId = userId;
+            Loaded += async (_, __) => await LoadRowsAsync();
         }
 
-        private void LoadRows()
+        private async Task LoadRowsAsync()
         {
-            using var db = _dbf.CreateDbContext();
-            var rows = db.UserOutlets
-                .Include(uo => uo.Outlet)
-                .Where(uo => uo.UserId == _userId)
-                .AsNoTracking()
-                .OrderBy(uo => uo.Outlet.Name)
-                .ToList();
-            Grid.ItemsSource = rows;
+            try
+            {
+                var rows = await _svc.GetUserOutletsAsync(_userId);
+                Grid.ItemsSource = rows;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to load assignments:\n\n" + ex.Message, "Assignments",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
-        private void Add_Click(object sender, RoutedEventArgs e)
+        private async void Add_Click(object sender, RoutedEventArgs e)
         {
-            using var db = _dbf.CreateDbContext();
-            var outlets = db.Outlets.AsNoTracking().OrderBy(o => o.Name).ToList();
-            var dlg = new SimplePromptWindow(
-                "Assign Outlet",
-                ("OutletId (existing)", outlets.FirstOrDefault()?.Id.ToString() ?? "1"),
-                ("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)", UserRole.Cashier.ToString())
-            );
-            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                // Simple prompt — can replace later with a nicer dialog
+                var allOutlets = (await _svc.GetOutletsAsync()).OrderBy(o => o.Name).ToList();
+                var dlg = new SimplePromptWindow(
+                    "Assign Outlet",
+                    ("OutletId (existing)", allOutlets.FirstOrDefault()?.Id.ToString() ?? "1"),
+                    ("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)", UserRole.Cashier.ToString())
+                );
+                if (dlg.ShowDialog() != true) return;
 
-            if (!int.TryParse(dlg.GetText("OutletId (existing)"), out var outletId)) { MessageBox.Show("Invalid OutletId"); return; }
-            if (!System.Enum.TryParse<UserRole>(dlg.GetText("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)"), true, out var role)) role = UserRole.Cashier;
+                if (!int.TryParse(dlg.GetText("OutletId (existing)"), out var outletId))
+                {
+                    MessageBox.Show("Invalid OutletId"); return;
+                }
 
-            // guard: duplicate
-            var exists = db.UserOutlets.Any(uo => uo.UserId == _userId && uo.OutletId == outletId);
-            if (exists) { MessageBox.Show("Already assigned."); return; }
+                if (!Enum.TryParse<UserRole>(
+                        dlg.GetText("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)"),
+                        true,
+                        out var role))
+                    role = UserRole.Cashier;
 
-            db.UserOutlets.Add(new UserOutlet { UserId = _userId, OutletId = outletId, Role = role });
-            db.SaveChanges();
-            LoadRows();
+                await _svc.AssignOutletAsync(_userId, outletId, role);
+                await LoadRowsAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to assign outlet:\n\n" + ex.Message,
+                    "Assignments", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
-        private void Edit_Click(object sender, RoutedEventArgs e)
+        private async void Edit_Click(object sender, RoutedEventArgs e)
         {
-            if (Grid.SelectedItem is not UserOutlet row) { MessageBox.Show("Select a row."); return; }
-            var dlg = new SimplePromptWindow("Edit Role", ("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)", row.Role.ToString()));
-            if (dlg.ShowDialog() != true) return;
-            if (!System.Enum.TryParse<UserRole>(dlg.GetText("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)"), true, out var role)) role = row.Role;
+            try
+            {
+                if (Grid.SelectedItem is not UserOutlet row)
+                {
+                    MessageBox.Show("Select a row."); return;
+                }
 
-            using var db = _dbf.CreateDbContext();
-            var uo = db.UserOutlets.Find(row.UserId, row.OutletId)!;
-            uo.Role = role;
-            db.SaveChanges();
-            LoadRows();
+                var dlg = new SimplePromptWindow(
+                    "Edit Role",
+                    ("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)", row.Role.ToString())
+                );
+                if (dlg.ShowDialog() != true) return;
+
+                if (!Enum.TryParse<UserRole>(
+                        dlg.GetText("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)"),
+                        true,
+                        out var newRole))
+                    newRole = row.Role;
+
+                await _svc.UpdateUserOutletRoleAsync(_userId, row.OutletId, newRole);
+                await LoadRowsAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to edit role:\n\n" + ex.Message,
+                    "Assignments", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
-        private void Remove_Click(object sender, RoutedEventArgs e)
+        private async void Remove_Click(object sender, RoutedEventArgs e)
         {
-            if (Grid.SelectedItem is not UserOutlet row) { MessageBox.Show("Select a row."); return; }
-            if (MessageBox.Show($"Remove outlet '{row.Outlet.Name}' from user?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-            using var db = _dbf.CreateDbContext();
-            var uo = db.UserOutlets.Find(row.UserId, row.OutletId)!;
-            db.UserOutlets.Remove(uo);
-            db.SaveChanges();
-            LoadRows();
+            try
+            {
+                if (Grid.SelectedItem is not UserOutlet row)
+                {
+                    MessageBox.Show("Select a row."); return;
+                }
+
+                if (MessageBox.Show(
+                        $"Remove outlet '{row.Outlet?.Name ?? row.OutletId.ToString()}' from user?",
+                        "Confirm",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning
+                    ) != MessageBoxResult.Yes)
+                    return;
+
+                await _svc.RemoveUserOutletAsync(_userId, row.OutletId);
+                await LoadRowsAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to remove assignment:\n\n" + ex.Message,
+                    "Assignments", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

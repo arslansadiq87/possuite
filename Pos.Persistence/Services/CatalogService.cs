@@ -3,48 +3,349 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain.Models;
 using Pos.Domain.Utils;
+using Pos.Persistence.Media;
+using Pos.Persistence.Outbox;
+using Pos.Persistence.Sync;
+using System.Security.Cryptography;
+using System.IO;
 
 namespace Pos.Persistence.Services
 {
     public class CatalogService
     {
-        private readonly PosClientDbContext _db;
-        public CatalogService(PosClientDbContext db) => _db = db;
+        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly IOutboxWriter _outbox;
 
-        // -------- Products --------
+        public CatalogService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox)
+        {
+            _dbf = dbf;
+            _outbox = outbox;
+        }
+
+        // ---------- helpers ----------
+        private static string Sha1(string path)
+        {
+            using var s = File.OpenRead(path);
+            using var sha = SHA1.Create();
+            var hash = sha.ComputeHash(s);
+            return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+        }
+
+        private static void TryDelete(string? path)
+        {
+            try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); }
+            catch { /* ignore */ }
+        }
+
+        // ---------- Images (write) ----------
+        public async Task<ProductImage> SetProductPrimaryImageAsync(
+            int productId, string originalLocalPath, Func<string, string> createThumbAt)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            _ = await db.Products.FindAsync(productId)
+                 ?? throw new InvalidOperationException("Product not found.");
+
+            var ext = Path.GetExtension(originalLocalPath);
+            var stem = $"p{productId}_{Guid.NewGuid():N}";
+            var staged = Path.Combine(MediaPaths.OriginalsDir, stem + ext);
+            Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+            File.Copy(originalLocalPath, staged, overwrite: true);
+
+            var sha1 = Sha1(staged);
+            var thumb = createThumbAt(stem);
+
+            var oldPrimaryIds = await db.ProductImages
+                .Where(x => x.ProductId == productId && x.IsPrimary)
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            await db.ProductImages
+                .Where(x => x.ProductId == productId && x.IsPrimary)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsPrimary, false));
+
+            var img = new ProductImage
+            {
+                ProductId = productId,
+                IsPrimary = true,
+                SortOrder = 0,
+                LocalOriginalPath = staged,
+                LocalThumbPath = thumb,
+                ContentHashSha1 = sha1,
+                SizeBytes = new FileInfo(staged).Length
+            };
+
+            db.ProductImages.Add(img);
+            await db.SaveChangesAsync();
+
+            await _outbox.WriteAsync("ProductImage", img.Id, "UPSERT", new
+            {
+                img.PublicId,
+                img.ProductId,
+                img.IsPrimary,
+                img.SortOrder,
+                img.ContentHashSha1
+            });
+
+            if (oldPrimaryIds.Count > 0)
+            {
+                var demoted = await db.ProductImages
+                    .Where(pi => oldPrimaryIds.Contains(pi.Id))
+                    .ToListAsync();
+
+                foreach (var d in demoted)
+                {
+                    await _outbox.WriteAsync("ProductImage", d.Id, "UPSERT", new
+                    {
+                        d.PublicId,
+                        d.ProductId,
+                        d.IsPrimary,
+                        d.SortOrder,
+                        d.ContentHashSha1
+                    });
+                }
+            }
+
+            return img;
+        }
+
+        public async Task ClearProductGalleryImagesAsync(int productId)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+            var imgs = await db.ProductImages.Where(pi => pi.ProductId == productId).ToListAsync();
+            db.ProductImages.RemoveRange(imgs);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task<ItemImage> SetItemPrimaryImageAsync(
+            int itemId, string originalLocalPath, Func<string, string> createThumbAt)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            _ = await db.Items.FindAsync(itemId)
+                ?? throw new InvalidOperationException("Item not found.");
+
+            var ext = Path.GetExtension(originalLocalPath);
+            var stem = $"i{itemId}_{Guid.NewGuid():N}";
+            var staged = Path.Combine(MediaPaths.OriginalsDir, stem + ext);
+            Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+            File.Copy(originalLocalPath, staged, overwrite: true);
+
+            var sha1 = Sha1(staged);
+            var thumb = createThumbAt(stem);
+
+            var oldPrimaryIds = await db.ItemImages
+                .Where(x => x.ItemId == itemId && x.IsPrimary)
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            await db.ItemImages
+                .Where(x => x.ItemId == itemId && x.IsPrimary)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsPrimary, false));
+
+            var img = new ItemImage
+            {
+                ItemId = itemId,
+                IsPrimary = true,
+                SortOrder = 0,
+                LocalOriginalPath = staged,
+                LocalThumbPath = thumb,
+                ContentHashSha1 = sha1,
+                SizeBytes = new FileInfo(staged).Length
+            };
+
+            db.ItemImages.Add(img);
+            await db.SaveChangesAsync();
+
+            await _outbox.WriteAsync("ItemImage", img.Id, "UPSERT", new
+            {
+                img.PublicId,
+                img.ItemId,
+                img.IsPrimary,
+                img.SortOrder,
+                img.ContentHashSha1
+            });
+
+            if (oldPrimaryIds.Count > 0)
+            {
+                var demoted = await db.ItemImages
+                    .Where(ii => oldPrimaryIds.Contains(ii.Id))
+                    .ToListAsync();
+
+                foreach (var d in demoted)
+                {
+                    await _outbox.WriteAsync("ItemImage", d.Id, "UPSERT", new
+                    {
+                        d.PublicId,
+                        d.ItemId,
+                        d.IsPrimary,
+                        d.SortOrder,
+                        d.ContentHashSha1
+                    });
+                }
+            }
+
+            return img;
+        }
+
+        public async Task<ProductImage> AddProductGalleryImageAsync(
+            int productId, string originalLocalPath, Func<string, string> createThumbAt)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var ext = Path.GetExtension(originalLocalPath);
+            var stem = $"p{productId}_{Guid.NewGuid():N}";
+            var staged = Path.Combine(MediaPaths.OriginalsDir, stem + ext);
+            Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+            File.Copy(originalLocalPath, staged, overwrite: true);
+
+            var sha1 = Sha1(staged);
+            var thumb = createThumbAt(stem);
+
+            var nextOrder = (await db.ProductImages
+                .Where(x => x.ProductId == productId)
+                .MaxAsync(x => (int?)x.SortOrder)) ?? -1;
+
+            var img = new ProductImage
+            {
+                ProductId = productId,
+                IsPrimary = false,
+                SortOrder = nextOrder + 1,
+                LocalOriginalPath = staged,
+                LocalThumbPath = thumb,
+                ContentHashSha1 = sha1,
+                SizeBytes = new FileInfo(staged).Length
+            };
+
+            db.ProductImages.Add(img);
+            await db.SaveChangesAsync();
+
+            await _outbox.WriteAsync("ProductImage", img.Id, "UPSERT", new
+            {
+                img.PublicId,
+                img.ProductId,
+                img.IsPrimary,
+                img.SortOrder,
+                img.ContentHashSha1
+            });
+
+            return img;
+        }
+
+        public async Task<ItemImage> AddItemGalleryImageAsync(
+            int itemId, string originalLocalPath, Func<string, string> createThumbAt)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            _ = await db.Items.FindAsync(itemId)
+                ?? throw new InvalidOperationException("Item not found.");
+
+            var ext = Path.GetExtension(originalLocalPath);
+            var stem = $"i{itemId}_{Guid.NewGuid():N}";
+            var staged = Path.Combine(MediaPaths.OriginalsDir, stem + ext);
+            Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+            File.Copy(originalLocalPath, staged, overwrite: true);
+
+            var sha1 = Sha1(staged);
+            var thumb = createThumbAt(stem);
+
+            var nextOrder = (await db.ItemImages
+                .Where(x => x.ItemId == itemId)
+                .MaxAsync(x => (int?)x.SortOrder)) ?? -1;
+
+            var img = new ItemImage
+            {
+                ItemId = itemId,
+                IsPrimary = false,
+                SortOrder = nextOrder + 1,
+                LocalOriginalPath = staged,
+                LocalThumbPath = thumb,
+                ContentHashSha1 = sha1,
+                SizeBytes = new FileInfo(staged).Length
+            };
+
+            db.ItemImages.Add(img);
+            await db.SaveChangesAsync();
+
+            await _outbox.WriteAsync("ItemImage", img.Id, "UPSERT", new
+            {
+                img.PublicId,
+                img.ItemId,
+                img.IsPrimary,
+                img.SortOrder,
+                img.ContentHashSha1
+            });
+
+            return img;
+        }
+
+        public async Task DeleteImageAsync(string kind, int imageId, bool deleteFiles = false)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            if (kind == "product")
+            {
+                var img = await db.ProductImages.FindAsync(imageId);
+                if (img is null) return;
+                if (deleteFiles)
+                {
+                    TryDelete(img.LocalOriginalPath);
+                    TryDelete(img.LocalThumbPath);
+                }
+                db.ProductImages.Remove(img);
+                await db.SaveChangesAsync();
+                await _outbox.WriteAsync("ProductImage", imageId, "DELETE", new { });
+            }
+            else if (kind == "item")
+            {
+                var img = await db.ItemImages.FindAsync(imageId);
+                if (img is null) return;
+                if (deleteFiles)
+                {
+                    TryDelete(img.LocalOriginalPath);
+                    TryDelete(img.LocalThumbPath);
+                }
+                db.ItemImages.Remove(img);
+                await db.SaveChangesAsync();
+                await _outbox.WriteAsync("ItemImage", imageId, "DELETE", new { });
+            }
+        }
+
+        // ---------- Products ----------
         public Task<List<Product>> SearchProductsAsync(string? term, int take = 100)
         {
             term = (term ?? "").Trim();
-
-            // Eager-load both Brand and Category so the ListBox ItemTemplate can bind Brand.Name / Category.Name
-            var q = _db.Products
-                .AsNoTracking()
-                .Include(p => p.Brand)
-                .Include(p => p.Category)
-                .Where(p => p.IsActive);
-
-            if (!string.IsNullOrWhiteSpace(term))
+            return _dbf.CreateDbContextAsync().ContinueWith(async t =>
             {
-                var like = $"%{term}%";
-                q = q.Where(p =>
-                    EF.Functions.Like(p.Name, like) ||
-                    (p.Brand != null && EF.Functions.Like(p.Brand.Name, like)) ||
-                    (p.Category != null && EF.Functions.Like(p.Category.Name, like))
-                );
-            }
+                await using var db = t.Result;
+                var q = db.Products
+                    .AsNoTracking()
+                    .Include(p => p.Brand)
+                    .Include(p => p.Category)
+                    .Where(p => p.IsActive);
 
-            // Null-safe sorting by Name, then Brand, then Category
-            return q.OrderBy(p => p.Name)
-                    .ThenBy(p => p.Brand != null ? p.Brand.Name : "")
-                    .ThenBy(p => p.Category != null ? p.Category.Name : "")
-                    .Take(take)
-                    .ToListAsync();
+                if (!string.IsNullOrWhiteSpace(term))
+                {
+                    var like = $"%{term}%";
+                    q = q.Where(p =>
+                        EF.Functions.Like(p.Name, like) ||
+                        (p.Brand != null && EF.Functions.Like(p.Brand.Name, like)) ||
+                        (p.Category != null && EF.Functions.Like(p.Category.Name, like))
+                    );
+                }
+
+                return await q.OrderBy(p => p.Name)
+                              .ThenBy(p => p.Brand != null ? p.Brand.Name : "")
+                              .ThenBy(p => p.Category != null ? p.Category.Name : "")
+                              .Take(take)
+                              .ToListAsync();
+            }).Unwrap();
         }
-
-
 
         public async Task<Product> CreateProductAsync(string name, int? brandId = null, int? categoryId = null)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             var p = new Product
             {
                 Name = name,
@@ -53,20 +354,27 @@ namespace Pos.Persistence.Services
                 IsActive = true,
                 UpdatedAt = DateTime.UtcNow
             };
-            _db.Products.Add(p);
-            await _db.SaveChangesAsync();
+            db.Products.Add(p);
+            await db.SaveChangesAsync();
+
+            await _outbox.EnqueueUpsertAsync(db, p, default);
+            await db.SaveChangesAsync();
+
             return p;
         }
 
-
         public async Task<Product?> GetProductAsync(int productId)
-            => await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == productId);
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+            return await db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == productId);
+        }
 
-        // -------- Items / Variants --------
-
+        // ---------- Items / Variants (reads for UI) ----------
         public async Task<List<ItemVariantRow>> GetItemsForProductAsync(int productId)
         {
-            return await _db.Items
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            return await db.Items
                 .Where(i => i.ProductId == productId)
                 .Include(i => i.Brand)
                 .Include(i => i.Category)
@@ -79,7 +387,6 @@ namespace Pos.Persistence.Services
                     Sku = i.Sku,
                     Name = i.Name,
                     ProductName = i.Product!.Name,
-                    // ⬇️ primary-first, else any
                     Barcode = i.Barcodes
                                 .OrderByDescending(b => b.IsPrimary)
                                 .Select(b => b.Code)
@@ -103,10 +410,11 @@ namespace Pos.Persistence.Services
                 .ToListAsync();
         }
 
-
         public async Task<List<ItemVariantRow>> SearchStandaloneItemRowsAsync(string term)
         {
-            var q = _db.Items.Where(i => i.ProductId == null);
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var q = db.Items.Where(i => i.ProductId == null);
 
             if (!string.IsNullOrWhiteSpace(term))
             {
@@ -114,7 +422,7 @@ namespace Pos.Persistence.Services
                 q = q.Where(i =>
                     EF.Functions.Like(i.Name, like) ||
                     EF.Functions.Like(i.Sku, like) ||
-                    i.Barcodes.Any(b => EF.Functions.Like(b.Code, like))   // ⬅️ search barcodes
+                    i.Barcodes.Any(b => EF.Functions.Like(b.Code, like))
                 );
             }
 
@@ -128,7 +436,6 @@ namespace Pos.Persistence.Services
                     Sku = i.Sku,
                     Name = i.Name,
                     ProductName = null,
-                    // ⬇️ primary-first, else any
                     Barcode = i.Barcodes
                                 .OrderByDescending(b => b.IsPrimary)
                                 .Select(b => b.Code)
@@ -152,24 +459,47 @@ namespace Pos.Persistence.Services
                 .ToListAsync();
         }
 
+        public async Task<List<Item>> SearchStandaloneItemsAsync(string? term, int take = 200)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
 
+            term = (term ?? "").Trim();
+            var q = db.Items.AsNoTracking().Where(i => i.ProductId == null);
 
+            if (!string.IsNullOrEmpty(term))
+            {
+                var like = $"%{term}%";
+                q = q.Where(i =>
+                    EF.Functions.Like(i.Name, like) ||
+                    EF.Functions.Like(i.Sku, like) ||
+                    i.Barcodes.Any(b => EF.Functions.Like(b.Code, like)));
+            }
 
+            return await q.OrderBy(i => i.Name).Take(take).ToListAsync();
+        }
 
+        // ---------- Items / Variants (writes) ----------
         public async Task<Item> CreateItemAsync(Item i)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             i.UpdatedAt = DateTime.UtcNow;
-            _db.Items.Add(i);
-            await _db.SaveChangesAsync();
+            db.Items.Add(i);
+            await db.SaveChangesAsync();
+
+            await _outbox.EnqueueUpsertAsync(db, i, default);
+            await db.SaveChangesAsync();
+
             return i;
         }
 
         public async Task<Item> UpdateItemAsync(Item updated)
         {
-            var e = await _db.Items.FirstAsync(x => x.Id == updated.Id);
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var e = await db.Items.FirstAsync(x => x.Id == updated.Id);
             e.Sku = updated.Sku;
             e.Name = updated.Name;
-            // e.Barcode = updated.Barcode;   // ⬅️ remove
             e.Price = updated.Price;
             e.UpdatedAt = DateTime.UtcNow;
 
@@ -184,12 +514,14 @@ namespace Pos.Persistence.Services
             e.Variant2Name = updated.Variant2Name;
             e.Variant2Value = updated.Variant2Value;
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
+
+            await _outbox.EnqueueUpsertAsync(db, e, default);
+            await db.SaveChangesAsync();
+
             return e;
         }
 
-
-        // Bulk add: Cartesian of axis1 x axis2 values → items
         public async Task<List<Item>> BulkCreateVariantsAsync(
             int productId,
             string itemBaseName,
@@ -198,6 +530,8 @@ namespace Pos.Persistence.Services
             decimal price, string? taxCode, decimal taxPct, bool taxInclusive,
             decimal? defDiscPct, decimal? defDiscAmt)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             var now = DateTime.UtcNow;
             var list = new List<Item>();
 
@@ -208,7 +542,7 @@ namespace Pos.Persistence.Services
                 foreach (var v2 in axis2Values.Select(s => s.Trim()).Where(s => s.Length > 0))
                 {
                     var sku = MakeSku(itemBaseName, v1, v2);
-                    var name = itemBaseName; // store product name in Product; Item.Name can mirror product or be specific
+                    var name = itemBaseName;
 
                     var it = new Item
                     {
@@ -229,64 +563,34 @@ namespace Pos.Persistence.Services
                         Variant2Name = a2Name,
                         Variant2Value = v2
                     };
-                    _db.Items.Add(it);
+                    db.Items.Add(it);
                     list.Add(it);
                 }
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
+            foreach (var it in list)
+                await _outbox.EnqueueUpsertAsync(db, it, default);
+            await db.SaveChangesAsync();
+
             return list;
-        }
-
-        public Task<List<Item>> SearchStandaloneItemsAsync(string? term, int take = 200)
-        {
-            term = (term ?? "").Trim();
-            var q = _db.Items.AsNoTracking().Where(i => i.ProductId == null);
-
-            if (!string.IsNullOrEmpty(term))
-            {
-                var like = $"%{term}%";
-                q = q.Where(i =>
-                    EF.Functions.Like(i.Name, like) ||
-                    EF.Functions.Like(i.Sku, like) ||
-                    i.Barcodes.Any(b => EF.Functions.Like(b.Code, like))   // ⬅️ was i.Barcode
-                );
-            }
-
-            return q.OrderBy(i => i.Name).Take(take).ToListAsync();
-        }
-
-
-
-        private static string MakeSku(string baseName, string v1, string v2)
-        {
-            // Simple SKU maker: BASE-<v1>-<v2> (safe chars)
-            string norm(string s) => new string(s.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
-            var b = norm(baseName.Replace(" ", ""));
-            var a = norm(v1);
-            var c = norm(v2);
-            return $"{b}-{a}-{c}";
         }
 
         public async Task<(bool canDelete, string? reason)> CanHardDeleteProductAsync(int productId)
         {
-            var itemIds = await _db.Items
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var itemIds = await db.Items
                 .Where(i => i.ProductId == productId)
                 .Select(i => i.Id)
                 .ToListAsync();
 
-            // If product has no variants, still consider “itemIds” empty;
-            // but standalone delete path will handle Items separately.
-
-            // Any sales?
-            bool hasSales = await _db.SaleLines.AnyAsync(sl => itemIds.Contains(sl.ItemId));
+            bool hasSales = await db.SaleLines.AnyAsync(sl => itemIds.Contains(sl.ItemId));
             if (hasSales) return (false, "Product has sales.");
 
-            // Any purchases?
-            bool hasPurchases = await _db.PurchaseLines.AnyAsync(pl => itemIds.Contains(pl.ItemId));
+            bool hasPurchases = await db.PurchaseLines.AnyAsync(pl => itemIds.Contains(pl.ItemId));
             if (hasPurchases) return (false, "Product has purchases.");
 
-            // Any stock entries at all (includes opening stock, transfers, adjustments)?
-            bool hasStockEntries = await _db.StockEntries.AnyAsync(se => itemIds.Contains(se.ItemId));
+            bool hasStockEntries = await db.StockEntries.AnyAsync(se => itemIds.Contains(se.ItemId));
             if (hasStockEntries) return (false, "Product has stock history (e.g., opening stock).");
 
             return (true, null);
@@ -294,23 +598,28 @@ namespace Pos.Persistence.Services
 
         public async Task DeleteProductAsync(int productId)
         {
-            // Call CanHardDeleteProductAsync before this; throw if not allowed.
-            using var tx = await _db.Database.BeginTransactionAsync();
+            await using var db = await _dbf.CreateDbContextAsync();
+            await using var tx = await db.Database.BeginTransactionAsync();
 
-            var items = await _db.Items.Where(i => i.ProductId == productId).ToListAsync();
-            _db.Items.RemoveRange(items);
+            var items = await db.Items.Where(i => i.ProductId == productId).ToListAsync();
+            db.Items.RemoveRange(items);
 
-            var product = await _db.Products.FirstAsync(p => p.Id == productId);
-            _db.Products.Remove(product);
+            var product = await db.Products.FirstAsync(p => p.Id == productId);
+            db.Products.Remove(product);
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
+
+            // If you keep a tombstone outbox, enqueue here.
+
             await tx.CommitAsync();
         }
 
         public async Task VoidProductAsync(int productId, string user)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             var now = DateTime.UtcNow;
-            var product = await _db.Products.Include(p => p.Variants)
+            var product = await db.Products.Include(p => p.Variants)
                              .FirstAsync(p => p.Id == productId);
 
             product.IsActive = false;
@@ -326,19 +635,25 @@ namespace Pos.Persistence.Services
                 it.VoidedBy = user;
             }
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
+
+            await _outbox.EnqueueUpsertAsync(db, product, default);
+            foreach (var it in product.Variants)
+                await _outbox.EnqueueUpsertAsync(db, it, default);
+            await db.SaveChangesAsync();
         }
 
-        // Standalone item versions
         public async Task<(bool canDelete, string? reason)> CanHardDeleteItemAsync(int itemId)
         {
-            bool hasStock = await _db.StockEntries.AnyAsync(se => se.ItemId == itemId);
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            bool hasStock = await db.StockEntries.AnyAsync(se => se.ItemId == itemId);
             if (hasStock) return (false, "Item has stock history.");
 
-            bool hasSales = await _db.SaleLines.AnyAsync(sl => sl.ItemId == itemId);
+            bool hasSales = await db.SaleLines.AnyAsync(sl => sl.ItemId == itemId);
             if (hasSales) return (false, "Item has sales.");
 
-            bool hasPurchases = await _db.PurchaseLines.AnyAsync(pl => pl.ItemId == itemId);
+            bool hasPurchases = await db.PurchaseLines.AnyAsync(pl => pl.ItemId == itemId);
             if (hasPurchases) return (false, "Item has purchases.");
 
             return (true, null);
@@ -346,17 +661,23 @@ namespace Pos.Persistence.Services
 
         public async Task DeleteItemAsync(int itemId)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             var (can, reason) = await CanHardDeleteItemAsync(itemId);
             if (!can) throw new InvalidOperationException("Cannot delete item: " + reason);
 
-            var it = await _db.Items.FirstAsync(x => x.Id == itemId);
-            _db.Items.Remove(it);
-            await _db.SaveChangesAsync();
+            var it = await db.Items.FirstAsync(x => x.Id == itemId);
+            db.Items.Remove(it);
+            await db.SaveChangesAsync();
+
+            // If you keep tombstones, enqueue here.
         }
 
         public async Task VoidItemAsync(int itemId, string user)
         {
-            var it = await _db.Items.FirstAsync(x => x.Id == itemId);
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var it = await db.Items.FirstAsync(x => x.Id == itemId);
             if (it.IsVoided) return;
 
             it.IsVoided = true;
@@ -364,35 +685,55 @@ namespace Pos.Persistence.Services
             it.VoidedAtUtc = DateTime.UtcNow;
             it.VoidedBy = user;
             it.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+
+            await db.SaveChangesAsync();
+            await _outbox.EnqueueUpsertAsync(db, it, default);
+            await db.SaveChangesAsync();
         }
 
         public async Task<Product> UpdateProductAsync(int productId, string name, int? brandId, int? categoryId)
         {
-            var p = await _db.Products.FirstAsync(x => x.Id == productId);
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var p = await db.Products.FirstAsync(x => x.Id == productId);
 
             p.Name = (name ?? "").Trim();
             p.BrandId = brandId;
             p.CategoryId = categoryId;
             p.UpdatedAt = DateTime.UtcNow;
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
 
-            // Return with fresh navs for UI (Brand/Category chips in the Products list)
-            await _db.Entry(p).Reference(x => x.Brand).LoadAsync();
-            await _db.Entry(p).Reference(x => x.Category).LoadAsync();
+            await _outbox.EnqueueUpsertAsync(db, p, default);
+            await db.SaveChangesAsync();
+
+            await db.Entry(p).Reference(x => x.Brand).LoadAsync();
+            await db.Entry(p).Reference(x => x.Category).LoadAsync();
 
             return p;
         }
 
-        public async Task<ItemBarcode> AddBarcodeAsync(int itemId, string code, BarcodeSymbology sym, int qtyPerScan = 1, bool isPrimary = false, string? label = null)
+        public async Task<ItemBarcode> AddBarcodeAsync(
+            int itemId, string code, BarcodeSymbology sym, int qtyPerScan = 1, bool isPrimary = false, string? label = null)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             code = (code ?? "").Trim();
             if (string.IsNullOrEmpty(code)) throw new ArgumentException("Barcode cannot be empty.");
 
-            // Ensure unique code
-            bool exists = await _db.ItemBarcodes.AnyAsync(x => x.Code == code);
+            bool exists = await db.ItemBarcodes.AnyAsync(x => x.Code == code);
             if (exists) throw new InvalidOperationException("Barcode already exists.");
+
+            if (isPrimary)
+            {
+                // capture ids before demotion (optional if you plan to enqueue demotions)
+                var _ = await db.ItemBarcodes
+                                .Where(bc => bc.ItemId == itemId && bc.IsPrimary)
+                                .Select(bc => bc.Id).ToListAsync();
+
+                await db.ItemBarcodes.Where(bc => bc.ItemId == itemId && bc.IsPrimary)
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPrimary, false));
+            }
 
             var entity = new ItemBarcode
             {
@@ -406,31 +747,34 @@ namespace Pos.Persistence.Services
                 UpdatedAt = DateTime.UtcNow
             };
 
-            if (isPrimary)
-            {
-                // Demote all others
-                var others = _db.ItemBarcodes.Where(bc => bc.ItemId == itemId && bc.IsPrimary);
-                await others.ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPrimary, false));
-            }
+            db.ItemBarcodes.Add(entity);
+            await db.SaveChangesAsync();
 
-            _db.ItemBarcodes.Add(entity);
-            await _db.SaveChangesAsync();
+            await _outbox.EnqueueUpsertAsync(db, entity, default);
+
+            // enqueue demoted barcodes (optional but consistent)
+            var demoted = await db.ItemBarcodes.Where(b => b.ItemId == itemId && !b.IsPrimary).ToListAsync();
+            foreach (var b in demoted)
+                await _outbox.EnqueueUpsertAsync(db, b, default);
+
+            await db.SaveChangesAsync();
             return entity;
         }
 
         public async Task<(Item item, int qty)> ResolveScanAsync(string scannedCode)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             scannedCode = (scannedCode ?? "").Trim();
             if (string.IsNullOrEmpty(scannedCode)) throw new ArgumentException("Code is empty.");
 
-            var hit = await _db.ItemBarcodes
-                .Where(x => x.Code == scannedCode /* && x.IsActive */) // keep IsActive if your model has it
+            var hit = await db.ItemBarcodes
+                .Where(x => x.Code == scannedCode)
                 .Select(x => new { x.Item, x.QuantityPerScan })
                 .FirstOrDefaultAsync();
 
             if (hit != null) return (hit.Item, Math.Max(1, hit.QuantityPerScan));
 
-            // Legacy fallback removed since Items.Barcode is dropped.
             throw new KeyNotFoundException("Barcode not found.");
         }
 
@@ -443,15 +787,15 @@ namespace Pos.Persistence.Services
             public required string ItemName { get; init; }
         }
 
-
-        // Returns the owner of a code, excluding a specific item (for edit scenarios)
         public async Task<(bool Taken, string? ProductName, string? ItemName, int? ProductId, int ItemId)>
-    TryGetBarcodeOwnerAsync(string code, int? excludeItemId = null)
+            TryGetBarcodeOwnerAsync(string code, int? excludeItemId = null)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             if (string.IsNullOrWhiteSpace(code)) return (false, null, null, null, 0);
             code = code.Trim();
 
-            var q = _db.ItemBarcodes
+            var q = db.ItemBarcodes
                 .Include(b => b.Item).ThenInclude(i => i.Product)
                 .Where(b => b.Code == code);
 
@@ -470,18 +814,18 @@ namespace Pos.Persistence.Services
                 : (true, o.ProductName, o.ItemName, o.ProductId, o.ItemId);
         }
 
-
-        // Find conflicts for many codes at once (exclude an item when editing)
         public async Task<List<BarcodeConflict>> FindBarcodeConflictsAsync(
-    IEnumerable<string> codes, int? excludeItemId = null)
+            IEnumerable<string> codes, int? excludeItemId = null)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             var list = codes.Where(s => !string.IsNullOrWhiteSpace(s))
                             .Select(s => s.Trim())
                             .Distinct(StringComparer.OrdinalIgnoreCase)
                             .ToList();
             if (list.Count == 0) return new();
 
-            var q = _db.ItemBarcodes
+            var q = db.ItemBarcodes
                 .Include(b => b.Item).ThenInclude(i => i.Product)
                 .Where(b => list.Contains(b.Code));
             if (excludeItemId is int eid) q = q.Where(b => b.ItemId != eid);
@@ -496,12 +840,11 @@ namespace Pos.Persistence.Services
             }).ToListAsync();
         }
 
-
-        // Generate a unique code based on symbology/prefix/sequence
-
         public async Task<(string Code, int AdvancedBy)> GenerateUniqueBarcodeAsync(
             BarcodeSymbology sym, string prefix, int startSeq, int maxTries = 10000)
         {
+            await using var db = await _dbf.CreateDbContextAsync();
+
             for (int i = 0; i < maxTries; i++)
             {
                 var candidate = BarcodeUtil.GenerateBySymbology(sym, prefix, startSeq + i);
@@ -510,6 +853,362 @@ namespace Pos.Persistence.Services
                     return (candidate, i + 1);
             }
             throw new InvalidOperationException("Could not generate a unique barcode. Adjust Prefix/Start.");
+        }
+
+        // ---------- Row <-> Entity mapping ----------
+        private static ItemVariantRow ToRow(Item i)
+        {
+            var primary = i.Barcodes?
+                .OrderByDescending(b => b.IsPrimary)
+                .Select(b => b.Code)
+                .FirstOrDefault();
+
+            return new ItemVariantRow
+            {
+                Id = i.Id,
+                Sku = i.Sku,
+                Name = i.Name,
+                ProductName = i.Product?.Name,
+                Barcode = primary,
+                Price = i.Price,
+                Variant1Name = i.Variant1Name,
+                Variant1Value = i.Variant1Value,
+                Variant2Name = i.Variant2Name,
+                Variant2Value = i.Variant2Value,
+                BrandId = i.BrandId ?? i.Product?.BrandId,
+                BrandName = i.Brand?.Name ?? i.Product?.Brand?.Name,
+                CategoryId = i.CategoryId ?? i.Product?.CategoryId,
+                CategoryName = i.Category?.Name ?? i.Product?.Category?.Name,
+                TaxCode = i.TaxCode,
+                DefaultTaxRatePct = i.DefaultTaxRatePct,
+                TaxInclusive = i.TaxInclusive,
+                DefaultDiscountPct = i.DefaultDiscountPct,
+                DefaultDiscountAmt = i.DefaultDiscountAmt,
+                UpdatedAt = i.UpdatedAt,
+                IsActive = i.IsActive,
+                IsVoided = i.IsVoided
+            };
+        }
+
+        // ---------- Queries used by UI (read helpers) ----------
+        public async Task<Item?> GetItemWithBarcodesAsync(int itemId)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            return await db.Items
+                .Include(i => i.Barcodes)
+                .Include(i => i.Product).ThenInclude(p => p.Brand)
+                .Include(i => i.Product).ThenInclude(p => p.Category)
+                .Include(i => i.Brand)
+                .Include(i => i.Category)
+                .FirstOrDefaultAsync(i => i.Id == itemId);
+        }
+
+        public async Task<List<string>> GetProductThumbsAsync(int productId)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            return await db.ProductImages.AsNoTracking()
+                .Where(pi => pi.ProductId == productId)
+                .OrderBy(pi => pi.SortOrder)
+                .Select(pi => pi.LocalThumbPath!)
+                .Where(p => p != null)
+                .ToListAsync();
+        }
+
+        public async Task<List<string>> GetItemThumbsAsync(int itemId)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            return await db.ItemImages.AsNoTracking()
+                .Where(ii => ii.ItemId == itemId)
+                .OrderBy(ii => ii.SortOrder)
+                .Select(ii => ii.LocalThumbPath!)
+                .Where(p => p != null)
+                .ToListAsync();
+        }
+
+        public async Task<int?> GetProductIdForItemAsync(int itemId)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            return await db.Items.AsNoTracking()
+                .Where(i => i.Id == itemId)
+                .Select(i => i.ProductId)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<Item> UpdateItemFromRowAsync(ItemVariantRow r)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var e = await db.Items.FirstAsync(i => i.Id == r.Id);
+
+            e.Sku = r.Sku ?? e.Sku;
+            if (!string.IsNullOrWhiteSpace(r.Name)) e.Name = r.Name!;
+            e.Price = r.Price;
+            e.Variant1Name = r.Variant1Name;
+            e.Variant1Value = r.Variant1Value;
+            e.Variant2Name = r.Variant2Name;
+            e.Variant2Value = r.Variant2Value;
+            e.BrandId = r.BrandId;
+            e.CategoryId = r.CategoryId;
+            e.TaxCode = r.TaxCode;
+            e.DefaultTaxRatePct = r.DefaultTaxRatePct;
+            e.TaxInclusive = r.TaxInclusive;
+            e.DefaultDiscountPct = r.DefaultDiscountPct;
+            e.DefaultDiscountAmt = r.DefaultDiscountAmt;
+            e.IsActive = r.IsActive;
+            e.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+            await _outbox.EnqueueUpsertAsync(db, e, default);
+            await db.SaveChangesAsync();
+
+            return e;
+        }
+
+        public async Task<List<ItemVariantRow>> SaveVariantRowsAsync(IEnumerable<ItemVariantRow> rows)
+        {
+            var list = rows.ToList();
+            if (list.Count == 0) return new();
+
+            await using var db = await _dbf.CreateDbContextAsync();
+            await using var tx = await db.Database.BeginTransactionAsync();
+
+            foreach (var r in list)
+            {
+                var e = await db.Items.FirstAsync(i => i.Id == r.Id);
+
+                e.Sku = r.Sku ?? e.Sku;
+                if (!string.IsNullOrWhiteSpace(r.Name)) e.Name = r.Name!;
+                e.Price = r.Price;
+                e.Variant1Name = r.Variant1Name;
+                e.Variant1Value = r.Variant1Value;
+                e.Variant2Name = r.Variant2Name;
+                e.Variant2Value = r.Variant2Value;
+                e.BrandId = r.BrandId;
+                e.CategoryId = r.CategoryId;
+                e.TaxCode = r.TaxCode;
+                e.DefaultTaxRatePct = r.DefaultTaxRatePct;
+                e.TaxInclusive = r.TaxInclusive;
+                e.DefaultDiscountPct = r.DefaultDiscountPct;
+                e.DefaultDiscountAmt = r.DefaultDiscountAmt;
+                e.IsActive = r.IsActive;
+                e.UpdatedAt = DateTime.UtcNow;
+
+                await _outbox.EnqueueUpsertAsync(db, e, default);
+            }
+
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            var ids = list.Select(x => x.Id).Distinct().ToList();
+            var fresh = await db.Items
+                .Include(i => i.Barcodes)
+                .Include(i => i.Product).ThenInclude(p => p.Brand)
+                .Include(i => i.Product).ThenInclude(p => p.Category)
+                .Include(i => i.Brand)
+                .Include(i => i.Category)
+                .Where(i => ids.Contains(i.Id))
+                .ToListAsync();
+
+            return fresh.Select(ToRow).ToList();
+        }
+
+        public async Task<(Item item, string? primaryCode)> ReplaceBarcodesAsync(int itemId, IEnumerable<ItemBarcode> newBarcodes)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var dbItem = await db.Items
+                .Include(i => i.Barcodes)
+                .FirstAsync(i => i.Id == itemId);
+
+            var codes = newBarcodes
+                .Select(b => b.Code?.Trim())
+                .Where(c => !string.IsNullOrEmpty(c))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (codes.Count != newBarcodes.Count())
+                throw new InvalidOperationException("Duplicate barcodes detected in the edited list.");
+
+            var conflict = await db.ItemBarcodes
+                .AnyAsync(b => codes.Contains(b.Code) && b.ItemId != dbItem.Id);
+
+            if (conflict)
+                throw new InvalidOperationException("One or more barcodes are already used by another item.");
+
+            db.ItemBarcodes.RemoveRange(dbItem.Barcodes);
+            dbItem.Barcodes.Clear();
+
+            foreach (var b in newBarcodes)
+            {
+                var code = b.Code?.Trim();
+                if (string.IsNullOrEmpty(code)) continue;
+
+                dbItem.Barcodes.Add(new ItemBarcode
+                {
+                    ItemId = dbItem.Id,
+                    Code = code,
+                    Symbology = b.Symbology,
+                    QuantityPerScan = Math.Max(1, b.QuantityPerScan),
+                    IsPrimary = b.IsPrimary,
+                    Label = string.IsNullOrWhiteSpace(b.Label) ? null : b.Label,
+                    CreatedAt = b.CreatedAt == default ? DateTime.UtcNow : b.CreatedAt,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+
+            if (dbItem.Barcodes.Any() && !dbItem.Barcodes.Any(x => x.IsPrimary))
+                dbItem.Barcodes.First().IsPrimary = true;
+
+            dbItem.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+            await _outbox.EnqueueUpsertAsync(db, dbItem, default);
+            await db.SaveChangesAsync();
+
+            var primary = dbItem.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
+                          ?? dbItem.Barcodes?.FirstOrDefault()?.Code;
+
+            return (dbItem, primary);
+        }
+
+        public async Task<ItemVariantRow> EditSingleItemAsync(Item editedWithBarcodes)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+            await using var tx = await db.Database.BeginTransactionAsync();
+
+            var dbItem = await db.Items
+                .Include(i => i.Barcodes)
+                .Include(i => i.Product).ThenInclude(p => p.Brand)
+                .Include(i => i.Product).ThenInclude(p => p.Category)
+                .Include(i => i.Brand)
+                .Include(i => i.Category)
+                .FirstAsync(i => i.Id == editedWithBarcodes.Id);
+
+            dbItem.Sku = editedWithBarcodes.Sku ?? dbItem.Sku;
+            if (!string.IsNullOrWhiteSpace(editedWithBarcodes.Name)) dbItem.Name = editedWithBarcodes.Name!;
+            dbItem.Price = editedWithBarcodes.Price;
+            dbItem.TaxCode = editedWithBarcodes.TaxCode;
+            dbItem.DefaultTaxRatePct = editedWithBarcodes.DefaultTaxRatePct;
+            dbItem.TaxInclusive = editedWithBarcodes.TaxInclusive;
+            dbItem.DefaultDiscountPct = editedWithBarcodes.DefaultDiscountPct;
+            dbItem.DefaultDiscountAmt = editedWithBarcodes.DefaultDiscountAmt;
+            dbItem.Variant1Name = editedWithBarcodes.Variant1Name;
+            dbItem.Variant1Value = editedWithBarcodes.Variant1Value;
+            dbItem.Variant2Name = editedWithBarcodes.Variant2Name;
+            dbItem.Variant2Value = editedWithBarcodes.Variant2Value;
+            dbItem.IsActive = editedWithBarcodes.IsActive;
+            dbItem.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+
+            await ReplaceBarcodesAsync(dbItem.Id, editedWithBarcodes.Barcodes ?? Enumerable.Empty<ItemBarcode>());
+
+            await tx.CommitAsync();
+
+            var fresh = await GetItemWithBarcodesAsync(dbItem.Id);
+            return ToRow(fresh!);
+        }
+
+        // ---------- Images (read helpers for UI strip) ----------
+        public async Task<List<string>> GetAllThumbsForProductAsync(int productId)
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+
+            var thumbs = new List<string>();
+
+            thumbs.AddRange(await db.ProductImages.AsNoTracking()
+                .Where(pi => pi.ProductId == productId)
+                .OrderBy(pi => pi.SortOrder)
+                .Select(pi => pi.LocalThumbPath!)
+                .Where(p => p != null)
+                .ToListAsync());
+
+            var vThumbs = await (
+                from ii in db.ItemImages.AsNoTracking()
+                join it in db.Items.AsNoTracking() on ii.ItemId equals it.Id
+                where it.ProductId == productId
+                orderby ii.SortOrder
+                select ii.LocalThumbPath!
+            ).Where(p => p != null).ToListAsync();
+
+            thumbs.AddRange(vThumbs);
+            return thumbs;
+        }
+
+        // ---------- misc ----------
+        private static string MakeSku(string baseName, string v1, string v2)
+        {
+            string norm(string s) => new string(s.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+            var b = norm(baseName.Replace(" ", ""));
+            var a = norm(v1);
+            var c = norm(v2);
+            return $"{b}-{a}-{c}";
+        }
+
+        public async Task<List<Brand>> GetActiveBrandsAsync()
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+            return await db.Brands.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
+        }
+
+        public async Task<List<Category>> GetActiveCategoriesAsync()
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+            return await db.Categories.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
+        }
+
+        // ===== VM-friendly queries =====
+
+        // Full product list for the VM: includes Brand, Category, Variants and their Barcodes
+        public async Task<List<Product>> GetProductsForVmAsync()
+        {
+            await using var db = await _dbf.CreateDbContextAsync();
+            return await db.Products
+                .AsNoTracking()
+                .Include(p => p.Brand)
+                .Include(p => p.Category)
+                .Include(p => p.Variants)
+                    .ThenInclude(v => v.Barcodes)
+                .OrderBy(p => p.Name)
+                .ToListAsync();
+        }
+
+        // Optional: lookups for combo sources (handy in dialogs/VMs)
+              
+      
+        public async Task<List<Category>> GetAllCategoriesAsync()
+        {
+                await using var db = await _dbf.CreateDbContextAsync();
+                return await db.Categories
+                .AsNoTracking()
+                .OrderBy(c => c.Name)
+                .ToListAsync();
+        }
+
+        /// <summary>
+        /// Computes the next available numeric sequence for SKUs that look like "PREFIX-###".
+        /// </summary>
+        public async Task<int> GetNextSkuSequenceAsync(string prefix, int fallbackStart)
+        {
+                await using var db = await _dbf.CreateDbContextAsync();
+                var likePrefix = (prefix ?? "") + "-";
+                var existing = await db.Items
+                    .AsNoTracking()
+                    .Where(i => i.Sku != null && i.Sku.StartsWith(likePrefix))
+                    .Select(i => i.Sku!)
+                    .ToListAsync();
+
+            var maxNum = 0;
+            foreach (var sku in existing)
+            {
+                var tail = sku.Substring(likePrefix.Length);
+                if (int.TryParse(tail, out var n) && n > maxNum) maxNum = n;
+            }
+            return Math.Max(maxNum + 1, fallbackStart);
         }
 
 

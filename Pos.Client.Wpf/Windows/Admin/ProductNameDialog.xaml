@@ -1,10 +1,11 @@
 ﻿<Window x:Class="Pos.Client.Wpf.Windows.Admin.ProductNameDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="New Product" Height="250" Width="420"
+        Title="New Product" Height="350" Width="520"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid Margin="12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -40,10 +41,52 @@
         <TextBlock Grid.Row="3" Text="Leave Brand/Category empty if not applicable."
                Foreground="Gray" Margin="0,4,0,0"/>
 
+        <!-- IMAGES -->
+        <StackPanel Grid.Row="4" Margin="0,12,0,0">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnPickPrimary"
+            Content="Set Primary Image"
+            Width="150" Height="28"
+            Click="BtnPickPrimary_Click"/>
+                <Button x:Name="BtnPickGallery"
+            Content="Add Gallery Images"
+            Width="160" Height="28" Margin="8,0,0,0"
+            Click="BtnPickGallery_Click"/>
+            </StackPanel>
+
+            <!-- simple inline thumb strip (optional visual feedback) -->
+            <ScrollViewer Margin="0,8,0,0"
+                Height="92"
+                HorizontalScrollBarVisibility="Auto"
+                VerticalScrollBarVisibility="Disabled">
+                <!-- Tiny preview strip -->
+                <ItemsControl ItemsSource="{Binding ThumbPreview}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="4">
+                                <Image Source="{Binding}" Width="64" Height="64" Stretch="UniformToFill"/>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+
         <!-- Buttons -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Create" Width="100" Height="30" Margin="0,0,8,0" Click="Create_Click" Style="{StaticResource Btn.GlobalPrimary}"/>
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button x:Name="BtnSave"
+            Content="Create"
+            Width="100" Height="30" Margin="0,0,8,0"
+            Click="Create_Click"
+            Style="{StaticResource Btn.GlobalPrimary}"/>
             <Button Content="Cancel" Width="100" Height="30" IsCancel="True" Style="{StaticResource Btn.GlobalPrimary}"/>
         </StackPanel>
+
     </Grid>
 </Window>

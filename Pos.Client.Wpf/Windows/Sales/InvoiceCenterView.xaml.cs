@@ -12,6 +12,8 @@ using Pos.Domain.Services;
 using System.Windows.Controls;
 using Pos.Client.Wpf.Services;
 using Pos.Client.Wpf.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Persistence.Sync;
 
 
 namespace Pos.Client.Wpf.Windows.Sales
@@ -406,7 +408,8 @@ namespace Pos.Client.Wpf.Windows.Sales
                 .UseSqlite("Data Source=pos.db") // <-- replace with your real config
                 .Options;
             using var db = new PosClientDbContext(options);
-            IReturnsService returnsSvc = new ReturnsService(db);
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            IReturnsService returnsSvc = new ReturnsService(db, outbox);   // <-- FIX
             // Replace these with your real getters if you have them
             var w = new ReturnWithoutInvoiceWindow(
             _unused: null,              // signature keeps compatibility; not used inside

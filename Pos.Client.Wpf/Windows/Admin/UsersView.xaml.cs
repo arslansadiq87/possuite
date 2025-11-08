@@ -3,11 +3,11 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;
 using Pos.Domain;
 using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -22,17 +22,21 @@ namespace Pos.Client.Wpf.Windows.Admin
         public bool IsGlobalAdmin { get; init; }
     }
 
-    // Row model for outlet assignment editor
-      public partial class UsersView : UserControl
+    public partial class UsersView : UserControl
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly UserAdminService _svc;
+        private readonly OutletCounterService _outletSvc; // for the Assignments dialog, if used
+
         private readonly ObservableCollection<OutletAssignRow> _outletRows = new();
         private readonly bool _currentIsGlobalAdmin;
         private readonly UserRole _currentRole;
+
         public bool CanSetGlobalAdmin => _currentIsGlobalAdmin;
+
         private bool _isNew;
         private int? _editingUserId;
         private double? _originalWidth;
+
         private sealed class OutletAssignRow
         {
             public int OutletId { get; init; }
@@ -41,7 +45,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             public string Role { get; set; } = "Cashier"; // default UI role text
         }
 
-        // Map enum <-> UI text
         private static string RoleToText(UserRole r) => r switch
         {
             UserRole.Salesman => "Salesman",
@@ -51,29 +54,37 @@ namespace Pos.Client.Wpf.Windows.Admin
             UserRole.Admin => "Admin",
             _ => "Cashier"
         };
-        
-        public UsersView(IDbContextFactory<PosClientDbContext> dbf, AppState state)
+
+        private static UserRole TextToRole(string s) => (s ?? "").Trim().ToLowerInvariant() switch
+        {
+            "salesman" => UserRole.Salesman,
+            "cashier" => UserRole.Cashier,
+            "supervisor" => UserRole.Supervisor,
+            "manager" => UserRole.Manager,
+            "admin" => UserRole.Admin,
+            _ => UserRole.Cashier
+        };
+
+        public UsersView(AppState state)
         {
             InitializeComponent();
-            _dbf = dbf;
+            _svc = App.Services.GetRequiredService<UserAdminService>();
+            _outletSvc = App.Services.GetRequiredService<OutletCounterService>();
 
-            var currentUser = state.CurrentUser;   // <<-- your already-saved login user
+            var currentUser = state.CurrentUser;
             _currentIsGlobalAdmin = currentUser?.IsGlobalAdmin == true;
             _currentRole = currentUser?.Role ?? UserRole.Cashier;
 
             DataContext = this;
-            Loaded += (_, __) => LoadUsers();
+            Loaded += async (_, __) => await LoadUsersAsync();
         }
 
-
-
-        private void LoadUsers()
+        // ─────────── Data loading ───────────
+        private async System.Threading.Tasks.Task LoadUsersAsync()
         {
             try
             {
-                using var db = _dbf.CreateDbContext();
-
-                var users = db.Users.AsNoTracking()
+                var users = (await _svc.GetAllAsync())
                     .OrderBy(u => u.Username)
                     .Select(u => new UserRow
                     {
@@ -95,12 +106,11 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        private void Refresh_Click(object sender, RoutedEventArgs e) => LoadUsers();
+        private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadUsersAsync();
 
-        // --- Toolbar actions ---
+        // ─────────── Toolbar actions ───────────
         private void Add_Click(object sender, RoutedEventArgs e)
         {
-            // Only GA or Admin can open Add; others cannot
             if (!_currentIsGlobalAdmin && _currentRole != UserRole.Admin)
             {
                 MessageBox.Show("You do not have permission to create users.", "Users",
@@ -117,17 +127,14 @@ namespace Pos.Client.Wpf.Windows.Admin
                 IsGlobalAdmin = false
             }, isNew: true);
 
-            // If current user is NOT Global Admin, prevent selecting Admin role
             if (!_currentIsGlobalAdmin)
             {
-                // Disable "Admin" option (index 4)
                 if (EdRole.Items.Count >= 5 && EdRole.Items[4] is ComboBoxItem adminItem)
                     adminItem.IsEnabled = false;
             }
         }
 
-
-        private void Edit_Click(object sender, RoutedEventArgs e)
+        private async void Edit_Click(object sender, RoutedEventArgs e)
         {
             if (UsersGrid.SelectedItem is not UserRow sel)
             {
@@ -137,9 +144,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             try
             {
-                using var db = _dbf.CreateDbContext();
-                var dbU = db.Users.First(u => u.Id == sel.Id);
-
+                var dbU = await _svc.GetAsync(sel.Id) ?? throw new InvalidOperationException("User not found.");
                 OpenEditor(new User
                 {
                     Id = dbU.Id,
@@ -148,15 +153,13 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Role = dbU.Role,
                     IsActive = dbU.IsActive,
                     IsGlobalAdmin = dbU.IsGlobalAdmin,
-                    PasswordHash = ""
+                    PasswordHash = "" // never show
                 }, isNew: false);
 
-                // Non-GA cannot assign Admin role or Global Admin
                 if (!_currentIsGlobalAdmin)
                 {
                     if (EdRole.Items.Count >= 5 && EdRole.Items[4] is ComboBoxItem adminItem)
                         adminItem.IsEnabled = false;
-
                     EdGlobalAdmin.IsEnabled = false;
                 }
             }
@@ -167,8 +170,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-
-        private void Delete_Click(object sender, RoutedEventArgs e)
+        private async void Delete_Click(object sender, RoutedEventArgs e)
         {
             if (UsersGrid.SelectedItem is not UserRow sel)
             {
@@ -182,18 +184,8 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             try
             {
-                using var db = _dbf.CreateDbContext();
-                var dbU = db.Users.Include(u => u.UserOutlets).First(u => u.Id == sel.Id);
-
-                if (dbU.UserOutlets.Any())
-                {
-                    MessageBox.Show("User has outlet assignments. Remove them first.");
-                    return;
-                }
-
-                db.Users.Remove(dbU);
-                db.SaveChanges();
-                LoadUsers();
+                await _svc.DeleteAsync(sel.Id);
+                await LoadUsersAsync();
             }
             catch (Exception ex)
             {
@@ -210,13 +202,13 @@ namespace Pos.Client.Wpf.Windows.Admin
                 return;
             }
 
-            // keep your existing assignments dialog
-            var dlg = new UserOutletAssignmentsWindow(_dbf, sel.Id) { };
+            // Use the service-driven assignments window we already refactored
+            var dlg = new UserOutletAssignmentsWindow(sel.Id) { };
             dlg.ShowDialog();
         }
 
-        // --- Editor open/close helpers ---
-        private void OpenEditor(User snapshot, bool isNew)
+        // ─────────── Editor open/close helpers ───────────
+        private async void OpenEditor(User snapshot, bool isNew)
         {
             _isNew = isNew;
             _editingUserId = isNew ? null : snapshot.Id;
@@ -227,77 +219,60 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             EdRole.SelectedIndex = RoleToIndex(snapshot.Role);
             EdActive.IsChecked = snapshot.IsActive;
-            EdGlobalAdmin.IsChecked = snapshot.IsGlobalAdmin;   // now sticks
+            EdGlobalAdmin.IsChecked = snapshot.IsGlobalAdmin;
 
-            EdPassword.Password = ""; // never prefill actual hash
-                                      // Load all outlets and current assignments
+            EdPassword.Password = "";
+
+            // Load all outlets + current assignments via service
             _outletRows.Clear();
-            using (var db = _dbf.CreateDbContext())
+            var outlets = await _svc.GetOutletsAsync();
+            var assigned = isNew
+                ? new System.Collections.Generic.Dictionary<int, UserRole>()
+                : await _svc.GetUserAssignmentsAsync(snapshot.Id);
+
+            foreach (var o in outlets)
             {
-                var outlets = db.Outlets
-                                .AsNoTracking()
-                                .OrderBy(o => o.Name)
-                                .Select(o => new { o.Id, o.Name })
-                                .ToList();
-
-                // Existing assignments if editing
-                Dictionary<int, UserRole> assigned = new();
-                if (!isNew)
+                var has = assigned.TryGetValue(o.Id, out var r);
+                _outletRows.Add(new OutletAssignRow
                 {
-                    assigned = db.UserOutlets
-                                 .AsNoTracking()
-                                 .Where(x => x.UserId == snapshot.Id)
-                                 .ToDictionary(x => x.OutletId, x => x.Role);
-                }
-
-                foreach (var o in outlets)
-                {
-                    var has = assigned.TryGetValue(o.Id, out var r);
-                    _outletRows.Add(new OutletAssignRow
-                    {
-                        OutletId = o.Id,
-                        OutletName = o.Name,
-                        IsAssigned = has,
-                        Role = RoleToText(has ? r : UserRole.Cashier)
-                    });
-                }
+                    OutletId = o.Id,
+                    OutletName = o.Name,
+                    IsAssigned = has,
+                    Role = RoleToText(has ? r : UserRole.Cashier)
+                });
             }
+
             EdOutletGrid.ItemsSource = _outletRows;
-
-
-
-            ShowEditor(true);   // open sidebar
+            ShowEditor(true);
         }
 
         private void ShowEditor(bool show)
         {
             if (show)
             {
-                // optional window auto-grow
                 _originalWidth ??= this.Width;
                 if (this.Width < 980) this.Width = 980;
 
                 EditorPanel.Visibility = Visibility.Visible;
-                EditorCol.Width = new GridLength(390);   // sidebar width when open
+                EditorCol.Width = new GridLength(390);
             }
             else
             {
-                // optional revert to original width
                 if (_originalWidth.HasValue) this.Width = _originalWidth.Value;
 
                 EditorPanel.Visibility = Visibility.Collapsed;
-                EditorCol.Width = new GridLength(0);     // fully collapse column
+                EditorCol.Width = new GridLength(0);
             }
         }
 
-        // --- Editor buttons ---
+        // ─────────── Editor buttons ───────────
         private void CancelEditor_Click(object sender, RoutedEventArgs e)
         {
             ShowEditor(false);
             _editingUserId = null;
         }
 
-        private void SaveEditor_Click(object sender, RoutedEventArgs e)
+        private async void SaveEditor_Click(object sender, RoutedEventArgs e)
         {
             var username = EdUsername.Text?.Trim() ?? "";
             if (string.IsNullOrWhiteSpace(username))
@@ -308,11 +283,11 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             var selectedRole = IndexToRole(EdRole.SelectedIndex);
             var wantsGlobalAdmin = EdGlobalAdmin.IsChecked == true;
+            var newPwd = EdPassword.Password ?? "";
 
             // Permission checks
             if (!_currentIsGlobalAdmin)
             {
-                // Admin can create below-Admin only, and cannot set Global Admin
                 if (_currentRole == UserRole.Admin)
                 {
                     if (selectedRole == UserRole.Admin || wantsGlobalAdmin)
@@ -324,15 +299,12 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
                 else
                 {
-                    // Non-admin cannot create or change users
                     if (_isNew)
                     {
                         MessageBox.Show("You do not have permission to create users.", "Users",
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
-
-                    // For edits, also block elevation to Admin / GA
                     if (selectedRole == UserRole.Admin || wantsGlobalAdmin)
                     {
                         MessageBox.Show("You do not have permission to assign Admin or Global Admin.", "Users",
@@ -342,57 +314,36 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
             }
 
-            var entity = new User
-            {
-                Id = _editingUserId ?? 0,
-                Username = username,
-                DisplayName = EdDisplayName.Text?.Trim() ?? "",
-                Role = selectedRole,
-                IsActive = EdActive.IsChecked == true,
-                IsGlobalAdmin = wantsGlobalAdmin,
-            };
-
-            var newPwd = EdPassword.Password ?? "";
-
             try
             {
-                using var db = _dbf.CreateDbContext();
-                using var tx = db.Database.BeginTransaction();
-
-                if (_isNew)
+                // Uniqueness check
+                var taken = await _svc.IsUsernameTakenAsync(username, excludingId: _editingUserId);
+                if (taken)
                 {
-                    entity.PasswordHash = string.IsNullOrWhiteSpace(newPwd)
-                        ? BCrypt.Net.BCrypt.HashPassword("1234")
-                        : BCrypt.Net.BCrypt.HashPassword(newPwd);
-
-                    db.Users.Add(entity);
-                    db.SaveChanges();
-                }
-                else
-                {
-                    var dbU = db.Users.First(u => u.Id == entity.Id);
-
-                    // Prevent self-demotion/elevation abuses as needed (optional extra rules)
-
-                    dbU.Username = entity.Username;
-                    dbU.DisplayName = entity.DisplayName;
-                    dbU.Role = entity.Role;
-                    dbU.IsActive = entity.IsActive;
-                    dbU.IsGlobalAdmin = entity.IsGlobalAdmin;
-
-                    if (!string.IsNullOrWhiteSpace(newPwd))
-                        dbU.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPwd);
-
-                    db.SaveChanges();
+                    MessageBox.Show("Another user already uses this username.",
+                        "Duplicate Username", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
 
-                // (keep your existing outlet-assignment save block here if present)
+                var entity = new User
+                {
+                    Id = _editingUserId ?? 0,
+                    Username = username,
+                    DisplayName = EdDisplayName.Text?.Trim() ?? "",
+                    Role = selectedRole,
+                    IsActive = EdActive.IsChecked == true,
+                    IsGlobalAdmin = wantsGlobalAdmin,
+                };
 
-                tx.Commit();
+                var savedId = await _svc.CreateOrUpdateAsync(entity, string.IsNullOrWhiteSpace(newPwd) ? null : newPwd);
+
+                // Save outlet assignments from sidebar grid
+                var desired = _outletRows.Select(r => (r.OutletId, r.IsAssigned, TextToRole(r.Role)));
+                await _svc.SaveAssignmentsAsync(savedId, desired);
 
                 ShowEditor(false);
                 _editingUserId = null;
-                LoadUsers();
+                await LoadUsersAsync();
             }
             catch (Exception ex)
             {
@@ -401,8 +352,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-
-        // --- Role helpers ---
+        // ─────────── Role helpers ───────────
         private int RoleToIndex(UserRole role) => role switch
         {
             UserRole.Salesman => 0,

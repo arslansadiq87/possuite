@@ -8,14 +8,15 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Client.Wpf.Services;
 using Pos.Domain.Entities;
 using Pos.Persistence;
-using Pos.Persistence.Services;
+//using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
     public partial class HeldPurchasesWindow : Window
     {
         private readonly DbContextOptions<PosClientDbContext> _opts;
-        private readonly PurchasesService _svc;
+        //private readonly PurchasesService _svc;
+
         public int? SelectedPurchaseId { get; private set; }
 
         public class UiDraftRow
@@ -35,7 +36,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             InitializeComponent();
             _opts = opts;
-            _svc = new PurchasesService(new PosClientDbContext(_opts));
+            //_svc = new PurchasesService(new PosClientDbContext(_opts));
             DraftsGrid.ItemsSource = _rows;
             Loaded += HeldPurchasesWindow_Loaded;
         }

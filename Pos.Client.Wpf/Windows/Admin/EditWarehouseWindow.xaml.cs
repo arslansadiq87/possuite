@@ -5,12 +5,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using Pos.Persistence.Sync;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class EditWarehouseWindow : Window
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly IOutboxWriter _outbox; // + add
 
         public int? EditId { get; set; } // null = add, non-null = edit
 
@@ -18,6 +20,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             InitializeComponent();
             _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            _outbox = App.Services.GetRequiredService<IOutboxWriter>(); // + add
             Loaded += (_, __) => LoadModel();
         }
 
@@ -57,39 +60,25 @@ namespace Pos.Client.Wpf.Windows.Admin
             return $"{prefix}{(max + 1):D3}";
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
+        private async void Save_Click(object sender, RoutedEventArgs e)
         {
             var code = (CodeBox.Text ?? "").Trim().ToUpperInvariant();
             var name = (NameBox.Text ?? "").Trim();
 
-            // Basic validation
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                MessageBox.Show("Code is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
-                CodeBox.Focus(); return;
-            }
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                MessageBox.Show("Name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
-                NameBox.Focus(); return;
-            }
+            if (string.IsNullOrWhiteSpace(code)) { MessageBox.Show("Code is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning); CodeBox.Focus(); return; }
+            if (string.IsNullOrWhiteSpace(name)) { MessageBox.Show("Name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning); NameBox.Focus(); return; }
 
             using var db = _dbf.CreateDbContext();
+            Warehouse w;
 
-            // Uniqueness checks
+            // Uniqueness
             var codeTaken = db.Warehouses.AsNoTracking()
-                .Any(w => w.Code == code && (EditId == null || w.Id != EditId.Value));
-            if (codeTaken)
-            {
-                MessageBox.Show("This Code already exists. Please choose a different code.", "Duplicate Code",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                CodeBox.Focus(); return;
-            }
+                .Any(x => x.Code == code && (EditId == null || x.Id != EditId.Value));
+            if (codeTaken) { MessageBox.Show("This Code already exists. Please choose a different code.", "Duplicate Code", MessageBoxButton.OK, MessageBoxImage.Warning); CodeBox.Focus(); return; }
 
-            // Upsert
             if (EditId == null)
             {
-                var w = new Warehouse
+                w = new Warehouse
                 {
                     Code = code,
                     Name = name,
@@ -103,7 +92,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             else
             {
-                var w = db.Warehouses.FirstOrDefault(x => x.Id == EditId.Value);
+                w = db.Warehouses.FirstOrDefault(x => x.Id == EditId.Value)!;
                 if (w == null) { DialogResult = false; Close(); return; }
 
                 w.Code = code;
@@ -118,7 +107,15 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             try
             {
-                db.SaveChanges();
+                // 1) persist entity changes (ensures Id for new rows)
+                await db.SaveChangesAsync();
+
+                // 2) enqueue upsert for sync
+                await _outbox.EnqueueUpsertAsync(db, w);
+
+                // 3) persist outbox record
+                await db.SaveChangesAsync();
+
                 DialogResult = true;
                 Close();
             }
@@ -127,6 +124,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Save failed: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
         private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {

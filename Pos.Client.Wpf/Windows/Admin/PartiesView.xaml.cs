@@ -1,130 +1,89 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class PartiesView : UserControl
     {
-        private IDbContextFactory<PosClientDbContext>? _dbf;
+        private PartyService? _svc;
         private Func<EditPartyWindow>? _editFactory;
         private readonly bool _design;
-
-        public class PartyRowVM
-        {
-            public int Id { get; set; }
-            public string Name { get; set; } = "";
-            public string? Phone { get; set; }
-            public string? Email { get; set; }
-            public string? TaxNumber { get; set; }
-            public bool IsActive { get; set; }
-            public bool IsSharedAcrossOutlets { get; set; }
-            public string RolesText { get; set; } = "";
-        }
-
-        private ObservableCollection<PartyRowVM> _rows = new();
+        private ObservableCollection<PartyService.PartyRowDto> _rows = new();
 
         public PartiesView()
         {
             InitializeComponent();
-
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            _svc = App.Services.GetRequiredService<PartyService>();
             _editFactory = () => App.Services.GetRequiredService<EditPartyWindow>();
-
-            Loaded += (_, __) => RefreshRows();
+            Loaded += async (_, __) => await RefreshRowsAsync();
             Grid.ItemsSource = _rows;
         }
 
-        private async void RefreshRows()
+        private async Task RefreshRowsAsync()
         {
-            if (_design || _dbf is null) return;
+            if (_design || _svc == null) return;
 
-            using var db = await _dbf.CreateDbContextAsync();
-            var term = (SearchText.Text ?? "").Trim();
-            var onlyActive = OnlyActiveCheck.IsChecked == true;
-            var wantCust = RoleCustomerCheck.IsChecked == true;
-            var wantSupp = RoleSupplierCheck.IsChecked == true;
-
-            var baseQ = db.Parties
-                .Include(p => p.Roles)
-                .AsNoTracking()
-                .AsQueryable();
-
-            if (!string.IsNullOrWhiteSpace(term))
+            try
             {
-                baseQ = baseQ.Where(p =>
-                    p.Name.Contains(term) ||
-                    (p.Phone != null && p.Phone.Contains(term)) ||
-                    (p.Email != null && p.Email.Contains(term)) ||
-                    (p.TaxNumber != null && p.TaxNumber.Contains(term)));
-            }
-            if (onlyActive) baseQ = baseQ.Where(p => p.IsActive);
+                var term = (SearchText.Text ?? "").Trim();
+                var onlyActive = OnlyActiveCheck.IsChecked == true;
+                var wantCust = RoleCustomerCheck.IsChecked == true;
+                var wantSupp = RoleSupplierCheck.IsChecked == true;
 
-            // Role filter
-            if (wantCust ^ wantSupp) // exactly one is checked
+                var list = await _svc.SearchAsync(term, onlyActive, wantCust, wantSupp);
+
+                _rows.Clear();
+                foreach (var r in list)
+                    _rows.Add(r);
+            }
+            catch (Exception ex)
             {
-                var role = wantCust ? RoleType.Customer : RoleType.Supplier;
-                baseQ = baseQ.Where(p => p.Roles.Any(r => r.Role == role));
+                MessageBox.Show("Failed to load parties: " + ex.Message,
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-
-            var list = await baseQ
-                .OrderBy(p => p.Name)
-                .Select(p => new PartyRowVM
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    Phone = p.Phone,
-                    Email = p.Email,
-                    TaxNumber = p.TaxNumber,
-                    IsActive = p.IsActive,
-                    IsSharedAcrossOutlets = p.IsSharedAcrossOutlets,
-                    RolesText = string.Join(", ", p.Roles.Select(r => r.Role.ToString()))
-                })
-                .ToListAsync();
-
-            _rows.Clear();
-            foreach (var r in list) _rows.Add(r);
         }
 
-        private void SearchText_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => RefreshRows();
-        private void FilterChanged(object sender, RoutedEventArgs e) => RefreshRows();
+        private async void SearchText_TextChanged(object sender, TextChangedEventArgs e)
+            => await RefreshRowsAsync();
+
+        private async void FilterChanged(object sender, RoutedEventArgs e)
+            => await RefreshRowsAsync();
 
         private void New_Click(object sender, RoutedEventArgs e)
         {
             var w = _editFactory!();
-            //w.Owner = this;
-            if (w.ShowDialog() == true) RefreshRows();
+            if (w.ShowDialog() == true)
+                _ = RefreshRowsAsync();
         }
 
         private void Edit_Click(object sender, RoutedEventArgs e)
         {
-            if (Grid.SelectedItem is not PartyRowVM row) return;
+            if (Grid.SelectedItem is not PartyService.PartyRowDto row) return;
+
             var w = _editFactory!();
-            //w.Owner = this;
             w.LoadParty(row.Id);
-            if (w.ShowDialog() == true) RefreshRows();
+            if (w.ShowDialog() == true)
+                _ = RefreshRowsAsync();
         }
 
-        private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e) => Edit_Click(sender, e);
-
-        //private void Close_Click(object sender, RoutedEventArgs e) => Close();
+        private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+            => Edit_Click(sender, e);
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            //if (e.Key == Key.Escape) Close();
-            if (e.Key == Key.N && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) New_Click(sender, e);
-            if (e.Key == Key.Enter) Edit_Click(sender, e);
+            if (e.Key == Key.N && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                New_Click(sender, e);
+            if (e.Key == Key.Enter)
+                Edit_Click(sender, e);
         }
     }
 }

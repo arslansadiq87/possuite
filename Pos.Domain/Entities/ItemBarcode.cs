@@ -1,4 +1,6 @@
-﻿namespace Pos.Domain.Entities
+﻿using System.Text.Json.Serialization;
+
+namespace Pos.Domain.Entities
 {
     public enum BarcodeSymbology
     {
@@ -13,9 +15,11 @@
         public int Id { get; set; }
 
         public int ItemId { get; set; }
+
+        [JsonIgnore]                 // <— prevent cycles and huge payloads
         public Item Item { get; set; } = null!;
 
-        public string Code { get; set; } = "";                  // UNIQUE
+        public string Code { get; set; } = "";  // UNIQUE
         public BarcodeSymbology Symbology { get; set; } = BarcodeSymbology.Ean13;
 
         /// <summary>Units to add when this barcode is scanned (1 = single piece, >1 = pack/box).</summary>

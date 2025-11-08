@@ -12,6 +12,9 @@ using Pos.Domain.Pricing;
 using Pos.Persistence;
 using Microsoft.Extensions.DependencyInjection;    // GetRequiredService
 using Pos.Client.Wpf.Services;                     // IPaymentDialogService, PaymentResult
+using Pos.Persistence.Sync;                 // IOutboxWriter
+using Pos.Client.Wpf.Services.Sync;         // EnqueueAfterSaveAsync extension (if you created it)
+
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -323,6 +326,9 @@ namespace Pos.Client.Wpf.Windows.Sales
             var deltaSub = amended.Subtotal - latest.Subtotal; // e.g., -20 means extra refund on net
             var deltaTax = amended.TaxTotal - latest.TaxTotal; // signed tax delta
             tx.Commit();
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            await outbox.EnqueueAfterSaveAsync(db, amended, default);
+
             // === GL POST: Return amendment delta (runs once per revision) ===
             try
             {

@@ -22,7 +22,8 @@
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <local:EqualityConverter x:Key="EqualityConverter"/>
             <local:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
-
+            <local:ProductPrimaryToThumbConverter x:Key="ProductPrimaryToThumbConverter"/>
+            <local:VariantThumbPathConverter x:Key="VariantThumbPathConverter"/>
 
             <!-- NEW: globally center all Windows relative to their Owner/MainWindow -->
         </ResourceDictionary>

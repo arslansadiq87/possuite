@@ -2,17 +2,17 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:domain="clr-namespace:Pos.Domain.Entities;assembly=Pos.Domain"
+        xmlns:conv="clr-namespace:Pos.Client.Wpf.Converters"
         MinHeight="450" MinWidth="1080">
-    
+    <UserControl.Resources>
+        <conv:VariantThumbPathConverter  x:Key="VariantThumbPathConverter "/>
+    </UserControl.Resources>
 
     <Grid Margin="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <!-- Top bar -->
-            <RowDefinition Height="*"/>
-            <!-- Body -->
-            <RowDefinition Height="Auto"/>
-            <!-- Footer -->
+            <RowDefinition Height="Auto"/><!-- Top bar -->
+            <RowDefinition Height="*"/><!-- Body -->
+            <RowDefinition Height="Auto"/><!-- Footer -->
         </Grid.RowDefinitions>
 
         <!-- Top bar: shared search + filter + actions -->
@@ -48,7 +48,6 @@
                 <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-
             <!-- LEFT: Tabs -->
             <TabControl x:Name="LeftTabs" Grid.Column="0" SelectionChanged="LeftTabs_SelectionChanged" Style="{StaticResource ModernTabControl}">
                 <!-- PRODUCTS TAB -->
@@ -76,8 +75,6 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                            <!-- Visible only when a product is selected -->
-                            <!-- Single action: Delete or Void (ask) -->
                             <Separator ToolBar.OverflowMode="Never" Visibility="{Binding Visibility, Source={x:Reference BtnDeleteOrVoidProduct}}"/>
                             <Button x:Name="BtnDeleteOrVoidProduct" Content="Delete/Void" ToolBar.OverflowMode="Never" Click="DeleteOrVoidProduct_Click"  Width="100">
                                 <Button.Style>
@@ -96,15 +93,10 @@
                             </Button>
                         </ToolBar>
 
-                                           
-
-                            
-                      
-
                         <ListBox x:Name="ProductsList"
-         Style="{StaticResource ModernListBox}"
-         SelectionMode="Single"
-         SelectionChanged="ProductsList_SelectionChanged">
+                             Style="{StaticResource ModernListBox}"
+                             SelectionMode="Single"
+                             SelectionChanged="ProductsList_SelectionChanged">
                             <!-- Make the entire row clickable & selectable -->
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem" BasedOn="{StaticResource ModernListBoxItem}">
@@ -115,7 +107,6 @@
                                     <Setter Property="Background" Value="Transparent"/>
                                 </Style>
                             </ListBox.ItemContainerStyle>
-
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="4,2">
@@ -123,14 +114,12 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-
                                         <!-- Product name -->
                                         <TextBlock Grid.Column="0"
-                   Text="{Binding Name}"
-                   FontWeight="SemiBold"
-                   TextTrimming="CharacterEllipsis"
-                   VerticalAlignment="Center"/>
-
+                                           Text="{Binding Name}"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"/>
                                         <!-- Brand & Category chips (auto-hide when missing) -->
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                             <!-- Brand chip -->
@@ -141,22 +130,20 @@
                                                   <TextBlock Text="{Binding Brand.Name}"
                                                       Foreground="{DynamicResource Chip.Foreground}"
                                                       FontSize="12"/>
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Brand.Name}" Value="{x:Null}">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Brand.Name}" Value="">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                            </DataTrigger>
-
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                            </Border>
-
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Brand.Name}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Brand.Name}" Value="">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
                                             <!-- Category chip -->
                                             <Border x:Name="CategoryChip"
                                                 Padding="8,2" CornerRadius="12" Margin="6,0,0,0"
@@ -175,8 +162,6 @@
                                                             <DataTrigger Binding="{Binding Category.Name}" Value="">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                             </DataTrigger>
-                                                            
-                                                            
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
@@ -195,12 +180,8 @@
                         <ToolBar DockPanel.Dock="Top" Style="{StaticResource ModernToolBar.Compact}"
                               ToolBarTray.IsLocked="True">
                             <Button Content="New Item" Click="NewStandaloneItem_Click" ToolBar.OverflowMode="Never" Width="100"/>
-                            <!-- Edit Item (visible only when a standalone item is selected) -->
-
-
                             <!-- Separator mirrors the Edit button's visibility -->
                             <Separator ToolBar.OverflowMode="Never" Visibility="{Binding Visibility, Source={x:Reference BtnEditStandalone}}"/>
-                            
                             <Button x:Name="BtnEditStandalone" Content="Edit" Click="EditStandaloneItem_Click" Width="100">
                                 <Button.Style>
                                     <Style TargetType="Button">
@@ -235,15 +216,11 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                            
-
                         </ToolBar>
-
                         <ListBox x:Name="StandaloneList"
-         Style="{StaticResource ModernListBox}"
-         SelectionMode="Single"
-         SelectionChanged="StandaloneList_SelectionChanged">
-
+                             Style="{StaticResource ModernListBox}"
+                             SelectionMode="Single"
+                             SelectionChanged="StandaloneList_SelectionChanged">
                             <!-- Same container behavior as Products -->
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem" BasedOn="{StaticResource ModernListBoxItem}">
@@ -254,7 +231,6 @@
                                     <Setter Property="Background" Value="Transparent"/>
                                 </Style>
                             </ListBox.ItemContainerStyle>
-
                             <!-- Same row layout: name on left, chips on right -->
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
@@ -263,23 +239,21 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-
                                         <!-- Item name -->
                                         <TextBlock Grid.Column="0"
-                   Text="{Binding Name}"
-                   FontWeight="SemiBold"
-                   TextTrimming="CharacterEllipsis"
-                   VerticalAlignment="Center"/>
-
+                                           Text="{Binding Name}"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"/>
                                         <!-- Brand / Category chips -->
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                             <!-- Brand chip -->
                                             <Border Padding="8,2" CornerRadius="12" Margin="6,0,0,0"
-                  Background="{DynamicResource Chip.Background}"
-                  BorderBrush="{DynamicResource Chip.Border}" BorderThickness="1">
+                                                  Background="{DynamicResource Chip.Background}"
+                                                  BorderBrush="{DynamicResource Chip.Border}" BorderThickness="1">
                                                 <TextBlock Text="{Binding BrandName}"
-                       Foreground="{DynamicResource Chip.Foreground}"
-                       FontSize="12"/>
+                                                   Foreground="{DynamicResource Chip.Foreground}"
+                                                   FontSize="12"/>
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Setter Property="Visibility" Value="Visible"/>
@@ -294,14 +268,13 @@
                                                     </Style>
                                                 </Border.Style>
                                             </Border>
-
                                             <!-- Category chip -->
                                             <Border Padding="8,2" CornerRadius="12" Margin="6,0,0,0"
-                  Background="{DynamicResource Chip.Background}"
-                  BorderBrush="{DynamicResource Chip.Border}" BorderThickness="1">
+                                              Background="{DynamicResource Chip.Background}"
+                                              BorderBrush="{DynamicResource Chip.Border}" BorderThickness="1">
                                                 <TextBlock Text="{Binding CategoryName}"
-                       Foreground="{DynamicResource Chip.Foreground}"
-                       FontSize="12"/>
+                                                   Foreground="{DynamicResource Chip.Foreground}"
+                                                   FontSize="12"/>
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Setter Property="Visibility" Value="Visible"/>
@@ -321,13 +294,11 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-
                     </DockPanel>
                 </TabItem>
             </TabControl>
 
             <Border Grid.Column="1"/>
-
             <!-- RIGHT: Editable grid (shows product variants OR standalone items) -->
             <GroupBox Grid.Column="2" Style="{StaticResource ModernGroupBox}">
                 <GroupBox.Header>
@@ -337,7 +308,6 @@
                     </StackPanel>
                 </GroupBox.Header>
                 <DockPanel>
-                    
                     <!-- RIGHT TOOLBAR OVER GRID -->
                     <ToolBar DockPanel.Dock="Top" Style="{StaticResource ModernToolBar.Compact}" ToolBarTray.IsLocked="True">
                         <!-- Products mode only -->
@@ -356,7 +326,6 @@
                                         <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="False">
                                             <Setter Property="Visibility" Value="Collapsed"/>
                                         </DataTrigger>
-
                                         <!-- Hide if no row is selected -->
                                         <DataTrigger Binding="{Binding SelectedItem, ElementName=VariantsGrid}" Value="{x:Null}">
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -365,7 +334,6 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-
                         <!-- Delete/Void Variant -->
                         <Separator ToolBar.OverflowMode="Never" Visibility="{Binding Visibility, Source={x:Reference BtnDeleteVoidVariant}}"/>
                         <Button x:Name="BtnDeleteVoidVariant" Content="Delete/Void" Click="DeleteOrVoidVariant_Click" Width="100">
@@ -387,8 +355,6 @@
                             </Button.Style>
                         </Button>
 
-
-
                         <Separator ToolBar.OverflowMode="Never" Visibility="{Binding Visibility, Source={x:Reference BtnSaveChanges}}"/>
                         <Button x:Name="BtnSaveChanges" Content="Save Changes" Click="SaveVariants_Click" Visibility="Collapsed">
                             <Button.Style>
@@ -407,6 +373,47 @@
                         </Button>
                     </ToolBar>
 
+                    <!-- IMAGE STRIP (single-row scrollable) -->
+                    <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <!-- Collapse when the ItemsControl has no items -->
+                                    <DataTrigger Binding="{Binding HasItems, ElementName=Thumbs}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+
+                        <ScrollViewer x:Name="ImagesScroller"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Disabled"
+                  Height="120"
+                  CanContentScroll="True"
+                  PanningMode="HorizontalOnly">
+                            <ItemsControl x:Name="Thumbs" ItemsSource="{Binding GalleryThumbs}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="#333" BorderThickness="1" Margin="4">
+                                            <!-- Use your existing converter so relative file paths work reliably -->
+                                            <Image Width="96" Height="96" Stretch="UniformToFill"
+       Source="{Binding Converter={StaticResource VariantThumbPathConverter }}"/>
+
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+
+
 
 
                     <DataGrid x:Name="VariantsGrid" 
@@ -417,7 +424,8 @@
                               CellEditEnding="VariantsGrid_CellEditEnding"
                               CurrentCellChanged="VariantsGrid_CurrentCellChanged"
                               BeginningEdit="VariantsGrid_BeginningEdit"
-                              SelectionChanged="VariantsGrid_SelectionChanged">
+                              SelectionChanged="VariantsGrid_SelectionChanged"
+                              SelectedItem="{Binding SelectedVariant, Mode=TwoWay}">
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow" BasedOn="{StaticResource RowStyle.Modern}">
                                 <!-- default -->
@@ -443,7 +451,6 @@
                                 </Style.Triggers>
                             </Style>
                         </DataGrid.RowStyle>
-                        
                         <DataGrid.Columns>
                             <DataGridTextColumn x:Name="ColSku" Header="SKU"
                             Binding="{Binding Sku, UpdateSourceTrigger=PropertyChanged}" Width="140"/>
@@ -464,14 +471,14 @@
                             <DataGridTextColumn x:Name="ColVar2Value" Header="Var2 Value"
                             Binding="{Binding Variant2Value, UpdateSourceTrigger=PropertyChanged}" Width="100"/>
                             <!-- Brand & Category (kept for Standalone view only; hidden in Variants mode) -->
-                            <DataGridComboBoxColumn x:Name="ColBrand" Header="Brand"
+                            <DataGridComboBoxColumn x:Name="ColBrand" Header="Brand" Visibility="Collapsed"
                                 SelectedValueBinding="{Binding BrandId, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
                                 SelectedValuePath="Id" DisplayMemberPath="Name" Width="140">
                                 <DataGridComboBoxColumn.ElementStyle>
                                     <Style TargetType="ComboBox">
                                         <Setter Property="ItemsSource"
-        Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
-                        Path=DataContext.Brands}"/>
+                                            Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
+                                                            Path=DataContext.Brands}"/>
                                         <Setter Property="IsReadOnly" Value="True"/>
                                         <Setter Property="IsHitTestVisible" Value="False"/>
                                         <Setter Property="Focusable" Value="False"/>
@@ -480,22 +487,22 @@
                                 <DataGridComboBoxColumn.EditingElementStyle>
                                     <Style TargetType="ComboBox">
                                         <Setter Property="ItemsSource"
-        Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
-                        Path=DataContext.Brands}"/>
+                                        Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
+                                              Path=DataContext.Brands}"/>
                                         <Setter Property="IsEditable" Value="True"/>
                                         <Setter Property="IsTextSearchEnabled" Value="True"/>
                                         <Setter Property="StaysOpenOnEdit" Value="True"/>
                                     </Style>
                                 </DataGridComboBoxColumn.EditingElementStyle>
                             </DataGridComboBoxColumn>
-                            <DataGridComboBoxColumn x:Name="ColCategory" Header="Category"
+                            <DataGridComboBoxColumn x:Name="ColCategory" Header="Category" Visibility="Collapsed"
                                 SelectedValueBinding="{Binding CategoryId, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
                                 SelectedValuePath="Id" DisplayMemberPath="Name" Width="160">
                                 <DataGridComboBoxColumn.ElementStyle>
                                     <Style TargetType="ComboBox">
                                         <Setter Property="ItemsSource"
-        Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
-                        Path=DataContext.Categories}"/>
+                                        Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
+                                                        Path=DataContext.Categories}"/>
                                         <Setter Property="IsReadOnly" Value="True"/>
                                         <Setter Property="IsHitTestVisible" Value="False"/>
                                         <Setter Property="Focusable" Value="False"/>
@@ -504,8 +511,8 @@
                                 <DataGridComboBoxColumn.EditingElementStyle>
                                     <Style TargetType="ComboBox">
                                         <Setter Property="ItemsSource"
-        Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
-                        Path=DataContext.Categories}"/>
+                                        Value="{Binding RelativeSource={RelativeSource AncestorType=DataGrid},
+                                                        Path=DataContext.Categories}"/>
                                         <Setter Property="IsEditable" Value="True"/>
                                         <Setter Property="IsTextSearchEnabled" Value="True"/>
                                         <Setter Property="StaysOpenOnEdit" Value="True"/>
@@ -527,17 +534,14 @@
                             Binding="{Binding UpdatedAt}" IsReadOnly="True" Width="130"/>
                             <!-- IsActive toggle -->
                             <DataGridCheckBoxColumn x:Name="ColIsActive" Header="Active"
-            Binding="{Binding IsActive, UpdateSourceTrigger=PropertyChanged}" Width="70"/>
-
+                            Binding="{Binding IsActive, UpdateSourceTrigger=PropertyChanged}" Width="70"/>
                             <!-- IsVoided (read-only; you void via toolbar) -->
                             <DataGridCheckBoxColumn x:Name="ColIsVoided" Header="Voided"
-            Binding="{Binding IsVoided}" IsReadOnly="True" Width="70"/>
+                            Binding="{Binding IsVoided}" IsReadOnly="True" Width="70"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
             </GroupBox>
         </Grid>
-        
-        
     </Grid>
 </UserControl>

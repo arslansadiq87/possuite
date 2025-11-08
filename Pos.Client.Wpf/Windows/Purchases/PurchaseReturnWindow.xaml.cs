@@ -20,6 +20,8 @@ using Pos.Client.Wpf.Controls;          // ItemSearchBox user control
 using Pos.Domain.DTO;                   // ItemIndexDto
 using Microsoft.Extensions.DependencyInjection;         // for GetRequiredService
 using Pos.Domain.Accounting;                            // for GlDocType
+using Pos.Persistence.Sync; // for IOutboxWriter
+
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
@@ -33,6 +35,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         // ----- Data -----
         private readonly DbContextOptions<PosClientDbContext> _opts;
         private readonly PurchasesService _svc;
+
         private readonly PartyLookupService _partySvc;
         // Supplier search
         private readonly System.Timers.Timer _supplierDebounce = new(250) { AutoReset = false };
@@ -54,7 +57,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
-            _svc = new PurchasesService(new PosClientDbContext(_opts));
+            //_svc = new PurchasesService(new PosClientDbContext(_opts));
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
+
+
             _partySvc = new PartyLookupService(new PosClientDbContext(_opts));
             GridLines.BeginningEdit += GridLines_BeginningEdit;
             GridLines.CurrentCellChanged += GridLines_CurrentCellChanged;
@@ -90,7 +97,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
-            _svc = new PurchasesService(new PosClientDbContext(_opts));
+            //_svc = new PurchasesService(new PosClientDbContext(_opts));
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
+
             _partySvc = new PartyLookupService(new PosClientDbContext(_opts));
             DataContext = VM;
             // Refresh AvailablePanel if source (Outlet/Warehouse) changes mid-edit
@@ -124,7 +134,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
             _opts = new DbContextOptionsBuilder<PosClientDbContext>()
                 .UseSqlite(DbPath.ConnectionString).Options;
-            _svc = new PurchasesService(new PosClientDbContext(_opts));
+            //_svc = new PurchasesService(new PosClientDbContext(_opts));
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
+
             _partySvc = new PartyLookupService(new PosClientDbContext(_opts));
             DataContext = VM;
             // Refresh AvailablePanel if source (Outlet/Warehouse) changes mid-edit

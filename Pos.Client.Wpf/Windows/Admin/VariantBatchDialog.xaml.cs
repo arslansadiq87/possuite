@@ -8,11 +8,21 @@ using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence;         
 using Pos.Persistence.Services;
+using Pos.Persistence.Sync; // IOutboxWriter
+using Microsoft.Win32;
+using System.Linq;
+using System.Threading.Tasks;
+
+
+
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class VariantBatchDialog : Window
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        //private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        //private Pos.Persistence.Sync.IOutboxWriter? _outbox; // NEW
+        private readonly CatalogService _svc;
+
         public enum Mode { Batch, EditSingle, Sequential }
         private bool _suppressValidation;          // prevents validation during programmatic focus
         private BarcodeRow? _newlyAddedRow;        // track the just-added manual row
@@ -31,11 +41,27 @@ namespace Pos.Client.Wpf.Windows.Admin
         private readonly ObservableCollection<VariantRow> _rows = new();
         public IReadOnlyList<Item> CreatedItems { get; private set; } = Array.Empty<Item>();
         public VariantBatchDialog() : this(Mode.Batch) { }
+        public sealed record PendingVariantImages(string? PrimaryPath, List<string> GalleryPaths);
+
+        private string? _pendingVariantPrimaryPath;
+        private readonly List<string> _pendingVariantGallery = new();
+
+        public PendingVariantImages PopPendingVariantImages()
+        {
+            var pack = new PendingVariantImages(_pendingVariantPrimaryPath, _pendingVariantGallery.ToList());
+            _pendingVariantPrimaryPath = null;
+            _pendingVariantGallery.Clear();
+            return pack;
+        }
+
         public VariantBatchDialog(Mode mode)
         {
             _mode = mode;
             InitializeComponent();
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            //_dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            //_outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            _svc = App.Services.GetRequiredService<CatalogService>();
+
             BarcodesGrid.ItemsSource = _barcodeRows;
             BarcodesGrid.RowEditEnding += BarcodesGrid_RowEditEnding;
             BarcodesGrid.CellEditEnding += BarcodesGrid_CellEditEnding;
@@ -271,31 +297,27 @@ namespace Pos.Client.Wpf.Windows.Admin
         .Where(s => !string.IsNullOrWhiteSpace(s))
         .Select(s => s!.Trim())
         .ToList();
-            await using (var db = await _dbf.CreateDbContextAsync())
+            var conflicts = await _svc.FindBarcodeConflictsAsync(codes, excludeItemId: null);
+            if (conflicts.Count > 0)
             {
-                var svc = new CatalogService(db);
-                var conflicts = await svc.FindBarcodeConflictsAsync(codes, excludeItemId: null);
-                if (conflicts.Count > 0)
-                {
-                    var lines = conflicts
-                        .GroupBy(c => c.Code)
-                        .Select(g =>
-                        {
-                            var x = g.First();
-                            var owner = !string.IsNullOrWhiteSpace(x.ProductName)
-                                        ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
-                                        : $"Item: {x.ItemName}";
-                            return $"• {g.Key} → already used by {owner}";
-                        });
-                    MessageBox.Show(
-                        "One or more barcodes are already in use:\n\n" +
-                        string.Join("\n", lines) +
-                        "\n\nPlease change these barcodes.",
-                        "Duplicate barcode(s) found",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return; // don’t proceed; user must fix
-                }
+                var lines = conflicts
+                    .GroupBy(c => c.Code)
+                    .Select(g => {
+                        var x = g.First();
+                        var owner = !string.IsNullOrWhiteSpace(x.ProductName)
+                            ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
+                            : $"Item: {x.ItemName}";
+                        return $"• {g.Key} → already used by {owner}";
+                    });
+                MessageBox.Show(
+                    "One or more barcodes are already in use:\n\n" +
+                    string.Join("\n", lines) +
+                    "\n\nPlease change these barcodes.",
+                    "Duplicate barcode(s) found",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
+
             SaveAddBtn.IsEnabled = false;
             try
             {
@@ -389,28 +411,25 @@ namespace Pos.Client.Wpf.Windows.Admin
                     .Select(s => s!.Trim())
                     .ToList();
 
-                await using (var db = await _dbf.CreateDbContextAsync())
+                var conflicts = await _svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
+                if (conflicts.Count > 0)
                 {
-                    var svc = new CatalogService(db);
-                    var conflicts = await svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
-                    if (conflicts.Count > 0)
+                    var lines = conflicts.GroupBy(c => c.Code).Select(g =>
                     {
-                        var lines = conflicts.GroupBy(c => c.Code).Select(g =>
-                        {
-                            var x = g.First();
-                            var owner = !string.IsNullOrWhiteSpace(x.ProductName)
-                                ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
-                                : $"Item: {x.ItemName}";
-                            return $"• {g.Key} → already used by {owner}";
-                        });
-                        MessageBox.Show("One or more barcodes are already in use:\n\n" +
-                                        string.Join("\n", lines) +
-                                        "\n\nPlease change these barcodes.",
-                                        "Duplicate barcode(s) found",
-                                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
+                        var x = g.First();
+                        var owner = !string.IsNullOrWhiteSpace(x.ProductName)
+                            ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
+                            : $"Item: {x.ItemName}";
+                        return $"• {g.Key} → already used by {owner}";
+                    });
+                    MessageBox.Show("One or more barcodes are already in use:\n\n" +
+                                    string.Join("\n", lines) +
+                                    "\n\nPlease change these barcodes.",
+                                    "Duplicate barcode(s) found",
+                                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
+
 
                 CreatedItems = _staged.ToList();
                 PersistStickyFromCurrentControls();
@@ -474,31 +493,27 @@ namespace Pos.Client.Wpf.Windows.Admin
                 var codes = edited.Barcodes.Select(b => b.Code)
                                            .Where(s => !string.IsNullOrWhiteSpace(s))
                                            .Select(s => s!.Trim());
-                await using (var db = await _dbf.CreateDbContextAsync())
+                var conflicts = await _svc.FindBarcodeConflictsAsync(codes, excludeItemId: edited.Id);
+                if (conflicts.Count > 0)
                 {
-                    var svc = new CatalogService(db);
-                    var conflicts = await svc.FindBarcodeConflictsAsync(codes, excludeItemId: edited.Id);
-                    if (conflicts.Count > 0)
-                    {
-                        var lines = conflicts
-                            .GroupBy(c => c.Code)
-                            .Select(g =>
-                            {
-                                var x = g.First();
-                                var owner = !string.IsNullOrWhiteSpace(x.ProductName)
-                                            ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
-                                            : $"Item: {x.ItemName}";
-                                return $"• {g.Key} → already used by {owner}";
-                            });
-                        MessageBox.Show(
-                            "One or more barcodes are already in use:\n\n" +
-                            string.Join("\n", lines) +
-                            "\n\nPlease change these barcodes.",
-                            "Duplicate barcode(s) found",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return; // stop; user must fix
-                    }
+                    var lines = conflicts
+                        .GroupBy(c => c.Code)
+                        .Select(g => {
+                            var x = g.First();
+                            var owner = !string.IsNullOrWhiteSpace(x.ProductName)
+                                ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
+                                : $"Item: {x.ItemName}";
+                            return $"• {g.Key} → already used by {owner}";
+                        });
+                    MessageBox.Show(
+                        "One or more barcodes are already in use:\n\n" +
+                        string.Join("\n", lines) +
+                        "\n\nPlease change these barcodes.",
+                        "Duplicate barcode(s) found",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
+
                 CreatedItems = new List<Item> { edited };
                 DialogResult = true;
                 return;
@@ -797,28 +812,25 @@ namespace Pos.Client.Wpf.Windows.Admin
     .Select(s => s!.Trim())
     .ToList();
 
-            await using (var db = await _dbf.CreateDbContextAsync())
+            var conflicts = await _svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
+            if (conflicts.Count > 0)
             {
-                var svc = new CatalogService(db);
-                var conflicts = await svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
-                if (conflicts.Count > 0)
+                var lines = conflicts.GroupBy(c => c.Code).Select(g =>
                 {
-                    var lines = conflicts.GroupBy(c => c.Code).Select(g =>
-                    {
-                        var x = g.First();
-                        var owner = !string.IsNullOrWhiteSpace(x.ProductName)
-                            ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
-                            : $"Item: {x.ItemName}";
-                        return $"• {g.Key} → already used by {owner}";
-                    });
-                    MessageBox.Show("One or more barcodes are already in use:\n\n" +
-                                    string.Join("\n", lines) +
-                                    "\n\nPlease change these barcodes.",
-                                    "Duplicate barcode(s) found",
-                                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
+                    var x = g.First();
+                    var owner = !string.IsNullOrWhiteSpace(x.ProductName)
+                        ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
+                        : $"Item: {x.ItemName}";
+                    return $"• {g.Key} → already used by {owner}";
+                });
+                MessageBox.Show("One or more barcodes are already in use:\n\n" +
+                                string.Join("\n", lines) +
+                                "\n\nPlease change these barcodes.",
+                                "Duplicate barcode(s) found",
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
+
             CreatedItems = created;
             PersistStickyFromCurrentControls();
             DialogResult = true;
@@ -890,9 +902,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async void GeneratePrimaryBarcode_Click(object sender, RoutedEventArgs e)
         {
             var sym = GetSelectedSymbology();
-            await using var db = await _dbf.CreateDbContextAsync();
-            var svc = new CatalogService(db);
-            var (code, advanceBy) = await svc.GenerateUniqueBarcodeAsync(sym, BarcodePrefix, _seqBarcode);
+            var (code, advanceBy) = await _svc.GenerateUniqueBarcodeAsync(sym, BarcodePrefix, _seqBarcode);
             foreach (var r in _barcodeRows) r.IsPrimary = false;
             var row = new BarcodeRow
             {
@@ -1253,18 +1263,10 @@ namespace Pos.Client.Wpf.Windows.Admin
             // ✅ After window is ready, compute a safe next SKU number based on existing data
             Loaded += async (_, __) =>
             {
-                await using var db = await _dbf.CreateDbContextAsync();
+                BrandBox.ItemsSource = await _svc.GetActiveBrandsAsync();
+                CategoryBox.ItemsSource = await _svc.GetAllCategoriesAsync();
 
-                // Load brands
-                var brands = await db.Brands.Where(b => b.IsActive).OrderBy(b => b.Name).ToListAsync();
-                BrandBox.ItemsSource = brands;
-
-                // Load categories
-                var cats = await db.Categories.OrderBy(c => c.Name).ToListAsync();
-                CategoryBox.ItemsSource = cats;
-
-                _seqSku = await GetNextSkuSequenceAsync(SkuPrefix, SkuStart);
-                // (Optional) reflect the computed start back into the textbox
+                _seqSku = await _svc.GetNextSkuSequenceAsync(SkuPrefix, SkuStart);
                 SkuStartBox.Text = _seqSku.ToString(CultureInfo.InvariantCulture);
             };
         }
@@ -1287,14 +1289,16 @@ namespace Pos.Client.Wpf.Windows.Admin
             UpdateTitle(); // keeps "Edit Item" when standalone + EditSingle
 
             // Load lookups (same as PrefillStandalone Loaded handler)
-            await using (var db = await _dbf.CreateDbContextAsync())
-            {
-                var brands = await db.Brands.Where(b => b.IsActive).OrderBy(b => b.Name).ToListAsync();
-                BrandBox.ItemsSource = brands;
+            BrandBox.ItemsSource = await _svc.GetActiveBrandsAsync();
+            CategoryBox.ItemsSource = await _svc.GetAllCategoriesAsync();
+            //await using (var db = await _dbf.CreateDbContextAsync())
+            //{
+            //    var brands = await db.Brands.Where(b => b.IsActive).OrderBy(b => b.Name).ToListAsync();
+            //    BrandBox.ItemsSource = brands;
 
-                var cats = await db.Categories.OrderBy(c => c.Name).ToListAsync();
-                CategoryBox.ItemsSource = cats;
-            }
+            //    var cats = await db.Categories.OrderBy(c => c.Name).ToListAsync();
+            //    CategoryBox.ItemsSource = cats;
+            //}
 
             // Pre-fill editable fields
             NameBox.Text = item.Name;
@@ -1307,35 +1311,66 @@ namespace Pos.Client.Wpf.Windows.Admin
         }
 
 
-        private async Task<int> GetNextSkuSequenceAsync(string prefix, int fallbackStart)
+        //private async Task<int> GetNextSkuSequenceAsync(string prefix, int fallbackStart)
+        //{
+        //    try
+        //    {
+        //        await using var db = await _dbf.CreateDbContextAsync();
+
+        //        // Fetch only SKUs that start with "<prefix>-", then parse the numeric tail
+        //        var likePrefix = prefix + "-";
+        //        var list = await db.Items
+        //            .Where(i => i.Sku != null && i.Sku.StartsWith(likePrefix))
+        //            .Select(i => i.Sku)
+        //            .ToListAsync();
+
+        //        int maxNum = 0;
+        //        foreach (var sku in list)
+        //        {
+        //            // Expect formats like PREFIX-001, PREFIX-25, etc.
+        //            var tail = sku.Substring(likePrefix.Length);
+        //            if (int.TryParse(tail, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
+        //                if (n > maxNum) maxNum = n;
+        //        }
+
+        //        // Next available number (at least fallbackStart)
+        //        return Math.Max(maxNum + 1, fallbackStart);
+        //    }
+        //    catch
+        //    {
+        //        // If anything goes wrong, stick to the UI-provided start
+        //        return fallbackStart;
+        //    }
+        //}
+
+        private void BtnVarPrimary_Click(object sender, RoutedEventArgs e)
         {
-            try
+            var dlg = new OpenFileDialog
             {
-                await using var db = await _dbf.CreateDbContextAsync();
-
-                // Fetch only SKUs that start with "<prefix>-", then parse the numeric tail
-                var likePrefix = prefix + "-";
-                var list = await db.Items
-                    .Where(i => i.Sku != null && i.Sku.StartsWith(likePrefix))
-                    .Select(i => i.Sku)
-                    .ToListAsync();
-
-                int maxNum = 0;
-                foreach (var sku in list)
-                {
-                    // Expect formats like PREFIX-001, PREFIX-25, etc.
-                    var tail = sku.Substring(likePrefix.Length);
-                    if (int.TryParse(tail, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
-                        if (n > maxNum) maxNum = n;
-                }
-
-                // Next available number (at least fallbackStart)
-                return Math.Max(maxNum + 1, fallbackStart);
+                Title = IsStandaloneMode ? "Choose Item Image" : "Choose Variant Image",
+                Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp",
+                Multiselect = false
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                _pendingVariantPrimaryPath = dlg.FileName;
+                // Optional UX: you could show a mini preview here if you like.
             }
-            catch
+        }
+
+        private void BtnVarGallery_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog
             {
-                // If anything goes wrong, stick to the UI-provided start
-                return fallbackStart;
+                Title = IsStandaloneMode ? "Add Item Gallery" : "Add Variant Gallery",
+                Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp",
+                Multiselect = true
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                foreach (var f in dlg.FileNames)
+                    if (!_pendingVariantGallery.Contains(f, StringComparer.OrdinalIgnoreCase))
+                        _pendingVariantGallery.Add(f);
             }
         }
 

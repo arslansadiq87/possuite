@@ -5,19 +5,28 @@ using System.Text;
 using System.Windows;
 using Pos.Domain;
 using Pos.Client.Wpf.Services;
+using Pos.Persistence.Sync; // ⬅️ add at the top
 
 public sealed class TillService : ITillService
 {
     private readonly DbContextOptions<PosClientDbContext> _dbOptions;
     private readonly ITerminalContext _ctx;
     private readonly IGlPostingService _gl;
+    private readonly IOutboxWriter _outbox;  // NEW
 
-    public TillService(DbContextOptions<PosClientDbContext> dbOptions, ITerminalContext ctx, IGlPostingService gl)
+
+    public TillService(
+    DbContextOptions<PosClientDbContext> dbOptions,
+    ITerminalContext ctx,
+    IGlPostingService gl,
+    IOutboxWriter outbox)                       // NEW
     {
         _dbOptions = dbOptions;
         _ctx = ctx;
         _gl = gl;
+        _outbox = outbox;                           // NEW
     }
+
 
     private int OutletId => _ctx.OutletId;
     private int CounterId => _ctx.CounterId;
@@ -40,6 +49,9 @@ public sealed class TillService : ITillService
         };
         db.TillSessions.Add(session);
         await db.SaveChangesAsync();
+        // === SYNC: Till opened ===
+        await _outbox.EnqueueUpsertAsync(db, session, default);
+        await db.SaveChangesAsync();    // persist the outbox row
         MessageBox.Show($"Till opened. Id={session.Id}", "Till");
         return true;
     }
@@ -108,6 +120,9 @@ public sealed class TillService : ITillService
         open.OverShort = overShort;
         await db.SaveChangesAsync();
 
+        // === SYNC: Till closed (session updated) ===
+        await _outbox.EnqueueUpsertAsync(db, open, default);
+        await db.SaveChangesAsync();
         // --- GL: move declared cash from Till -> Cash in Hand and post over/short ---
         var systemCash = salesCash - refundsCashAbs;                 // exclude opening float
         var declaredToMove = declaredCash - open.OpeningFloat;       // keep float in till

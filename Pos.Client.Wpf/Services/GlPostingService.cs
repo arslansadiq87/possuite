@@ -8,6 +8,7 @@ using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
 using Pos.Domain.Hr;
 using Pos.Persistence;
+using Pos.Persistence.Sync; // ⬅️ add at the top
 
 namespace Pos.Client.Wpf.Services
 {
@@ -33,12 +34,14 @@ namespace Pos.Client.Wpf.Services
         private readonly PosClientDbContext _db;
         private readonly ICoaService _coa;
         private readonly IInvoiceSettingsService _invSettings;   // NEW
+        private readonly IOutboxWriter _outbox; // ⬅️ add
 
-        public GlPostingService(PosClientDbContext db, ICoaService coa, IInvoiceSettingsService invSettings)
+        public GlPostingService(PosClientDbContext db, ICoaService coa, IInvoiceSettingsService invSettings, IOutboxWriter outbox) // ⬅️ add param
         {
             _db = db;
             _coa = coa;
-            _invSettings = invSettings;    // NEW
+            _invSettings = invSettings;
+            _outbox = outbox; // ⬅️ add
         }
 
         // Aligned with CoATemplateSeeder
@@ -144,8 +147,16 @@ namespace Pos.Client.Wpf.Services
             }
             if (sale.CardAmount > 0m)
             {
-                await LineAsync(ts, outletId, BANK, 0m, sale.CardAmount, GlDocType.SaleReturn, sale.Id, "Refund via bank/card");
+                // Use the same configured clearing/bank account as Sale
+                var (s, _) = await _invSettings.GetAsync(outletId, "en");
+                if (s?.SalesCardClearingAccountId is null)
+                    throw new InvalidOperationException("Cannot refund CARD: configure a Sales Card Clearing Account in Invoice Settings for this outlet.");
+                var bankId = s!.SalesCardClearingAccountId.Value;
+
+                // Refund = credit bank
+                LineById(ts, outletId, bankId, 0m, sale.CardAmount, GlDocType.SaleReturn, sale.Id, "Refund via bank/card");
             }
+
             if (creditReversed > 0m)
                 await LineAsync(ts, outletId, AR, 0m, creditReversed, GlDocType.SaleReturn, sale.Id, "Reverse AR");
             // Reverse revenue and output tax
@@ -271,8 +282,12 @@ namespace Pos.Client.Wpf.Services
             }
             // Persist GL entries using the SAME DbContext/transaction
             await db.SaveChangesAsync();
+            // === SYNC: voucher posted ===
+            await _outbox.EnqueueUpsertAsync(db, v, default);
+            await db.SaveChangesAsync();
+
         }
-        
+
         public async Task PostVoucherAsync(Voucher v)
         {
             // 🔒 Guard: cash vouchers must have an outlet (cash account is per-outlet)
@@ -337,9 +352,13 @@ namespace Pos.Client.Wpf.Services
                     throw new InvalidOperationException("Journal Voucher must balance.");
             }
             await _db.SaveChangesAsync();
+            // === SYNC: voucher posted ===
+            await _outbox.EnqueueUpsertAsync(_db, v, default);
+            await _db.SaveChangesAsync();
+
         }
 
-    public async Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid)
+        public async Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid)
     {
         // We tagged voucher user-lines as Journal/CashPayment/CashReceipt in your PostVoucherAsync.
         var baseDocTypes = new[] { GlDocType.JournalVoucher, GlDocType.CashPayment, GlDocType.CashReceipt };
@@ -364,9 +383,13 @@ namespace Pos.Client.Wpf.Services
             });
         }
         await db.SaveChangesAsync();
-    }
+            // === SYNC: voucher voided ===
+            await _outbox.EnqueueUpsertAsync(db, voucherToVoid, default);
+            await db.SaveChangesAsync();
 
-    public async Task PostVoucherRevisionAsync(PosClientDbContext db, Voucher newVoucher, IReadOnlyList<VoucherLine> oldLines)
+        }
+
+        public async Task PostVoucherRevisionAsync(PosClientDbContext db, Voucher newVoucher, IReadOnlyList<VoucherLine> oldLines)
     {
         // Load NEW lines (ensure attached)
         await db.Entry(newVoucher).Collection(x => x.Lines).LoadAsync();
@@ -435,9 +458,13 @@ namespace Pos.Client.Wpf.Services
             }
         }
         await db.SaveChangesAsync();
-    }
+            // === SYNC: voucher revised ===
+            await _outbox.EnqueueUpsertAsync(db, newVoucher, default);
+            await db.SaveChangesAsync();
 
-    public async Task PostPayrollAccrualAsync(PayrollRun run)
+        }
+
+        public async Task PostPayrollAccrualAsync(PayrollRun run)
         {
             // Dr Salaries Expense (5130), Cr Salaries Payable (2200)
             var ts = run.CreatedAtUtc;
@@ -447,6 +474,10 @@ namespace Pos.Client.Wpf.Services
                 await LineAsync(ts, null, SALX, total, 0, GlDocType.PayrollAccrual, run.Id, "Payroll accrual");
                 await LineAsync(ts, null, SALP, 0, total, GlDocType.PayrollAccrual, run.Id, "Salaries payable");
                 await _db.SaveChangesAsync();
+                // === SYNC: payroll accrual ===
+                await _outbox.EnqueueUpsertAsync(_db, run, default);
+                await _db.SaveChangesAsync();
+
             }
         }
 
@@ -462,6 +493,10 @@ namespace Pos.Client.Wpf.Services
                 var handAccId = await _coa.GetCashAccountIdAsync(outletId: null); // company-scope by default
                 LineById(ts, null, handAccId, 0, total, GlDocType.PayrollPayment, run.Id, "Payout (Cash)");
                 await _db.SaveChangesAsync();
+                // === SYNC: payroll payment ===
+                await _outbox.EnqueueUpsertAsync(_db, run, default);
+                await _db.SaveChangesAsync();
+
             }
         }
 
@@ -569,6 +604,10 @@ namespace Pos.Client.Wpf.Services
                 }
             }
             await _db.SaveChangesAsync();
+            // === SYNC: till session closed ===
+            await _outbox.EnqueueUpsertAsync(_db, session, default);
+            await _db.SaveChangesAsync();
+
         }
     }
 }

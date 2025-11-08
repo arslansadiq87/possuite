@@ -18,29 +18,52 @@ using Pos.Client.Wpf.Windows.Inventory;
 using Pos.Domain.Entities;
 using Pos.Client.Wpf.Windows.Settings;
 using Pos.Client.Wpf.Windows.Accounting;
-
+using Pos.Persistence.Sync;
+using Pos.Client.Wpf.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using Pos.Client.Wpf.Services.Sync; // ISyncService
 
 
 namespace Pos.Client.Wpf
 {
     public partial class App : Application
     {
+        public App()
+        {
+            // If your file has InitializeComponent(), keep it first.
+            try { InitializeComponent(); } catch { /* ok if not generated */ }
+            CrashReporter.Install(this);
+            this.DispatcherUnhandledException += (s, e) =>
+            {
+                try { MessageBox.Show(e.Exception.ToString(), "UI Crash", MessageBoxButton.OK, MessageBoxImage.Error); }
+                catch { /* swallow */ }
+                e.Handled = true;
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                var ex = e.ExceptionObject as Exception;
+                try { MessageBox.Show(ex?.ToString() ?? "Unknown crash", "App Crash", MessageBoxButton.OK, MessageBoxImage.Error); }
+                catch { /* swallow */ }
+            };
+        }
+
+
         public static IServiceProvider Services { get; private set; } = null!;
+        private CancellationTokenSource? _syncCts;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
 
+
+            ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
             //ThemeManager.Current.ThemeSyncMode = ThemeSyncMode.SyncAll;  // or SyncWithAppMode / SyncWithAccent
             //ThemeManager.Current.SyncTheme();
             //ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
             // 3) Keep every open window in lock-step:
-            
-            
             var sc = new ServiceCollection();
-
-
             // 1) Connection string
             var cs = DbPath.ConnectionString;
             var dbFile = DbPath.Get();
@@ -53,7 +76,6 @@ namespace Pos.Client.Wpf
 
             sc.AddTransient<Windows.Shell.DashboardVm>();
             sc.AddTransient<Windows.Shell.DashboardWindow>();
-
             // View navigation
             sc.AddSingleton<IViewNavigator, ViewNavigator>();
             sc.AddSingleton<IWindowNavigator, WindowNavigator>();
@@ -62,11 +84,22 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<ITillService, TillService>();
             sc.AddSingleton<ITerminalContext, TerminalContext>();
             // Party posting (build a DbContext instance from the factory for each use)
+            sc.AddScoped<BrandService>();
+            sc.AddScoped<CategoryService>();
+            sc.AddScoped<PartyService>();
+            sc.AddScoped<WarehouseService>();
+            sc.AddScoped<OtherAccountService>();
+            sc.AddScoped<Pos.Persistence.Services.OutletCounterService>();
+            sc.AddScoped<Pos.Persistence.Services.StaffService>();
+            sc.AddScoped<Pos.Persistence.Services.UserAdminService>();
+
             sc.AddTransient<PartyPostingService>(sp =>
             {
                 var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-                return new PartyPostingService(dbf.CreateDbContext());
+                var outbox = sp.GetRequiredService<IOutboxWriter>();      // NEW
+                return new PartyPostingService(dbf.CreateDbContext(), outbox);
             });
+
             // Party lookup (construct DbContext per resolve so queries use a fresh context)
             sc.AddTransient<PartyLookupService>(sp =>
             {
@@ -197,10 +230,20 @@ namespace Pos.Client.Wpf
             sc.AddScoped<IArApQueryService, ArApQueryService>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportWindow>();
+            sc.AddTransient<PurchasesService>();
 
             // Posting service (if not already added earlier)
             //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
 
+            // after other services
+            sc.AddSingleton<Pos.Persistence.Sync.ISyncTokenService, Pos.Persistence.Sync.SyncTokenService>();
+            sc.AddSingleton<Pos.Persistence.Sync.IOutboxWriter, Pos.Persistence.Sync.OutboxWriter>();
+            //sc.AddScoped<IOutboxWriter, OutboxWriter>();
+            sc.AddHttpClient<Pos.Client.Wpf.Services.Sync.ISyncHttp, Pos.Client.Wpf.Services.Sync.SyncHttp>(c =>
+            {
+                c.BaseAddress = new Uri("http://localhost:5089/"); // TODO: set
+            });
+            sc.AddSingleton<Pos.Client.Wpf.Services.Sync.ISyncService, Pos.Client.Wpf.Services.Sync.SyncService>();
 
             //sc.AddTransient<UsersWindow>(sp =>
             //{
@@ -356,28 +399,60 @@ namespace Pos.Client.Wpf
                 return;
             }
 
+            // ---- START PERIODIC SYNC (after login + binding, before showing shell) ----
+            try
+            {
+                var sync = Services.GetRequiredService<ISyncService>();
+                _syncCts = new CancellationTokenSource();
+                _ = RunSyncLoopAsync(sync, _syncCts.Token); // fire-and-forget
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[SYNC] Could not start sync loop: " + ex);
+            }
+            // ---- END PERIODIC SYNC ----
 
-
-            // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
-            //var dash = Services.GetRequiredService<DashboardWindow>();
-            //MainWindow = dash;
-            //dash.Show();
-
-            // using System.Windows;
-            // using Pos.Client.Wpf.Windows.Shell;
-
-            //var shell = Services.GetRequiredService<DashboardWindow>(); // exact type
-            //Application.Current.MainWindow = shell;                     // RibbonWindow : Window
-            //shell.Show();
             var shell = Services.GetRequiredService<Windows.Shell.DashboardWindow>();
             Application.Current.MainWindow = shell;
             shell.Show();
-
             this.ShutdownMode = oldMode; // e.g. back to OnMainWindowClose
         }
 
-        
+        protected override void OnExit(ExitEventArgs e)
+        {
+            try { _syncCts?.Cancel(); } catch { /* ignore */ }
+            _syncCts?.Dispose();
+            base.OnExit(e);
+        }
+
+        private static async Task RunSyncLoopAsync(ISyncService sync, CancellationToken ct)
+        {
+            // Small delay so UI settles
+            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await sync.PushAsync(ct);
+                    await sync.PullAsync(ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break; // shutting down
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[SYNC] Error in loop: " + ex.Message);
+                    // keep going
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            }
+        }
+
+
+
 
     }
 }

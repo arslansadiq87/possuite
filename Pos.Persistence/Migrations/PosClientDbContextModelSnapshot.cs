@@ -15,7 +15,7 @@ namespace Pos.Persistence.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
+            modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
 
             modelBuilder.Entity("InvoiceSettings", b =>
                 {
@@ -207,7 +207,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime>("TsUtc")
                         .HasColumnType("TEXT");
@@ -265,7 +265,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
@@ -328,7 +328,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -405,7 +405,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int?>("SystemKey")
                         .HasColumnType("INTEGER");
@@ -571,7 +571,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -625,7 +625,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int?>("TillSessionId")
                         .HasColumnType("INTEGER");
@@ -672,7 +672,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -717,7 +717,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -773,7 +773,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -819,7 +819,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -916,7 +916,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<string>("Sku")
                         .IsRequired()
@@ -1017,6 +1017,73 @@ namespace Pos.Persistence.Migrations
                     b.ToTable("ItemBarcodes");
                 });
 
+            modelBuilder.Entity("Pos.Domain.Entities.ItemImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentHashSha1")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LocalOriginalPath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LocalThumbPath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("BLOB")
+                        .HasDefaultValueSql("randomblob(8)");
+
+                    b.Property<string>("ServerOriginalUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerThumbUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId", "IsPrimary");
+
+                    b.ToTable("ItemImages");
+                });
+
             modelBuilder.Entity("Pos.Domain.Entities.Journal", b =>
                 {
                     b.Property<int>("Id")
@@ -1049,7 +1116,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime>("TsUtc")
                         .HasColumnType("TEXT");
@@ -1106,7 +1173,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -1162,7 +1229,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
@@ -1252,7 +1319,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<decimal>("UnitCost")
                         .HasPrecision(18, 4)
@@ -1312,7 +1379,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -1358,7 +1425,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -1412,7 +1479,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<string>("TaxNumber")
                         .HasMaxLength(50)
@@ -1465,7 +1532,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -1524,7 +1591,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime>("TimestampUtc")
                         .HasColumnType("TEXT");
@@ -1583,7 +1650,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -1600,7 +1667,7 @@ namespace Pos.Persistence.Migrations
 
                     b.ToTable("PartyOutlets", null, t =>
                         {
-                            t.HasCheckConstraint("CK_PartyOutlet_CreditLimit_NonNegative", "[CreditLimit] IS NULL OR [CreditLimit] >= 0");
+                            t.HasCheckConstraint("CK_PartyOutlet_CreditLimit_NonNegative", "CreditLimit IS NULL OR CreditLimit >= 0");
                         });
                 });
 
@@ -1629,7 +1696,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -1643,6 +1710,73 @@ namespace Pos.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("PartyRoles");
+                });
+
+            modelBuilder.Entity("Pos.Domain.Entities.ProductImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentHashSha1")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LocalOriginalPath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LocalThumbPath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("BLOB")
+                        .HasDefaultValueSql("randomblob(8)");
+
+                    b.Property<string>("ServerOriginalUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerThumbUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId", "IsPrimary");
+
+                    b.ToTable("ProductImages");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Purchase", b =>
@@ -1716,7 +1850,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
@@ -1772,7 +1906,7 @@ namespace Pos.Persistence.Migrations
 
                     b.ToTable("Purchases", t =>
                         {
-                            t.HasCheckConstraint("CK_Purchase_Target", "( [TargetType] = 1 AND [OutletId] IS NOT NULL AND [WarehouseId] IS NULL ) OR ( [TargetType] = 2 AND [WarehouseId] IS NOT NULL AND [OutletId] IS NULL )");
+                            t.HasCheckConstraint("CK_Purchase_Target", "(TargetType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (TargetType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
                         });
                 });
 
@@ -1822,7 +1956,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<decimal>("TaxRate")
                         .HasColumnType("decimal(5,2)");
@@ -1891,7 +2025,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("SupplierId")
                         .HasColumnType("INTEGER");
@@ -2011,7 +2145,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int?>("SalesmanId")
                         .HasColumnType("INTEGER");
@@ -2106,7 +2240,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("SaleId")
                         .HasColumnType("INTEGER");
@@ -2192,7 +2326,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
@@ -2269,7 +2403,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<string>("SkuSnapshot")
                         .IsRequired()
@@ -2347,7 +2481,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int?>("StockDocId")
                         .HasColumnType("INTEGER");
@@ -2379,7 +2513,7 @@ namespace Pos.Persistence.Migrations
 
                     b.ToTable("StockEntries", t =>
                         {
-                            t.HasCheckConstraint("CK_StockEntry_StockDoc_Requirement", "CASE  WHEN [RefType] IN ('Opening','TransferOut','TransferIn') THEN [StockDocId] IS NOT NULL  ELSE 1 END");
+                            t.HasCheckConstraint("CK_StockEntry_StockDoc_Requirement", "CASE WHEN RefType IN ('Opening','TransferOut','TransferIn') THEN StockDocId IS NOT NULL ELSE 1 END");
                         });
                 });
 
@@ -2409,7 +2543,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -2469,7 +2603,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -2518,7 +2652,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -2593,7 +2727,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -2657,7 +2791,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
@@ -2706,7 +2840,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("StaffId")
                         .HasColumnType("INTEGER");
@@ -2750,7 +2884,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<string>("Source")
                         .HasColumnType("TEXT");
@@ -2811,7 +2945,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("StaffId")
                         .HasColumnType("INTEGER");
@@ -2859,7 +2993,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<decimal>("TotalDeductions")
                         .HasColumnType("decimal(18,2)");
@@ -2911,7 +3045,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<TimeSpan>("Start")
                         .HasColumnType("TEXT");
@@ -2949,7 +3083,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("ShiftId")
                         .HasColumnType("INTEGER");
@@ -3025,7 +3159,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<int>("Type")
                         .HasColumnType("INTEGER");
@@ -3042,6 +3176,95 @@ namespace Pos.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Staff");
+                });
+
+            modelBuilder.Entity("Pos.Persistence.Sync.SyncCursor", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("LastToken")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SyncCursors");
+                });
+
+            modelBuilder.Entity("Pos.Persistence.Sync.SyncInbox", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Entity")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Op")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Token")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("TsUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("SyncInbox");
+                });
+
+            modelBuilder.Entity("Pos.Persistence.Sync.SyncOutbox", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Entity")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Op")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Token")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("TsUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("SyncOutbox");
                 });
 
             modelBuilder.Entity("Product", b =>
@@ -3079,7 +3302,7 @@ namespace Pos.Persistence.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("BLOB")
-                        .HasDefaultValueSql("X''");
+                        .HasDefaultValueSql("randomblob(8)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
@@ -3227,6 +3450,17 @@ namespace Pos.Persistence.Migrations
                     b.Navigation("Item");
                 });
 
+            modelBuilder.Entity("Pos.Domain.Entities.ItemImage", b =>
+                {
+                    b.HasOne("Pos.Domain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Item");
+                });
+
             modelBuilder.Entity("Pos.Domain.Entities.Journal", b =>
                 {
                     b.HasOne("Pos.Domain.Entities.Outlet", "Outlet")
@@ -3329,6 +3563,17 @@ namespace Pos.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Party");
+                });
+
+            modelBuilder.Entity("Pos.Domain.Entities.ProductImage", b =>
+                {
+                    b.HasOne("Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("Pos.Domain.Entities.Purchase", b =>

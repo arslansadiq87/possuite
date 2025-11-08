@@ -33,11 +33,15 @@ namespace Pos.Client.Wpf.Services
         private const string CASH_HEADER = "111";  // header under which both live
         private const string CASH_CHILD = "11101"; // Cash in Hand
         private const string TILL_CHILD = "11102"; // Cash in Till
+        private const string COMPANY_CODE = "COMPANY"; // or your company short code
+
+        
 
         public async Task<int> EnsureOutletCashAccountAsync(int outletId)
         {
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
 
+            // Ensure company-level CASH header exists and is marked as header/system
             // Ensure company-level CASH header exists and is marked as header/system
             var header = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
             if (header == null)
@@ -45,7 +49,7 @@ namespace Pos.Client.Wpf.Services
                 header = new Account
                 {
                     Code = CASH_HEADER,
-                    Name = "Cash in Hand",
+                    Name = "Cash",                 // <— unified name
                     Type = AccountType.Asset,
                     NormalSide = NormalSide.Debit,
                     IsHeader = true,
@@ -60,12 +64,14 @@ namespace Pos.Client.Wpf.Services
             else
             {
                 // normalize semantics in case someone edited it
+                header.Name = "Cash";             // <— keep it consistent
                 header.IsHeader = true;
                 header.AllowPosting = false;
                 header.IsSystem = true;
                 header.OutletId = null;
                 await _db.SaveChangesAsync();
             }
+
 
             // Child code is “111-{OutletCode}”
             var childCode = $"{CASH_CHILD}-{outlet.Code}";
@@ -150,13 +156,68 @@ namespace Pos.Client.Wpf.Services
             return child.Id;
         }
 
+        private async Task<int> EnsureCompanyCashInHandAsync()
+{
+    // 11101 leaf without OutletId — company-scope posting account
+    var code = $"{CASH_CHILD}-{COMPANY_CODE}";
+    var acc = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == code && a.OutletId == null);
+    if (acc != null) return acc.Id;
+
+    // parent header 111 must exist
+    var header = await _db.Accounts.FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
+
+    acc = new Account
+    {
+        Code = code,
+        Name = "Cash in Hand – Company",
+        Type = AccountType.Asset,
+        NormalSide = NormalSide.Debit,
+        IsHeader = false,
+        AllowPosting = true,
+        IsSystem = true,
+        ParentId = header.Id,
+        OutletId = null,
+        IsActive = true
+    };
+    _db.Accounts.Add(acc);
+    await _db.SaveChangesAsync();
+    return acc.Id;
+}
+
+        private async Task<int> EnsureCompanyCashInHandAsync(PosClientDbContext db)
+        {
+            var code = $"{CASH_CHILD}-{COMPANY_CODE}";
+            var acc = await db.Accounts.FirstOrDefaultAsync(a => a.Code == code && a.OutletId == null);
+            if (acc != null) return acc.Id;
+
+            var header = await db.Accounts.FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
+
+            acc = new Account
+            {
+                Code = code,
+                Name = "Cash in Hand – Company",
+                Type = AccountType.Asset,
+                NormalSide = NormalSide.Debit,
+                IsHeader = false,
+                AllowPosting = true,
+                IsSystem = true,
+                ParentId = header.Id,
+                OutletId = null,
+                IsActive = true
+            };
+            db.Accounts.Add(acc);
+            await db.SaveChangesAsync();
+            return acc.Id;
+        }
+
         // If outletId is null (company-scope docs), keep your existing behavior
         public async Task<int> GetCashAccountIdAsync(int? outletId)
         {
             if (outletId == null)
             {
-                var h = await _db.Accounts.AsNoTracking().FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
-                return h.Id;
+                //var h = await _db.Accounts.AsNoTracking().FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
+                return await EnsureCompanyCashInHandAsync();   // <— was returning header 111
+
             }
 
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId.Value);
@@ -185,13 +246,14 @@ namespace Pos.Client.Wpf.Services
         {
             var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
 
-            var header = await db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
+            // Ensure company-level CASH header exists and is marked as header/system
+            var header = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
             if (header == null)
             {
                 header = new Account
                 {
                     Code = CASH_HEADER,
-                    Name = "Cash in Hand",
+                    Name = "Cash",                 // <— unified name
                     Type = AccountType.Asset,
                     NormalSide = NormalSide.Debit,
                     IsHeader = true,
@@ -200,17 +262,20 @@ namespace Pos.Client.Wpf.Services
                     OutletId = null,
                     IsActive = true
                 };
-                db.Accounts.Add(header);
-                await db.SaveChangesAsync();
+                _db.Accounts.Add(header);
+                await _db.SaveChangesAsync();
             }
             else
             {
+                // normalize semantics in case someone edited it
+                header.Name = "Cash";             // <— keep it consistent
                 header.IsHeader = true;
                 header.AllowPosting = false;
                 header.IsSystem = true;
                 header.OutletId = null;
-                await db.SaveChangesAsync();
+                await _db.SaveChangesAsync();
             }
+
 
             var childCode = $"{CASH_CHILD}-{outlet.Code}";
             var child = await db.Accounts
@@ -240,13 +305,14 @@ namespace Pos.Client.Wpf.Services
         {
             var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
 
-            var header = await db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
+            // Ensure company-level CASH header exists and is marked as header/system
+            var header = await _db.Accounts.FirstOrDefaultAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
             if (header == null)
             {
                 header = new Account
                 {
                     Code = CASH_HEADER,
-                    Name = "Cash in Till",
+                    Name = "Cash",                 // <— unified name
                     Type = AccountType.Asset,
                     NormalSide = NormalSide.Debit,
                     IsHeader = true,
@@ -255,17 +321,20 @@ namespace Pos.Client.Wpf.Services
                     OutletId = null,
                     IsActive = true
                 };
-                db.Accounts.Add(header);
-                await db.SaveChangesAsync();
+                _db.Accounts.Add(header);
+                await _db.SaveChangesAsync();
             }
             else
             {
+                // normalize semantics in case someone edited it
+                header.Name = "Cash";             // <— keep it consistent
                 header.IsHeader = true;
                 header.AllowPosting = false;
                 header.IsSystem = true;
                 header.OutletId = null;
-                await db.SaveChangesAsync();
+                await _db.SaveChangesAsync();
             }
+
 
             var childCode = $"{TILL_CHILD}-{outlet.Code}";
             var child = await db.Accounts
@@ -295,9 +364,10 @@ namespace Pos.Client.Wpf.Services
         {
             if (outletId == null)
             {
-                var h = await db.Accounts.AsNoTracking()
-                    .FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
-                return h.Id;
+                return await EnsureCompanyCashInHandAsync(db);
+                //var h = await db.Accounts.AsNoTracking()
+                //    .FirstAsync(a => a.Code == CASH_HEADER && a.OutletId == null);
+                //return h.Id;
             }
 
             var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId.Value);

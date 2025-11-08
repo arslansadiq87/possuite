@@ -2,9 +2,11 @@
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.EntityFrameworkCore;
+//using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
-using Pos.Persistence;
+//using Pos.Persistence;
+using Pos.Persistence.Features.OpeningStock;
+using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -12,7 +14,8 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         public enum Mode { Drafts, Locked }
 
-        private readonly IDbContextFactory<Pos.Persistence.PosClientDbContext> _dbf;
+        //private readonly IDbContextFactory<Pos.Persistence.PosClientDbContext> _dbf;
+        private readonly IOpeningStockService _svc;
         private readonly InventoryLocationType _locType;
         private readonly int _locId;
         private readonly Mode _mode;
@@ -33,12 +36,13 @@ namespace Pos.Client.Wpf.Windows.Admin
             public string StatusText => Status.ToString();        // optional helper
         }
 
-        public OpeningStockPickDialog(IDbContextFactory<Pos.Persistence.PosClientDbContext> dbf,
+        public OpeningStockPickDialog(IOpeningStockService svc,
             InventoryLocationType locType, int locId, Mode mode)
         {
             InitializeComponent();
             DataContext = this;
-            _dbf = dbf;
+            //_dbf = dbf;
+            _svc = svc;
             _locType = locType;
             _locId = locId;
             _mode = mode;
@@ -48,59 +52,38 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            await using var db = await _dbf.CreateDbContextAsync();
-
-            var status = _mode == Mode.Drafts ? StockDocStatus.Draft : StockDocStatus.Locked;
-
-            // Load docs for this location
-            //var docs = await db.StockDocs
-            //    .Where(d => d.DocType == StockDocType.Opening
-            //             && d.Status == status
-            //             && d.LocationType == _locType
-            //             && d.LocationId == _locId)
-            //    .OrderByDescending(d => d.Id)
-            //    .ToListAsync();
-            var docs = await db.StockDocs.AsNoTracking()
-                .Where(d => d.DocType == StockDocType.Opening
-                         && d.LocationType == _locType
-                         && d.LocationId == _locId)
-                .OrderByDescending(d => d.Id)
-                .ToListAsync();
-
-            if (docs.Count == 0) return;
-
-            var docIds = docs.Select(d => d.Id).ToList();
-
-            // Aggregate lines per doc
-            var lines = await db.StockEntries.AsNoTracking()
-                .Where(se => se.StockDocId.HasValue && docIds.Contains(se.StockDocId.Value))
-                .GroupBy(se => se.StockDocId)
-                .Select(g => new
-                {
-                    DocId = g.Key,
-                    Count = g.Count(),
-                    Qty = g.Sum(x => x.QtyChange),
-                    Value = g.Sum(x => x.QtyChange * x.UnitCost)
-                }).ToListAsync();
-
-            var map = lines.ToDictionary(x => x.DocId, x => x);
-
-            Docs.Clear();
-            foreach (var d in docs)
+            try
             {
-                map.TryGetValue(d.Id, out var agg);
-                Docs.Add(new Row
+                StockDocStatus? filter = _mode switch
                 {
-                    Id = d.Id,
-                    EffectiveDateUtc = d.EffectiveDateUtc,
-                    LineCount = agg?.Count ?? 0,
-                    TotalQty = agg?.Qty ?? 0m,
-                    TotalValue = agg?.Value ?? 0m,
-                    Note = d.Note,
-                    Status = d.Status
-                });
+                    Mode.Drafts => StockDocStatus.Draft,
+                    Mode.Locked => StockDocStatus.Locked,
+                    _ => null
+                };
+
+                var list = await _svc.GetOpeningDocSummariesAsync(_locType, _locId, filter);
+
+                Docs.Clear();
+                foreach (var d in list)
+                {
+                    Docs.Add(new Row
+                    {
+                        Id = d.Id,
+                        EffectiveDateUtc = d.EffectiveDateUtc,
+                        LineCount = d.LineCount,
+                        TotalQty = d.TotalQty,
+                        TotalValue = d.TotalValue,
+                        Note = d.Note,
+                        Status = d.Status
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Load error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
         private void Select_Click(object sender, RoutedEventArgs e)
         {

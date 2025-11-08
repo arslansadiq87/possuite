@@ -1,8 +1,8 @@
 ﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Admin.WarehousesView"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Loaded="UserControl_Loaded"
-        PreviewKeyDown="Root_PreviewKeyDown">
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             PreviewKeyDown="Root_PreviewKeyDown">
+
     <DockPanel>
 
         <!-- Search row (auto-hidden unless grid has vertical scrollbar) -->
@@ -73,9 +73,7 @@
                   IsReadOnly="True"
                   SelectionMode="Single"
                   SelectionChanged="Grid_SelectionChanged"
-                  MouseDoubleClick="Grid_MouseDoubleClick"
-                  SizeChanged="WarehousesGrid_SizeChanged"
-                  Loaded="WarehousesGrid_Loaded">
+                  MouseDoubleClick="Grid_MouseDoubleClick">
             <DataGrid.Resources>
                 <!-- 1) Override the system selection text colors just for this grid -->
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"                 Color="#111111"/>

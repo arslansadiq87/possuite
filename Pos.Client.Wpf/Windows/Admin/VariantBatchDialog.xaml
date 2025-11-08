@@ -11,6 +11,10 @@
         <ToolBar DockPanel.Dock="Top" Style="{StaticResource ModernToolBar.Compact}" ToolBarTray.IsLocked="True">
             <Button x:Name="SaveAddBtn" Content="Save &amp; Add another" Click="SaveAndAddAnother_Click" />
             <Button x:Name="SaveBtn"     Content="Save &amp; Close"   Margin="6,0,0,0" Click="Save_Click" />
+            <Separator/>
+            <Button x:Name="BtnVarPrimary" Content="Set Variant Image" Click="BtnVarPrimary_Click"/>
+            <Button x:Name="BtnVarGallery" Content="Add Variant Gallery" Margin="6,0,0,0" Click="BtnVarGallery_Click"/>
+
             <Button Content="Cancel" Margin="6,0,0,0" Click="Cancel_Click"/>
             <Separator/>
             

@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         MinHeight="400" MinWidth="800"
         KeyDown="Window_KeyDown">
+
     <UserControl.Resources>
         <Style TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -10,33 +11,53 @@
     </UserControl.Resources>
 
     <DockPanel Margin="14">
-        <!-- Top bar -->
+
+        <!-- ✅ Toolbar -->
+        <ToolBar DockPanel.Dock="Top" Margin="0,0,0,10"
+                 Style="{StaticResource ModernToolBar.Compact}">
+            <Button Content="New (Ctrl+N)" Click="New_Click" Width="110"
+                    Margin="0,0,8,0"/>
+            <Button Content="Edit (Enter)" Click="Edit_Click" Width="110"
+                    Margin="0,0,16,0"/>
+            <Separator/>
+            <CheckBox x:Name="OnlyActiveCheck" Content="Only Active" IsChecked="True"
+                      Margin="8,0,16,0"
+                      Checked="FilterChanged" Unchecked="FilterChanged"
+                      Style="{StaticResource ModernCheckBox}"/>
+            <CheckBox x:Name="RoleCustomerCheck" Content="Customer" IsChecked="True"
+                      Margin="0,0,8,0"
+                      Checked="FilterChanged" Unchecked="FilterChanged"
+                      Style="{StaticResource ModernCheckBox}"/>
+            <CheckBox x:Name="RoleSupplierCheck" Content="Supplier" IsChecked="True"
+                      Margin="0,0,8,0"
+                      Checked="FilterChanged" Unchecked="FilterChanged"
+                      Style="{StaticResource ModernCheckBox}"/>
+        </ToolBar>
+
+        <!-- Search bar -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
-            <TextBox x:Name="SearchText" Width="260" Margin="0,0,8,0" 
-                     TextChanged="SearchText_TextChanged"/>
-            <CheckBox x:Name="OnlyActiveCheck" Content="Only Active" IsChecked="True" Margin="0,0,16,0"
-                      Checked="FilterChanged" Unchecked="FilterChanged"/>
-            <CheckBox x:Name="RoleCustomerCheck" Content="Customer" IsChecked="True" Margin="0,0,6,0"
-                      Checked="FilterChanged" Unchecked="FilterChanged"/>
-            <CheckBox x:Name="RoleSupplierCheck" Content="Supplier" IsChecked="True" Margin="0,0,16,0"
-                      Checked="FilterChanged" Unchecked="FilterChanged"/>
-            <Button Content="New (Ctrl+N)" Click="New_Click" Margin="0,0,6,0"  Style="{StaticResource Btn.GlobalPrimary}"/>
-            <Button Content="Edit (Enter)" Click="Edit_Click" Margin="0,0,6,0"  Style="{StaticResource Btn.GlobalPrimary}"/>
-            
+            <TextBox x:Name="SearchText" Width="260" Margin="0,0,8,0"
+                     TextChanged="SearchText_TextChanged"
+                     Style="{StaticResource Txt.Search}"/>
         </StackPanel>
 
-        <!-- Grid -->
-        <DataGrid x:Name="Grid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
-                  MouseDoubleClick="Grid_MouseDoubleClick" Style="{StaticResource ModernDataGrid}">
+        <!-- Data Grid -->
+        <DataGrid x:Name="Grid"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  IsReadOnly="True"
+                  MouseDoubleClick="Grid_MouseDoubleClick"
+                  Style="{StaticResource ModernDataGrid}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*"/>
-                <DataGridTextColumn Header="Roles" Binding="{Binding RolesText}" Width="*" />
-                <DataGridTextColumn Header="Phone" Binding="{Binding Phone}" Width="*" />
-                <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="*" />
-                <DataGridTextColumn Header="Tax #" Binding="{Binding TaxNumber}" Width="*" />
+                <DataGridTextColumn Header="Roles" Binding="{Binding RolesText}" Width="*"/>
+                <DataGridTextColumn Header="Phone" Binding="{Binding Phone}" Width="*"/>
+                <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="*"/>
+                <DataGridTextColumn Header="Tax #" Binding="{Binding TaxNumber}" Width="*"/>
                 <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="70"/>
                 <DataGridCheckBoxColumn Header="Shared" Binding="{Binding IsSharedAcrossOutlets}" Width="80"/>
             </DataGrid.Columns>
         </DataGrid>
+
     </DockPanel>
 </UserControl>

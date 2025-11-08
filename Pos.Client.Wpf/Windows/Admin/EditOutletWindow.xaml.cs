@@ -1,15 +1,11 @@
 ﻿using System;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Client.Wpf.Services;
 using Pos.Domain.Entities;
-using Pos.Persistence;
-
-using static Pos.Client.Wpf.Windows.Admin.EditPartyWindow;
+using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -17,7 +13,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         private enum Mode { Create, Edit }
 
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly OutletCounterService _svc;
         private readonly Mode _mode;
 
         public sealed class Vm : INotifyPropertyChanged
@@ -40,40 +36,35 @@ namespace Pos.Client.Wpf.Windows.Admin
         }
 
         public Vm VM { get; } = new();
-
-        /// <summary>
-        /// The id saved/edited by this dialog. 0 if not saved.
-        /// </summary>
         public int SavedOutletId { get; private set; }
 
-        /// <summary>
-        /// Create mode (new outlet)
-        /// </summary>
-        public EditOutletWindow(IDbContextFactory<PosClientDbContext> dbf)
+        // CREATE
+        public EditOutletWindow()
         {
             InitializeComponent();
-            _dbf = dbf;
+            _svc = App.Services.GetRequiredService<OutletCounterService>();
             _mode = Mode.Create;
             DataContext = VM;
             Title = "Add Outlet";
             VM.IsActive = true;
         }
 
-        /// <summary>
-        /// Edit mode (existing outlet)
-        /// </summary>
-        public EditOutletWindow(IDbContextFactory<PosClientDbContext> dbf, int outletId)
+        // EDIT
+        public EditOutletWindow(int outletId)
         {
             InitializeComponent();
-            _dbf = dbf;
+            _svc = App.Services.GetRequiredService<OutletCounterService>();
             _mode = Mode.Edit;
             DataContext = VM;
             Title = "Edit Outlet";
+            _ = LoadAsync(outletId);
+        }
 
+        private async Task LoadAsync(int outletId)
+        {
             try
             {
-                using var db = _dbf.CreateDbContext();
-                var o = db.Outlets.AsNoTracking().FirstOrDefault(x => x.Id == outletId);
+                var o = await _svc.GetOutletAsync(outletId);
                 if (o == null)
                 {
                     MessageBox.Show("Outlet not found.", "Outlets",
@@ -98,7 +89,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
-            // --- Basic validation (mirrors your XAML MaxLength but also guards back-end) ---
             var code = (VM.Code ?? "").Trim();
             var name = (VM.Name ?? "").Trim();
             var address = string.IsNullOrWhiteSpace(VM.Address) ? null : VM.Address!.Trim();
@@ -110,51 +100,32 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             try
             {
-                // Resolve OutletService from DI container
-                using var scope = App.Services.CreateScope();
-                var outletSvc = scope.ServiceProvider.GetRequiredService<IOutletService>();
-
-                // Validate code uniqueness quickly using raw context (optional but fast precheck)
-                await using var db = await _dbf.CreateDbContextAsync();
-                var codeExists = await db.Outlets
-                    .AnyAsync(o => o.Id != VM.Id && o.Code.ToLower() == code.ToLower());
-                if (codeExists)
+                // uniqueness
+                var taken = await _svc.IsOutletCodeTakenAsync(code, excludingId: _mode == Mode.Edit ? VM.Id : (int?)null);
+                if (taken)
                 {
                     MessageBox.Show("Another outlet already uses this Code. Choose a different one.",
                         "Duplicate Code", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                if (_mode == Mode.Create)
+                var entity = new Outlet
                 {
-                    // --- Create new outlet ---
-                    var entity = new Outlet
-                    {
-                        Code = code,
-                        Name = name,
-                        Address = address,
-                        IsActive = VM.IsActive
-                    };
+                    Id = _mode == Mode.Edit ? VM.Id : 0,
+                    Code = code,
+                    Name = name,
+                    Address = address,
+                    IsActive = VM.IsActive
+                };
 
-                    // This automatically creates Cash-in-Hand and Cash-in-Till accounts
-                    SavedOutletId = await outletSvc.CreateAsync(entity);
-                }
-                else // --- Edit existing outlet ---
-                {
-                    var entity = new Outlet
-                    {
-                        Id = VM.Id,
-                        Code = code,
-                        Name = name,
-                        Address = address,
-                        IsActive = VM.IsActive
-                    };
+                // one call handles create vs update + outbox
+                var savedId = await _svc.AddOrUpdateOutletAsync(entity);
+                SavedOutletId = savedId;
 
-                    await outletSvc.UpdateAsync(entity);
-                    SavedOutletId = entity.Id;
-                }
+                // also enqueue a fresh upsert read to guarantee payload has latest fields
+                await _svc.UpsertOutletByIdAsync(savedId);
 
-                DialogResult = true; // close the dialog
+                DialogResult = true; // closes
             }
             catch (Exception ex)
             {
@@ -162,6 +133,5 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
     }
 }

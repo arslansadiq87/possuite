@@ -17,6 +17,7 @@ using Microsoft.VisualBasic;
 using System.Linq;            // at top of PurchasesService.cs
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Persistence.Sync;
 
 
 namespace Pos.Client.Wpf.Windows.Purchases
@@ -130,7 +131,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly PosClientDbContext _db;
         private readonly PurchasesService _purchaseSvc;
         //private readonly SuppliersService _suppliersSvc;
-        private readonly ItemsService _itemsSvc;
+        private ItemsService _itemsSvc;
+        private IOutboxWriter _outbox;                // NEW
         private Purchase _model = new();
         private readonly ObservableCollection<PurchaseLineVM> _lines = new();
         private ObservableCollection<Party> _supplierResults = new();  // was ObservableCollection<Supplier>
@@ -151,9 +153,17 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
             // -------- INIT CORE SERVICES (so _db isn't null) --------
             _db = new PosClientDbContext(_opts);
-            _purchaseSvc = new PurchasesService(_db);
+            _outbox = App.Services.GetRequiredService<IOutboxWriter>();      // NEW
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            _purchaseSvc = new PurchasesService(new PosClientDbContext(_opts), outbox);
+
+            //_purchaseSvc = new PurchasesService(_db);
+
+
             _partySvc = new PartyLookupService(_db);
-            _itemsSvc = new ItemsService(_db);
+            //_itemsSvc = new ItemsService(_db);
+            _itemsSvc = new ItemsService(_db, _outbox);                      // ⬅️ FIX: pass outbox
+
             // -------- INIT UI BINDINGS / EVENTS (same as your db-ctor) --------
             DatePicker.SelectedDate = DateTime.Now;
             OtherChargesBox.Text = "0.00";
@@ -351,9 +361,13 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public PurchaseView(PosClientDbContext db) : this()  // CHANGED: chain to parameterless
         {
             _db = db;
-            _purchaseSvc = new PurchasesService(_db);
+            //using var db = new PosClientDbContext(_opts);
+            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            _purchaseSvc = new PurchasesService(db, outbox);
+
+            //_purchaseSvc = new PurchasesService(_db);
             _partySvc = new PartyLookupService(_db);
-            _itemsSvc = new ItemsService(_db);
+            _itemsSvc = new ItemsService(_db, _outbox);         // ⬅️ FIX: pass outbox
             // init UI bindings you already had
             DatePicker.SelectedDate = DateTime.Now;
             OtherChargesBox.Text = "0.00";

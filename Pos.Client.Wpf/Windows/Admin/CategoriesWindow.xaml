@@ -108,7 +108,7 @@
                                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                                             VerticalAlignment="Center" HorizontalAlignment="Right">
                                     <!-- Use your product icon -->
-                                    <Image Source="{StaticResource Icon.Product}"
+                                    <Image Source="{StaticResource Icon.Products}"
                                            Width="{DynamicResource Icon.Size}"
                                            Height="{DynamicResource Icon.Size}"
                                            Stretch="Uniform"/>

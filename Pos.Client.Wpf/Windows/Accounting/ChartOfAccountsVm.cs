@@ -15,6 +15,8 @@ using System.Windows.Threading;
 using Pos.Client.Wpf.Infrastructure;
 using System; // <-- add this
 using Pos.Domain.Accounting; // 👈 add this
+using Pos.Persistence.Sync;                 // IOutboxWriter
+using Microsoft.Extensions.DependencyInjection; // App.Services.GetRequiredService
 
 
 namespace Pos.Client.Wpf.Windows.Accounting
@@ -77,6 +79,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
     public partial class ChartOfAccountsVm : ObservableObject, IDisposable
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly IOutboxWriter _outbox;   // NEW
 
         // Hierarchical roots (unused by the view directly, but used to build Flat)
         public ObservableCollection<AccountNode> Roots { get; } = new();
@@ -170,8 +173,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public ChartOfAccountsVm(IDbContextFactory<PosClientDbContext> dbf)
         {
             _dbf = dbf;
-            AppEvents.AccountsChanged += OnAccountsChanged;   // <-- subscribe
+            _outbox = App.Services.GetRequiredService<IOutboxWriter>(); // NEW
+            AppEvents.AccountsChanged += OnAccountsChanged;
         }
+
 
         private async void OnAccountsChanged()
         {
@@ -310,6 +315,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
             db.Accounts.Add(acc);
             await db.SaveChangesAsync();
+            // SYNC: broadcast the new account
+            await _outbox.EnqueueUpsertAsync(db, acc);
+            await db.SaveChangesAsync();
             await LoadAsync();
         }
 
@@ -355,6 +363,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             };
 
             db.Accounts.Add(acc);
+            await db.SaveChangesAsync();
+            // SYNC
+            await _outbox.EnqueueUpsertAsync(db, acc);
             await db.SaveChangesAsync();
             await LoadAsync();
         }
@@ -403,7 +414,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             var exists = await db.Accounts.AnyAsync(a => a.Code == code);
             if (!exists)
             {
-                db.Accounts.Add(new Account
+                var acc = new Account
                 {
                     Code = code,
                     Name = $"Staff — {user.Username}",
@@ -411,8 +422,15 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     NormalSide = NormalSide.Debit,
                     IsHeader = false,
                     AllowPosting = true
-                });
+                };
+                db.Accounts.Add(acc);
                 await db.SaveChangesAsync();
+
+                // SYNC
+                await _outbox.EnqueueUpsertAsync(db, acc);
+                await db.SaveChangesAsync();
+
+
             }
             await LoadAsync();
         }
@@ -426,6 +444,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             using var db = _dbf.CreateDbContext();
             var rows = await db.Accounts.Where(a => !a.IsOpeningLocked).ToListAsync();
             foreach (var a in rows) a.IsOpeningLocked = true;
+            await db.SaveChangesAsync();
+            foreach (var a in rows)
+                await _outbox.EnqueueUpsertAsync(db, a);
             await db.SaveChangesAsync();
             await LoadAsync();
         }
@@ -464,6 +485,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
 
             await db.SaveChangesAsync();
+            // SYNC (bulk)
+            foreach (var a in dbAccounts)
+                await _outbox.EnqueueUpsertAsync(db, a);
+            await db.SaveChangesAsync();
             await LoadAsync();
         }
 
@@ -493,6 +518,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             acc.IsHeader = isHeader;
             acc.AllowPosting = allowPosting;
 
+            await db.SaveChangesAsync();
+            // SYNC
+            await _outbox.EnqueueUpsertAsync(db, acc);
             await db.SaveChangesAsync();
             await LoadAsync();
         }
@@ -531,6 +559,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 return;
             db.Accounts.Remove(acc);
             await db.SaveChangesAsync();
+            // SYNC (delete)
+            await _outbox.EnqueueDeleteAsync(db, nameof(Account), acc.PublicId);
+            await db.SaveChangesAsync();
+
             await LoadAsync();
         }
 

@@ -12,6 +12,10 @@ using Pos.Domain.Entities;
 using Pos.Persistence;
 using System.Windows;
 using System.Diagnostics;
+using Pos.Persistence.Sync;                 // IOutboxWriter
+using Pos.Client.Wpf.Services.Sync;         // EnqueueAfterSaveAsync helper (if you created it)
+using Microsoft.Extensions.DependencyInjection; // App.Services.GetRequiredService<...>()
+
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
@@ -28,6 +32,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
     public partial class VoucherEditorVm : ObservableObject
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly IOutboxWriter _outbox;     // NEW
+
         private readonly IGlPostingService _gl;
         // Editing state: null => creating new; value => editing this voucher
         private int? _editingVoucherId = null;
@@ -116,6 +122,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public VoucherEditorVm(IDbContextFactory<PosClientDbContext> dbf, IGlPostingService gl)
         {
             _dbf = dbf; _gl = gl;
+            _outbox = App.Services.GetRequiredService<IOutboxWriter>(); // NEW
 
             Lines.CollectionChanged += (_, e) =>
             {
@@ -390,6 +397,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     // Re-post with the SAME DbContext/transaction
                     await _gl.PostVoucherAsync(db, v);
                     await tx.CommitAsync();
+                    // === SYNC: voucher finalized — enqueue once ===
+                    await _outbox.EnqueueAfterSaveAsync(db, v, default);
+
                     WasSaved = true;
                     CloseRequested?.Invoke(true);
 
@@ -430,6 +440,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     // GL posting (handles Cash-in-Hand auto-line)
                     await _gl.PostVoucherAsync(db, v);
                     await tx.CommitAsync();
+                    // === SYNC: voucher finalized — enqueue once ===
+                    await _outbox.EnqueueAfterSaveAsync(db, v, default);
+
                     try { AccountsReloadRequested?.Invoke(); } catch { /* ignore */ }
                     // Optional: clear form for next entry
                     Clear();

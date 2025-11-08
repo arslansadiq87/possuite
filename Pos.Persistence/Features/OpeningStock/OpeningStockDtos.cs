@@ -128,4 +128,15 @@ namespace Pos.Persistence.Features.OpeningStock
         [Required] public int VoidedByUserId { get; set; }
         public string? Reason { get; set; }
     }
+
+    public sealed class OpeningDocSummaryDto
+    {
+        public int Id { get; init; }
+        public DateTime EffectiveDateUtc { get; init; }
+        public int LineCount { get; init; }
+        public decimal TotalQty { get; init; }
+        public decimal TotalValue { get; init; }
+        public string? Note { get; init; }
+        public StockDocStatus Status { get; init; }
+    }
 }

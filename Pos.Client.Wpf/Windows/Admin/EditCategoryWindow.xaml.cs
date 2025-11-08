@@ -1,18 +1,17 @@
 ﻿using System;
-using System.ComponentModel;                 // DesignerProperties
-using System.Linq;
+using System.ComponentModel;
+using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Persistence.Services;   // CategoryService
 using Pos.Domain.Entities;
-using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class EditCategoryWindow : Window
     {
-        private IDbContextFactory<PosClientDbContext>? _dbf;
         private readonly bool _design;
+        private CategoryService? _svc;
 
         // set by caller before ShowDialog()
         public int? EditId { get; set; }
@@ -24,65 +23,39 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-            Loaded += (_, __) => LoadOrInit();
+            _svc = App.Services.GetRequiredService<CategoryService>();
+            Loaded += async (_, __) => await LoadOrInitAsync();
         }
 
-        private bool Ready => !_design && _dbf != null;
-
-        private void LoadOrInit()
+        private async Task LoadOrInitAsync()
         {
-            if (!Ready || EditId is null) return;
+            if (_design || _svc == null) return;
+            if (EditId is null) return; // new category
 
-            using var db = _dbf!.CreateDbContext();
-            var row = db.Categories.AsNoTracking().FirstOrDefault(c => c.Id == EditId.Value);
+            var row = await _svc.GetCategoryAsync(EditId.Value);
             if (row is null) { DialogResult = false; Close(); return; }
 
             NameBox.Text = row.Name;
             IsActiveBox.IsChecked = row.IsActive;
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
+        private async void Save_Click(object sender, RoutedEventArgs e)
         {
-            if (!Ready) return;
+            if (_svc == null) return;
 
             var name = (NameBox.Text ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                MessageBox.Show("Name is required.");
-                return;
-            }
+            var active = IsActiveBox.IsChecked ?? true;
 
-            using var db = _dbf!.CreateDbContext();
-            var exists = db.Categories.Any(c => c.Name.ToLower() == name.ToLower() && c.Id != (EditId ?? 0));
-            if (exists)
+            try
             {
-                MessageBox.Show("A category with this name already exists.");
-                return;
+                await _svc.SaveCategoryAsync(EditId, name, active);
+                DialogResult = true;
+                Close();
             }
-
-            if (EditId is null)
+            catch (Exception ex)
             {
-                var now = DateTime.UtcNow;
-                db.Categories.Add(new Category
-                {
-                    Name = name,
-                    IsActive = IsActiveBox.IsChecked ?? true,
-                    CreatedAtUtc = now,
-                    UpdatedAtUtc = now
-                });
+                MessageBox.Show(ex.Message, "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            else
-            {
-                var row = db.Categories.First(c => c.Id == EditId.Value);
-                row.Name = name;
-                row.IsActive = IsActiveBox.IsChecked ?? true;
-                row.UpdatedAtUtc = DateTime.UtcNow;
-            }
-
-            db.SaveChanges();
-            DialogResult = true;
-            Close();
         }
 
         private void Cancel_Click(object s, RoutedEventArgs e)

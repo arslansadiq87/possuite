@@ -2,13 +2,19 @@
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.DTO;
 using Pos.Domain.Entities;
+using Pos.Persistence.Sync; // ⬅️ add
 
 namespace Pos.Persistence.Services
 {
     public class ItemsService
     {
         private readonly PosClientDbContext _db;
-        public ItemsService(PosClientDbContext db) => _db = db;
+        private readonly IOutboxWriter _outbox; // ⬅️ add
+
+        public ItemsService(PosClientDbContext db, IOutboxWriter outbox) // ⬅️ change
+        {
+            _db = db; _outbox = outbox; // ⬅️ add
+        }
 
         /// <summary>
         /// Search items by SKU, Barcode, or Name (contains). Returns up to {take} items.
@@ -56,6 +62,9 @@ namespace Pos.Persistence.Services
         public async Task<Item> CreateAsync(Item item)
         {
             _db.Items.Add(item);
+            await _db.SaveChangesAsync();
+            // === SYNC: item created ===
+            await _outbox.EnqueueUpsertAsync(_db, item, default);
             await _db.SaveChangesAsync();
             return item;
         }
