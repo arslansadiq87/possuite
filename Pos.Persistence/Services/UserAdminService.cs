@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Pos.Persistence/Services/UserAdminService.cs
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -7,12 +8,15 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
+using Pos.Domain.Models.Users;
+using Pos.Domain.Services;
+using Pos.Domain.Utils;
 using Pos.Persistence;
 using Pos.Persistence.Sync;
 
 namespace Pos.Persistence.Services
 {
-    public sealed class UserAdminService
+    public sealed class UserAdminService : IUserAdminService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
@@ -38,10 +42,15 @@ namespace Pos.Persistence.Services
 
         public async Task<bool> IsUsernameTakenAsync(string username, int? excludingId = null, CancellationToken ct = default)
         {
-            username = (username ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(username))
+                throw new InvalidOperationException("Username is required.");
+
+            var canonical = username.Trim().ToLower(CultureInfo.InvariantCulture);
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            return await db.Users.AnyAsync(u =>
-                u.Username.ToLower() == username && (excludingId == null || u.Id != excludingId.Value), ct);
+
+            return await db.Users.AnyAsync(
+                u => u.Username.ToLower() == canonical && (!excludingId.HasValue || u.Id != excludingId.Value),
+                ct);
         }
 
         // ─────────── Users (Commands) ───────────
@@ -51,11 +60,18 @@ namespace Pos.Persistence.Services
         /// </summary>
         public async Task<int> CreateOrUpdateAsync(User input, string? newPassword, CancellationToken ct = default)
         {
+            if (input is null) throw new InvalidOperationException("User payload is required.");
+            if (string.IsNullOrWhiteSpace(input.Username))
+                throw new InvalidOperationException("Username is required.");
+            if (string.IsNullOrWhiteSpace(input.DisplayName))
+                throw new InvalidOperationException("Display name is required.");
+
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
             var isCreate = input.Id == 0;
             User entity;
+
             if (isCreate)
             {
                 entity = new User();
@@ -68,8 +84,8 @@ namespace Pos.Persistence.Services
             }
 
             // Map
-            entity.Username = (input.Username ?? "").Trim();
-            entity.DisplayName = (input.DisplayName ?? "").Trim();
+            entity.Username = input.Username.Trim();
+            entity.DisplayName = input.DisplayName.Trim();
             entity.Role = input.Role;
             entity.IsActive = input.IsActive;
             entity.IsGlobalAdmin = input.IsGlobalAdmin;
@@ -84,11 +100,12 @@ namespace Pos.Persistence.Services
                 entity.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
             }
 
+            // Persist + outbox (enqueue before final save/commit)
             await db.SaveChangesAsync(ct);
             await _outbox.EnqueueUpsertAsync(db, entity, ct);
             await db.SaveChangesAsync(ct);
-
             await tx.CommitAsync(ct);
+
             return entity.Id;
         }
 
@@ -104,18 +121,16 @@ namespace Pos.Persistence.Services
                 throw new InvalidOperationException("User has outlet assignments. Remove them first.");
 
             db.Users.Remove(entity);
-            await db.SaveChangesAsync(ct);
 
-            // Keep your previous behavior: enqueue upsert after delete (if your sync expects it).
+            // Persist + outbox (enqueue before final save/commit)
+            await db.SaveChangesAsync(ct);
+            // If your sync uses upsert-on-delete semantics:
             await _outbox.EnqueueUpsertAsync(db, entity, ct);
             await db.SaveChangesAsync(ct);
-
             await tx.CommitAsync(ct);
         }
 
         // ─────────── Outlets + Assignments (for editor sidebar) ───────────
-        public sealed record OutletLite(int Id, string Name);
-
         public async Task<List<OutletLite>> GetOutletsAsync(CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
@@ -138,9 +153,11 @@ namespace Pos.Persistence.Services
         /// </summary>
         public async Task SaveAssignmentsAsync(
             int userId,
-            IEnumerable<(int OutletId, bool IsAssigned, UserRole Role)> desired,
+            IEnumerable<UserOutletAssignDto> desired,
             CancellationToken ct = default)
         {
+            if (desired is null) throw new InvalidOperationException("Desired assignments are required.");
+
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -158,7 +175,7 @@ namespace Pos.Persistence.Services
                         await _outbox.EnqueueDeleteAsync(
                             db,
                             nameof(UserOutlet),
-                            Pos.Domain.Utils.GuidUtility.FromString($"useroutlet:{existing.UserId}:{existing.OutletId}"),
+                            GuidUtility.FromString($"useroutlet:{existing.UserId}:{existing.OutletId}"),
                             ct
                         );
                         await db.SaveChangesAsync(ct);

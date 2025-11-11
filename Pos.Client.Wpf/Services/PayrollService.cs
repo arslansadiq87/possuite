@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Hr;
 using Pos.Persistence;
 using Pos.Persistence.Sync; // ⬅️ add
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Services
 {

@@ -1,7 +1,5 @@
 ﻿//Pos.Client.Wpf/MainWindow.xaml.cs
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -11,28 +9,23 @@ using Pos.Domain.Entities;
 using Pos.Persistence;
 using Pos.Domain.Pricing;
 using Pos.Domain.Formatting;
-using System.Windows.Data;                // CollectionViewSource
 using System.Windows.Threading;           // DispatcherTimer
 using System.Globalization;
 using Pos.Client.Wpf.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
-using Microsoft.Extensions.DependencyInjection;
 using System.Windows.Media;
-using Pos.Persistence.Services;
-using System.Linq;
 using Pos.Client.Wpf.Printing;
-using Pos.Persistence.Sync;                 // IOutboxWriter
-using Pos.Client.Wpf.Services.Sync;         // EnqueueAfterSaveAsync extension (if you created it)
+using Pos.Domain.Services;
+using Pos.Domain.Models.Sales;
+//using ItemIndexDto = Pos.Domain.Models.Sales.ItemIndexDto;
 
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class SaleInvoiceView : UserControl
     {
-        
-
+        private readonly ISalesService _sales;
         private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
@@ -72,11 +65,12 @@ namespace Pos.Client.Wpf.Windows.Sales
         private int _escCount = 0;
         private const int EscChordMs = 450; // double-press window
         private int? _currentHeldSaleId = null;
-        public SaleInvoiceView(IDialogService dialogs, ITerminalContext ctx)
+        public SaleInvoiceView(IDialogService dialogs, ITerminalContext ctx, ISalesService sales)
         {
             InitializeComponent();
             _ctx = ctx;
             _dialogs = dialogs;
+            _sales = sales;
             _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>();
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
             _dbOptions = new DbContextOptionsBuilder<PosClientDbContext>()
@@ -137,38 +131,56 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show("Print failed: " + ex.Message, "Receipt Print");
             }
         }
-        private ItemIndexDto AdaptItem(Pos.Domain.DTO.ItemIndexDto src)
-        {
-            return new ItemIndexDto(
-                Id: src.Id,
-                Name: src.Name ?? src.DisplayName ?? "",
-                Sku: src.Sku ?? "",
-                Barcode: src.Barcode ?? "",
-                Price: src.Price,
-                TaxCode: null,                   // ItemSearchBox index may not carry these; keep existing defaults
-                DefaultTaxRatePct: 0m,
-                TaxInclusive: false,
-                DefaultDiscountPct: null,
-                DefaultDiscountAmt: null,
-                ProductName: null,
-                Variant1Name: null, Variant1Value: null,
-                Variant2Name: null, Variant2Value: null
-            );
-        }
 
         private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
-            var pick = box.SelectedItem;
-            if (pick is null) return;
+            // Force static type to object so pattern matching is legal
+            object? selected = box.SelectedItem;
+            if (selected is null) return;
+            Pos.Domain.Models.Sales.ItemIndexDto? pick = null;
+            // Case 1: new domain DTO
+            if (selected is Pos.Domain.Models.Sales.ItemIndexDto d1)
+            {
+                pick = d1;
+            }
+            // Case 2: legacy/other DTO the control might still be producing
+            else if (selected is Pos.Domain.DTO.ItemIndexDto legacy)
+            {
+                // adapt legacy -> domain
+                pick = new Pos.Domain.Models.Sales.ItemIndexDto(
+                    Id: legacy.Id,
+                    Name: legacy.Name ?? legacy.DisplayName ?? "",
+                    Sku: legacy.Sku ?? "",
+                    Barcode: legacy.Barcode ?? "",
+                    Price: legacy.Price,
+                    TaxCode: null,
+                    DefaultTaxRatePct: 0m,
+                    TaxInclusive: false,
+                    DefaultDiscountPct: null,
+                    DefaultDiscountAmt: null,
+                    ProductName: null,
+                    Variant1Name: null, Variant1Value: null,
+                    Variant2Name: null, Variant2Value: null
+                );
+            }
+            else
+            {
+                MessageBox.Show($"Unsupported SelectedItem type: {selected.GetType().FullName}");
+                return;
+            }
+
+            // ---- proceed with your existing logic using 'pick' ----
             var itemId = pick.Id;
             var existing = _cart.FirstOrDefault(c => c.ItemId == itemId);
             var proposedTotal = (existing?.Qty ?? 0) + 1;
+
             if (!await GuardSaleQtyAsync(itemId, proposedTotal))
             {
                 try { ItemSearch?.FocusSearch(); } catch { }
                 return;
             }
+
             if (existing != null)
             {
                 existing.Qty += 1;
@@ -176,8 +188,9 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             else
             {
-                AddItemToCart(AdaptItem(pick)); // your existing add
+                AddItemToCart(pick);
             }
+
             UpdateTotal();
             try { ItemSearch?.FocusSearch(); } catch { }
         }
@@ -291,97 +304,58 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
-        private void SaveHold(string? holdTag)
+        private async void SaveHold(string? holdTag)
         {
             var (subtotal, invDiscValue, tax, grand, items, qty) = ComputeTotalsSnapshot();
             if (grand <= 0m) throw new InvalidOperationException("Total must be > 0.");
-            using var db = new PosClientDbContext(_dbOptions);
-            var sale = new Sale
+
+            var req = new SaleHoldRequest
             {
-                Ts = DateTime.UtcNow,
                 OutletId = OutletId,
                 CounterId = CounterId,
-                TillSessionId = null,
                 IsReturn = (ReturnCheck?.IsChecked == true),
-                InvoiceNumber = 0,                // unassigned until finalization
-                Status = SaleStatus.Draft,
-                HoldTag = string.IsNullOrWhiteSpace(holdTag) ? null : holdTag.Trim(),
-                // invoice-level discounts
-                InvoiceDiscountPct = (_invDiscAmt > 0m) ? (decimal?)null : _invDiscPct,
-                InvoiceDiscountAmt = (_invDiscAmt > 0m) ? _invDiscAmt : (decimal?)null,
+                CashierId = cashierId,
+                SalesmanId = _selectedSalesmanId,
+                CustomerKind = (WalkInCheck?.IsChecked == true) ? CustomerKind.WalkIn : CustomerKind.Registered,
+                CustomerId = _selectedCustomerId,
+                CustomerName = string.IsNullOrWhiteSpace(CustNameBox?.Text) ? null : CustNameBox!.Text.Trim(),
+                CustomerPhone = string.IsNullOrWhiteSpace(CustPhoneBox?.Text) ? null : CustPhoneBox!.Text.Trim(),
+                InvoiceDiscountPct = (_invDiscAmt > 0m) ? null : _invDiscPct,
+                InvoiceDiscountAmt = (_invDiscAmt > 0m) ? _invDiscAmt : null,
                 InvoiceDiscountValue = invDiscValue,
-                DiscountBeforeTax = true,
-                // totals
                 Subtotal = subtotal,
                 TaxTotal = tax,
                 Total = grand,
-                // users
-                CashierId = cashierId,
-                SalesmanId = _selectedSalesmanId,
-                // customer snapshot
-                CustomerKind = (WalkInCheck?.IsChecked == true) ? CustomerKind.WalkIn : CustomerKind.Registered,
-                CustomerId = null, // you can attach if you later add a Customer table
-                CustomerName = string.IsNullOrWhiteSpace(CustNameBox?.Text) ? null : CustNameBox!.Text.Trim(),
-                CustomerPhone = string.IsNullOrWhiteSpace(CustPhoneBox?.Text) ? null : CustPhoneBox!.Text.Trim(),
-                // payment not captured yet
-                CashAmount = 0m,
-                CardAmount = 0m,
-                PaymentMethod = PaymentMethod.Cash,
-                // e-receipt/footer not relevant yet
-                EReceiptToken = null,
-                EReceiptUrl = null,
-                InvoiceFooter = string.IsNullOrWhiteSpace(FooterBox?.Text) ? null : FooterBox!.Text
+                HoldTag = holdTag,
+                Footer = string.IsNullOrWhiteSpace(FooterBox?.Text) ? null : FooterBox!.Text
             };
-            db.Sales.Add(sale);
-            db.SaveChanges();
+
             foreach (var l in _cart)
             {
-                db.SaleLines.Add(new SaleLine
-                {
-                    SaleId = sale.Id,
-                    ItemId = l.ItemId,
-                    Qty = l.Qty,
-                    UnitPrice = l.UnitPrice,
-                    DiscountPct = l.DiscountPct,
-                    DiscountAmt = l.DiscountAmt,
-                    TaxCode = l.TaxCode,
-                    TaxRatePct = l.TaxRatePct,
-                    TaxInclusive = l.TaxInclusive,
-                    UnitNet = l.UnitNet,
-                    LineNet = l.LineNet,
-                    LineTax = l.LineTax,
-                    LineTotal = l.LineTotal
-                });
+                req.Lines.Add(new SaleHoldRequest.SaleLineInput(
+                    l.ItemId, l.Qty, l.UnitPrice, l.DiscountPct, l.DiscountAmt,
+                    l.TaxCode, l.TaxRatePct, l.TaxInclusive,
+                    l.UnitNet, l.LineNet, l.LineTax, l.LineTotal));
             }
-            db.SaveChanges();
+
+            await _sales.HoldAsync(req);
         }
 
-        private void UpdateInvoicePreview()
+
+        private async void UpdateInvoicePreview()
         {
-            using var db = new PosClientDbContext(_dbOptions);
-            var seq = db.CounterSequences.SingleOrDefault(x => x.CounterId == CounterId);
-            if (seq == null)
-            {
-                seq = new CounterSequence { CounterId = CounterId, NextInvoiceNumber = 1 };
-                db.CounterSequences.Add(seq);
-                db.SaveChanges();
-            }
-            InvoicePreviewText.Text = $"{CounterId}-{seq.NextInvoiceNumber}";
+            var prev = await _sales.GetInvoicePreviewAsync(CounterId);
+            InvoicePreviewText.Text = prev.Human;
         }
+
 
         private void UpdateInvoiceDateNow()
         {
             InvoiceDateText.Text = DateTime.Now.ToString("dd-MMM-yyyy");
         }
-        private void LoadSalesmen()
+        private async void LoadSalesmen()
         {
-            using var db = new PosClientDbContext(_dbOptions);
-            var list = db.Staff
-                .AsNoTracking()
-                .Where(s => s.IsActive && s.ActsAsSalesman)
-                .OrderBy(s => s.FullName)
-                .ToList();
-            list.Insert(0, new Pos.Domain.Hr.Staff { Id = 0, FullName = "-- None --", IsActive = true });
+            var list = await _sales.GetSalesmenAsync();
             SalesmanBox.ItemsSource = list;
             SalesmanBox.DisplayMemberPath = "FullName";
             SalesmanBox.SelectedValuePath = "Id";
@@ -409,7 +383,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 _selectedSalesmanName = null;
             }
         }
-
 
         private void PayBox_GotFocus(object sender, RoutedEventArgs e)
         {
@@ -449,64 +422,12 @@ namespace Pos.Client.Wpf.Windows.Sales
             _invoiceFooter = FooterBox.Text ?? "";
         }
 
-        public record ItemIndexDto(
-            int Id,
-            string Name,
-            string Sku,
-            string Barcode,
-            decimal Price,
-            string? TaxCode,
-            decimal DefaultTaxRatePct,
-            bool TaxInclusive,
-            decimal? DefaultDiscountPct,
-            decimal? DefaultDiscountAmt,
-            string? ProductName,
-            string? Variant1Name,
-            string? Variant1Value,
-            string? Variant2Name,
-            string? Variant2Value
-        )
-        {
-            public string DisplayName =>
-                Pos.Domain.Formatting.ProductNameComposer.Compose(
-                    ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
-        }
-
+      
         public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
 
-        private void LoadItemIndex()
+        private async void LoadItemIndex()
         {
-            using var db = new PosClientDbContext(_dbOptions);
-            var list =
-                (from i in db.Items.AsNoTracking()
-                 join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
-                 from p in gp.DefaultIfEmpty()
-                 let primaryBarcode =
-                     db.ItemBarcodes
-                       .Where(b => b.ItemId == i.Id && b.IsPrimary)
-                       .Select(b => b.Code)
-                       .FirstOrDefault()
-                 let anyBarcode =
-                     db.ItemBarcodes
-                       .Where(b => b.ItemId == i.Id)
-                       .Select(b => b.Code)
-                       .FirstOrDefault()
-                 orderby i.Name
-                 select new ItemIndexDto(
-                     i.Id,
-                     i.Name,
-                     i.Sku,
-                     primaryBarcode ?? anyBarcode ?? "", // <- replaces i.Barcode
-                     i.Price,
-                     i.TaxCode,
-                     i.DefaultTaxRatePct,
-                     i.TaxInclusive,
-                     i.DefaultDiscountPct,
-                     i.DefaultDiscountAmt,
-                     p != null ? p.Name : null,
-                     i.Variant1Name, i.Variant1Value,
-                     i.Variant2Name, i.Variant2Value
-                 )).ToList();
+            var list = await _sales.GetItemIndexAsync();
             DataContextItemIndex.Clear();
             foreach (var it in list) DataContextItemIndex.Add(it);
         }
@@ -521,7 +442,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             decimal.TryParse(InvDiscAmtBox.Text, out _invDiscAmt);
             UpdateTotal(); // recompute overall total shown
         }
-        private void AddItemToCart(ItemIndexDto item)
+        private void AddItemToCart(Pos.Domain.Models.Sales.ItemIndexDto item)
         {
             var existing = _cart.FirstOrDefault(c => c.ItemId == item.Id);
             if (existing != null)
@@ -535,7 +456,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 ItemId = item.Id,
                 Sku = item.Sku,
-                DisplayName = ProductNameComposer.Compose(item.ProductName, item.Name, item.Variant1Name, item.Variant1Value, item.Variant2Name, item.Variant2Value),          //item.Name,
+                DisplayName = ProductNameComposer.Compose(item.ProductName, item.Name, item.Variant1Name, item.Variant1Value, item.Variant2Name, item.Variant2Value),
                 UnitPrice = item.Price,
                 Qty = 1,
                 TaxCode = item.TaxCode,
@@ -598,15 +519,18 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async void PayButton_Click(object sender, RoutedEventArgs e)
         {
+            // 0) basic guards
             if (!_cart.Any()) { MessageBox.Show("Cart is empty."); return; }
-            using var db = new PosClientDbContext(_dbOptions);
-            var open = GetOpenTill(db);
+
+            // 1) ensure open till (via service)
+            var open = await _sales.GetOpenTillAsync(OutletId, CounterId);
             if (open == null)
             {
                 MessageBox.Show("Till is CLOSED. Please open till before taking payment.", "Till Closed");
                 return;
             }
-            // --- Recalc current cart lines (ensure totals are fresh) ---
+
+            // 2) recompute current cart math (fresh per-line totals)
             foreach (var cl in _cart) RecalcLineShared(cl);
             var lineNetSum = _cart.Sum(l => l.LineNet);
             var lineTaxSum = _cart.Sum(l => l.LineTax);
@@ -619,6 +543,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                     ? Math.Min(_invDiscAmt, baseForInvDisc)
                     : PricingMath.RoundMoney(baseForInvDisc * (_invDiscPct / 100m));
             }
+
             var factor = (baseForInvDisc > 0m) ? (baseForInvDisc - invDiscValue) / baseForInvDisc : 1m;
             decimal adjNetSum = 0m, adjTaxSum = 0m;
             foreach (var l in _cart)
@@ -629,13 +554,14 @@ namespace Pos.Client.Wpf.Windows.Sales
                 adjNetSum += adjNet;
                 adjTaxSum += adjTax;
             }
-            var subtotal = adjNetSum;               // after invoice discount
+
+            var subtotal = adjNetSum;               // after invoice-level discount
             var taxtotal = adjTaxSum;
             var grand = subtotal + taxtotal;
             if (grand <= 0m) { MessageBox.Show("Total must be greater than 0."); return; }
             var itemsCount = _cart.Count;
             var qtySum = _cart.Sum(l => l.Qty);
-            // ===================== OPEN PAY DIALOG (overlay) =====================
+            // 3) take payment (overlay)
             var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
             var payResult = await paySvc.ShowAsync(
                 subtotal, invDiscValue, taxtotal, grand, itemsCount, qtySum,
@@ -645,88 +571,45 @@ namespace Pos.Client.Wpf.Windows.Sales
                 RestoreFocusToScan();
                 return;
             }
-            //var enteredCash = payResult.Cash;
-            //var enteredCard = payResult.Card;
-            //var paid = enteredCash + enteredCard;
             var enteredCash = payResult.Cash;
             var enteredCard = payResult.Card;
-
-            // --- NEW: block card if not configured; force collect remaining as cash ---
-            if (!_isCardEnabled && enteredCard > 0m)
+            // 3a) card toggle: if disabled, convert card portion to cash via "difference" screen
+            if (!IsCardEnabled && enteredCard > 0m)
             {
                 MessageBox.Show(
                     "Card payments are disabled for this outlet. Please collect cash.",
                     "Card Disabled", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                // Ask for the card portion as cash using your difference mode
                 var cashOnly = await paySvc.ShowAsync(
                     subtotal, invDiscValue, taxtotal, grand,
                     itemsCount, qtySum,
-                    differenceMode: true,                 // collect only the difference
-                    amountDelta: enteredCard,             // need to cover the previously-entered card amount
+                    differenceMode: true,
+                    amountDelta: enteredCard,
                     title: "Collect Remaining (Cash Only)");
-
                 if (!cashOnly.Confirmed)
                 {
                     RestoreFocusToScan();
                     return;
                 }
-
-                // Add the difference to cash; zero-out card since it’s not allowed
                 enteredCash += cashOnly.Cash;
                 enteredCard = 0m;
             }
-            // --- END NEW ---
-
             var paid = enteredCash + enteredCard;
-
-            if (paid + 0.01m < grand) // safety check; PayWindow already enforces this
+            if (paid + 0.01m < grand) // safety net (dialog already enforces this)
             {
                 MessageBox.Show("Payment is less than total.");
                 return;
             }
             var paymentMethod =
-                (enteredCash > 0 && enteredCard > 0) ? PaymentMethod.Mixed :
-                (enteredCash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
-            // ========== Cashier & salesman ==========
-            var cashier = db.Users.AsNoTracking()
-                .FirstOrDefault(u => u.Id == cashierId)
-                ?? db.Users.AsNoTracking().FirstOrDefault(u => u.Username == "admin")
-                ?? db.Users.AsNoTracking().FirstOrDefault(u => u.IsActive);
-            if (cashier == null)
-            {
-                MessageBox.Show("No active users found. Seed users first.");
-                return;
-            }
-            int cashierIdLocal = cashier.Id;
-            string cashierDisplay = cashier.DisplayName ?? "Unknown";
-            int? salesmanIdLocal = _selectedSalesmanId;
-            // If not set via _selectedSalesmanId, try from the combobox
-            if (!salesmanIdLocal.HasValue && SalesmanBox?.SelectedItem is Pos.Domain.Hr.Staff selStaff)
-                salesmanIdLocal = (selStaff.Id == 0) ? (int?)null : selStaff.Id;
-            // Validate salesman against Staff (ActsAsSalesman + IsActive)
-            if (salesmanIdLocal.HasValue)
-            {
-                bool exists = db.Staff
-                    .AsNoTracking()
-                    .Any(s => s.Id == salesmanIdLocal.Value && s.IsActive && s.ActsAsSalesman);
-
-                if (!exists) salesmanIdLocal = null;
-            }
-            if (!db.Users.AsNoTracking().Any(x => x.Id == cashierIdLocal))
-            {
-                MessageBox.Show("Cashier not found in Users table."); return;
-            }
-            // ========== Customer ==========
+                (enteredCash > 0m && enteredCard > 0m) ? PaymentMethod.Mixed
+              : (enteredCash > 0m) ? PaymentMethod.Cash
+                                                      : PaymentMethod.Card;
+            // 4) customer & credit guards (UI-level rules)
             bool isWalkIn = (WalkInCheck?.IsChecked == true);
             var customerKind = isWalkIn ? CustomerKind.WalkIn : CustomerKind.Registered;
             int? customerId = isWalkIn ? null : _selectedCustomerId;
             string? customerName = isWalkIn ? null : (CustNameBox?.Text?.Trim());
             string? customerPhone = isWalkIn ? null : (CustPhoneBox?.Text?.Trim());
-            // ===== Credit guard: on-account sales require a registered customer =====
-                           // already computed above
-            if (grand <= 0m) { MessageBox.Show("Total must be greater than 0."); return; }
-            var creditPortion = grand - paid;              // amount to post to customer ledger
+            var creditPortion = grand - paid;                  // B2C on-account
             bool wantsCredit = (creditPortion > 0.009m);
             if (wantsCredit && (customerId == null))
             {
@@ -736,192 +619,64 @@ namespace Pos.Client.Wpf.Windows.Sales
                     "Customer required for credit", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            // ========== Return flag ==========
-            bool isReturnFlow = (ReturnCheck?.IsChecked == true);
-            // ========== E-receipt & footer ==========
-            string eReceiptToken = Guid.NewGuid().ToString("N");
-            string? eReceiptUrl = null;
-            string? invoiceFooter = string.IsNullOrWhiteSpace(FooterBox?.Text) ? null : FooterBox!.Text;
-           
-            // --- Negative stock guard (Outlet) BEFORE we allocate invoice or write anything
+            // Salesman (take from selected box if _selectedSalesmanId isn’t set)
+            int? salesmanIdLocal = _selectedSalesmanId;
+            if (!salesmanIdLocal.HasValue && SalesmanBox?.SelectedValue is int vFromBox)
+                salesmanIdLocal = (vFromBox == 0) ? (int?)null : vFromBox;
+            // 5) build finalize request for the service layer
+            var req = new SaleFinalizeRequest
             {
-                var guard = new StockGuard(db);
-                var deltas = _cart
-                    .Where(l => l.ItemId > 0)
-                    .GroupBy(l => l.ItemId)
-                    .Select(g => (
-                        itemId: g.Key,
-                        outletId: OutletId,
-                        locType: InventoryLocationType.Outlet,
-                        locId: OutletId,
-                        // sale is OUT; negative delta
-                        delta: -g.Sum(x => Convert.ToDecimal(x.Qty))
-                    ))
-                    .ToArray();
-                // Will throw InvalidOperationException if any item would go < 0
-                await guard.EnsureNoNegativeAtLocationAsync(deltas);
-            }
-            // ===== Start a transaction only AFTER the user confirms =====
-            using var tx = db.Database.BeginTransaction();
-            // ===================== Allocate invoice number per counter (inside tx) =====================
-            var seq = db.CounterSequences.SingleOrDefault(x => x.CounterId == CounterId)
-                      ?? db.CounterSequences.Add(new CounterSequence { CounterId = CounterId, NextInvoiceNumber = 1 }).Entity;
-            db.SaveChanges();
-            var allocatedInvoiceNo = seq.NextInvoiceNumber;
-            seq.NextInvoiceNumber++;               // increment for next sale
-            db.SaveChanges();
-            // --- Create Sale ---
-            var sale = new Sale
-            {
-                Ts = DateTime.UtcNow,
                 OutletId = OutletId,
                 CounterId = CounterId,
                 TillSessionId = open.Id,
-                Status = SaleStatus.Final,
-                Revision = 0,
-                RevisedFromSaleId = null,
-                // returns & invoice sequencing
-                IsReturn = isReturnFlow,
-                InvoiceNumber = allocatedInvoiceNo,
-                // invoice-level discounts you already compute
-                InvoiceDiscountPct = (_invDiscAmt > 0m) ? (decimal?)null : _invDiscPct,
-                InvoiceDiscountAmt = (_invDiscAmt > 0m) ? _invDiscAmt : (decimal?)null,
-                InvoiceDiscountValue = invDiscValue,
-                DiscountBeforeTax = true,
-                // totals
-                Subtotal = subtotal,
-                TaxTotal = taxtotal,
-                Total = grand,
-                // attribution
-                CashierId = cashierIdLocal,
+                IsReturn = (ReturnCheck?.IsChecked == true),
+                CashierId = cashierId,
                 SalesmanId = salesmanIdLocal,
-                // customer
                 CustomerKind = customerKind,
                 CustomerId = customerId,
                 CustomerName = customerName,
                 CustomerPhone = customerPhone,
-                // payment split
+                InvoiceDiscountPct = (_invDiscAmt > 0m) ? null : _invDiscPct,
+                InvoiceDiscountAmt = (_invDiscAmt > 0m) ? _invDiscAmt : null,
+                InvoiceDiscountValue = invDiscValue,
+                Subtotal = subtotal,
+                TaxTotal = taxtotal,
+                Total = grand,
                 CashAmount = enteredCash,
                 CardAmount = enteredCard,
                 PaymentMethod = paymentMethod,
-                // e-receipt & footer
-                EReceiptToken = eReceiptToken,
-                EReceiptUrl = eReceiptUrl,
-                InvoiceFooter = invoiceFooter
+                InvoiceFooter = string.IsNullOrWhiteSpace(FooterBox?.Text) ? null : FooterBox!.Text,
+                EReceiptToken = Guid.NewGuid().ToString("N"),
+                HeldSaleId = _currentHeldSaleId
             };
-            db.Sales.Add(sale);
-            db.SaveChanges();
-            // --- Lines & stock ---
             foreach (var line in _cart)
             {
-                db.SaleLines.Add(new SaleLine
-                {
-                    SaleId = sale.Id,
-                    ItemId = line.ItemId,
-                    Qty = line.Qty,
-                    UnitPrice = line.UnitPrice,
-                    DiscountPct = line.DiscountPct,
-                    DiscountAmt = line.DiscountAmt,
-                    TaxCode = line.TaxCode,
-                    TaxRatePct = line.TaxRatePct,
-                    TaxInclusive = line.TaxInclusive,
-                    UnitNet = line.UnitNet,
-                    LineNet = line.LineNet,
-                    LineTax = line.LineTax,
-                    LineTotal = line.LineTotal
-                });
-                db.StockEntries.Add(new StockEntry
-                {
-                    LocationType = InventoryLocationType.Outlet,
-                    LocationId = OutletId,
-                    OutletId = OutletId,
-                    ItemId = line.ItemId,
-                    QtyChange = -Convert.ToDecimal(line.Qty),
-                    UnitCost = 0m,
-                    RefType = "Sale",
-                    RefId = sale.Id,
-                    StockDocId = null,
-                    Ts = DateTime.UtcNow,
-                    Note = null
-                });
+                req.Lines.Add(new SaleFinalizeRequest.SaleLineInput(
+                    line.ItemId, line.Qty, line.UnitPrice, line.DiscountPct, line.DiscountAmt,
+                    line.TaxCode, line.TaxRatePct, line.TaxInclusive,
+                    line.UnitNet, line.LineNet, line.LineTax, line.LineTotal));
             }
-            db.SaveChanges();
-            tx.Commit();
-            // === SYNC OUTBOX: record this finalized sale once it's fully committed ===
-            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
-            await outbox.EnqueueAfterSaveAsync(db, sale, default);
-
-            // === GL POST: Sale / SaleReturn (runs once per finalized doc) ===
+            // 6) finalize via service (this handles sequence, stock, outbox, GL, and voiding held)
+            Sale sale;
             try
             {
-                // (Optional) "post-once" guard — prevents accidental double posting
-                using (var chk = new PosClientDbContext(_dbOptions))
-                {
-                    var already = chk.GlEntries.AsNoTracking()
-                        .Any(g => (g.DocType == Pos.Domain.Accounting.GlDocType.Sale
-                                    && !sale.IsReturn
-                                    && g.DocId == sale.Id)
-                               || (g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturn
-                                    && sale.IsReturn
-                                    && g.DocId == sale.Id));
-                    if (!already)
-                    {
-                        var gl = App.Services.GetRequiredService<IGlPostingService>();
-                        if (!sale.IsReturn)
-                            await gl.PostSaleAsync(sale);
-                        else
-                            await gl.PostSaleReturnAsync(sale);
-                    }
-                }
+                sale = await _sales.FinalizeAsync(req);
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Finalize Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
             catch (Exception ex)
             {
-                // Non-fatal: sale is saved; log and continue
-                System.Diagnostics.Debug.WriteLine("GL post failed: " + ex);
+                MessageBox.Show("Could not finalize sale:\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
             }
-            // If this sale came from a held draft, mark the draft as voided (or delete it)
-            if (_currentHeldSaleId.HasValue)
-            {
-                using var db2 = new PosClientDbContext(_dbOptions);
-                var draft = db2.Sales.FirstOrDefault(x => x.Id == _currentHeldSaleId.Value && x.Status == SaleStatus.Draft);
-                if (draft != null)
-                {
-                    draft.Status = SaleStatus.Voided;
-                    draft.RevisedToSaleId = sale.Id;
-                    draft.VoidedAtUtc = DateTime.UtcNow;
-                    draft.VoidReason = "Finalized from held draft";
-                    db2.SaveChanges();
-                }
-                _currentHeldSaleId = null;
-            }
-            // If this sale came from a held draft, mark the draft as voided (or delete it)
-            if (_currentHeldSaleId.HasValue)
-            {
-                using var db2 = new PosClientDbContext(_dbOptions);
-                var draft = db2.Sales.FirstOrDefault(x => x.Id == _currentHeldSaleId.Value && x.Status == SaleStatus.Draft);
-                if (draft != null)
-                {
-                    // Keep for audit: set as Voided and link forward
-                    draft.Status = SaleStatus.Voided;
-                    draft.RevisedToSaleId = sale.Id;
-                    draft.VoidedAtUtc = DateTime.UtcNow;
-                    draft.VoidReason = "Finalized from held draft";
-                    db2.SaveChanges();
-                }
-                _currentHeldSaleId = null;
-            }
-            MessageBox.Show(
-                $"Sale saved. ID: {sale.Id}\nInvoice: {CounterId}-{sale.InvoiceNumber}\nTotal: {sale.Total:0.00}",
-                "Success");
-            // ===== Post credit (A/R) to customer ledger if unpaid portion exists =====
+            // 7) OPTIONAL: A/R posting for unpaid portion (keep here, or move into SalesService)
             try
             {
                 var poster = App.Services.GetRequiredService<PartyPostingService>();
-                // paidNow uses the same values you saved into the sale (non-nullable decimals)
-                var paidNow = sale.CashAmount + sale.CardAmount;
-                // Reuse the outer computed creditPortion, OR recompute from the saved sale.
-                // Prefer recompute from the saved sale to avoid any future mismatch:
-                var unpaid = sale.Total - paidNow;
+                var unpaid = sale.Total - (sale.CashAmount + sale.CardAmount);
                 if (unpaid > 0.009m && sale.CustomerId.HasValue)
                 {
                     await poster.PostAsync(
@@ -930,10 +685,8 @@ namespace Pos.Client.Wpf.Windows.Sales
                         outletId: sale.OutletId,
                         docType: PartyLedgerDocType.Sale,
                         docId: sale.Id,
-                        debit: unpaid,        // +A/R
-                        credit: 0m,
-                        memo: $"On-account sale #{sale.CounterId}-{sale.InvoiceNumber}"
-                    );
+                        debit: unpaid, credit: 0m,
+                        memo: $"On-account sale #{sale.CounterId}-{sale.InvoiceNumber}");
                 }
             }
             catch (Exception ex)
@@ -941,8 +694,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show("Sale saved, but posting to customer ledger failed:\n" + ex.Message,
                     "Ledger warning", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            UpdateInvoicePreview();  // show the next invoice that will be used
-            UpdateInvoiceDateNow();  // timestamp of current screen state
+            // 8) print (best effort)
             try
             {
                 await MaybePrintReceiptAsync(sale, open);
@@ -951,6 +703,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 MessageBox.Show("Printed with error: " + ex.Message, "Print");
             }
+            // 9) success + UI reset
+            MessageBox.Show(
+                $"Sale saved. ID: {sale.Id}\nInvoice: {CounterId}-{sale.InvoiceNumber}\nTotal: {sale.Total:0.00}",
+                "Success");
+            _currentHeldSaleId = null;
             _cart.Clear();
             _invDiscPct = 0m; _invDiscAmt = 0m;
             InvDiscPctBox.Text = ""; InvDiscAmtBox.Text = "";
@@ -958,9 +715,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (CustNameBox != null) CustNameBox.Text = "";
             if (CustPhoneBox != null) CustPhoneBox.Text = "";
             if (ReturnCheck != null) ReturnCheck.IsChecked = false;
-            // keep FooterBox as-is (so cashier can set shop message once and reuse)
+            // keep FooterBox as-is so cashier’s message persists
             UpdateTotal();
-            //ScanText.Focus();
+            UpdateInvoicePreview();
+            UpdateInvoiceDateNow();
+            RestoreFocusToScan();
         }
 
         private async void QtyPlus_Click(object sender, RoutedEventArgs e)
@@ -974,7 +733,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 UpdateTotal();
             }
         }
-
 
         private void QtyMinus_Click(object sender, RoutedEventArgs e)
         {
@@ -1019,7 +777,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if (e.Row?.Item is CartLine l)
                 {
                     var header = (e.Column.Header as string) ?? string.Empty;
-
                     if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
                     {
                         if (l.Qty <= 0) { l.Qty = 1; }
@@ -1030,7 +787,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                             if (l.Qty < 1) l.Qty = 1;
                         }
                     }
-
                     // Preserve your existing discount/price recompute logic
                     if (header.Contains("Disc %"))
                     {
@@ -1046,22 +802,20 @@ namespace Pos.Client.Wpf.Windows.Sales
             }), DispatcherPriority.Background);
         }
 
-        private void ResumeHeld(int saleId)
+        private async void ResumeHeld(int saleId)
         {
-            using var db = new PosClientDbContext(_dbOptions);
-            var s = db.Sales.AsNoTracking().FirstOrDefault(x => x.Id == saleId && x.Status == SaleStatus.Draft);
+            var s = await _sales.LoadHeldAsync(saleId);
             if (s == null) { MessageBox.Show("Held invoice not found."); return; }
-            var lines = db.SaleLines.AsNoTracking().Where(x => x.SaleId == saleId).ToList();
-            // Load into UI
+
             _cart.Clear();
-            foreach (var l in lines)
+            foreach (var l in s.Lines)
             {
                 _cart.Add(new CartLine
                 {
                     ItemId = l.ItemId,
-                    Sku = DataContextItemIndex.FirstOrDefault(i => i.Id == l.ItemId)?.Sku ?? "",
-                    DisplayName = DataContextItemIndex.FirstOrDefault(i => i.Id == l.ItemId)?.DisplayName ?? "",
-                    Qty = l.Qty,
+                    Sku = l.Sku,
+                    DisplayName = l.DisplayName,
+                    Qty = (int)decimal.Round(l.Qty, 0, MidpointRounding.AwayFromZero),
                     UnitPrice = l.UnitPrice,
                     DiscountPct = l.DiscountPct,
                     DiscountAmt = l.DiscountAmt,
@@ -1074,7 +828,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                     LineTotal = l.LineTotal
                 });
             }
-            // Restore header fields (discounts, return flag, footer, customer snapshot)
+
             _invDiscPct = s.InvoiceDiscountAmt.HasValue ? 0m : (s.InvoiceDiscountPct ?? 0m);
             _invDiscAmt = s.InvoiceDiscountAmt ?? 0m;
             InvDiscPctBox.Text = (_invDiscPct > 0m) ? _invDiscPct.ToString() : "";
@@ -1084,12 +838,10 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (CustNameBox != null) CustNameBox.Text = s.CustomerName ?? "";
             if (CustPhoneBox != null) CustPhoneBox.Text = s.CustomerPhone ?? "";
             if (!string.IsNullOrWhiteSpace(s.InvoiceFooter) && FooterBox != null) FooterBox.Text = s.InvoiceFooter;
-            if (SalesmanBox != null)
-                SalesmanBox.SelectedValue = _selectedSalesmanId ?? 0;
-            // optional: set SalesmanBox.SelectedValue = s.SalesmanId ?? 0;
-            _currentHeldSaleId = s.Id;
+            if (SalesmanBox != null) SalesmanBox.SelectedValue = s.SalesmanId ?? 0;
+
+            _currentHeldSaleId = s.SaleId;
             UpdateTotal();
-            //ScanText.Focus();
         }
 
         private void Global_PreviewKeyDown(object? sender, KeyEventArgs e)
@@ -1135,31 +887,10 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async Task<bool> GuardSaleQtyAsync(int itemId, decimal proposedQty)
         {
-            if (proposedQty <= 0) return true; // nothing to guard
-
-            using var db = new PosClientDbContext(_dbOptions);
-            var guard = new StockGuard(db);
-
-            try
-            {
-                // Single-location, single-item check at the current outlet
-                var outletId = OutletId; // (this property already exists in your Sale window)
-                await guard.EnsureNoNegativeAtLocationAsync(new[]
-                {
-            (itemId: itemId,
-             outletId: outletId,
-             locType: InventoryLocationType.Outlet,
-             locId: outletId,
-             delta: -proposedQty) // OUT for sale
-        });
-                return true;
-            }
-            catch (InvalidOperationException ex)
-            {
-                // Show the same message the guard uses (keeps UX/messages consistent)
-                MessageBox.Show(ex.Message, "Not enough stock", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return false;
-            }
+            var ok = await _sales.GuardSaleQtyAsync(OutletId, itemId, proposedQty);
+            if (!ok)
+                MessageBox.Show("Not enough stock at this outlet.", "Not enough stock", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return ok;
         }
 
         private void CustomerPicker_CustomerPicked(object sender, RoutedEventArgs e)

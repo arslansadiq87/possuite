@@ -15,7 +15,6 @@ namespace Pos.Client.Wpf.Windows.Sales
     public partial class StockReportView : UserControl, IRefreshOnActivate
     {
         private DateTime _lastRefreshUtc = DateTime.MinValue;
-
         private enum LocationScope { Outlet, Warehouse }     // which dimension is active
         private LocationScope _scope = LocationScope.Outlet;
         private const int AllId = -1;                        // sentinel for "All ..."
@@ -237,8 +236,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             Grid.Columns.Add(new DataGridTextColumn { Header = "Category", Binding = new Binding("Category"), Width = 170 });
             Grid.Columns.Add(new DataGridTextColumn { Header = "On Hand", Binding = new Binding("OnHand"), Width = 120 });
         }
-
-
 
         private IQueryable<StockEntry> BuildScopedLedger(PosClientDbContext db)
         {

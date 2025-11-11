@@ -7,7 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;
 using Pos.Domain;
 using Pos.Domain.Entities;
+using Pos.Domain.Models.Users;
+using Pos.Domain.Services;
 using Pos.Persistence.Services;
+
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -24,8 +27,8 @@ namespace Pos.Client.Wpf.Windows.Admin
 
     public partial class UsersView : UserControl
     {
-        private readonly UserAdminService _svc;
-        private readonly OutletCounterService _outletSvc; // for the Assignments dialog, if used
+        private readonly IUserAdminService _svc;
+        //private readonly OutletCounterService _outletSvc; // for the Assignments dialog, if used
 
         private readonly ObservableCollection<OutletAssignRow> _outletRows = new();
         private readonly bool _currentIsGlobalAdmin;
@@ -68,8 +71,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         public UsersView(AppState state)
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<UserAdminService>();
-            _outletSvc = App.Services.GetRequiredService<OutletCounterService>();
+            _svc = App.Services.GetRequiredService<IUserAdminService>(); // interface, not concrete
+            //_outletSvc = App.Services.GetRequiredService<OutletCounterService>();
 
             var currentUser = state.CurrentUser;
             _currentIsGlobalAdmin = currentUser?.IsGlobalAdmin == true;
@@ -338,8 +341,15 @@ namespace Pos.Client.Wpf.Windows.Admin
                 var savedId = await _svc.CreateOrUpdateAsync(entity, string.IsNullOrWhiteSpace(newPwd) ? null : newPwd);
 
                 // Save outlet assignments from sidebar grid
-                var desired = _outletRows.Select(r => (r.OutletId, r.IsAssigned, TextToRole(r.Role)));
+                // Save outlet assignments from sidebar grid
+                var desired = _outletRows.Select(r =>
+                    new UserOutletAssignDto(
+                        OutletId: r.OutletId,
+                        IsAssigned: r.IsAssigned,
+                        Role: TextToRole(r.Role)));
+
                 await _svc.SaveAssignmentsAsync(savedId, desired);
+
 
                 ShowEditor(false);
                 _editingUserId = null;

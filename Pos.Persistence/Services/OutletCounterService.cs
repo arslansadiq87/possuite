@@ -6,13 +6,15 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
-using Pos.Domain.Utils;              // GuidUtility
+using Pos.Domain.Models;              // moved DTOs
+using Pos.Domain.Services;            // interface
+using Pos.Domain.Utils;               // GuidUtility
 using Pos.Persistence;
-using Pos.Persistence.Sync;          // IOutboxWriter
+using Pos.Persistence.Sync;           // IOutboxWriter
 
 namespace Pos.Persistence.Services
 {
-    public sealed class OutletCounterService
+    public sealed class OutletCounterService : IOutletCounterService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
@@ -21,25 +23,6 @@ namespace Pos.Persistence.Services
         {
             _dbf = dbf;
             _outbox = outbox;
-        }
-
-        // ─────────────────────────  DTOs for safe binding  ─────────────────────────
-        public sealed class OutletRow
-        {
-            public int Id { get; init; }
-            public string Code { get; init; } = "";
-            public string Name { get; init; } = "";
-            public string? Address { get; init; }
-            public bool IsActive { get; init; }
-        }
-
-        public sealed class CounterRow
-        {
-            public int Id { get; init; }
-            public int OutletId { get; init; }
-            public string Name { get; init; } = "";
-            public bool IsActive { get; init; }
-            public string? AssignedTo { get; init; }
         }
 
         // ─────────────────────────  Queries  ─────────────────────────
@@ -101,8 +84,10 @@ namespace Pos.Persistence.Services
                 db.Outlets.Update(outlet);
             }
 
+            // First save to get identity/rowversion for payloads
             await db.SaveChangesAsync(ct);
-            // Sync upsert
+
+            // Enqueue outbox BEFORE final save (house rule)
             await _outbox.EnqueueUpsertAsync(db, outlet, ct);
             await db.SaveChangesAsync(ct);
 
@@ -123,7 +108,7 @@ namespace Pos.Persistence.Services
                 throw new InvalidOperationException("Outlet not found.");
 
             if (outlet.Counters.Any())
-                throw new InvalidOperationException("Outlet has counters. Delete counters first.");
+                throw new InvalidOperationException("Cannot delete: outlet still has counters. Delete counters first.");
 
             db.Outlets.Remove(outlet);
             await db.SaveChangesAsync(ct);
@@ -189,19 +174,20 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            // ensure outlet/counter exist
             var exists = await db.Counters.AnyAsync(c => c.Id == counterId && c.OutletId == outletId, ct);
             if (!exists)
-                throw new InvalidOperationException("Counter not found for selected outlet.");
+                throw new InvalidOperationException("Counter not found for the selected outlet.");
 
             // ensure one binding per machine (free previous)
             var existingForMachine = await db.CounterBindings
                 .Where(b => b.MachineName == machine)
                 .ToListAsync(ct);
+
             if (existingForMachine.Count > 0)
             {
                 db.CounterBindings.RemoveRange(existingForMachine);
                 await db.SaveChangesAsync(ct);
+
                 foreach (var b in existingForMachine)
                 {
                     var topicOld = nameof(CounterBinding);
@@ -211,7 +197,6 @@ namespace Pos.Persistence.Services
                 await db.SaveChangesAsync(ct);
             }
 
-            // add new binding
             var binding = new CounterBinding
             {
                 CounterId = counterId,
@@ -250,9 +235,6 @@ namespace Pos.Persistence.Services
             await tx.CommitAsync(ct);
         }
 
-      
-
-     
         // ─────────────────────────  Lookups  ─────────────────────────
         public async Task<Outlet?> GetOutletAsync(int outletId, CancellationToken ct = default)
         {
@@ -296,7 +278,7 @@ namespace Pos.Persistence.Services
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
-           
+
         public async Task UpsertCounterByIdAsync(int counterId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
@@ -334,7 +316,7 @@ namespace Pos.Persistence.Services
 
             var exists = await db.UserOutlets.AnyAsync(uo => uo.UserId == userId && uo.OutletId == outletId, ct);
             if (exists)
-                throw new InvalidOperationException("This user is already assigned to the selected outlet.");
+                throw new InvalidOperationException("User is already assigned to the selected outlet.");
 
             var entity = new UserOutlet
             {
@@ -345,6 +327,7 @@ namespace Pos.Persistence.Services
 
             await db.UserOutlets.AddAsync(entity, ct);
             await db.SaveChangesAsync(ct);
+
             await _outbox.EnqueueUpsertAsync(db, entity, ct);
             await db.SaveChangesAsync(ct);
 
@@ -361,6 +344,7 @@ namespace Pos.Persistence.Services
 
             entity.Role = newRole;
             await db.SaveChangesAsync(ct);
+
             await _outbox.EnqueueUpsertAsync(db, entity, ct);
             await db.SaveChangesAsync(ct);
 
@@ -388,7 +372,5 @@ namespace Pos.Persistence.Services
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
-
-
     }
 }

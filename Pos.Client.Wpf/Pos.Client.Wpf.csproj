@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <Compile Remove="Contracts\IScanFocusable.cs" />
+    <Compile Remove="Services\CoaService.cs" />
     <Compile Remove="Services\CurrentUserService.cs" />
     <Compile Remove="Services\MediaPaths.cs" />
     <Compile Remove="Services\OpeningBalanceService.cs" />
@@ -12,12 +13,16 @@
     <Compile Remove="Windows\Accounting\OpeningBalanceVm.cs" />
     <Compile Remove="Windows\Accounting\OpeningBalanceWindow.xaml.cs" />
     <Compile Remove="Windows\Accounting\VoucherEditorWindow.xaml.cs" />
+    <Compile Remove="Windows\Purchases\ItemQuickDialog.xaml.cs" />
+    <Compile Remove="Windows\Purchases\SupplierQuickDialog.xaml.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <Page Remove="Windows\Accounting\AccountDialog.xaml" />
     <Page Remove="Windows\Accounting\OpeningBalanceWindow.xaml" />
     <Page Remove="Windows\Accounting\VoucherEditorWindow.xaml" />
+    <Page Remove="Windows\Purchases\ItemQuickDialog.xaml" />
+    <Page Remove="Windows\Purchases\SupplierQuickDialog.xaml" />
   </ItemGroup>
   
 	<ItemGroup>

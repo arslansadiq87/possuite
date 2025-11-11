@@ -14,6 +14,7 @@ using System.Windows.Controls;       // AppState / AppCtx
 using Pos.Client.Wpf.Infrastructure;
 using Pos.Persistence.Sync; // for IOutboxWriter
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.Intrinsics.Arm;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -22,8 +23,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private DateTime _lastRefreshUtc = DateTime.MinValue;
 
         public int? SelectedHeldPurchaseId { get; private set; }  // bubble selection back to caller
-        private readonly DbContextOptions<PosClientDbContext> _opts;
-        private readonly PurchasesService _svc;
+
+        private readonly IPurchaseCenterReadService _read;
+        private readonly IPurchasesServiceFactory _svcFactory;
+
+        //private readonly DbContextOptions<PosClientDbContext> _opts;
+        //private readonly PurchasesService _svc;
         public Style? CurrentButtonStyle { get; set; }
 
         // ----- Grid row shapes -----
@@ -59,26 +64,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             InitializeComponent();
 
-            // Double-Esc to close (same feel as Sales center)
-            //this.PreviewKeyDown += PurchaseCenterWindow_PreviewKeyDown;
-
-            _opts = new DbContextOptionsBuilder<PosClientDbContext>()
-                .UseSqlite(DbPath.ConnectionString).Options;
-
-            //_svc = new PurchasesService(new PosClientDbContext(_opts));
-            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
-            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
+            _read = App.Services.GetRequiredService<IPurchaseCenterReadService>();
+            _svcFactory = App.Services.GetRequiredService<IPurchasesServiceFactory>();
 
             PurchasesGrid.ItemsSource = _purchases;
             LinesGrid.ItemsSource = _lines;
 
-            // defaults: last 30 days
             FromDate.SelectedDate = DateTime.Today.AddDays(-30);
             ToDate.SelectedDate = DateTime.Today;
 
             UpdateFilterSummary();
             LoadPurchases();
-            UpdateHeldButtonVisibility();
+            _ = UpdateHeldButtonVisibilityAsync();
         }
 
         private void Refresh_Click(object sender, RoutedEventArgs e) => LoadPurchases();
@@ -105,8 +102,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             PopupFilter.IsOpen = false;
             UpdateFilterSummary();
             LoadPurchases();
-            UpdateHeldButtonVisibility();
+            _ = UpdateHeldButtonVisibilityAsync();
         }
+
 
         private void ClearFilter_Click(object sender, RoutedEventArgs e)
         {
@@ -126,86 +124,45 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void Search_Executed(object sender, ExecutedRoutedEventArgs e) => LoadPurchases();
 
         // ===== Load & filter list (Purchases + Returns) =====
-        private void LoadPurchases()
+        private async void LoadPurchases()
         {
             _purchases.Clear();
 
             DateTime? fromUtc = FromDate.SelectedDate?.Date.ToUniversalTime();
             DateTime? toUtc = ToDate.SelectedDate?.AddDays(1).Date.ToUniversalTime();
 
-            using var db = new PosClientDbContext(_opts);
-
-            // Base query includes Party for supplier display and BOTH purchases & returns
-            var q = db.Purchases.AsNoTracking()
-                    .Include(p => p.Party)  // ← ensures Supplier name is available
-                    .Where(p =>
-                        (!fromUtc.HasValue || (p.CreatedAtUtc >= fromUtc || p.ReceivedAtUtc >= fromUtc)) &&
-                        (!toUtc.HasValue || (p.CreatedAtUtc < toUtc || p.ReceivedAtUtc < toUtc))
-                    );
-
-            // Search box: doc no / supplier / vendor invoice
-            var term = (SearchBox.Text ?? "").Trim();
-            if (!string.IsNullOrWhiteSpace(term))
-            {
-                q = q.Where(p =>
-                    (p.DocNo ?? "").Contains(term) ||
-                    (p.VendorInvoiceNo ?? "").Contains(term) ||
-                    (p.Party != null && p.Party.Name.Contains(term))
-                );
-            }
-
-            // Pull minimal columns for speed and transform
-            var list = q.OrderByDescending(p => p.ReceivedAtUtc ?? p.CreatedAtUtc)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.DocNo,
-                    Supplier = p.Party != null ? p.Party.Name : "",
-                    Ts = p.ReceivedAtUtc ?? p.CreatedAtUtc,
-                    p.Status,
-                    p.GrandTotal,
-                    p.Revision,
-                    p.IsReturn,
-                    p.RefPurchaseId            // << add this
-                })
-                .ToList();
-
             bool wantFinal = ChkFinal.IsChecked == true;
             bool wantDraft = ChkDraft.IsChecked == true;
             bool wantVoided = ChkVoided.IsChecked == true;
             bool onlyWithDoc = ChkOnlyWithDocNo.IsChecked == true;
+            var term = (SearchBox.Text ?? "").Trim();
 
-            var rows = list
-                .Where(r =>
-                    ((r.Status == PurchaseStatus.Final && wantFinal) ||
-                     (r.Status == PurchaseStatus.Draft && wantDraft) ||
-                     (r.Status == PurchaseStatus.Voided && wantVoided))
-                    && (!onlyWithDoc || !string.IsNullOrWhiteSpace(r.DocNo))
-                )
-                .Select(r => new UiPurchaseRow
-                {
-                    PurchaseId = r.Id,
-                    DocNoOrId = string.IsNullOrWhiteSpace(r.DocNo) ? $"#{r.Id}" : r.DocNo!,
-                    Supplier = string.IsNullOrWhiteSpace(r.Supplier) ? "—" : r.Supplier.Trim(),
-                    TsLocal = r.Ts.ToLocalTime().ToString("dd-MMM-yyyy HH:mm"),
-                    Status = r.Status.ToString(),
-                    GrandTotal = r.IsReturn ? -Math.Abs(r.GrandTotal) : Math.Abs(r.GrandTotal),
-                    Revision = r.Revision,
-                    IsReturn = r.IsReturn,               // ← KEY: now your action bar logic can differentiate
-                    IsReturnWithInvoice = r.IsReturn && r.RefPurchaseId.HasValue
-                });
+            var rows = await _read.SearchAsync(fromUtc, toUtc, term, wantFinal, wantDraft, wantVoided, onlyWithDoc);
 
             foreach (var r in rows)
-                _purchases.Add(r);
+            {
+                _purchases.Add(new UiPurchaseRow
+                {
+                    PurchaseId = r.PurchaseId,
+                    DocNoOrId = r.DocNoOrId,
+                    Supplier = r.Supplier,
+                    TsLocal = r.TsLocal,
+                    Status = r.Status,
+                    GrandTotal = r.GrandTotal,
+                    Revision = r.Revision,
+                    IsReturn = r.IsReturn,
+                    IsReturnWithInvoice = r.IsReturnWithInvoice
+                });
+            }
 
             HeaderText.Text = "Select a document to view lines.";
             _lines.Clear();
-
             UpdateActions(null);
         }
 
+
         // ===== Selection → show lines =====
-        private void PurchasesGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        private async void PurchasesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             _lines.Clear();
 
@@ -216,105 +173,28 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 return;
             }
 
-            using var db = new PosClientDbContext(_opts);
+            // Compose header text (we need a bit more data for status & total)
+            // We already have enough from the grid row:
+            var kind = sel.IsReturn ? "Return" : "Purchase";
+            var revPart = sel.HasRevisions ? $"  Rev {sel.Revision}  " : "  ";
+            HeaderText.Text = $"{kind} {sel.DocNoOrId}{revPart}Status: {sel.Status}  Grand: {sel.GrandTotal:0.00}";
 
-            // Load the purchase (base immutable lines)
-            var purchase = db.Purchases
-                .Include(p => p.Lines)
-                .AsNoTracking()
-                .First(p => p.Id == sel.PurchaseId);
-
-            // Is this a return?
-            var isReturn = purchase.IsReturn || sel.IsReturn;
-
-            // Header
-            var kind = isReturn ? "Return" : "Purchase";
-            var revPart = purchase.Revision > 1 ? $"  Rev {purchase.Revision}  " : "  ";
-            HeaderText.Text = $"{kind} {sel.DocNoOrId}{revPart}Status: {purchase.Status}  Grand: {purchase.GrandTotal:0.00}";
-
-            // -------- fold in prior amendment deltas (qty only) --------
-            var refTypeAmend = isReturn ? "PurchaseReturnAmend" : "PurchaseAmend";
-
-            var amendQtyByItem = db.StockEntries
-                .AsNoTracking()
-                .Where(se => se.RefType == refTypeAmend && se.RefId == purchase.Id)
-                .GroupBy(se => se.ItemId)
-                .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
-                .ToDictionary(x => x.ItemId, x => x.Qty);
-
-            // Base (original immutable) grouped per item
-            var baseByItem = purchase.Lines
-                .GroupBy(l => l.ItemId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => new
-                    {
-                        Qty = g.Sum(x => x.Qty),                              // may be negative for returns
-                        AvgUnitCost = g.Any() ? Math.Round(g.Average(x => x.UnitCost), 2) : 0m,
-                        LineTotal = g.Sum(x => x.LineTotal)
-                    });
-
-            // Get meta for all items present in base or amendments
-            var itemIds = baseByItem.Keys.Union(amendQtyByItem.Keys).Distinct().ToList();
-
-            var meta = (
-                from i in db.Items.AsNoTracking()
-                join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
-                from p in gp.DefaultIfEmpty()
-                where itemIds.Contains(i.Id)
-                select new
-                {
-                    i.Id,
-                    ItemName = i.Name,
-                    ProductName = p != null ? p.Name : null,
-                    i.Variant1Name,
-                    i.Variant1Value,
-                    i.Variant2Name,
-                    i.Variant2Value,
-                    i.Sku,
-                    i.Price
-                }
-            ).ToList().ToDictionary(x => x.Id);
-
-            // Build EFFECTIVE preview rows
-            foreach (var itemId in itemIds)
-            {
-                baseByItem.TryGetValue(itemId, out var b);
-                amendQtyByItem.TryGetValue(itemId, out var aQty);
-
-                var effectiveQty = (b?.Qty ?? 0m) + aQty;         // purchases: positive; returns: likely negative
-                var displayQty = isReturn ? Math.Abs(effectiveQty) : effectiveQty;
-
-                if (displayQty == 0m) continue;                  // only skip when nothing left to show
-
-                // Display cost: prefer base avg; if item exists only via amendments, fallback to default price
-                var unitCost = b?.AvgUnitCost ?? (meta.TryGetValue(itemId, out var m0) ? (m0?.Price ?? 0m) : 0m);
-
-                // Friendly name + SKU
-                string display = $"Item #{itemId}";
-                string sku = "";
-                if (meta.TryGetValue(itemId, out var m))
-                {
-                    display = ProductNameComposer.Compose(
-                        m.ProductName, m.ItemName,
-                        m.Variant1Name, m.Variant1Value,
-                        m.Variant2Name, m.Variant2Value);
-                    sku = m.Sku ?? "";
-                }
-
+            // Preview lines from service
+            var rows = await _read.GetPreviewLinesAsync(sel.PurchaseId);
+            foreach (var r in rows)
                 _lines.Add(new UiLineRow
                 {
-                    ItemId = itemId,
-                    Sku = sku,
-                    DisplayName = display,
-                    Qty = displayQty,                                 // ← returns now show positive qty
-                    UnitCost = unitCost,
-                    LineTotal = Math.Round(displayQty * unitCost, 2)        // preview only
+                    ItemId = r.ItemId,
+                    Sku = r.Sku,
+                    DisplayName = r.DisplayName,
+                    Qty = r.Qty,
+                    UnitCost = r.UnitCost,
+                    LineTotal = r.LineTotal
                 });
-            }
 
             UpdateActions(sel);
         }
+
 
 
 
@@ -377,41 +257,23 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (sel.IsReturn) { MessageBox.Show("Returns cannot be received."); return; }
             if (sel.Status != nameof(PurchaseStatus.Draft)) { MessageBox.Show("Only DRAFT purchases can be received."); return; }
 
+            var svc = _svcFactory.Create();
+
             try
             {
-                //using var db = new PosClientDbContext(_opts);
-                //var svc = new PurchasesService(db);
-                using var db = new PosClientDbContext(_opts);
-                var outbox = App.Services.GetRequiredService<IOutboxWriter>();
-                var svc = new PurchasesService(db, outbox);
+                // Load effective lines & finalize using the domain service
+                var draftEff = await svc.GetEffectiveLinesAsync(sel.PurchaseId);
 
-
-                // Load draft header + lines
-                var draft = await db.Purchases
-                    .Include(p => p.Lines)
-                    .FirstOrDefaultAsync(p => p.Id == sel.PurchaseId);
-
-                if (draft == null) { MessageBox.Show("Draft not found."); return; }
-                if (draft.Status != PurchaseStatus.Draft) { MessageBox.Show("This document is not in Draft anymore."); return; }
-
-                // Build a minimal header model in FINAL status
                 var header = new Purchase
                 {
-                    Id = draft.Id,
-                    PartyId = draft.PartyId,
-                    TargetType = draft.TargetType,
-                    OutletId = draft.OutletId,
-                    WarehouseId = draft.WarehouseId,
-                    VendorInvoiceNo = draft.VendorInvoiceNo,
-                    PurchaseDate = draft.PurchaseDate,
+                    Id = sel.PurchaseId,
                     Status = PurchaseStatus.Final
+                    // other header fields are looked up by the service inside ReceiveAsync if needed,
+                    // but if your current ReceiveAsync requires full header:
+                    // supply PartyId, TargetType, OutletId, WarehouseId, VendorInvoiceNo, PurchaseDate
                 };
 
-                // Effective lines (for drafts this is normally same as base lines)
-                // You already have a helper used in the editor:
-                var eff = await svc.GetEffectiveLinesAsync(draft.Id); // (ItemId, Qty, UnitCost, Discount, TaxRate, …)
-
-                var lines = eff.Select(x => new PurchaseLine
+                var lines = draftEff.Select(x => new PurchaseLine
                 {
                     ItemId = x.ItemId,
                     Qty = x.Qty,
@@ -421,18 +283,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }).ToList();
 
                 var user = AppState.Current?.CurrentUserName ?? "system";
-
-                // Finalize + write stock via the same service the editor uses
                 await svc.ReceiveAsync(header, lines, user);
 
                 MessageBox.Show("Purchase received and posted.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-                LoadPurchases();         // refresh list
-                _lines.Clear();          // clear preview
-                UpdateActions(null);     // reset action bar
+                LoadPurchases();
+                _lines.Clear();
+                UpdateActions(null);
             }
             catch (InvalidOperationException ex)
             {
-                // business rules (e.g., negative stock guard on amendments etc.)
                 MessageBox.Show(ex.Message, "Blocked", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch (DbUpdateException ex)
@@ -444,6 +303,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 MessageBox.Show("Unexpected error: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
 
         private void Amend_Executed(object? sender, ExecutedRoutedEventArgs? e)
@@ -507,7 +367,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
                 try
                 {
-                    await _svc.VoidReturnAsync(sel.PurchaseId, reason, user);
+                    var svc = _svcFactory.Create();
+                    await svc.VoidReturnAsync(sel.PurchaseId, reason, user);
                     MessageBox.Show("Return voided.");
                     LoadPurchases();
                 }
@@ -525,7 +386,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             try
             {
-                await _svc.VoidPurchaseAsync(sel.PurchaseId, reason2, user);
+                var svc = _svcFactory.Create();
+                await svc.VoidPurchaseAsync(sel.PurchaseId, reason2, user);
                 MessageBox.Show("Purchase voided.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 LoadPurchases();           // refresh the list
                 LinesGrid.ItemsSource = null; // optional: clear lines after void
@@ -546,32 +408,27 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async void OpenHeldPicker()
         {
-            var picker = new HeldPurchasesWindow(_opts) { Owner = Window.GetWindow(this) };
+            var read = App.Services.GetRequiredService<IPurchaseCenterReadService>();
+            var picker = new HeldPurchasesWindow(read) { Owner = Window.GetWindow(this) };
 
-            // If user picked a draft, bubble the ID up to the caller (PurchaseWindow),
-            // close Held picker AND close Invoice Center itself.
-            if (picker.ShowDialog() == true && picker.SelectedPurchaseId.HasValue)
+            if (picker.ShowDialog() == true && picker.SelectedPurchaseId is int id)
             {
-                this.SelectedHeldPurchaseId = picker.SelectedPurchaseId;
-                var owner = Window.GetWindow(this);   // the Window hosting this view
-                if (owner != null)
-                {
-                    owner.DialogResult = true;        // signal OK to the caller
-                    owner.Close();                    // close the dialog window
-                }
-                return;
-            }
+                SelectedHeldPurchaseId = id;
 
-            // else: stay open
+                if (Window.GetWindow(this) is Window host)
+                {
+                    host.DialogResult = true;
+                    host.Close();
+                }
+            }
         }
 
-        private void UpdateHeldButtonVisibility()
+
+        private async Task UpdateHeldButtonVisibilityAsync()
         {
             try
             {
-                using var db = new PosClientDbContext(_opts);
-                bool anyHeld = db.Purchases.AsNoTracking()
-                                    .Any(p => p.Status == PurchaseStatus.Draft && !p.IsReturn);
+                bool anyHeld = await _read.AnyHeldDraftAsync();
                 if (BtnHeld != null)
                     BtnHeld.Visibility = anyHeld ? Visibility.Visible : Visibility.Collapsed;
             }
@@ -580,6 +437,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 if (BtnHeld != null) BtnHeld.Visibility = Visibility.Collapsed;
             }
         }
+
 
         // ----- Action bar buttons (wired from XAML) -----
         private void AmendReturn_Click(object sender, RoutedEventArgs e)

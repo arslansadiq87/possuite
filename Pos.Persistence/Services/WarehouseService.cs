@@ -1,14 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
+using Pos.Domain.Services;            // <-- interface lives in Domain
 using Pos.Persistence.Sync;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Pos.Persistence.Services
 {
-    public class WarehouseService
+    public sealed class WarehouseService : IWarehouseService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
@@ -20,10 +17,14 @@ namespace Pos.Persistence.Services
         }
 
         // -------------------- LIST --------------------
-        public async Task<List<Warehouse>> SearchAsync(string? term, bool showInactive, int take = 1000)
+        public async Task<List<Warehouse>> SearchAsync(
+            string? term,
+            bool showInactive,
+            int take = 1000,
+            CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
-            term = (term ?? "").Trim().ToLower();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            term = (term ?? "").Trim();
 
             var q = db.Warehouses.AsNoTracking();
 
@@ -31,43 +32,46 @@ namespace Pos.Persistence.Services
                 q = q.Where(w => w.IsActive);
 
             if (!string.IsNullOrWhiteSpace(term))
+            {
+                var t = term.ToLower();
                 q = q.Where(w =>
-                    (w.Name ?? "").ToLower().Contains(term) ||
-                    (w.Code ?? "").ToLower().Contains(term) ||
-                    (w.City ?? "").ToLower().Contains(term) ||
-                    (w.Phone ?? "").ToLower().Contains(term) ||
-                    (w.Note ?? "").ToLower().Contains(term));
+                    (w.Name ?? "").ToLower().Contains(t) ||
+                    (w.Code ?? "").ToLower().Contains(t) ||
+                    (w.City ?? "").ToLower().Contains(t) ||
+                    (w.Phone ?? "").ToLower().Contains(t) ||
+                    (w.Note ?? "").ToLower().Contains(t));
+            }
 
             return await q
                 .OrderByDescending(w => w.IsActive)
                 .ThenBy(w => w.Name)
                 .Take(take)
-                .ToListAsync();
+                .ToListAsync(ct);
         }
 
         // -------------------- ENABLE / DISABLE --------------------
-        public async Task SetActiveAsync(int warehouseId, bool active)
+        public async Task SetActiveAsync(int warehouseId, bool active, CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
-            var w = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == warehouseId);
-            if (w == null) throw new InvalidOperationException("Warehouse not found.");
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var w = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == warehouseId, ct)
+                    ?? throw new InvalidOperationException("Warehouse not found.");
 
             w.IsActive = active;
             w.UpdatedAtUtc = DateTime.UtcNow;
 
-            await db.SaveChangesAsync();
+            // enqueue + save in one transaction boundary
             await _outbox.EnqueueUpsertAsync(db, w);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
         }
 
-        public async Task<Warehouse> SaveWarehouseAsync(Warehouse input)
+        public async Task<Warehouse> SaveWarehouseAsync(Warehouse input, CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
 
-            // Uniqueness check
-            bool codeTaken = await db.Warehouses
+            var codeTaken = await db.Warehouses
                 .AsNoTracking()
-                .AnyAsync(x => x.Code == input.Code && x.Id != input.Id);
+                .AnyAsync(x => x.Code == input.Code && x.Id != input.Id, ct);
+
             if (codeTaken)
                 throw new InvalidOperationException("This warehouse code already exists.");
 
@@ -88,8 +92,8 @@ namespace Pos.Persistence.Services
             }
             else
             {
-                entity = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == input.Id)
-                    ?? throw new InvalidOperationException("Warehouse not found.");
+                entity = await db.Warehouses.FirstOrDefaultAsync(x => x.Id == input.Id, ct)
+                      ?? throw new InvalidOperationException("Warehouse not found.");
 
                 entity.Code = input.Code;
                 entity.Name = input.Name;
@@ -100,17 +104,15 @@ namespace Pos.Persistence.Services
                 entity.UpdatedAtUtc = DateTime.UtcNow;
             }
 
-            await db.SaveChangesAsync();
             await _outbox.EnqueueUpsertAsync(db, entity);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
             return entity;
         }
 
-        public async Task<Warehouse?> GetWarehouseAsync(int id)
+        public async Task<Warehouse?> GetWarehouseAsync(int id, CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
-            return await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         }
-
     }
 }

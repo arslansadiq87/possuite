@@ -3,10 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.DTO;
 using Pos.Domain.Entities;
 using Pos.Persistence.Sync; // ⬅️ add
+using Pos.Domain.Services;
 
 namespace Pos.Persistence.Services
 {
-    public class ItemsService
+    public class ItemsService : IItemsReadService
     {
         private readonly PosClientDbContext _db;
         private readonly IOutboxWriter _outbox; // ⬅️ add
@@ -129,5 +130,86 @@ namespace Pos.Persistence.Services
                  i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value
              )).FirstOrDefaultAsync();
         }
+
+        public async Task<Dictionary<int, (string display, string sku)>> GetDisplayMetaAsync(
+    IEnumerable<int> itemIds,
+    CancellationToken ct = default)
+        {
+            var ids = itemIds?.Distinct().ToList() ?? new List<int>();
+            if (ids.Count == 0) return new();
+
+            var rows = await (
+                from i in _db.Items.AsNoTracking()
+                join pr in _db.Products.AsNoTracking() on i.ProductId equals pr.Id into gp
+                from pr in gp.DefaultIfEmpty()
+                where ids.Contains(i.Id)
+                select new
+                {
+                    i.Id,
+                    i.Sku,
+                    ItemName = i.Name,
+                    ProductName = pr != null ? pr.Name : null,
+                    i.Variant1Name,
+                    i.Variant1Value,
+                    i.Variant2Name,
+                    i.Variant2Value
+                }
+            ).ToListAsync(ct);
+
+            var dict = new Dictionary<int, (string display, string sku)>(rows.Count);
+            foreach (var r in rows)
+            {
+                var display = Pos.Domain.Formatting.ProductNameComposer.Compose(
+                    r.ProductName, r.ItemName,
+                    r.Variant1Name, r.Variant1Value,
+                    r.Variant2Name, r.Variant2Value
+                );
+                dict[r.Id] = (display ?? $"Item #{r.Id}", r.Sku ?? "");
+            }
+            return dict;
+        }
+
+        /// <summary>
+        /// For a single item: display name, SKU, and last purchase UnitCost (ignoring returns).
+        /// </summary>
+        public async Task<(string display, string sku, decimal? lastCost)?> GetItemMetaForReturnAsync(
+            int itemId, CancellationToken ct = default)
+        {
+            var meta = await (
+                from i in _db.Items.AsNoTracking().Where(x => x.Id == itemId)
+                join pr in _db.Products.AsNoTracking() on i.ProductId equals pr.Id into gp
+                from pr in gp.DefaultIfEmpty()
+                select new
+                {
+                    i.Id,
+                    i.Sku,
+                    ItemName = i.Name,
+                    ProductName = pr != null ? pr.Name : null,
+                    i.Variant1Name,
+                    i.Variant1Value,
+                    i.Variant2Name,
+                    i.Variant2Value
+                }
+            ).FirstOrDefaultAsync(ct);
+
+            if (meta == null) return null;
+
+            var display = Pos.Domain.Formatting.ProductNameComposer.Compose(
+                meta.ProductName, meta.ItemName,
+                meta.Variant1Name, meta.Variant1Value,
+                meta.Variant2Name, meta.Variant2Value) ?? $"Item #{itemId}";
+
+            var lastCost = await (
+                from pl in _db.PurchaseLines.AsNoTracking()
+                join pu in _db.Purchases.AsNoTracking() on pl.PurchaseId equals pu.Id
+                where pl.ItemId == itemId && !pu.IsReturn
+                orderby pu.PurchaseDate descending
+                select pl.UnitCost
+            ).FirstOrDefaultAsync(ct);
+
+            return (display, meta.Sku ?? "", lastCost);
+        }
+
+
     }
 }

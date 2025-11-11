@@ -2,38 +2,23 @@
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
+using Pos.Domain.Formatting;
+using Pos.Domain.Models.Sales;
+using Pos.Domain.Services;
 
 namespace Pos.Persistence.Services
 {
-    public sealed class InvoiceService
+    public sealed class InvoiceService : IInvoiceService
     {
-        private readonly DbContextOptions<PosClientDbContext> _opts;
-        public InvoiceService(DbContextOptions<PosClientDbContext> opts) => _opts = opts;
+        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        public InvoiceService(IDbContextFactory<PosClientDbContext> dbf) => _dbf = dbf;
 
-        // Lightweight row for the browser grid
-        public sealed class InvoiceRow
+        public async Task<IReadOnlyList<InvoiceSearchRowDto>> SearchLatestInvoicesAsync(
+            int outletId, int counterId, DateTime? fromUtc, DateTime? toUtc, string? search, CancellationToken ct = default)
         {
-            public int SaleId { get; set; }
-            public int CounterId { get; set; }
-            public int InvoiceNumber { get; set; }
-            public int Revision { get; set; }
-            public SaleStatus Status { get; set; }
-            public bool IsReturn { get; set; }
-            public DateTime TsUtc { get; set; }
-            public string Customer { get; set; } = "";
-            public decimal Total { get; set; }
-        }
+            await using var db = await _dbf.CreateDbContextAsync(ct);
 
-        public IList<InvoiceRow> SearchLatestInvoices(
-            int? outletId, int? counterId,
-            DateTime? fromUtc, DateTime? toUtc,
-            string? text // matches invoice no / customer / phone
-        )
-        {
-            using var db = new PosClientDbContext(_opts);
-
-            // Max revision per (CounterId, InvoiceNumber), excluding Voided
-            // Latest revision per (OutletId, CounterId, InvoiceNumber) — includes Voided
+            // Latest revision per (OutletId, CounterId, InvoiceNumber)
             var maxRev = db.Sales.AsNoTracking()
                 .GroupBy(s => new { s.OutletId, s.CounterId, s.InvoiceNumber })
                 .Select(g => new
@@ -44,74 +29,225 @@ namespace Pos.Persistence.Services
                     Rev = g.Max(x => x.Revision)
                 });
 
-
             var q =
                 from s in db.Sales.AsNoTracking()
                 join m in maxRev
                     on new { s.OutletId, s.CounterId, s.InvoiceNumber, s.Revision }
                     equals new { m.OutletId, m.CounterId, m.InvoiceNumber, Revision = m.Rev }
+                where s.OutletId == outletId && s.CounterId == counterId
                 select s;
 
-
-            if (outletId.HasValue) q = q.Where(s => s.OutletId == outletId.Value);
-            if (counterId.HasValue) q = q.Where(s => s.CounterId == counterId.Value);
             if (fromUtc.HasValue) q = q.Where(s => s.Ts >= fromUtc.Value);
             if (toUtc.HasValue) q = q.Where(s => s.Ts < toUtc.Value);
 
-            if (!string.IsNullOrWhiteSpace(text))
+            if (!string.IsNullOrWhiteSpace(search))
             {
-                text = text.Trim();
+                var text = search.Trim();
                 if (int.TryParse(text, out var invNo))
+                {
                     q = q.Where(s => s.InvoiceNumber == invNo);
+                }
                 else
+                {
                     q = q.Where(s =>
                         (s.CustomerName != null && EF.Functions.Like(s.CustomerName, $"%{text}%")) ||
                         (s.CustomerPhone != null && EF.Functions.Like(s.CustomerPhone, $"%{text}%")));
+                }
             }
 
-            return q
-                .OrderByDescending(s => s.Ts)
+            var rows = await q.OrderByDescending(s => s.Ts)
                 .Take(500)
-                .Select(s => new InvoiceRow
-                {
-                    SaleId = s.Id,
-                    CounterId = s.CounterId,
-                    InvoiceNumber = s.InvoiceNumber,
-                    Revision = s.Revision,
-                    Status = s.Status,
-                    IsReturn = s.IsReturn,
-                    TsUtc = s.Ts,
-                    Customer = s.CustomerName ?? (s.CustomerPhone ?? "Walk-in"),
-                    Total = s.Total
-                })
-                .ToList();
+                .Select(s => new InvoiceSearchRowDto(
+                    s.Id,
+                    s.CounterId,
+                    s.InvoiceNumber,
+                    s.Revision,
+                    s.Status,
+                    s.IsReturn,
+                    s.Ts,
+                    s.CustomerName ?? (s.CustomerPhone ?? "Walk-in"),
+                    s.Total))
+                .ToListAsync(ct);
+
+            return rows;
         }
 
-        public (Sale sale, List<(SaleLine line, string itemName, string sku)> lines) LoadSaleWithLines(int saleId)
+        public async Task<Dictionary<int, bool>> GetReturnHasBaseMapAsync(
+            IEnumerable<int> returnSaleIds, CancellationToken ct = default)
         {
-            using var db = new PosClientDbContext(_opts);
-            var sale = db.Sales.AsNoTracking().First(x => x.Id == saleId);
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var ids = returnSaleIds.Distinct().ToList();
+            if (ids.Count == 0) return new();
 
-            var q =
-            from l in db.SaleLines.AsNoTracking().Where(x => x.SaleId == saleId)
-            join i in db.Items.AsNoTracking() on l.ItemId equals i.Id
-            select new { Line = l, Name = i.Name, Sku = i.Sku };
+            return await db.Sales.AsNoTracking()
+                .Where(s => ids.Contains(s.Id))
+                .Select(s => new { s.Id, HasBase = (s.RefSaleId != null) || (s.OriginalSaleId != null) })
+                .ToDictionaryAsync(x => x.Id, x => x.HasBase, ct);
+        }
 
-            // First project to a concrete class or anonymous type, then ToList, THEN tuples:
-            var materialized = q
-                .Select(x => new
+        public async Task<(InvoiceDetailHeaderDto header, IReadOnlyList<InvoiceDetailLineDto> lines)>
+            LoadSaleWithLinesAsync(int saleId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            var sale = await db.Sales.AsNoTracking().FirstAsync(s => s.Id == saleId, ct);
+
+            var linesRaw = await (
+                from l in db.SaleLines.AsNoTracking().Where(x => x.SaleId == saleId)
+                join i in db.Items.AsNoTracking() on l.ItemId equals i.Id
+                join p in db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
+                from p in gp.DefaultIfEmpty()
+                select new
                 {
-                    Line = x.Line,
-                    ItemName = x.Name ?? "",
-                    Sku = x.Sku ?? ""
-                })
-                .ToList();
+                    l.ItemId,
+                    i.Sku,
+                    ItemName = i.Name,
+                    ProductName = p != null ? p.Name : null,
+                    i.Variant1Name,
+                    i.Variant1Value,
+                    i.Variant2Name,
+                    i.Variant2Value,
+                    l.Qty,
+                    l.UnitPrice,
+                    l.LineTotal
+                }
+            ).ToListAsync(ct);
 
-            var lines = materialized
-                .Select(x => (x.Line, x.ItemName, x.Sku))
-                .ToList();
+            var lines = linesRaw.Select(x =>
+                new InvoiceDetailLineDto(
+                    x.ItemId,
+                    x.Sku ?? "",
+                    ProductNameComposer.Compose(x.ProductName, x.ItemName, x.Variant1Name, x.Variant1Value, x.Variant2Name, x.Variant2Value),
+                    x.Qty,
+                    x.UnitPrice,
+                    x.LineTotal
+                )).ToList();
 
-            return (sale, lines);
+            var header = new InvoiceDetailHeaderDto(
+                sale.Id, sale.CounterId, sale.InvoiceNumber, sale.Revision, sale.Status,
+                sale.IsReturn, sale.Ts, sale.Total);
+
+            return (header, lines);
+        }
+
+        public async Task<bool> AnyHeldAsync(int outletId, int counterId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Sales.AsNoTracking()
+                .AnyAsync(s => s.OutletId == outletId && s.CounterId == counterId && s.Status == SaleStatus.Draft, ct);
+        }
+
+        public async Task<bool> HasNonVoidedReturnAgainstAsync(int saleId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Sales.AsNoTracking()
+                .AnyAsync(s => s.IsReturn
+                            && (s.OriginalSaleId == saleId || s.RefSaleId == saleId)
+                            && s.Status != SaleStatus.Voided, ct);
+        }
+
+        public async Task VoidReturnAsync(int saleId, string reason, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var sale = await db.Sales.FirstAsync(s => s.Id == saleId, ct);
+            if (!sale.IsReturn) throw new InvalidOperationException("Not a return.");
+            if (sale.Status != SaleStatus.Final) throw new InvalidOperationException("Only FINAL returns can be voided.");
+
+            var prior = await db.StockEntries
+                .Where(e => e.RefId == sale.Id && e.RefType == "SaleReturn")
+                .ToListAsync(ct);
+
+            foreach (var p in prior)
+            {
+                db.StockEntries.Add(new StockEntry
+                {
+                    LocationType = p.LocationType,
+                    LocationId = p.LocationId,
+                    OutletId = p.OutletId,
+                    ItemId = p.ItemId,
+                    QtyChange = -p.QtyChange, // exact negation
+                    RefType = "Void",
+                    RefId = sale.Id,
+                    Ts = DateTime.UtcNow
+                });
+            }
+
+            sale.Status = SaleStatus.Voided;
+            sale.VoidReason = reason;
+            sale.VoidedAtUtc = DateTime.UtcNow;
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        public async Task VoidSaleAsync(int saleId, string reason, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var hasReturn = await db.Sales.AsNoTracking()
+                .AnyAsync(s => s.IsReturn
+                           && (s.OriginalSaleId == saleId || s.RefSaleId == saleId)
+                           && s.Status != SaleStatus.Voided, ct);
+            if (hasReturn) throw new InvalidOperationException("This sale has a return against it and cannot be voided.");
+
+            var sale = await db.Sales.FirstAsync(s => s.Id == saleId, ct);
+            if (sale.IsReturn) throw new InvalidOperationException("Selected document is a return.");
+            if (sale.Status != SaleStatus.Final) throw new InvalidOperationException("Only FINAL invoices can be voided.");
+
+            var lines = await db.SaleLines.Where(l => l.SaleId == sale.Id).ToListAsync(ct);
+            foreach (var l in lines)
+            {
+                db.StockEntries.Add(new StockEntry
+                {
+                    LocationType = InventoryLocationType.Outlet,
+                    LocationId = sale.OutletId,
+                    OutletId = sale.OutletId,
+                    ItemId = l.ItemId,
+                    QtyChange = +l.Qty, // reverse sale OUT -> IN
+                    RefType = "Void",
+                    RefId = sale.Id,
+                    Ts = DateTime.UtcNow
+                });
+            }
+
+            sale.Status = SaleStatus.Voided;
+            sale.VoidReason = reason;
+            sale.VoidedAtUtc = DateTime.UtcNow;
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        public async Task<IReadOnlyList<HeldRowDto>> GetHeldAsync(int outletId, int counterId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Sales.AsNoTracking()
+                .Where(s => s.OutletId == outletId
+                         && s.CounterId == counterId
+                         && s.Status == SaleStatus.Draft)
+                .OrderByDescending(s => s.Ts)
+                .Select(s => new HeldRowDto(
+                    s.Id,
+                    s.Ts,
+                    s.HoldTag,
+                    s.CustomerName,
+                    s.Total))
+                .ToListAsync(ct);
+        }
+
+        public async Task DeleteHeldAsync(int saleId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var s = await db.Sales.FirstOrDefaultAsync(x => x.Id == saleId && x.Status == SaleStatus.Draft, ct);
+            if (s == null) return;
+
+            var lines = db.SaleLines.Where(x => x.SaleId == s.Id);
+            db.SaleLines.RemoveRange(lines);
+            db.Sales.Remove(s);
+            await db.SaveChangesAsync(ct);
         }
     }
 }

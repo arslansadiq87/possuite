@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence;         
-using Pos.Persistence.Services;
+//using Pos.Persistence.Services;
+using Pos.Domain.Services;
 using Pos.Persistence.Sync; // IOutboxWriter
 using Microsoft.Win32;
 using System.Linq;
@@ -21,7 +22,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         //private readonly IDbContextFactory<PosClientDbContext> _dbf;
         //private Pos.Persistence.Sync.IOutboxWriter? _outbox; // NEW
-        private readonly CatalogService _svc;
+        private readonly ICatalogService _svc;
 
         public enum Mode { Batch, EditSingle, Sequential }
         private bool _suppressValidation;          // prevents validation during programmatic focus
@@ -60,7 +61,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             InitializeComponent();
             //_dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
             //_outbox = App.Services.GetRequiredService<IOutboxWriter>();
-            _svc = App.Services.GetRequiredService<CatalogService>();
+            _svc = App.Services.GetRequiredService<ICatalogService>();
 
             BarcodesGrid.ItemsSource = _barcodeRows;
             BarcodesGrid.RowEditEnding += BarcodesGrid_RowEditEnding;

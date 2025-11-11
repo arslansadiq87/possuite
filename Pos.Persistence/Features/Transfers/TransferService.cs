@@ -6,30 +6,32 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain;
 using Pos.Domain.Settings;
-using Pos.Persistence.Services;
+//using Pos.Persistence.Services;
 using Pos.Persistence.Sync;   // NEW
+using Pos.Domain.Models.Inventory;   // StockDeltaDto
+using Pos.Domain.Services;           // IStockGuard (if not already)
 
 namespace Pos.Persistence.Features.Transfers
 {
     public sealed class TransferService : ITransferService
     {
         private readonly Pos.Persistence.PosClientDbContext _db;
-        private readonly StockGuard _guard; // add this
+        private readonly IStockGuard _guard; // add this
         private readonly IOutboxWriter _outbox;   // NEW
 
-        public TransferService(PosClientDbContext db, StockGuard guard, IOutboxWriter outbox)
+        public TransferService(PosClientDbContext db, IStockGuard guard, IOutboxWriter outbox)
         {
             _db = db;
             _guard = guard;
             _outbox = outbox;
         }
 
-        public TransferService(PosClientDbContext db, IOutboxWriter outbox)
-        {
-            _db = db;
-            _guard = new StockGuard(db);
-            _outbox = outbox;
-        }
+        //public TransferService(PosClientDbContext db, IOutboxWriter outbox)
+        //{
+        //    _db = db;
+        //    _guard = new StockGuard(db);
+        //    _outbox = outbox;
+        //}
 
 
         private static bool IsAdminOrManager(User u) =>
@@ -446,17 +448,19 @@ namespace Pos.Persistence.Features.Transfers
             if (lines.Count == 0) throw new InvalidOperationException("No lines to dispatch.");
 
             // 1) Guard: no negative at source on the selected date
+            // 1) Guard: no negative at source on the selected date
             var deltas = lines
                 .Where(l => l.QtyExpected > 0m)
-                .Select(l => (
-                    itemId: l.ItemId,
-                    outletId: (fromType == InventoryLocationType.Outlet) ? fromId : 0, // outlet aggregate if you track one
-                    locType: fromType,
-                    locId: fromId,
-                    delta: -l.QtyExpected))
+                .Select(l => new StockDeltaDto(
+                    ItemId: l.ItemId,
+                    OutletId: (fromType == InventoryLocationType.Outlet) ? fromId : 0,
+                    LocType: fromType,
+                    LocId: fromId,
+                    Delta: -l.QtyExpected))
                 .ToArray();
 
             await _guard.EnsureNoNegativeAtLocationAsync(deltas, atUtc: effectiveUtc);
+
 
             // 2) Ledger entries
             var entries = new List<StockEntry>();

@@ -4,18 +4,18 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Hr;
-using Pos.Persistence.Services;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class StaffView : UserControl
     {
-        private readonly StaffService _svc;
+        private readonly IStaffService _svc;
 
         public StaffView()
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<StaffService>();
+            _svc = App.Services.GetRequiredService<IStaffService>();
             Loaded += async (_, __) => await RefreshAsync();
         }
 

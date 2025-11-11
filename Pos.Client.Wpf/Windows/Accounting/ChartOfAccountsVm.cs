@@ -17,7 +17,8 @@ using System; // <-- add this
 using Pos.Domain.Accounting; // 👈 add this
 using Pos.Persistence.Sync;                 // IOutboxWriter
 using Microsoft.Extensions.DependencyInjection; // App.Services.GetRequiredService
-
+using Pos.Domain.Services;        // IOutboxWriter
+using Pos.Domain.Models.Accounting;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
@@ -78,8 +79,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
     // ---------- ViewModel ----------
     public partial class ChartOfAccountsVm : ObservableObject, IDisposable
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
-        private readonly IOutboxWriter _outbox;   // NEW
+        private readonly ICoaService _coa;   // NEW
 
         // Hierarchical roots (unused by the view directly, but used to build Flat)
         public ObservableCollection<AccountNode> Roots { get; } = new();
@@ -170,10 +170,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             return name;
         }
 
-        public ChartOfAccountsVm(IDbContextFactory<PosClientDbContext> dbf)
+        public ChartOfAccountsVm(ICoaService coa)
         {
-            _dbf = dbf;
-            _outbox = App.Services.GetRequiredService<IOutboxWriter>(); // NEW
+            _coa = coa;
             AppEvents.AccountsChanged += OnAccountsChanged;
         }
 
@@ -212,14 +211,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [RelayCommand]
         public async Task LoadAsync()
         {
-            using var db = _dbf.CreateDbContext();
             var canEdit = CanEditOpenings();
+            var rows = await _coa.GetAllAsync();
 
-            var accounts = await db.Accounts.AsNoTracking()
-                                .OrderBy(a => a.Code)
-                                .ToListAsync();
-
-            var nodes = accounts.ToDictionary(
+            var nodes = rows.ToDictionary(
                 a => a.Id,
                 a => new AccountNode
                 {
@@ -233,29 +228,27 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     OpeningCredit = a.OpeningCredit,
                     IsOpeningLocked = a.IsOpeningLocked,
                     CanEditOpenings = canEdit,
-                    IsSystem = a.IsSystem,          // <- NEW
-                    SystemKey = a.SystemKey   // 👈 add this line
+                    IsSystem = a.IsSystem,
+                    SystemKey = a.SystemKey
                 });
 
             Roots.Clear();
-            foreach (var a in accounts)
+            foreach (var a in rows)
             {
                 if (a.ParentId.HasValue && nodes.TryGetValue(a.ParentId.Value, out var parent))
                     parent.Children.Add(nodes[a.Id]);
                 else
                     Roots.Add(nodes[a.Id]);
             }
-            // reset default: expand all nodes that have children the first time
+
             _expanded.Clear();
             foreach (var r in Roots)
-            {
                 foreach (var n in Enumerate(r))
-                    if (n.Children.Any())
-                        _expanded.Add(n.Id);
-            }
+                    if (n.Children.Any()) _expanded.Add(n.Id);
 
             RebuildFlat();
         }
+
 
         private bool CanRenameSelected()
     => SelectedNode != null
@@ -278,97 +271,34 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
         public async Task NewHeaderAsync()
         {
-            if (!CanManageCoA()) return;
-
-            if (SelectedNode is null)
+            if (!CanManageCoA() || SelectedNode is null) return;
+            if (!CanHaveChildren(SelectedNode) || IsPartyTree(SelectedNode))
             {
-                MessageBox.Show("Select a parent header first.", "Chart of Accounts");
-                return;
-            }
-            if (!CanHaveChildren(SelectedNode))
-            {
-                MessageBox.Show("You cannot add under a posting account. Convert it to a header (no posting) first.", "Chart of Accounts");
-                return;
-            }
-            if (IsPartyTree(SelectedNode))
-            {
-                MessageBox.Show("Party accounts are managed from their own forms. You cannot create headers inside Parties.", "Chart of Accounts");
+                MessageBox.Show("Select a header (non-posting) under a non-Party branch.", "Chart of Accounts");
                 return;
             }
 
-            using var db = _dbf.CreateDbContext();
-            var parent = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
-            if (parent == null) return;
             var name = AskName("Header name:", "New Header");
-            var code = await GenerateNextChildCodeAsync(db, parent, forHeader: true);
-            var acc = new Account
-            {
-                Code = code,
-                Name = name,
-                Type = parent.Type,                   // inherit reporting bucket
-                NormalSide = DefaultNormalFor(parent.Type), // implied by bucket
-                IsHeader = true,
-                AllowPosting = false,
-                ParentId = parent.Id,
-                OutletId = parent.OutletId
-            };
-
-            db.Accounts.Add(acc);
-            await db.SaveChangesAsync();
-            // SYNC: broadcast the new account
-            await _outbox.EnqueueUpsertAsync(db, acc);
-            await db.SaveChangesAsync();
+            await _coa.CreateHeaderAsync(SelectedNode.Id, name);
             await LoadAsync();
         }
+
 
         [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
         public async Task NewAccountAsync()
         {
-            if (!CanManageCoA()) return;
-
-            if (SelectedNode is null)
+            if (!CanManageCoA() || SelectedNode is null) return;
+            if (!CanHaveChildren(SelectedNode) || IsPartyTree(SelectedNode))
             {
-                MessageBox.Show("Select a parent header first.", "Chart of Accounts");
+                MessageBox.Show("Select a header (non-posting) under a non-Party branch.", "Chart of Accounts");
                 return;
             }
-            if (!CanHaveChildren(SelectedNode))
-            {
-                MessageBox.Show("You cannot add under a posting account. Convert it to a header (no posting) first.", "Chart of Accounts");
-                return;
-            }
-            if (IsPartyTree(SelectedNode))
-            {
-                MessageBox.Show("Party accounts are managed from their own forms. You cannot create accounts inside Parties.", "Chart of Accounts");
-                return;
-            }
-
-
-            using var db = _dbf.CreateDbContext();
-            var parent = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
-            if (parent == null) return;
 
             var name = AskName("Account name:", "New Account");
-            var code = await GenerateNextChildCodeAsync(db, parent, forHeader: false);
-
-            var acc = new Account
-            {
-                Code = code,
-                Name = name,
-                Type = parent.Type,                   // inherit reporting bucket
-                NormalSide = DefaultNormalFor(parent.Type), // implied by bucket
-                IsHeader = false,
-                AllowPosting = true,                          // leaf = posting
-                ParentId = parent.Id,
-                OutletId = parent.OutletId
-            };
-
-            db.Accounts.Add(acc);
-            await db.SaveChangesAsync();
-            // SYNC
-            await _outbox.EnqueueUpsertAsync(db, acc);
-            await db.SaveChangesAsync();
+            await _coa.CreateAccountAsync(SelectedNode.Id, name);
             await LoadAsync();
         }
+
 
 
 
@@ -377,27 +307,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public async Task AddCashForOutletAsync()
         {
             if (!CanManageCoA()) return;
-
-            using var db = _dbf.CreateDbContext();
-            var outlet = await db.Outlets.AsNoTracking().FirstOrDefaultAsync();
-            if (outlet == null) return;
-
-            var code = $"CASH-{outlet.Code}";
-            var exists = await db.Accounts.AnyAsync(a => a.OutletId == outlet.Id && a.Code == code);
-            if (!exists)
-            {
-                db.Accounts.Add(new Account
-                {
-                    Code = code,
-                    Name = $"Cash — {outlet.Name}",
-                    Type = AccountType.Asset,
-                    NormalSide = NormalSide.Debit,
-                    IsHeader = false,
-                    AllowPosting = true,
-                    OutletId = outlet.Id
-                });
-                await db.SaveChangesAsync();
-            }
+            await _coa.AddCashForOutletAsync();
             await LoadAsync();
         }
 
@@ -405,168 +315,92 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public async Task AddStaffAccountAsync()
         {
             if (!CanManageCoA()) return;
-
-            using var db = _dbf.CreateDbContext();
-            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync();
-            if (user == null) return;
-
-            var code = $"STAFF-{user.Username}";
-            var exists = await db.Accounts.AnyAsync(a => a.Code == code);
-            if (!exists)
-            {
-                var acc = new Account
-                {
-                    Code = code,
-                    Name = $"Staff — {user.Username}",
-                    Type = AccountType.Asset,
-                    NormalSide = NormalSide.Debit,
-                    IsHeader = false,
-                    AllowPosting = true
-                };
-                db.Accounts.Add(acc);
-                await db.SaveChangesAsync();
-
-                // SYNC
-                await _outbox.EnqueueUpsertAsync(db, acc);
-                await db.SaveChangesAsync();
-
-
-            }
+            await _coa.AddStaffAccountAsync();
             await LoadAsync();
         }
+
 
         // ---- Lock & save openings ----
         [RelayCommand]
         public async Task LockOpeningsAsync()
         {
             if (!CanLockOpenings()) return;
-
-            using var db = _dbf.CreateDbContext();
-            var rows = await db.Accounts.Where(a => !a.IsOpeningLocked).ToListAsync();
-            foreach (var a in rows) a.IsOpeningLocked = true;
-            await db.SaveChangesAsync();
-            foreach (var a in rows)
-                await _outbox.EnqueueUpsertAsync(db, a);
-            await db.SaveChangesAsync();
+            await _coa.LockAllOpeningsAsync();
             await LoadAsync();
         }
+
 
         [RelayCommand]
         public async Task SaveOpeningsAsync()
         {
             if (!CanEditOpenings()) return;
 
-            using var db = _dbf.CreateDbContext();
-
             var editable = AllNodes()
-                .Where(n => !n.IsHeader
-                && !n.IsOpeningLocked 
-                && n.CanEditOpenings
-                && n.SystemKey != SystemAccountKey.CashInTillOutlet)
-              .ToList();
+                .Where(n => !n.IsHeader && !n.IsOpeningLocked && n.CanEditOpenings && n.SystemKey != SystemAccountKey.CashInTillOutlet)
+                .Select(n => new OpeningChange(n.Id, n.OpeningDebit, n.OpeningCredit))
+                .ToList();
+
             if (editable.Count == 0) return;
 
-            var ids = editable.Select(n => n.Id).ToArray();
-            var dbAccounts = await db.Accounts.Where(a => ids.Contains(a.Id)).ToListAsync();
-
-            foreach (var a in dbAccounts)
+            try
             {
-                if (a.OpeningDebit != 0m && a.OpeningCredit != 0m)
-                {
-                    MessageBox.Show($"Opening for {a.Code} has both Dr and Cr. Please keep only one side.", "Openings");
-                    return;
-                }
-                if (a.SystemKey == SystemAccountKey.CashInTillOutlet)
-                    throw new InvalidOperationException("Opening balance is not allowed for 'Cash in Till' accounts.");
-
-                var vm = editable.First(n => n.Id == a.Id);
-                a.OpeningDebit = vm.OpeningDebit;
-                a.OpeningCredit = vm.OpeningCredit;
+                await _coa.SaveOpeningsAsync(editable);
+                await LoadAsync();
             }
-
-            await db.SaveChangesAsync();
-            // SYNC (bulk)
-            foreach (var a in dbAccounts)
-                await _outbox.EnqueueUpsertAsync(db, a);
-            await db.SaveChangesAsync();
-            await LoadAsync();
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Openings");
+            }
         }
+
 
         // ---- Edit/Delete ----
         [RelayCommand(CanExecute = nameof(CanRenameSelected))]
         public async Task EditAccountAsync()
         {
-            if (!CanManageCoA()) return;
-            if (SelectedNode is null) return;
-            if (IsPartyTree(SelectedNode))
+            if (!CanManageCoA() || SelectedNode is null) return;
+            if (IsPartyTree(SelectedNode)) { MessageBox.Show("Party accounts are managed from their own forms."); return; }
+            if (SelectedNode.IsSystem) { MessageBox.Show("System accounts cannot be edited."); return; }
+
+            var newCode = Prompt("Account Code:", SelectedNode.Code) ?? SelectedNode.Code;
+            var newName = Prompt("Account Name:", SelectedNode.Name) ?? SelectedNode.Name;
+            var isHeader = MessageBoxYesNo("Mark as Header (no posting)?", SelectedNode.IsHeader);
+            var allowPosting = !isHeader && MessageBoxYesNo("Allow Posting on this account?", SelectedNode.AllowPosting);
+
+            try
             {
-                MessageBox.Show("Party accounts are managed from their own forms. Edit is disabled here.", "Chart of Accounts");
-                return;
+                await _coa.EditAsync(new AccountEdit(SelectedNode.Id, newCode, newName, isHeader, allowPosting));
+                await LoadAsync();
             }
-
-            using var db = _dbf.CreateDbContext();
-            var acc = await db.Accounts.FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
-            if (acc == null) return;
-
-            var newCode = Prompt("Account Code:", acc.Code);
-            var newName = Prompt("Account Name:", acc.Name);
-            var isHeader = MessageBoxYesNo("Mark as Header (no posting)?", acc.IsHeader);
-            var allowPosting = !isHeader && MessageBoxYesNo("Allow Posting on this account?", acc.AllowPosting);
-
-            acc.Code = string.IsNullOrWhiteSpace(newCode) ? acc.Code : newCode.Trim();
-            acc.Name = string.IsNullOrWhiteSpace(newName) ? acc.Name : newName.Trim();
-            acc.IsHeader = isHeader;
-            acc.AllowPosting = allowPosting;
-
-            await db.SaveChangesAsync();
-            // SYNC
-            await _outbox.EnqueueUpsertAsync(db, acc);
-            await db.SaveChangesAsync();
-            await LoadAsync();
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Edit Account");
+            }
         }
+
 
         [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
         public async Task DeleteAccountAsync()
         {
-            if (!CanManageCoA()) return;
-            if (SelectedNode is null) return;
-            if (IsPartyTree(SelectedNode))
+            if (!CanManageCoA() || SelectedNode is null) return;
+            if (IsPartyTree(SelectedNode)) { MessageBox.Show("Party accounts are managed from their own forms."); return; }
+
+            if (MessageBox.Show($"Delete account '{SelectedNode.Code} - {SelectedNode.Name}'?",
+                "Confirm", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+
+            try
             {
-                MessageBox.Show("Party accounts are managed from their own forms. Delete is disabled here.", "Chart of Accounts");
-                return;
+                await _coa.DeleteAsync(SelectedNode.Id);
+                await LoadAsync();
             }
-
-            using var db = _dbf.CreateDbContext();
-            var acc = await db.Accounts.FirstOrDefaultAsync(a => a.Id == SelectedNode.Id);
-            if (acc == null) return;
-
-            var hasChildren = await db.Accounts.AnyAsync(a => a.ParentId == acc.Id);
-            if (acc.IsSystem || hasChildren)
+            catch (Exception ex)
             {
-                MessageBox.Show("Cannot delete system or parent accounts.", "Chart of Accounts");
-                return;
+                MessageBox.Show(ex.Message, "Delete Account");
             }
-
-            var usedInGl = await db.JournalLines.AnyAsync(l => l.AccountId == acc.Id);
-            var usedByParty = await db.Parties.AnyAsync(p => p.AccountId == acc.Id);
-            if (usedInGl || usedByParty)
-            {
-                MessageBox.Show("This account is in use and cannot be deleted.", "Chart of Accounts");
-                return;
-            }
-
-            if (MessageBox.Show($"Delete account '{acc.Code} - {acc.Name}'?", "Confirm", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
-                return;
-            db.Accounts.Remove(acc);
-            await db.SaveChangesAsync();
-            // SYNC (delete)
-            await _outbox.EnqueueDeleteAsync(db, nameof(Account), acc.PublicId);
-            await db.SaveChangesAsync();
-
-            await LoadAsync();
         }
 
-        
+
+
         // ---- Expand/Collapse for GridView pseudo-tree ----
         [RelayCommand]
         private void ToggleExpandCmd(AccountFlatRow row)

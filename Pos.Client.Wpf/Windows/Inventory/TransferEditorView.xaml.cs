@@ -13,6 +13,8 @@ using Pos.Persistence.Features.Transfers;
 using Pos.Client.Wpf.Services; // AppState
 using Pos.Domain.Formatting;
 using System.Windows.Media;
+//using Pos.Persistence.Services;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Inventory
 {
@@ -28,36 +30,35 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private decimal _availableOnHand = 0m;
 
 
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        //private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        //private readonly ITransferService _svc;
+        //private readonly AppState _state;
         private readonly ITransferService _svc;
+        private readonly ITransferQueries _queries;
+        private readonly ILookupService _lookups;
+        private readonly IInventoryReadService _invRead;
         private readonly AppState _state;
 
         private StockDoc? _doc;
         private ObservableCollection<StockDocLine> _lines = new();
 
-        public TransferEditorView(
-            IDbContextFactory<PosClientDbContext> dbf,
-            ITransferService svc,
-            AppState state)
+        public TransferEditorView(ITransferService svc, ITransferQueries queries, ILookupService lookups, IInventoryReadService invRead, AppState state)
         {
             InitializeComponent();
-            _dbf = dbf;
             _svc = svc;
+            _queries = queries;
+            _lookups = lookups;
+            _invRead = invRead;
             _state = state;
             Loaded += OnLoaded;
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            using var db = await _dbf.CreateDbContextAsync();
-
             var u = _state.CurrentUser;
             bool canPickSource = u.IsGlobalAdmin || u.Role == UserRole.Admin || u.Role == UserRole.Manager;
-
-            // load into fields (not locals)
-            _whs = await db.Warehouses.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
-            _outs = await db.Outlets.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
-
+            _whs = (await _lookups.GetWarehousesAsync()).ToList();
+            _outs = (await _lookups.GetOutletsAsync()).ToList();
             // defaults
             FromTypeBox.SelectedIndex = 0; // Warehouse
             ToTypeBox.SelectedIndex = 1; // Outlet
@@ -77,11 +78,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 FromTypeBox.SelectedIndex = 1; // force Outlet for outlet user
                 RebindPickerForType(FromTypeBox, FromPicker);
 
-                var myOutId = await db.Set<UserOutlet>().AsNoTracking()
-                    .Where(x => x.UserId == u.Id)
-                    .Select(x => x.OutletId)
-                    .FirstOrDefaultAsync();
-
+                var myOutId = (await _lookups.GetUserOutletIdsAsync(u.Id)).FirstOrDefault();
                 if (myOutId > 0) FromPicker.SelectedValue = myOutId;
                 FromTypeBox.IsEnabled = false;
                 FromPicker.IsEnabled = false;
@@ -219,66 +216,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private async void BtnAddLine_Click(object sender, RoutedEventArgs e)
         {
-            //var term = (SearchBox.Text ?? "").Trim();
-            //if (string.IsNullOrWhiteSpace(term)) return;
-
-            //try
-            //{
-            //    using var db = await _dbf.CreateDbContextAsync();
-
-            //    // Search by barcode/sku/name
-            //    int itemId = 0;
-            //    itemId = await db.ItemBarcodes.AsNoTracking().Where(b => b.Code == term).Select(b => b.ItemId).FirstOrDefaultAsync();
-            //    if (itemId == 0)
-            //        itemId = await db.Items.AsNoTracking().Where(i => i.Sku == term).Select(i => i.Id).FirstOrDefaultAsync();
-            //    if (itemId == 0)
-            //        itemId = await db.Items.AsNoTracking()
-            //                   .Where(i => EF.Functions.Like(i.Name, $"{term}%") || EF.Functions.Like(i.Name, $"%{term}%"))
-            //                   .OrderBy(i => i.Name).Select(i => i.Id).FirstOrDefaultAsync();
-
-            //    if (itemId == 0) throw new InvalidOperationException("Item not found.");
-
-            //    var it = await db.Items.AsNoTracking()
-            //        .Where(x => x.Id == itemId)
-            //        .Select(x => new {
-            //            x.Id,
-            //            x.Sku,
-            //            x.Name,
-            //            Product = x.Product != null ? x.Product.Name : null,
-            //            x.Variant1Name,
-            //            x.Variant1Value,
-            //            x.Variant2Name,
-            //            x.Variant2Value
-            //        })
-            //        .FirstAsync();
-
-            //    var name = ProductNameComposer.Compose(it.Product, it.Name, it.Variant1Name, it.Variant1Value, it.Variant2Name, it.Variant2Value);
-
-            //    var existing = _lines.FirstOrDefault(l => l.ItemId == itemId && l.Id == 0);
-            //    if (existing == null)
-            //    {
-            //        _lines.Add(new StockDocLine
-            //        {
-            //            ItemId = it.Id,
-            //            SkuSnapshot = it.Sku ?? "",
-            //            ItemNameSnapshot = name,
-            //            QtyExpected = 1m,
-            //            Remarks = ""
-            //        });
-            //    }
-            //    else
-            //    {
-            //        existing.QtyExpected += 1m;
-            //    }
-
-            //    LinesGrid.Items.Refresh();
-            //    LinesCountText.Text = _lines.Count.ToString();
-            //    SearchBox.SelectAll();
-            //}
-            //catch (Exception ex)
-            //{
-            //    MessageBox.Show(ex.Message, "Add failed", MessageBoxButton.OK, MessageBoxImage.Error);
-            //}
         }
 
         private async void BtnSaveDraft_Click(object sender, RoutedEventArgs e)
@@ -340,15 +277,14 @@ namespace Pos.Client.Wpf.Windows.Inventory
             // Reuse your existing TransferPickerWindow in Receipts mode
             try
             {
-                var picker = new TransferPickerWindow(App.Services, _dbf, new TransferQueries(_dbf), _state, TransferPickerWindow.PickerMode.Receipts);
+                //var picker = new TransferPickerWindow(App.Services, _dbf, new TransferQueries(_dbf), _state, TransferPickerWindow.PickerMode.Receipts);
+                var picker = new TransferPickerWindow(_queries, _lookups, _state, TransferPickerWindow.PickerMode.Receipts);
                 if (picker.ShowDialog() == true && picker.SelectedTransferId.HasValue)
                 {
-                    using var db = await _dbf.CreateDbContextAsync();
-                    _doc = await db.StockDocs.AsNoTracking().FirstOrDefaultAsync(d => d.Id == picker.SelectedTransferId.Value);
-                    if (_doc == null) throw new InvalidOperationException("Transfer not found.");
-                    // load lines to grid for review
-                    var rows = await db.StockDocLines.AsNoTracking().Where(l => l.StockDocId == _doc.Id).OrderBy(l => l.Id).ToListAsync();
-                    _lines = new ObservableCollection<StockDocLine>(rows);
+                    var payload = await _queries.GetWithLinesAsync(picker.SelectedTransferId.Value);
+                    if (payload is null) throw new InvalidOperationException("Transfer not found.");
+                    _doc = payload.Value.Doc;
+                    _lines = new ObservableCollection<StockDocLine>(payload.Value.Lines);
                     LinesGrid.ItemsSource = _lines;
                     LinesCountText.Text = _lines.Count.ToString();
                 }
@@ -397,7 +333,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             }
         }
 
-        private async void DeleteLine_Click(object sender, RoutedEventArgs e)
+        private void DeleteLine_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not FrameworkElement fe || fe.DataContext is not StockDocLine line) return;
 
@@ -626,7 +562,10 @@ namespace Pos.Client.Wpf.Windows.Inventory
             try
             {
                 var (fromType, fromId, _, _) = GetHeader();
-                _availableOnHand = await GetOnHandAsync(itemId, fromType, fromId);
+                //_availableOnHand = await GetOnHandAsync(itemId, fromType, fromId);
+                var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
+                var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
+                _availableOnHand = await _invRead.GetOnHandAsync(itemId, fromType, fromId, cutoffUtc);
                 AvailableText.Text = $"Available: {_availableOnHand:0.####}";
             }
             catch
@@ -637,25 +576,25 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
         // On-hand at the Source (up to selected EffectiveDate end-of-day)
-        private async Task<decimal> GetOnHandAsync(int itemId, InventoryLocationType locType, int locId)
-        {
-            if (locId <= 0) return 0m;
+        //private async Task<decimal> GetOnHandAsync(int itemId, InventoryLocationType locType, int locId)
+        //{
+        //    if (locId <= 0) return 0m;
 
-            using var db = await _dbf.CreateDbContextAsync();
+        //    using var db = await _dbf.CreateDbContextAsync();
 
-            var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
-            var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
+        //    var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
+        //    var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
 
-            var onHand = await db.Set<StockEntry>()
-                .AsNoTracking()
-                .Where(e => e.ItemId == itemId
-                         && e.LocationType == locType
-                         && e.LocationId == locId
-                         && e.Ts < cutoffUtc) // exclusive
-                .SumAsync(e => (decimal?)e.QtyChange) ?? 0m;
+        //    var onHand = await db.Set<StockEntry>()
+        //        .AsNoTracking()
+        //        .Where(e => e.ItemId == itemId
+        //                 && e.LocationType == locType
+        //                 && e.LocationId == locId
+        //                 && e.Ts < cutoffUtc) // exclusive
+        //        .SumAsync(e => (decimal?)e.QtyChange) ?? 0m;
 
-            return Math.Max(onHand, 0m);
-        }
+        //    return Math.Max(onHand, 0m);
+        //}
 
         private async void LinesGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
@@ -669,7 +608,9 @@ namespace Pos.Client.Wpf.Windows.Inventory
                         var (fromType, fromId, _, _) = GetHeader();
 
                         // On-hand at source (up to end-of-day of EffectiveDate)
-                        var onHand = await GetOnHandAsync(row.ItemId, fromType, fromId);
+                        var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
+                        var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
+                        var onHand = await _invRead.GetOnHandAsync(row.ItemId, fromType, fromId, cutoffUtc);
 
                         // Other staged rows for the same item (exclude the row being edited)
                         var stagedOther = _lines
@@ -706,22 +647,22 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
 
-        private async Task FocusItemSearchAsync()
-        {
-            // First hop: let DataGrid finish committing
-            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
-            // Second hop: ensure editors are closed and focus changes stick
-            await Dispatcher.InvokeAsync(() =>
-            {
-                try
-                {
-                    ItemSearch.Focus();
-                    Keyboard.Focus(ItemSearch);
-                    HideAvailableBadge(); // badge must be hidden as we left the grid
-                }
-                catch { /* ignore */ }
-            }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        }
+        //private async Task FocusItemSearchAsync()
+        //{
+        //    // First hop: let DataGrid finish committing
+        //    await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+        //    // Second hop: ensure editors are closed and focus changes stick
+        //    await Dispatcher.InvokeAsync(() =>
+        //    {
+        //        try
+        //        {
+        //            ItemSearch.Focus();
+        //            Keyboard.Focus(ItemSearch);
+        //            HideAvailableBadge(); // badge must be hidden as we left the grid
+        //        }
+        //        catch { /* ignore */ }
+        //    }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        //}
 
         private void BtnClear_Click(object sender, RoutedEventArgs e)
         {

@@ -1,11 +1,15 @@
-﻿using System;
+﻿// Pos.Client.Wpf/Windows/Accounting/CashBookVm.cs
+using System;
 using System.Collections.ObjectModel;
-using System.Runtime.InteropServices;
+using System.Linq;                             // ← add
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Pos.Client.Wpf.Services;
+using Pos.Client.Wpf.Infrastructure;           // ← add (AuthZ, AppState)
 using Pos.Domain.Entities;
+using Pos.Domain.Services;
+using Pos.Domain.Models.Accounting;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
@@ -16,8 +20,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [ObservableProperty] private decimal debit;
         [ObservableProperty] private decimal credit;
         [ObservableProperty] private decimal running;
-        // NEW:
-        [ObservableProperty] private string? sourceRef;   // e.g., "PO #1023 · Till T-03" or "Voucher PMT-45"
+        [ObservableProperty] private string? sourceRef;
         [ObservableProperty] private bool isVoided;
         [ObservableProperty] private int? tillId;
     }
@@ -26,8 +29,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
     {
         private readonly ILedgerQueryService _ledger;
         private readonly IOutletService _outlets;
-        [ObservableProperty] private bool includeVoided;  // bound to checkbox
-        [ObservableProperty] private CashBookScope scope = CashBookScope.HandOnly; // NEW
+
+        [ObservableProperty] private bool includeVoided;
+        [ObservableProperty] private CashBookScope scope = CashBookScope.HandOnly;
 
         public ObservableCollection<Outlet> OutletChoices { get; } = new();
         [ObservableProperty] private Outlet? selectedOutlet;
@@ -37,7 +41,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
         [ObservableProperty] private decimal opening;
         [ObservableProperty] private decimal closing;
-       
+
         public ObservableCollection<CashBookRowVm> Rows { get; } = new();
 
         public IAsyncRelayCommand RefreshCmd { get; }
@@ -65,15 +69,12 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 var myOutletId = AppState.Current.CurrentOutletId;
                 var mine = all.Where(o => o.Id == myOutletId).ToList();
 
-                OutletChoices.Clear();
                 foreach (var o in mine) OutletChoices.Add(o);
-
                 SelectedOutlet = OutletChoices.FirstOrDefault();
             }
 
             await RefreshAsync();
         }
-
 
         private async Task RefreshAsync()
         {
@@ -81,27 +82,20 @@ namespace Pos.Client.Wpf.Windows.Accounting
             Opening = Closing = 0m;
             if (SelectedOutlet == null) return;
 
-            // Prefer a richer API for cash book rows if available
             try
             {
-                // NEW: use outlet directly so we can attach till/source/void filters
-                //var (op2, rows2, cl2) = await _ledger.GetCashBookAsync(
-                //    SelectedOutlet.Id,
-                //    FromDate,
-                //    ToDate.AddDays(1).AddTicks(-1),
-                //    IncludeVoided);
-
-                var (op2, rows2, cl2) = await _ledger.GetCashBookAsync(
+                // Use a temp variable instead of tuple deconstruction to avoid CS8130
+                var result = await _ledger.GetCashBookAsync(
                     SelectedOutlet.Id,
                     FromDate,
                     ToDate.AddDays(1).AddTicks(-1),
                     IncludeVoided,
-                    Scope); // NEW
+                    Scope);
 
+                Opening = result.opening;
+                Closing = result.closing;
 
-                Opening = op2; Closing = cl2;
-
-                foreach (var r in rows2)
+                foreach (var r in result.rows)
                 {
                     Rows.Add(new CashBookRowVm
                     {
@@ -110,7 +104,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                         Debit = r.Debit,
                         Credit = r.Credit,
                         Running = r.Running,
-                        SourceRef = r.SourceRef,  // "PO #x", "Sale #x", "Voucher PMT-xx", optionally " · Till T-yy"
+                        SourceRef = r.SourceRef,
                         IsVoided = r.IsVoided,
                         TillId = r.TillId
                     });
@@ -126,24 +120,25 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 // fall through to legacy path if the new method is not yet wired
             }
 
-            // LEGACY PATH (keeps your current behavior; no void/source info)
+            // LEGACY PATH (Cash-in-Hand only)
             var cashId = await _ledger.GetOutletCashAccountIdAsync(SelectedOutlet.Id);
-            var (op, rows, cl) = await _ledger.GetAccountLedgerAsync(
+            var legacy = await _ledger.GetAccountLedgerAsync(
                 cashId, FromDate, ToDate.AddDays(1).AddTicks(-1));
 
-            Opening = op; Closing = cl;
+            Opening = legacy.opening;
+            Closing = legacy.closing;
 
-            foreach (var r in rows)
+            foreach (var r in legacy.rows)
+            {
                 Rows.Add(new CashBookRowVm
                 {
                     TsUtc = r.TsUtc,
                     Memo = r.Memo,
                     Debit = r.Debit,
                     Credit = r.Credit,
-                    Running = r.Running,
-                    // SourceRef/IsVoided/TillId unavailable in legacy path
+                    Running = r.Running
                 });
+            }
         }
-
     }
 }

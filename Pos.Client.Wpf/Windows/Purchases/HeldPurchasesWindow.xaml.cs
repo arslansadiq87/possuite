@@ -1,50 +1,48 @@
-﻿using System;
+﻿// Pos.Client.Wpf/Windows/Purchases/HeldPurchasesWindow.xaml.cs
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using Microsoft.EntityFrameworkCore;
-using Pos.Client.Wpf.Services;
-using Pos.Domain.Entities;
-using Pos.Persistence;
-//using Pos.Persistence.Services;
+using Pos.Client.Wpf.Services;   // IPurchaseCenterReadService, AppState
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
     public partial class HeldPurchasesWindow : Window
     {
-        private readonly DbContextOptions<PosClientDbContext> _opts;
-        //private readonly PurchasesService _svc;
+        private readonly IPurchaseCenterReadService _read;
 
         public int? SelectedPurchaseId { get; private set; }
 
-        public class UiDraftRow
+        public sealed class UiDraftRow
         {
-            public int PurchaseId { get; set; }
-            public string DocNoOrId { get; set; } = "";
-            public string Supplier { get; set; } = "";
-            public string TsLocal { get; set; } = "";
-            public int Lines { get; set; }
-            public decimal GrandTotal { get; set; }
+            public int PurchaseId { get; init; }
+            public string DocNoOrId { get; init; } = "";
+            public string Supplier { get; init; } = "";
+            public string TsLocal { get; init; } = "";
+            public int Lines { get; init; }
+            public decimal GrandTotal { get; init; }
         }
 
         private readonly ObservableCollection<UiDraftRow> _rows = new();
         private List<UiDraftRow> _all = new();
 
-        public HeldPurchasesWindow(DbContextOptions<PosClientDbContext> opts)
+        public HeldPurchasesWindow(IPurchaseCenterReadService read)
         {
             InitializeComponent();
-            _opts = opts;
-            //_svc = new PurchasesService(new PosClientDbContext(_opts));
+            _read = read;
+
             DraftsGrid.ItemsSource = _rows;
-            Loaded += HeldPurchasesWindow_Loaded;
+            Loaded += OnLoadedAsync;
         }
 
-        private async void HeldPurchasesWindow_Loaded(object sender, RoutedEventArgs e)
+        // ===== Load & guard =====
+        private async void OnLoadedAsync(object? sender, RoutedEventArgs e)
         {
-            var outletId = AppState.Current.CurrentOutletId;
-            var counterId = AppState.Current.CurrentCounterId;
+            var outletId = AppState.Current?.CurrentOutletId ?? 0;
+            var counterId = AppState.Current?.CurrentCounterId ?? 0;
 
             if (outletId <= 0 || counterId <= 0)
             {
@@ -58,29 +56,68 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 return;
             }
 
-            using var db = new PosClientDbContext(_opts);
-            var results = await db.Purchases
-                .AsNoTracking()
-                .Include(p => p.Party)   // bring supplier names
-                .Include(p => p.Lines)      // bring line counts
-                .Where(p => p.OutletId == outletId && p.Status == PurchaseStatus.Draft)
-                .OrderByDescending(p => p.CreatedAtUtc)
-                .Select(p => new UiDraftRow
-                {
-                    PurchaseId = p.Id,
-                    DocNoOrId = string.IsNullOrWhiteSpace(p.DocNo) ? $"#{p.Id}" : p.DocNo!,
-                    Supplier = string.IsNullOrWhiteSpace(p.Party!.Name) ? "—" : p.Party!.Name,
-                    TsLocal = (p.UpdatedAtUtc ?? p.CreatedAtUtc).ToLocalTime().ToString("dd-MMM-yyyy HH:mm"),
-                    Lines = p.Lines.Count,
-                    GrandTotal = p.GrandTotal
-                })
-                .ToListAsync();
-
-            _all = results;
-            ApplyFilter();
+            try
+            {
+                await LoadDraftsAsync();
+                ApplyFilter();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to load held purchases: " + ex.Message,
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                DialogResult = false;
+                Close();
+            }
         }
 
+        private async Task LoadDraftsAsync()
+        {
+            // Fetch drafts via read service (no EF here)
+            // Filters: Draft=true, Final=false, Voided=false, Include those without DocNo as well.
+            var list = await _read.SearchAsync(
+                fromUtc: null,
+                toUtc: null,
+                term: null,
+                wantFinal: false,
+                wantDraft: true,
+                wantVoided: false,
+                onlyWithDoc: false);
 
+            // Only pure purchases (no returns)
+            var drafts = list.Where(r => !r.IsReturn).ToList();
+
+            // Build rows; compute Lines count via preview lines (service call)
+            // If there are many, this can be optimized later (batch/DTO).
+            var rows = new List<UiDraftRow>(drafts.Count);
+            foreach (var d in drafts)
+            {
+                int lines = 0;
+                try
+                {
+                    var preview = await _read.GetPreviewLinesAsync(d.PurchaseId);
+                    lines = preview?.Count ?? 0;
+                }
+                catch
+                {
+                    // If preview fails for a document, keep going; show 0 lines.
+                }
+
+                rows.Add(new UiDraftRow
+                {
+                    PurchaseId = d.PurchaseId,
+                    DocNoOrId = d.DocNoOrId,
+                    Supplier = d.Supplier,
+                    TsLocal = d.TsLocal,
+                    Lines = lines,
+                    GrandTotal = d.GrandTotal
+                });
+            }
+
+            // Preserve ordering (SearchAsync already orders by ReceivedAt/CreatedAt desc)
+            _all = rows;
+        }
+
+        // ===== Filtering =====
         private void ApplyFilter()
         {
             var term = (SearchBox.Text ?? "").Trim();
@@ -89,28 +126,40 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (!string.IsNullOrWhiteSpace(term))
             {
                 src = src.Where(r =>
-                    r.Supplier.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                    r.DocNoOrId.Contains(term, StringComparison.OrdinalIgnoreCase));
+                    (!string.IsNullOrEmpty(r.Supplier) &&
+                        r.Supplier.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    || (!string.IsNullOrEmpty(r.DocNoOrId) &&
+                        r.DocNoOrId.Contains(term, StringComparison.OrdinalIgnoreCase)));
             }
 
             _rows.Clear();
             foreach (var r in src) _rows.Add(r);
         }
 
-        private void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => ApplyFilter();
+        private void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+            => ApplyFilter();
 
+        // ===== Open / Close =====
         private void DraftsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e) => OpenSelected();
         private void Open_Click(object sender, RoutedEventArgs e) => OpenSelected();
 
         private void OpenSelected()
         {
-            if (DraftsGrid.SelectedItem is not UiDraftRow row) { MessageBox.Show("Select a draft."); return; }
+            if (DraftsGrid.SelectedItem is not UiDraftRow row)
+            {
+                MessageBox.Show("Select a draft.");
+                return;
+            }
             SelectedPurchaseId = row.PurchaseId;
             DialogResult = true;
             Close();
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            DialogResult = false;
+            Close();
+        }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {

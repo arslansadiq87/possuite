@@ -1,12 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Domain.Services;
 
-public interface IUserPreferencesService
-{
-    Task<UserPreference> GetAsync(CancellationToken ct = default);
-    Task SaveAsync(UserPreference p, CancellationToken ct = default);
-}
+namespace Pos.Persistence.Services;
+
 
 public sealed class UserPreferencesService : IUserPreferencesService
 {

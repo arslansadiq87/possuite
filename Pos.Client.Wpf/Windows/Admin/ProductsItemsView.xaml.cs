@@ -18,6 +18,7 @@ using System.Globalization;
 using Pos.Persistence.Sync;           // IOutboxWriter
 using Pos.Persistence.Media;
 using Pos.Client.Wpf.Services;   // ThumbnailService
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -25,7 +26,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         // ----- services / db -----
         // ----- services / db -----
-        private readonly CatalogService _svc;
+        private readonly ICatalogService _svc;
         private readonly ThumbnailService _thumbs = new(); // already present below, keep single instance
         private bool _squelchGridEdits;
 
@@ -67,7 +68,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             DataContext = this;
 
             // resolve service layer only
-            _svc = App.Services.GetRequiredService<CatalogService>();
+            _svc = App.Services.GetRequiredService<ICatalogService>();
 
             ProductsList.ItemsSource = _products;
             StandaloneList.ItemsSource = _standalone;

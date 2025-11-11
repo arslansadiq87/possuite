@@ -1,19 +1,20 @@
 ﻿using System;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Persistence.Services;
+using Pos.Domain.Services;
 using Pos.Client.Wpf.Infrastructure;
+using Pos.Domain.Models;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OtherAccountDialog : Window
     {
-        private readonly OtherAccountService _svc;
+        private readonly IOtherAccountService _svc;
         private int? _id;
 
         public string DialogTitle => _id == null ? "New Other Account" : "Edit Other Account";
 
-        public OtherAccountDialog(OtherAccountService svc)
+        public OtherAccountDialog(IOtherAccountService svc)
         {
             InitializeComponent();
             _svc = svc;
@@ -48,7 +49,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 return;
             }
 
-            var dto = new OtherAccountService.OtherAccountDto
+            var dto = new OtherAccountUpsertDto
             {
                 Id = _id,
                 Code = CodeBox.Text,

@@ -1,21 +1,17 @@
-﻿// Pos.Client.Wpf/Windows/Accounting/VoucherEditorVm.cs
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;           // <-- for IRelayCommand & [RelayCommand]
-using Microsoft.EntityFrameworkCore;
-using Pos.Client.Wpf.Services;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Services;            // AuthZ, AppState
 using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Persistence.Services;           // ILookupService, IVoucherEditorService
 using System.Windows;
-using System.Diagnostics;
-using Pos.Persistence.Sync;                 // IOutboxWriter
-using Pos.Client.Wpf.Services.Sync;         // EnqueueAfterSaveAsync helper (if you created it)
-using Microsoft.Extensions.DependencyInjection; // App.Services.GetRequiredService<...>()
-
+using Pos.Domain.Services;
+using Pos.Domain.Models.Accounting;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
@@ -25,22 +21,19 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [ObservableProperty] private string? description;
         [ObservableProperty] private decimal debit;
         [ObservableProperty] private decimal credit;
-        // NOTE: no command aliases here — commands live on VoucherEditorVm
-
     }
 
     public partial class VoucherEditorVm : ObservableObject
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
-        private readonly IOutboxWriter _outbox;     // NEW
+        private readonly IVoucherCenterService _editor;
+        private readonly ILookupService _lookup;
+        private readonly IServiceProvider _sp;
 
-        private readonly IGlPostingService _gl;
-        // Editing state: null => creating new; value => editing this voucher
+        // null => creating new; value => editing this voucher
         private int? _editingVoucherId = null;
-        // inside VoucherEditorVm
 
         public bool WasSaved { get; private set; } = false;
-        public event Action<bool>? CloseRequested; // true = saved, false = cancel/close
+        public event Action<bool>? CloseRequested;
 
         public ObservableCollection<Account> Accounts { get; } = new();
         public ObservableCollection<Outlet> Outlets { get; } = new();
@@ -58,22 +51,36 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public decimal TotalDebit => Lines.Sum(l => l.Debit);
         public decimal TotalCredit => Lines.Sum(l => l.Credit);
 
-        // UI helpers
         public bool ShowDebitColumn => Type == nameof(VoucherType.Debit) || Type == nameof(VoucherType.Journal);
         public bool ShowCreditColumn => Type == nameof(VoucherType.Credit) || Type == nameof(VoucherType.Journal);
 
         public event Action? AccountsReloadRequested;
 
-        public async Task ReloadAccountsAsync()
+        public VoucherEditorVm(IVoucherCenterService editor, ILookupService lookup, IServiceProvider sp)
         {
-            using var db = await _dbf.CreateDbContextAsync();
-            var list = await db.Accounts.AsNoTracking().OrderBy(a => a.Code).ToListAsync();
+            _editor = editor;
+            _lookup = lookup;
+            _sp = sp;
 
-            Accounts.Clear();
-            foreach (var a in list) Accounts.Add(a);
+            Lines.CollectionChanged += (_, e) =>
+            {
+                if (e.OldItems != null)
+                    foreach (VoucherLineVm vm in e.OldItems) vm.PropertyChanged -= Line_PropertyChanged;
+                if (e.NewItems != null)
+                    foreach (VoucherLineVm vm in e.NewItems) vm.PropertyChanged += Line_PropertyChanged;
+                RecalcUi();
+            };
         }
 
-        // Allow changing Type while there are no meaningful entries on any row
+        public async Task ReloadAccountsAsync()
+        {
+            Accounts.Clear();
+            // pass null => all/global; or pass AppState.Current.CurrentOutletId if you want to scope
+            var accs = await _lookup.GetAccountsAsync(null);
+            foreach (var a in accs.OrderBy(a => a.Code))
+                Accounts.Add(a);
+        }
+
         public bool IsTypeChangeAllowed =>
             Lines.Count == 0 ||
             Lines.All(l =>
@@ -82,17 +89,13 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 l.Credit == 0m &&
                 string.IsNullOrWhiteSpace(l.Description));
 
-
-        // Non-admins are locked to their outlet (combobox IsEnabled bound to this)
         public bool IsOutletSelectable => AuthZ.IsAdmin();
 
-        // Enable Save according to voucher type and basic validations
         public bool SaveEnabled
         {
             get
             {
                 if (SelectedOutlet == null) return false;
-
                 var vt = Enum.Parse<VoucherType>(Type);
 
                 if (vt == VoucherType.Debit)
@@ -101,11 +104,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 if (vt == VoucherType.Credit)
                     return Lines.Any(l => l.Account != null && l.Credit > 0m);
 
-                // Journal: either side > 0 on at least one row
                 return Lines.Any(l => l.Account != null && (l.Debit > 0m || l.Credit > 0m));
             }
         }
-
 
         private void RecalcUi()
         {
@@ -119,55 +120,20 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
         partial void OnTypeChanged(string value) => RecalcUi();
 
-        public VoucherEditorVm(IDbContextFactory<PosClientDbContext> dbf, IGlPostingService gl)
-        {
-            _dbf = dbf; _gl = gl;
-            _outbox = App.Services.GetRequiredService<IOutboxWriter>(); // NEW
-
-            Lines.CollectionChanged += (_, e) =>
-            {
-                if (e.OldItems != null)
-                    foreach (VoucherLineVm vm in e.OldItems) vm.PropertyChanged -= Line_PropertyChanged;
-
-                if (e.NewItems != null)
-                    foreach (VoucherLineVm vm in e.NewItems) vm.PropertyChanged += Line_PropertyChanged;
-
-                RecalcUi();
-            };
-        }
-
-        private void Line_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName is nameof(VoucherLineVm.Debit)
-                              or nameof(VoucherLineVm.Credit)
-                              or nameof(VoucherLineVm.Account))
-                RecalcUi();
-        }
-
-        private static void ClearLine(VoucherLineVm l)
-        {
-            l.Account = null;
-            l.Description = "";
-            l.Debit = 0m;
-            l.Credit = 0m;
-        }
-
-
-        // ---------- Commands ----------
+        // ---------- Commands / Lifecycle ----------
 
         [RelayCommand]
         public void Clear()
         {
-            _editingVoucherId = null;   // <--- reset edit mode
-
+            _editingVoucherId = null;
             VoucherDate = DateTime.Today;
             RefNo = "";
             Memo = "";
 
             Lines.Clear();
-            AddLine(); // seed exactly one empty line
+            AddLine();
 
-            // Re-select outlet according to role
+            // outlet selection based on role
             if (!AuthZ.IsAdmin())
             {
                 var oid = AppState.Current.CurrentOutletId;
@@ -180,17 +146,14 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
             RecalcUi();
             AccountsReloadRequested?.Invoke();
-
         }
 
-        // Allow any parameter; ignore placeholder/invalids; fall back to SelectedLine
         [RelayCommand(CanExecute = nameof(CanDeleteLine))]
         public void DeleteLine(object? parameter)
         {
             var line = parameter as VoucherLineVm ?? SelectedLine;
             if (line == null) return;
 
-            // If this is the only row, clear it instead of removing
             if (Lines.Count <= 1)
             {
                 ClearLine(Lines[0]);
@@ -199,46 +162,76 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 return;
             }
 
-            // Else remove normally
             Lines.Remove(line);
-            // Keep at least one row at all times (defensive)
-            if (Lines.Count == 0)
-                AddLine();
-
+            if (Lines.Count == 0) AddLine();
             RecalcUi();
         }
 
+        private bool CanDeleteLine(object? parameter) => parameter is VoucherLineVm || SelectedLine is VoucherLineVm;
 
-        // Disable the delete button on placeholder rows
-        private bool CanDeleteLine(object? parameter)
+        private static void ClearLine(VoucherLineVm l)
         {
-            return parameter is VoucherLineVm || SelectedLine is VoucherLineVm;
+            l.Account = null;
+            l.Description = "";
+            l.Debit = 0m;
+            l.Credit = 0m;
         }
+
+        [RelayCommand]
+        public async Task LoadAsync()
+        {
+            // lookups
+            Accounts.Clear();
+            foreach (var a in (await _lookup.GetAccountsAsync(null)).OrderBy(a => a.Code))
+                Accounts.Add(a);
+
+            Outlets.Clear();
+            foreach (var o in (await _lookup.GetOutletsAsync()).OrderBy(o => o.Name))
+                Outlets.Add(o);
+
+            // preselect outlet
+            if (!AuthZ.IsAdmin())
+            {
+                var oid = AppState.Current.CurrentOutletId;
+                SelectedOutlet = Outlets.FirstOrDefault(o => o.Id == oid) ?? Outlets.FirstOrDefault();
+            }
+            else
+            {
+                SelectedOutlet = SelectedOutlet ?? Outlets.FirstOrDefault();
+            }
+
+            if (Lines.Count == 0) AddLine();
+            RecalcUi();
+        }
+
+        private void Line_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(VoucherLineVm.Debit)
+                              or nameof(VoucherLineVm.Credit)
+                              or nameof(VoucherLineVm.Account))
+                RecalcUi();
+        }
+
 
         public async Task LoadAsync(int voucherId)
         {
-            // 1) Ensure lists are loaded (accounts, outlets, default outlet, one empty line, etc.)
             if (Accounts.Count == 0 || Outlets.Count == 0)
-                await LoadAsync(); // your parameterless loader
-            using var db = await _dbf.CreateDbContextAsync();
-            var v = await db.Vouchers
-                .AsNoTracking()
-                .Include(x => x.Lines)
-                .FirstAsync(x => x.Id == voucherId);
-            // 2) Mark we are editing this voucher
-            _editingVoucherId = v.Id;
-            WasSaved = false;   // <--- add this
+                await LoadAsync();
 
-            // 3) Populate header fields
-            VoucherDate = v.TsUtc.ToLocalTime().Date; // convert to local date for the DatePicker
-            RefNo = v.RefNo ?? "";
-            Memo = v.Memo ?? "";
-            Type = v.Type.ToString(); // your UI binds to string enum name
-            // 4) Outlet selection
-            SelectedOutlet = Outlets.FirstOrDefault(o => o.Id == v.OutletId) ?? Outlets.FirstOrDefault();
-            // 5) Populate line items
+            var dto = await _editor.LoadAsync(voucherId);
+
+            _editingVoucherId = dto.Id;
+            WasSaved = false;
+
+            VoucherDate = dto.TsUtc.ToLocalTime().Date;
+            RefNo = dto.RefNo ?? "";
+            Memo = dto.Memo ?? "";
+            Type = dto.Type.ToString();
+
+            SelectedOutlet = Outlets.FirstOrDefault(o => o.Id == dto.OutletId) ?? Outlets.FirstOrDefault();
+
             Lines.Clear();
-            foreach (var ln in v.Lines.OrderBy(l => l.Id))
+            foreach (var ln in dto.Lines)
             {
                 var acc = Accounts.FirstOrDefault(a => a.Id == ln.AccountId);
                 Lines.Add(new VoucherLineVm
@@ -250,38 +243,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 });
             }
             if (Lines.Count == 0) AddLine();
-            // 6) Refresh UI calculated properties
-            RecalcUi();
-        }
-
-
-        [RelayCommand]
-        public async Task LoadAsync()
-        {
-            using var db = await _dbf.CreateDbContextAsync();
-
-            Accounts.Clear();
-            foreach (var a in await db.Accounts.AsNoTracking().OrderBy(a => a.Code).ToListAsync())
-                Accounts.Add(a);
-
-            Outlets.Clear();
-            var outlets = await db.Outlets.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
-            foreach (var o in outlets) Outlets.Add(o);
-
-            // Preselect outlet
-            if (!AuthZ.IsAdmin())
-            {
-                var oid = AppState.Current.CurrentOutletId;
-                SelectedOutlet = Outlets.FirstOrDefault(o => o.Id == oid) ?? outlets.FirstOrDefault();
-            }
-            else
-            {
-                SelectedOutlet = SelectedOutlet ?? outlets.FirstOrDefault();
-            }
-
-            // seed exactly one row if empty
-            if (Lines.Count == 0) AddLine();
-
             RecalcUi();
         }
 
@@ -289,7 +250,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public void AddLine()
         {
             var line = new VoucherLineVm();
-            line.PropertyChanged += (_, __) => RecalcUi();  // keep totals reactive
+            line.PropertyChanged += (_, __) => RecalcUi();
             Lines.Add(line);
             RecalcUi();
         }
@@ -307,28 +268,22 @@ namespace Pos.Client.Wpf.Windows.Accounting
         {
             if (SelectedOutlet == null)
                 throw new InvalidOperationException("Select an outlet.");
+
             var vt = Enum.Parse<VoucherType>(Type);
-            // Trim: only rows that actually matter
+
             var linesToSave = Lines
-                .Where(l => l.Account != null && ((l.Debit > 0m) || (l.Credit > 0m)))
+                .Where(l => l.Account != null && (l.Debit > 0m || l.Credit > 0m))
                 .ToList();
             if (linesToSave.Count == 0)
                 throw new InvalidOperationException("Enter at least one non-zero line.");
 
-            // 🔎 INSERT near the top of SaveAsync(), after basic null/line checks
             if (!string.Equals(Type, "Journal", StringComparison.OrdinalIgnoreCase) && SelectedOutlet == null)
             {
-                System.Windows.MessageBox.Show(
-                    "Select an Outlet for Debit/Credit vouchers (cash side).",
-                    "Outlet Required",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
+                MessageBox.Show("Select an Outlet for Debit/Credit vouchers (cash side).",
+                    "Outlet Required", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-
-
-            // STRICT per-type validation (kept from your original intent)
             var totalDebit = linesToSave.Sum(l => l.Debit);
             var totalCredit = linesToSave.Sum(l => l.Credit);
 
@@ -347,118 +302,32 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 if (linesToSave.Any(l => l.Debit != 0m || l.Credit <= 0m))
                     throw new InvalidOperationException("For Credit Voucher, only Credit amounts (> 0) are allowed.");
             }
-            // Store date as UTC (date-only picked by user)
+
+            // store date as UTC (date-only picked by user)
             var localDate = DateTime.SpecifyKind(VoucherDate.Date, DateTimeKind.Local);
             var tsUtc = localDate.ToUniversalTime();
-            using var db = await _dbf.CreateDbContextAsync();
-            using var tx = await db.Database.BeginTransactionAsync();
 
-            try
-            {
-                if (_editingVoucherId.HasValue)
-                {
-                    // -------- EDIT/UPDATE EXISTING --------
-                    var v = await db.Vouchers
-                        .Include(x => x.Lines)
-                        .FirstAsync(x => x.Id == _editingVoucherId.Value);
-                    // Update header
-                    v.TsUtc = tsUtc;
-                    v.OutletId = SelectedOutlet.Id;
-                    v.RefNo = RefNo?.Trim();
-                    v.Memo = Memo?.Trim();
-                    v.Type = vt;
-                    // Remove existing GL entries for this voucher's base posting
-                    var baseDocTypes = new[] { GlDocType.JournalVoucher, GlDocType.CashPayment, GlDocType.CashReceipt };
-                    var oldGl = await db.GlEntries
-                        .Where(g => g.DocId == v.Id && baseDocTypes.Contains(g.DocType))
-                        .ToListAsync();
-                    if (oldGl.Count > 0)
-                        db.GlEntries.RemoveRange(oldGl);
-                    // Replace lines
-                    if (v.Lines.Count > 0)
-                        db.VoucherLines.RemoveRange(v.Lines);
-                    await db.SaveChangesAsync();
-                    foreach (var ln in linesToSave)
-                    {
-                        db.VoucherLines.Add(new VoucherLine
-                        {
-                            VoucherId = v.Id,
-                            AccountId = ln.Account!.Id,
-                            Description = string.IsNullOrWhiteSpace(ln.Description)
-                                          ? (vt == VoucherType.Debit ? "Cash Payment Voucher"
-                                             : vt == VoucherType.Credit ? "Cash Receiving Voucher"
-                                             : "Journal Voucher")
-                                          : ln.Description!.Trim(),
-                            Debit = ln.Debit,
-                            Credit = ln.Credit
-                        });
-                    }
-                    await db.SaveChangesAsync();
-                    // Re-post with the SAME DbContext/transaction
-                    await _gl.PostVoucherAsync(db, v);
-                    await tx.CommitAsync();
-                    // === SYNC: voucher finalized — enqueue once ===
-                    await _outbox.EnqueueAfterSaveAsync(db, v, default);
+            var dto = new VoucherEditLoadDto(
+                _editingVoucherId ?? 0,
+                tsUtc,
+                SelectedOutlet?.Id,
+                RefNo,
+                Memo,
+                vt,
+                linesToSave.Select(l => new VoucherEditLineDto(l.Account!.Id, l.Description?.Trim(), l.Debit, l.Credit)).ToList()
+            );
 
-                    WasSaved = true;
-                    CloseRequested?.Invoke(true);
+            var savedId = await _editor.SaveAsync(dto);
 
-                    // Reset edit mode after save
-                    _editingVoucherId = null;
-                    Clear();
-                }
-                else
-                {
-                    // -------- CREATE NEW (your original code) --------
-                    var v = new Voucher
-                    {
-                        TsUtc = tsUtc,
-                        OutletId = SelectedOutlet.Id,
-                        RefNo = RefNo?.Trim(),
-                        Memo = Memo?.Trim(),
-                        Type = vt
-                    };
-                    db.Vouchers.Add(v);
-                    await db.SaveChangesAsync();
+            WasSaved = true;
+            CloseRequested?.Invoke(true);
 
-                    foreach (var ln in linesToSave)
-                    {
-                        db.VoucherLines.Add(new VoucherLine
-                        {
-                            VoucherId = v.Id,
-                            AccountId = ln.Account!.Id,
-                            Description = string.IsNullOrWhiteSpace(ln.Description)
-                                          ? (vt == VoucherType.Debit ? "Cash Payment Voucher"
-                                             : vt == VoucherType.Credit ? "Cash Receiving Voucher"
-                                             : "Journal Voucher")
-                                          : ln.Description!.Trim(),
-                            Debit = ln.Debit,
-                            Credit = ln.Credit
-                        });
-                    }
-                    await db.SaveChangesAsync();
-                    // GL posting (handles Cash-in-Hand auto-line)
-                    await _gl.PostVoucherAsync(db, v);
-                    await tx.CommitAsync();
-                    // === SYNC: voucher finalized — enqueue once ===
-                    await _outbox.EnqueueAfterSaveAsync(db, v, default);
-
-                    try { AccountsReloadRequested?.Invoke(); } catch { /* ignore */ }
-                    // Optional: clear form for next entry
-                    Clear();
-                    CloseRequested?.Invoke(true);
-
-                }
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
+            // reset edit state after save and clear form
+            _editingVoucherId = null;
+            Clear();
         }
 
-     
-        // Your XAML uses DeleteLineCmd / SaveCmd / ClearCmd
+        // XAML aliases
         public IRelayCommand DeleteLineCmd => DeleteLineCommand;
         public IRelayCommand SaveCmd => SaveCommand;
         public IRelayCommand ClearCmd => ClearCommand;

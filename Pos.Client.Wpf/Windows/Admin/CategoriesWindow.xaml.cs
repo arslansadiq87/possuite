@@ -6,13 +6,13 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Persistence.Services;   // CategoryService
-
+using Pos.Domain.Services;   // CategoryService
+using Pos.Domain.Models.Catalog; // ICategoryService
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class CategoriesWindow : Window
     {
-        private CategoryService? _svc;
+        private ICategoryService? _svc;
         private Func<EditCategoryWindow>? _editCategoryFactory;
         private readonly bool _design;
         private bool _queuedVisibilityCheck;
@@ -26,7 +26,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _svc = App.Services.GetRequiredService<CategoryService>();
+            _svc = App.Services.GetRequiredService<ICategoryService>();
             _editCategoryFactory = () => App.Services.GetRequiredService<EditCategoryWindow>();
 
             Loaded += async (_, __) =>
@@ -56,8 +56,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        private CategoryService.CategoryRowDto? Selected()
-            => CategoriesList.SelectedItem as CategoryService.CategoryRowDto;
+        private CategoryRowDto? Selected()
+            => CategoriesList.SelectedItem as CategoryRowDto;
 
         private void UpdateActionButtons()
         {

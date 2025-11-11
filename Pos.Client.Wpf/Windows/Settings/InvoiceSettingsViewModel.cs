@@ -1,20 +1,20 @@
 ﻿// Pos.Client.Wpf/Windows/Settings/InvoiceSettingsViewModel.cs
 using System.Collections.ObjectModel;
 using System.Drawing.Printing;
-using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
-using Pos.Persistence;
-using Microsoft.Win32;
 using System.IO;
 using Pos.Client.Wpf.Printing;
+using System;
+using Pos.Domain.Services;
+
 namespace Pos.Client.Wpf.Windows.Settings;
 
 public partial class InvoiceSettingsViewModel : ObservableObject
 {
-    private readonly IDbContextFactory<PosClientDbContext> _dbf;
+    private readonly IInvoiceSettingsService _svc;
+    private readonly ILookupService _lookup;
 
     public ObservableCollection<Outlet> Outlets { get; } = new();
     public ObservableCollection<string> InstalledPrinters { get; } =
@@ -104,9 +104,12 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     private List<InvoiceLocalization> _loadedLocs = new();
 
 
-    public InvoiceSettingsViewModel(IDbContextFactory<PosClientDbContext> dbf)
+    public InvoiceSettingsViewModel(
+    IInvoiceSettingsService svc,
+    ILookupService lookup)
     {
-        _dbf = dbf;
+        _svc = svc;
+        _lookup = lookup;
         _ = InitAsync();
         IsOutlet = !IsGlobal; // initialize radio sync
 
@@ -148,10 +151,9 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
     private async Task InitAsync()
     {
-        await using var db = await _dbf.CreateDbContextAsync();
-        var outlets = await db.Outlets.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+        var outlets = await _lookup.GetOutletsAsync();
+        Outlets.Clear();
         foreach (var o in outlets) Outlets.Add(o);
-
         await LoadAsync();
         UpdateCurrentLocalization();
     }
@@ -162,20 +164,18 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
     private async Task LoadAsync()
     {
-        await using var db = await _dbf.CreateDbContextAsync();
+        
 
         var outletId = IsGlobal ? (int?)null : SelectedOutlet?.Id;
 
-        _loadedSettings = await db.InvoiceSettings
-            .Include(x => x.Localizations)
-            .Where(x => x.OutletId == outletId)
-            .OrderByDescending(x => x.UpdatedAtUtc)
-            .FirstOrDefaultAsync();
-
-        if (_loadedSettings == null)
-            _loadedSettings = new InvoiceSettings { OutletId = outletId };
-
+        //_loadedSettings = await _svc.GetAsync(outletId);
+        var tuple = await _svc.GetAsync(outletId, SelectedLang);
+        _loadedSettings = tuple.Settings;
+         // keep the VM's local list for editing:
         _loadedLocs = _loadedSettings.Localizations?.ToList() ?? new();
+         // also track current localization selection:
+        CurrentLocalization = tuple.Local;
+        //_loadedLocs = _loadedSettings.Localizations?.ToList() ?? new();
 
         // snapshot to fields
         OutletDisplayName = _loadedSettings.OutletDisplayName;
@@ -191,6 +191,7 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
         // --- Bank defaults (Sales card clearing / Purchase bank) ---
         await LoadBankAccountsAsync(outletId);
+
         SelectedPurchaseBankAccount = (_loadedSettings.PurchaseBankAccountId is int pid)
             ? BankAccounts.FirstOrDefault(a => a.Id == pid)
             : null;
@@ -243,27 +244,38 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     private async Task LoadBankAccountsAsync(int? outletId)
     {
         BankAccounts.Clear();
-        await using var db = await _dbf.CreateDbContextAsync();
+        //await using var db = await _dbf.CreateDbContextAsync();
 
-        var q = db.Accounts.AsNoTracking()
-            .Where(a => a.AllowPosting && !a.IsHeader);
+        //var q = db.Accounts.AsNoTracking()
+        //    .Where(a => a.AllowPosting && !a.IsHeader);
 
-        // Prefer outlet-scoped accounts when editing outlet-scoped settings
-        if (outletId != null)
-            q = q.Where(a => a.OutletId == outletId);
-        else
-            q = q.Where(a => a.OutletId == null);
+        //// Prefer outlet-scoped accounts when editing outlet-scoped settings
+        //if (outletId != null)
+        //    q = q.Where(a => a.OutletId == outletId);
+        //else
+        //    q = q.Where(a => a.OutletId == null);
 
-        // Include typical bank & card-clearing ledgers:
-        // - CoA prefix "113" (Bank & equivalents in your seeding)
-        // - Names that contain "Bank", "Card", or "Clearing"
-        q = q.Where(a =>
-             a.Code.StartsWith("113")
-          || a.Name.Contains("Bank")
-          || a.Name.Contains("Card")
-          || a.Name.Contains("Clearing"));
+        //// Include typical bank & card-clearing ledgers:
+        //// - CoA prefix "113" (Bank & equivalents in your seeding)
+        //// - Names that contain "Bank", "Card", or "Clearing"
+        //q = q.Where(a =>
+        //     a.Code.StartsWith("113")
+        //  || a.Name.Contains("Bank")
+        //  || a.Name.Contains("Card")
+        //  || a.Name.Contains("Clearing"));
 
-        var list = await q.OrderBy(a => a.Code).ThenBy(a => a.Name).ToListAsync();
+        //var list = await q.OrderBy(a => a.Code).ThenBy(a => a.Name).ToListAsync();
+        var all = await _lookup.GetAccountsAsync(outletId);
+        var list = all
+               .Where(a => a.AllowPosting && !a.IsHeader)
+               .Where(a => (outletId != null ? a.OutletId == outletId : a.OutletId == null))
+               .Where(a => a.Code?.StartsWith("113") == true
+                        || (a.Name?.Contains("Bank") ?? false)
+                        || (a.Name?.Contains("Card") ?? false)
+                        || (a.Name?.Contains("Clearing") ?? false))
+               .OrderBy(a => a.Code)
+               .ThenBy(a => a.Name)
+               .ToList();
         foreach (var a in list) BankAccounts.Add(a);
     }
 
@@ -283,7 +295,7 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
-        await using var db = await _dbf.CreateDbContextAsync();
+        //await using var db = await _dbf.CreateDbContextAsync();
         // --- Guardrails for missing selections (optional but recommended) ---
         //if (SelectedSalesCardClearingAccount == null)
         //{
@@ -356,17 +368,19 @@ public partial class InvoiceSettingsViewModel : ObservableObject
         _loadedSettings.SalesCardClearingAccountId = SelectedSalesCardClearingAccount?.Id;
         // ---------------------------
 
-        if (isNew) db.InvoiceSettings.Add(_loadedSettings);
-        else db.InvoiceSettings.Update(_loadedSettings);
+        //if (isNew) db.InvoiceSettings.Add(_loadedSettings);
+        //else db.InvoiceSettings.Update(_loadedSettings);
 
-        foreach (var loc in _loadedLocs)
-        {
-            if (loc.Id == 0) { loc.InvoiceSettings = _loadedSettings; db.Set<InvoiceLocalization>().Add(loc); }
-            else db.Set<InvoiceLocalization>().Update(loc);
+        //foreach (var loc in _loadedLocs)
+        //{
+        //    if (loc.Id == 0) { loc.InvoiceSettings = _loadedSettings; db.Set<InvoiceLocalization>().Add(loc); }
+        //    else db.Set<InvoiceLocalization>().Update(loc);
 
-        }
+        //}
 
-        await db.SaveChangesAsync();
+        //await db.SaveChangesAsync();
+        await _svc.SaveAsync(_loadedSettings, _loadedLocs);
+
 
         // Optionally: toast/snackbar
     }
@@ -395,22 +409,31 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     {
         try
         {
-            await using var db = await _dbf.CreateDbContextAsync();
-            var items = await db.Items
-                .AsNoTracking()
-                .Select(x => new { x.Name, x.Sku })
-                .Take(4)
-                .ToListAsync();
+            //await using var db = await _dbf.CreateDbContextAsync();
+            //var items = await db.Items
+            //    .AsNoTracking()
+            //    .Select(x => new { x.Name, x.Sku })
+            //    .Take(4)
+            //    .ToListAsync();
 
-            var lines = items.Select((x, i) => new ReceiptPreviewLine
-            {
-                Name = string.IsNullOrWhiteSpace(x.Name) ? $"Item {i + 1}" : x.Name!,
-                Sku = string.IsNullOrWhiteSpace(x.Sku) ? $"SKU{i + 1:D3}" : x.Sku!,
-                Qty = (i % 3) + 1,
-                Unit = 99.00m + i * 25m,
-                LineDiscount = (i == 0) ? 10m : 0m
-            }).ToList();
+            //var lines = items.Select((x, i) => new ReceiptPreviewLine
+            //{
+            //    Name = string.IsNullOrWhiteSpace(x.Name) ? $"Item {i + 1}" : x.Name!,
+            //    Sku = string.IsNullOrWhiteSpace(x.Sku) ? $"SKU{i + 1:D3}" : x.Sku!,
+            //    Qty = (i % 3) + 1,
+            //    Unit = 99.00m + i * 25m,
+            //    LineDiscount = (i == 0) ? 10m : 0m
+            //}).ToList();
 
+                   // Preview should not depend on DB. Use mock lines.
+            var lines = Enumerable.Range(1, 4).Select(i => new ReceiptPreviewLine
+                   {
+                    Name = $"Sample Item {i}",
+                    Sku = $"SKU{i:000}",
+                    Qty = (i % 3) + 1,
+                    Unit = 99.00m + i * 25m,
+                    LineDiscount = (i == 1) ? 5m : 0m
+                    }).ToList();
             if (lines.Count == 0)
             {
                 lines = Enumerable.Range(1, 3).Select(i => new ReceiptPreviewLine

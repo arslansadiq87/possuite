@@ -6,7 +6,7 @@ using System.Windows;
 using Pos.Domain;
 using Pos.Client.Wpf.Services;
 using Pos.Persistence.Sync; // ⬅️ add at the top
-
+using Pos.Domain.Services;
 public sealed class TillService : ITillService
 {
     private readonly DbContextOptions<PosClientDbContext> _dbOptions;

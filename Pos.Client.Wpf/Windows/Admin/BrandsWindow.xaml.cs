@@ -6,14 +6,15 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Persistence.Services;   // BrandService
+using Pos.Domain.Services;   // BrandService
 using System.Threading.Tasks;
+using Pos.Domain.Models.Catalog; // BrandRowDto
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class BrandsWindow : Window
     {
-        private BrandService? _svc;
+        private IBrandService? _svc;
         private Func<EditBrandWindow>? _editBrandFactory;
         private readonly bool _design;
         private bool _queuedVisibilityCheck;
@@ -27,7 +28,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _svc = App.Services.GetRequiredService<BrandService>();
+            _svc = App.Services.GetRequiredService<IBrandService>();
             _editBrandFactory = () => App.Services.GetRequiredService<EditBrandWindow>();
 
             Loaded += async (_, __) =>
@@ -90,8 +91,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             await LoadRowsAsync();
         }
 
-        private BrandService.BrandRowDto? Selected()
-            => BrandsList.SelectedItem as BrandService.BrandRowDto;
+        private BrandRowDto? Selected()
+            => BrandsList.SelectedItem as BrandRowDto;
 
         private void UpdateActionButtons()
         {

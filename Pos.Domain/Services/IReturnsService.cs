@@ -1,6 +1,7 @@
 ﻿// Pos.Domain/Services/IReturnsService.cs
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Pos.Domain.Models.Sales;
 
 namespace Pos.Domain.Services
 {
@@ -22,5 +23,9 @@ namespace Pos.Domain.Services
             string? customerName = null,
             string? customerPhone = null,
             string? reason = null);
+
+        Task<EditReturnLoadDto> LoadReturnForAmendAsync(int returnSaleId, CancellationToken ct = default);
+
+        Task<EditReturnFinalizeResult> FinalizeReturnAmendAsync(EditReturnFinalizeRequest request, CancellationToken ct = default);
     }
 }

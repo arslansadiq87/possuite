@@ -8,14 +8,15 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
-using Pos.Persistence.Services;
+//using Pos.Persistence.Services;
 using Pos.Client.Wpf.Services;   // AuthZ, IViewNavigator, etc.
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class WarehousesView : UserControl
     {
-        private WarehouseService? _svc;
+        private IWarehouseService? _svc;
         private Func<EditWarehouseWindow>? _editFactory;
         private readonly bool _design;
 
@@ -26,7 +27,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _svc = App.Services.GetRequiredService<WarehouseService>();
+            _svc = App.Services.GetRequiredService<IWarehouseService>();
             _editFactory = () => App.Services.GetRequiredService<EditWarehouseWindow>();
             Loaded += async (_, __) => await LoadRowsAsync();
         }

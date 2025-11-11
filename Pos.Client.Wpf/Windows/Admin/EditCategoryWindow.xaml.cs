@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Persistence.Services;   // CategoryService
+using Pos.Domain.Services;   // CategoryService
 using Pos.Domain.Entities;
 
 namespace Pos.Client.Wpf.Windows.Admin
@@ -11,7 +11,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     public partial class EditCategoryWindow : Window
     {
         private readonly bool _design;
-        private CategoryService? _svc;
+        private ICategoryService? _svc;
 
         // set by caller before ShowDialog()
         public int? EditId { get; set; }
@@ -23,7 +23,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _svc = App.Services.GetRequiredService<CategoryService>();
+            _svc = App.Services.GetRequiredService<ICategoryService>();
             Loaded += async (_, __) => await LoadOrInitAsync();
         }
 

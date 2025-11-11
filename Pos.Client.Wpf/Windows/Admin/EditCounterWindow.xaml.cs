@@ -5,7 +5,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
-using Pos.Persistence.Services;
+using Pos.Domain.Services;
+
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -13,7 +14,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         private enum Mode { Create, Edit }
 
-        private readonly OutletCounterService _svc;
+        private readonly IOutletCounterService _svc;
         private readonly Mode _mode;
 
         private int _fixedOutletId;
@@ -40,7 +41,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         public EditCounterWindow(int outletId)
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<OutletCounterService>();
+            _svc = App.Services.GetRequiredService<IOutletCounterService>();
             _mode = Mode.Create;
             _fixedOutletId = outletId;
 
@@ -53,7 +54,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         public EditCounterWindow(int counterId, bool load = true)
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<OutletCounterService>();
+            _svc = App.Services.GetRequiredService<IOutletCounterService>();
             _mode = Mode.Edit;
 
             DataContext = VM;

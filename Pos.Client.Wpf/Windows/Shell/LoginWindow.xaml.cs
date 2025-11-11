@@ -1,10 +1,10 @@
-﻿//Pos.Client.Wpf/Windows/Shell/LoginWindow.cs
+﻿// Pos.Client.Wpf/Windows/Shell/LoginWindow.cs
+using System;
 using System.Windows;
 using System.Windows.Input;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;
-using Pos.Persistence;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Shell
 {
@@ -12,36 +12,36 @@ namespace Pos.Client.Wpf.Windows.Shell
     {
         private readonly AuthService _auth;
         private readonly AppState _state;
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly IUserReadService _users;
 
         public LoginWindow()
         {
             InitializeComponent();
             _auth = App.Services.GetRequiredService<AuthService>();
             _state = App.Services.GetRequiredService<AppState>();
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
+            _users = App.Services.GetRequiredService<IUserReadService>();
         }
 
         private void Window_Loaded(object? sender, RoutedEventArgs e)
         {
-            var last = LocalPrefs.LoadLastUsername();   // from the small helper class I shared earlier
+            var last = LocalPrefs.LoadLastUsername();
             if (!string.IsNullOrWhiteSpace(last))
             {
                 UserBox.Text = last;
-                PassBox.Focus();                        // prefilled → focus password
+                PassBox.Focus();
             }
             else
             {
-                UserBox.Focus();                        // empty → focus username
+                UserBox.Focus();
             }
         }
 
-        // Enter in username → move focus to next control (PasswordBox)
+        // Enter in username → move focus to password
         private void UserBox_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                e.Handled = true; // prevent default button from firing
+                e.Handled = true;
                 var req = new TraversalRequest(FocusNavigationDirection.Next);
                 (Keyboard.FocusedElement as UIElement)?.MoveFocus(req);
             }
@@ -83,18 +83,24 @@ namespace Pos.Client.Wpf.Windows.Shell
 
                 LocalPrefs.SaveLastUsername(username);
 
-                using var db = await _dbf.CreateDbContextAsync();
-                var user = await db.Users.FirstAsync(u => u.Username == username);
+                // fetch user via read service (no EF here)
+                var user = await _users.GetByUsernameAsync(username);
+                if (user is null)
+                {
+                    MessageBox.Show("User record not found after successful login.", "Login",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 _state.CurrentUser = user;
 
-                // tell App we succeeded; App will open Dashboard and set MainWindow
-                DialogResult = true;   // this closes the login dialog
+                // Success → let App proceed
+                DialogResult = true; // closes this window
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Login Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
     }
 }

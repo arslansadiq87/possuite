@@ -3,19 +3,21 @@ using System.Drawing.Printing;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
-using Pos.Persistence;
 using System.Threading;
-
+//using Pos.Persistence.Services;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Settings;
 
 public partial class BarcodeLabelSettingsViewModel : ObservableObject
 {
-    private readonly IDbContextFactory<PosClientDbContext> _dbf;
+    
+
+    private readonly ILookupService _lookup;
     private readonly IBarcodeLabelSettingsService _svc;
-    private readonly ILabelPrintService? _labelPrinter; // optional injection for TestPrint
+    private readonly ILabelPrintService? _labelPrinter;
+
     private CancellationTokenSource? _previewCts;
     public void ForceRefreshPreview() => RefreshPreviewDebounced();
 
@@ -134,24 +136,27 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     private BarcodeLabelSettings? _loaded;
 
     public BarcodeLabelSettingsViewModel(
-        IDbContextFactory<PosClientDbContext> dbf,
-        IBarcodeLabelSettingsService svc,
-        ILabelPrintService? labelPrinter = null)
+    ILookupService lookup,
+    IBarcodeLabelSettingsService svc,
+    ILabelPrintService? labelPrinter = null)
     {
-        _dbf = dbf;
+        _lookup = lookup;
         _svc = svc;
         _labelPrinter = labelPrinter;
         _ = InitAsync();
     }
 
+
     private async Task InitAsync()
     {
-        await using var db = await _dbf.CreateDbContextAsync();
-        var outlets = await db.Outlets.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
-        foreach (var o in outlets) Outlets.Add(o);
+        var outlets = await _lookup.GetOutletsAsync();
+        Outlets.Clear();
+        foreach (var o in outlets)
+            Outlets.Add(o);
 
         await LoadAsync();
     }
+
 
     partial void OnIsGlobalChanged(bool value) => _ = LoadAsync();
     partial void OnSelectedOutletChanged(Outlet? value) { if (!IsGlobal) _ = LoadAsync(); }

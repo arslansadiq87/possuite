@@ -1,32 +1,34 @@
 ﻿// Pos.Persistence/Services/PurchasesService.cs
-using Microsoft.EntityFrameworkCore;
-using Pos.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Pos.Persistence.Sync; // add this
+using Microsoft.EntityFrameworkCore;
+using Pos.Domain.Entities;
+using Pos.Domain.Services;
+using Pos.Domain.Models.Purchases;   // <-- add
+using Pos.Persistence.Sync;
 
 
-
-
-namespace Pos.Persistence.Services
+namespace Pos.Persistence.Services 
 {
     // NEW: lightweight DTO to carry refund instructions from UI
-    public record SupplierRefundSpec(TenderMethod Method, decimal Amount, string? Note);
+    //public record SupplierRefundSpec(TenderMethod Method, decimal Amount, string? Note);
 
-    public class PurchasesService
+    public class PurchasesService : IPurchasesService
     {
-        private readonly PosClientDbContext _db;
+        //private readonly PosClientDbContext _db;
+        private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox; // NEW
 
-        public PurchasesService(PosClientDbContext db, IOutboxWriter outbox /* keep your other deps if any */)
-        {
-            _db = db;
-            _outbox = outbox;
-        }
-
+        //public PurchasesService(PosClientDbContext db, IOutboxWriter outbox /* keep your other deps if any */)
+        //{
+        //    _db = db;
+        //    _outbox = outbox;
+        //}
+        public PurchasesService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox)
+        { _dbf = dbf; _outbox = outbox; }
         //public PurchasesService(PosClientDbContext db) => _db = db;
 
        
@@ -36,13 +38,14 @@ namespace Pos.Persistence.Services
         /// Create or update a DRAFT purchase (no stock postings).
         /// Replaces lines on update to keep things simple.
         /// </summary>
-        public async Task<Purchase> SaveDraftAsync(Purchase draft, IEnumerable<PurchaseLine> lines, string? user = null)
+        //public async Task<Purchase> SaveDraftAsync(Purchase draft, IEnumerable<PurchaseLine> lines, string? user = null)
+        public async Task<Purchase> SaveDraftAsync(Purchase draft, IEnumerable<PurchaseLine> lines, string? user = null, CancellationToken ct = default)
         {
             // Drafts are *purchases*, not returns. We coerce negatives to zero.
+            //var lineList = NormalizeAndCompute(lines);
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var lineList = NormalizeAndCompute(lines);
-
             ComputeHeaderTotals(draft, lineList);
-
             draft.Status = PurchaseStatus.Draft;
             draft.DocNo = null;                    // ⬅️ never number a Draft
             draft.ReceivedAtUtc = null;            // ⬅️ Drafts are not “received”
@@ -58,7 +61,8 @@ namespace Pos.Persistence.Services
             }
             else
             {
-                var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id);
+                //var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id);
+                var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id, ct);
 
                 // header fields allowed in Draft
                 existing.PartyId = draft.PartyId;
@@ -83,7 +87,9 @@ namespace Pos.Persistence.Services
 
                 // clear old lines
                 _db.PurchaseLines.RemoveRange(existing.Lines);
-                await _db.SaveChangesAsync();
+                //await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
+
 
                 // 🔑 re-attach new lines properly
                 foreach (var l in lineList)
@@ -97,12 +103,14 @@ namespace Pos.Persistence.Services
                 draft = existing;
             }
 
-            await _db.SaveChangesAsync();
+            //await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
             return draft;
         }
 
         private async Task<string> EnsurePurchaseNumberAsync(Purchase p, CancellationToken ct)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // Simple safe fallback: if DocNo already set, keep it.
             if (!string.IsNullOrWhiteSpace(p.DocNo)) return p.DocNo!;
 
@@ -124,8 +132,10 @@ namespace Pos.Persistence.Services
         /// Finalize (Receive) a purchase: sets Status=Final, stamps ReceivedAtUtc,
         /// replaces lines, recomputes totals. (Stock ledger posting comes next step.)
         /// </summary>
-        public async Task<Purchase> ReceiveAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null)
+        public async Task<Purchase> ReceiveAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+
             // 0) Normalize + compute monetary totals on incoming UI payload
             ValidateDestination(model);
             // SAFETY RAIL: all settlements must be recorded via AddPaymentAsync (OnReceive/Adjustment).
@@ -155,7 +165,7 @@ namespace Pos.Persistence.Services
                 model.Lines = lineList;
                 _db.Purchases.Add(model);
 
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
                 // normal purchase postings (IN to the chosen destination)
                 await PostPurchaseStockAsync(model, lineList, user ?? "system");
@@ -172,7 +182,7 @@ namespace Pos.Persistence.Services
                 catch { /* ignore */ }
                 // === SYNC: finalized Purchase (first-time) ===
                 await _outbox.EnqueueUpsertAsync(_db, model, default);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
                 return model;
             }
@@ -182,7 +192,7 @@ namespace Pos.Persistence.Services
             // -----------------------------
             var existing = await _db.Purchases
                                     .Include(p => p.Lines)
-                                    .FirstAsync(p => p.Id == model.Id);
+                                    .FirstAsync(p => p.Id == model.Id, ct);
 
             var wasFinal = existing.Status == PurchaseStatus.Final;
 
@@ -252,7 +262,7 @@ namespace Pos.Persistence.Services
                                  && se.LocationType == oldLocType
                                  && se.LocationId == oldLocId
                                  && relevantRefTypes.Contains(se.RefType))
-                    .ToListAsync();
+                    .ToListAsync(ct);
 
                 // Nothing posted at old destination (e.g., it was already moved previously) → nothing to do
                 if (oldPostings.Count == 0)
@@ -307,7 +317,7 @@ namespace Pos.Persistence.Services
                     se.Note = "Relocated on amend (dest change)";
                     // (Optional) se.Ts = DateTime.UtcNow;  // only if you want to bump the timestamp
                 }
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
             AfterMove:;
             }
@@ -320,7 +330,7 @@ namespace Pos.Persistence.Services
             {
                 // replace lines once (draft → final)
                 _db.PurchaseLines.RemoveRange(existing.Lines);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
                 foreach (var l in lineList)
                 {
@@ -330,7 +340,7 @@ namespace Pos.Persistence.Services
                 }
                 existing.Lines = lineList;
 
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
                 // normal purchase postings (IN to current destination on header)
                 await PostPurchaseStockAsync(existing, lineList, user ?? "system");
@@ -345,7 +355,7 @@ namespace Pos.Persistence.Services
                 }
                 catch { /* ignore */ }
                 await _outbox.EnqueueUpsertAsync(_db, model, default);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
                 return existing;
             }
@@ -534,10 +544,10 @@ namespace Pos.Persistence.Services
                     });
                 }
 
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
                 await _outbox.EnqueueUpsertAsync(_db, model, default);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
             }
 
@@ -546,8 +556,9 @@ namespace Pos.Persistence.Services
         }
 
         // Resolve or create per-outlet "Supplier Advances" posting account without using WPF services.
-        private async Task<int> GetSupplierAdvancesAccountIdAsync(int outletId)
+        private async Task<int> GetSupplierAdvancesAccountIdAsync(int outletId, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // Need outlet code to build our deterministic account code
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
             var code = $"113-{outlet.Code}-ADV";
@@ -557,7 +568,7 @@ namespace Pos.Persistence.Services
                 .AsNoTracking()
                 .Where(a => a.OutletId == outletId && a.Code == code)
                 .Select(a => a.Id)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(ct);
             if (existingId != 0) return existingId;
 
             // Try to find an "Assets" header to attach under; if not found, parent is null
@@ -566,7 +577,7 @@ namespace Pos.Persistence.Services
                 .Where(a => a.OutletId == outletId && a.IsHeader &&
                             (a.Code == "1" || a.Name == "Assets"))     // adjust if your chart differs
                 .Select(a => (int?)a.Id)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(ct);
 
             var acc = new Pos.Domain.Entities.Account
             {
@@ -581,7 +592,7 @@ namespace Pos.Persistence.Services
             };
 
             _db.Accounts.Add(acc);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
             return acc.Id;
         }
 
@@ -590,8 +601,9 @@ namespace Pos.Persistence.Services
         /// <summary>
         /// Auto-pick last UnitCost/Discount/TaxRate from latest FINAL purchase line of this item.
         /// </summary>
-        public async Task<(decimal unitCost, decimal discount, decimal taxRate)?> GetLastPurchaseDefaultsAsync(int itemId)
+        public async Task<(decimal unitCost, decimal discount, decimal taxRate)?> GetLastPurchaseDefaultsAsync(int itemId, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var last = await _db.PurchaseLines
                 .AsNoTracking()
                 .Where(x => x.ItemId == itemId && _db.Purchases
@@ -599,7 +611,7 @@ namespace Pos.Persistence.Services
                     .Any())
                 .OrderByDescending(x => x.Id)
                 .Select(x => new { x.UnitCost, x.Discount, x.TaxRate })
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(ct);
 
             if (last == null) return null;
             return (last.UnitCost, last.Discount, last.TaxRate);
@@ -617,12 +629,13 @@ namespace Pos.Persistence.Services
     int? tillSessionId,
     int? counterId,
     string user,
-    int? bankAccountId = null) // NEW
+    int? bankAccountId = null, CancellationToken ct = default) // NEW
         {
             // ---------- Load & basic guards ----------
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var purchase = await _db.Purchases
                 .Include(p => p.Payments)
-                .FirstAsync(p => p.Id == purchaseId);
+                .FirstAsync(p => p.Id == purchaseId, ct);
 
             if (purchase.Status == PurchaseStatus.Voided)
                 throw new InvalidOperationException("Cannot pay a voided purchase.");
@@ -669,7 +682,7 @@ namespace Pos.Persistence.Services
             {
                 // Require PurchaseBankAccountId configured for the outlet
                 var settings = await _db.InvoiceSettings.AsNoTracking()
-                    .FirstOrDefaultAsync(x => x.OutletId == payOutletId);
+                    .FirstOrDefaultAsync(x => x.OutletId == payOutletId, ct);
 
                 if (settings?.PurchaseBankAccountId is null)
                     throw new InvalidOperationException("Bank payments are disabled: configure Purchase Bank Account in Invoice Settings for this outlet.");
@@ -679,7 +692,7 @@ namespace Pos.Persistence.Services
             }
 
             // ---------- Atomic write: payment + GL + (cash ledger) ----------
-            using var tx = await _db.Database.BeginTransactionAsync();
+            using var tx = await _db.Database.BeginTransactionAsync(ct);
 
             var pay = new PurchasePayment
             {
@@ -697,7 +710,7 @@ namespace Pos.Persistence.Services
             };
 
             _db.PurchasePayments.Add(pay);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
 
             // ---------- GL Posting ----------
             // Resolve credit account for payment: Cash (per-outlet) OR chosen Bank account
@@ -712,7 +725,7 @@ namespace Pos.Persistence.Services
                 creditAccountId = await _db.Accounts.AsNoTracking()
                     .Where(a => a.Code == cashCode && a.OutletId == payOutletId)
                     .Select(a => a.Id)
-                    .FirstAsync();
+                    .FirstAsync(ct);
             }
             else // Bank
             {
@@ -749,7 +762,7 @@ namespace Pos.Persistence.Services
                     Memo = $"Advance to supplier ({method})"
                 });
 
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
             }
             else if (purchase.Status == PurchaseStatus.Final)
             {
@@ -758,7 +771,7 @@ namespace Pos.Persistence.Services
                 var apId = await _db.Accounts.AsNoTracking()
                     .Where(a => a.Code == "6100")
                     .Select(a => a.Id)
-                    .FirstAsync();
+                    .FirstAsync(ct);
 
                 _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
                 {
@@ -783,7 +796,7 @@ namespace Pos.Persistence.Services
                     Memo = $"Supplier payment ({kind}, {method})"
                 });
 
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
             }
 
             // ---------- Cash drawer (only for Cash) ----------
@@ -804,7 +817,7 @@ namespace Pos.Persistence.Services
                     CreatedBy = user
                 };
                 _db.CashLedgers.Add(cash);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
             }
 
 
@@ -816,8 +829,8 @@ namespace Pos.Persistence.Services
 
             purchase.CashPaid = newPaid;
             purchase.CreditDue = Math.Max(0, purchase.GrandTotal - newPaid);
-            await _db.SaveChangesAsync();
-            await tx.CommitAsync();
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
             // === SYNC: payment + (optional) cash ledger + purchase balance ===
             await _outbox.EnqueueUpsertAsync(_db, pay, default);
             if (cash != null)
@@ -825,7 +838,7 @@ namespace Pos.Persistence.Services
                 await _outbox.EnqueueUpsertAsync(_db, cash, default);
             }
             await _outbox.EnqueueUpsertAsync(_db, purchase, default);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
 
             return pay;
         }
@@ -836,14 +849,15 @@ namespace Pos.Persistence.Services
         /// Returns the Outlet Cash-in-Hand account id using code pattern "111-{Outlet.Code}".
         /// Throws a clear error if not found (so you notice missing seeding).
         /// </summary>
-        private async Task<int> ResolveCashAccountIdAsync(int outletId)
+        private async Task<int> ResolveCashAccountIdAsync(int outletId, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
             var cashCode = $"11101-{outlet.Code}";
             var cashId = await _db.Accounts.AsNoTracking()
                 .Where(a => a.Code == cashCode && a.OutletId == outletId)
                 .Select(a => a.Id)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(ct);
 
             if (cashId == 0)
                 throw new InvalidOperationException($"Cash account '{cashCode}' not found for outlet #{outletId}. Make sure COA seeding created it.");
@@ -856,8 +870,9 @@ namespace Pos.Persistence.Services
         /// Code pattern: "113-{Outlet.Code}-ADV".
         /// If the asset header cannot be found, throws with a clear message.
         /// </summary>
-        private async Task<int> ResolveSupplierAdvancesAccountIdAsync(int outletId)
+        private async Task<int> ResolveSupplierAdvancesAccountIdAsync(int outletId, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
             var code = $"113-{outlet.Code}-ADV";
 
@@ -865,7 +880,7 @@ namespace Pos.Persistence.Services
             var existingId = await _db.Accounts.AsNoTracking()
                 .Where(a => a.Code == code && a.OutletId == outletId)
                 .Select(a => a.Id)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(ct);
             if (existingId != 0) return existingId;
 
             // Find an Assets header for this outlet (preferred) or a shared one.
@@ -873,7 +888,7 @@ namespace Pos.Persistence.Services
                 .Where(a => a.IsHeader && a.AllowPosting == false && a.Type == Pos.Domain.Entities.AccountType.Asset
                             && (a.OutletId == outletId || a.OutletId == null))
                 .OrderByDescending(a => a.OutletId) // prefer outlet-specific over shared
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(ct);
 
             if (assetHeader == null)
                 throw new InvalidOperationException("Assets header account not found. Ensure your Chart of Accounts seeding includes an Asset header.");
@@ -891,15 +906,16 @@ namespace Pos.Persistence.Services
             };
 
             _db.Accounts.Add(acc);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
             return acc.Id;
         }
 
 
-        public async Task<(Purchase purchase, List<PurchasePayment> payments)> GetWithPaymentsAsync(int purchaseId)
+        public async Task<(Purchase purchase, List<PurchasePayment> payments)> GetWithPaymentsAsync(int purchaseId, CancellationToken ct = default)
         {
-            var purchase = await _db.Purchases.FirstAsync(p => p.Id == purchaseId);
-            var pays = await _db.PurchasePayments.Where(x => x.PurchaseId == purchaseId).OrderBy(x => x.TsUtc).ToListAsync();
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            var purchase = await _db.Purchases.FirstAsync(p => p.Id == purchaseId, ct);
+            var pays = await _db.PurchasePayments.Where(x => x.PurchaseId == purchaseId).OrderBy(x => x.TsUtc).ToListAsync(ct);
             return (purchase, pays);
         }
 
@@ -911,7 +927,7 @@ namespace Pos.Persistence.Services
             int supplierId,
             int? tillSessionId,
             int? counterId,
-            string user)
+            string user, CancellationToken ct=default)
         {
             // SAFETY RAIL: all settlements must be recorded via AddPaymentAsync (OnReceive/Adjustment).
             if (purchase.CashPaid > 0m)
@@ -953,12 +969,13 @@ namespace Pos.Persistence.Services
         /// Build a draft for a return from a FINAL purchase.
         /// Pre-fills remaining-allowed quantities per line.
         /// </summary>
-        public async Task<PurchaseReturnDraft> BuildReturnDraftAsync(int originalPurchaseId)
+        public async Task<PurchaseReturnDraft> BuildReturnDraftAsync(int originalPurchaseId, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var p = await _db.Purchases
                 .Include(x => x.Lines).ThenInclude(l => l.Item)
                 .Include(x => x.Party)
-                .FirstAsync(x => x.Id == originalPurchaseId && x.Status == PurchaseStatus.Final && !x.IsReturn);
+                .FirstAsync(x => x.Id == originalPurchaseId && x.Status == PurchaseStatus.Final && !x.IsReturn, ct);
 
             // Already returned per original line (stored as negative qty; convert to positive for math)
             var already = await _db.Purchases
@@ -967,7 +984,7 @@ namespace Pos.Persistence.Services
                 .Where(l => l.RefPurchaseLineId != null)
                 .GroupBy(l => l.RefPurchaseLineId!.Value)
                 .Select(g => new { OriginalLineId = g.Key, ReturnedAbs = Math.Abs(g.Sum(z => z.Qty)) })
-                .ToListAsync();
+                .ToListAsync(ct);
 
             var returnedByLine = already.ToDictionary(x => x.OriginalLineId, x => x.ReturnedAbs);
 
@@ -1003,14 +1020,16 @@ namespace Pos.Persistence.Services
         /// Forces negative line Qty, validates per-line remaining caps, computes totals from |Qty|.
         /// Overload kept to avoid breaking existing callers (no refunds).
         /// </summary>
-        public Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null)
-            => SaveReturnAsync(model, lines, user, refunds: null, tillSessionId: null, counterId: null);
+        public Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, CancellationToken ct = default)
+        => SaveReturnAsync(model, lines, user, refunds: null, tillSessionId: null, counterId: null, ct);
+
 
         /// <summary>
         /// Save a FINAL purchase return with optional refunds and auto-credit creation.
         /// </summary>
-        public async Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, IEnumerable<SupplierRefundSpec>? refunds = null, int? tillSessionId = null, int? counterId = null)
+        public async Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, IEnumerable<SupplierRefundSpec>? refunds = null, int? tillSessionId = null, int? counterId = null, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             if (!model.IsReturn)
                 throw new InvalidOperationException("Model must be a return (IsReturn=true).");
 
@@ -1068,7 +1087,7 @@ namespace Pos.Persistence.Services
             model.UpdatedAtUtc = DateTime.UtcNow;
             model.UpdatedBy = user;
 
-            using var tx = await _db.Database.BeginTransactionAsync();
+            using var tx = await _db.Database.BeginTransactionAsync(ct);
 
             if (model.Id == 0)
             {
@@ -1118,7 +1137,7 @@ namespace Pos.Persistence.Services
                     : 0;
 
                 _db.PurchaseLines.RemoveRange(existing.Lines);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
                 foreach (var l in lineList)
                 {
@@ -1129,7 +1148,7 @@ namespace Pos.Persistence.Services
                 model = existing;
             }
 
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
             await PostPurchaseReturnStockAsync(model, lineList, user ?? "system");
 
             // === CHANGED: Only auto-apply against original if one exists.
@@ -1185,9 +1204,9 @@ namespace Pos.Persistence.Services
                     Source = $"Return {(string.IsNullOrWhiteSpace(model.DocNo) ? $"#{model.Id}" : model.DocNo)}"
                 };
                 _db.SupplierCredits.Add(credit);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
                 await _outbox.EnqueueUpsertAsync(_db, credit, default);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
             }
 
@@ -1196,15 +1215,16 @@ namespace Pos.Persistence.Services
             // - Delta: l.Qty (already negative)
             // - Valuation: l.UnitCost (free-form uses edited cost; referenced uses locked cost)
 
-            await tx.CommitAsync();
+            await tx.CommitAsync(ct);
             await _outbox.EnqueueUpsertAsync(_db, model, default);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
 
             return model;
         }
 
-        public async Task<decimal> GetOnHandAsync(int itemId, StockTargetType target, int? outletId, int? warehouseId)
+        public async Task<decimal> GetOnHandAsync(int itemId, StockTargetType target, int? outletId, int? warehouseId, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             if (itemId <= 0) return 0m;
 
             if (target == StockTargetType.Outlet)
@@ -1233,6 +1253,7 @@ namespace Pos.Persistence.Services
 
         private async Task<string> EnsureReturnNumberAsync(Purchase p, CancellationToken ct)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             if (!string.IsNullOrWhiteSpace(p.DocNo)) return p.DocNo!;
 
             var day = (p.ReceivedAtUtc ?? DateTime.UtcNow).Date;
@@ -1344,41 +1365,54 @@ namespace Pos.Persistence.Services
 
         // ---------- Convenience Queries for UI Pickers ----------
 
-        public Task<List<Purchase>> ListHeldAsync()
-            => _db.Purchases
-              .AsNoTracking()
-              .Include(p => p.Party)   // <- keep this!
-              .Where(p => p.Status == PurchaseStatus.Draft)
-              .OrderByDescending(p => p.PurchaseDate)
-              .ToListAsync();
+        public async Task<List<Purchase>> ListHeldAsync(CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Purchases
+                .AsNoTracking()
+                .Include(p => p.Party)
+                .Where(p => p.Status == PurchaseStatus.Draft)
+                .OrderByDescending(p => p.PurchaseDate)
+                .ToListAsync(ct);
+        }
 
-        public Task<List<Purchase>> ListPostedAsync()
-            => _db.Purchases
-                  .AsNoTracking()
-                  .Include(p => p.Party)
-                  .Where(p => p.Status == PurchaseStatus.Final)
-                  .OrderByDescending(p => p.ReceivedAtUtc ?? p.PurchaseDate)
-                  .ToListAsync();
 
-        public Task<Purchase> LoadWithLinesAsync(int id)
-            => _db.Purchases
-                  .Include(p => p.Lines)
-                  .Include(p => p.Party)
-                  .FirstAsync(p => p.Id == id);
+        public async Task<List<Purchase>> ListPostedAsync(CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Purchases
+                .AsNoTracking()
+                .Include(p => p.Party)
+                .Where(p => p.Status == PurchaseStatus.Final)
+                .OrderByDescending(p => p.ReceivedAtUtc ?? p.PurchaseDate)
+                .ToListAsync(ct);
+        }
+
+
+        public async Task<Purchase> LoadWithLinesAsync(int id, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Purchases
+                .Include(p => p.Lines)
+                .Include(p => p.Party)
+                .FirstAsync(p => p.Id == id, ct);
+        }
+
 
         // ---------- INTERNAL CREDIT/REFUND HELPERS ----------
 
         /// <summary>
         /// Non-cash adjustment on original purchase for return value. Returns amount applied.
         /// </summary>
-        private async Task<decimal> AutoApplyReturnToOriginalAsync_ReturnApplied(Purchase savedReturn, string user)
+        private async Task<decimal> AutoApplyReturnToOriginalAsync_ReturnApplied(Purchase savedReturn, string user, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             if (!savedReturn.IsReturn || savedReturn.RefPurchaseId is null or <= 0)
                 return 0m;
 
             var original = await _db.Purchases
                 .Include(p => p.Payments)
-                .FirstAsync(p => p.Id == savedReturn.RefPurchaseId.Value);
+                .FirstAsync(p => p.Id == savedReturn.RefPurchaseId.Value, ct);
 
             if (original.Status == PurchaseStatus.Voided)
                 return 0m; // nothing to apply
@@ -1416,8 +1450,9 @@ namespace Pos.Persistence.Services
             int? tillSessionId,
             int? counterId,
             SupplierRefundSpec refund,
-            string user)
+            string user, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var amt = Math.Round(refund.Amount, 2);
             if (amt <= 0) throw new InvalidOperationException("Refund amount must be > 0.");
 
@@ -1436,7 +1471,7 @@ namespace Pos.Persistence.Services
             };
 
             _db.CashLedgers.Add(cash);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
         }
 
         /// <summary>
@@ -1444,8 +1479,9 @@ namespace Pos.Persistence.Services
         /// Prefers outlet-scoped credits, then global credits; oldest first.
         /// </summary>
         private async Task<decimal> ApplySupplierCreditsAsync(
-            int supplierId, int? outletId, Purchase purchase, string user)
+            int supplierId, int? outletId, Purchase purchase, string user, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // Determine how much we still need to cover
             var currentPaid = purchase.Payments.Sum(p => p.Amount);
             var need = Math.Max(0, purchase.GrandTotal - currentPaid);
@@ -1455,7 +1491,7 @@ namespace Pos.Persistence.Services
             var credits = await _db.SupplierCredits
                 .Where(c => c.SupplierId == supplierId && (c.OutletId == outletId || c.OutletId == null) && c.Amount > 0)
                 .OrderBy(c => c.CreatedAtUtc)
-                .ToListAsync();
+                .ToListAsync(ct);
 
             decimal used = 0m;
             var touched = new List<SupplierCredit>(); // track credits we modify
@@ -1491,7 +1527,7 @@ namespace Pos.Persistence.Services
             if (zeroed.Count > 0)
                 _db.SupplierCredits.RemoveRange(zeroed);
 
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
             // === SYNC: updated credits + purchase balance
             foreach (var c in touched.Where(x => x.Amount > 0.0001m))
             {
@@ -1500,7 +1536,7 @@ namespace Pos.Persistence.Services
             // For removed credits, you can skip (treat as fully consumed). If you want to mirror deletions,
             // consider a soft-delete flag in the future.
             await _outbox.EnqueueUpsertAsync(_db, purchase, default);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
 
             return used;
         }
@@ -1509,8 +1545,9 @@ namespace Pos.Persistence.Services
         // using Pos.Domain.Entities;
         // ...
 
-        private async Task PostPurchaseStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user)
+        private async Task PostPurchaseStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // Determine ledger location
             var locType = model.TargetType == StockTargetType.Warehouse
                 ? InventoryLocationType.Warehouse
@@ -1523,11 +1560,11 @@ namespace Pos.Persistence.Services
             // If this purchase was already FINAL and is being amended, remove previous postings
             var prior = await _db.StockEntries
                 .Where(se => se.RefType == "Purchase" && se.RefId == model.Id)
-                .ToListAsync();
+                .ToListAsync(ct);
             if (prior.Count > 0)
             {
                 _db.StockEntries.RemoveRange(prior);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
             }
 
             var now = DateTime.UtcNow;
@@ -1548,11 +1585,12 @@ namespace Pos.Persistence.Services
                 });
             }
 
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
         }
 
-        private async Task PostPurchaseReturnStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user)
+        private async Task PostPurchaseReturnStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // ---- Resolve where to post OUT (debit) ----
             InventoryLocationType locType;
             int locId;
@@ -1560,7 +1598,7 @@ namespace Pos.Persistence.Services
             if (model.RefPurchaseId is int rid && rid > 0)
             {
                 // WITH-INVOICE: reduce where the original purchase was received
-                var orig = await _db.Purchases.AsNoTracking().FirstAsync(p => p.Id == rid);
+                var orig = await _db.Purchases.AsNoTracking().FirstAsync(p => p.Id == rid, ct);
 
                 if (orig.TargetType == StockTargetType.Warehouse)
                 {
@@ -1595,7 +1633,7 @@ namespace Pos.Persistence.Services
             if (prior.Count > 0)
             {
                 _db.StockEntries.RemoveRange(prior);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
             }
 
             var now = DateTime.UtcNow;
@@ -1614,16 +1652,17 @@ namespace Pos.Persistence.Services
                     Note = model.VendorInvoiceNo
                 });
             }
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
         }
 
 
-        public async Task VoidPurchaseAsync(int purchaseId, string reason, string? user = null)
+        public async Task VoidPurchaseAsync(int purchaseId, string reason, string? user = null, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // Load the purchase (non-return)
             var p = await _db.Purchases
                 .AsNoTracking()
-                .FirstAsync(x => x.Id == purchaseId && !x.IsReturn);
+                .FirstAsync(x => x.Id == purchaseId && !x.IsReturn, ct);
 
             if (p.Status == PurchaseStatus.Voided) return;
 
@@ -1640,7 +1679,7 @@ namespace Pos.Persistence.Services
             var postings = await _db.StockEntries
                 .Where(se => se.RefId == p.Id &&
                       (se.RefType == "Purchase" || se.RefType == "PurchaseAmend" || se.RefType == "PurchaseMove"))
-                .ToListAsync();
+                .ToListAsync(ct);
 
             // Nothing posted? Just mark void and exit.
             if (postings.Count == 0)
@@ -1649,11 +1688,11 @@ namespace Pos.Persistence.Services
                 entity.Status = PurchaseStatus.Voided;
                 entity.UpdatedAtUtc = DateTime.UtcNow;
                 entity.UpdatedBy = user;
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
 
                 // === SYNC: voided purchase
                 await _outbox.EnqueueUpsertAsync(_db, entity, default);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(ct);
                 return;
             }
 
@@ -1677,7 +1716,7 @@ namespace Pos.Persistence.Services
                              itemIds.Contains(se.ItemId))
                 .GroupBy(se => se.ItemId)
                 .Select(g => new { ItemId = g.Key, OnHand = g.Sum(x => x.QtyChange) })
-                .ToDictionaryAsync(x => x.ItemId, x => x.OnHand);
+                .ToDictionaryAsync(x => x.ItemId, x => x.OnHand, ct);
 
             // Validate no item would go below zero after removal
             var violations = new List<string>();
@@ -1700,7 +1739,7 @@ namespace Pos.Persistence.Services
             }
 
             // Safe to void: remove all purchase-linked postings atomically and mark void
-            using var tx = await _db.Database.BeginTransactionAsync();
+            using var tx = await _db.Database.BeginTransactionAsync(ct);
 
             _db.StockEntries.RemoveRange(postings);
 
@@ -1710,49 +1749,51 @@ namespace Pos.Persistence.Services
             entity2.UpdatedBy = user;
             // (Optional) record audit row if you keep one
             //_db.AuditLogs.Add(new AuditLog { ... });
-            await _db.SaveChangesAsync();
-            await tx.CommitAsync();
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
             // === SYNC: voided purchase
-            var voided = await _db.Purchases.AsNoTracking().FirstAsync(x => x.Id == p.Id);
+            var voided = await _db.Purchases.AsNoTracking().FirstAsync(x => x.Id == p.Id, ct);
             await _outbox.EnqueueUpsertAsync(_db, voided, default);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
 
         }
 
 
-        public async Task VoidReturnAsync(int returnId, string reason, string? user = null)
+        public async Task VoidReturnAsync(int returnId, string reason, string? user = null, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             var r = await _db.Purchases.Include(x => x.Lines)
-                                       .FirstAsync(x => x.Id == returnId && x.IsReturn);
+                                       .FirstAsync(x => x.Id == returnId && x.IsReturn, ct);
             if (r.Status == PurchaseStatus.Voided) return;
             var postings = await _db.StockEntries
                 .Where(se => se.RefType == "PurchaseReturn" && se.RefId == r.Id)
-                .ToListAsync();
+                .ToListAsync(ct);
             if (postings.Count > 0) _db.StockEntries.RemoveRange(postings);
 
             r.Status = PurchaseStatus.Voided;
             r.UpdatedAtUtc = DateTime.UtcNow;
             r.UpdatedBy = user;
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
             // === SYNC: voided return
             await _outbox.EnqueueUpsertAsync(_db, r, default);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
 
         }
 
-        public sealed class PurchaseLineEffective
-        {
-            public int ItemId { get; set; }
-            public string? Sku { get; set; }
-            public string? Name { get; set; }
-            public decimal Qty { get; set; }
-            public decimal UnitCost { get; set; }  // display-only; keep simple (avg of base lines)
-            public decimal Discount { get; set; }  // display-only (sum of base discounts)
-            public decimal TaxRate { get; set; }   // display-only (avg of base tax rates)
-        }
+        //public sealed class PurchaseLineEffective
+        //{
+        //    public int ItemId { get; set; }
+        //    public string? Sku { get; set; }
+        //    public string? Name { get; set; }
+        //    public decimal Qty { get; set; }
+        //    public decimal UnitCost { get; set; }  // display-only; keep simple (avg of base lines)
+        //    public decimal Discount { get; set; }  // display-only (sum of base discounts)
+        //    public decimal TaxRate { get; set; }   // display-only (avg of base tax rates)
+        //}
 
-        public async Task<List<PurchaseLineEffective>> GetEffectiveLinesAsync(int purchaseId)
+        public async Task<List<PurchaseLineEffective>> GetEffectiveLinesAsync(int purchaseId, CancellationToken ct = default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // original lines (grouped by Item)
             var baseLines = await _db.PurchaseLines
                 .AsNoTracking()
@@ -1766,14 +1807,14 @@ namespace Pos.Persistence.Services
                     Discount = Math.Round(g.Sum(x => x.Discount), 2),
                     TaxRate = g.Any() ? Math.Round(g.Average(x => x.TaxRate), 2) : 0m,
                 })
-                .ToDictionaryAsync(x => x.ItemId, x => x);
+                .ToDictionaryAsync(x => x.ItemId, x => x, ct);
             // prior amendment deltas (qty only)
             var amendQty = await _db.StockEntries
                 .AsNoTracking()
                 .Where(se => se.RefType == "PurchaseAmend" && se.RefId == purchaseId)
                 .GroupBy(se => se.ItemId)
                 .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
-                .ToDictionaryAsync(x => x.ItemId, x => x.Qty);
+                .ToDictionaryAsync(x => x.ItemId, x => x.Qty, ct);
             // build effective map
             var ids = baseLines.Keys.Union(amendQty.Keys).ToList();
             var effective = new List<PurchaseLineEffective>(ids.Count);
@@ -1782,7 +1823,7 @@ namespace Pos.Persistence.Services
                 .AsNoTracking()
                 .Where(i => ids.Contains(i.Id))
                 .Select(i => new { i.Id, i.Sku, i.Name, i.Price, i.DefaultTaxRatePct })
-                .ToDictionaryAsync(x => x.Id, x => x);
+                .ToDictionaryAsync(x => x.Id, x => x, ct);
 
             foreach (var id in ids)
             {
@@ -1807,14 +1848,15 @@ namespace Pos.Persistence.Services
                 .ToList();
         }
 
-        public async Task<decimal> GetRemainingReturnableQtyAsync(int purchaseLineId)
+        public async Task<decimal> GetRemainingReturnableQtyAsync(int purchaseLineId, CancellationToken ct=default)
         {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
             // original line qty (may be negative)
             var orig = await _db.PurchaseLines
                 .AsNoTracking()
                 .Where(x => x.Id == purchaseLineId)
                 .Select(x => (decimal?)x.Qty)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(ct);
 
             if (orig is null) return 0m;
             // SUM of positive magnitudes for all returns that reference this line
@@ -1823,32 +1865,109 @@ namespace Pos.Persistence.Services
                 .AsNoTracking()
                 .Where(x => x.RefPurchaseLineId == purchaseLineId)
                 .Select(x => (decimal?)(x.Qty < 0 ? -x.Qty : x.Qty))
-                .SumAsync() ?? 0m;
+                .SumAsync(ct) ?? 0m;
 
             var origAbs = orig.Value < 0 ? -orig.Value : orig.Value;
             var remaining = Math.Max(0m, origAbs - returned);
             return remaining;
         }
+
+        // --- Bank configuration & pickers (outlet-scoped) ---
+        public async Task<bool> IsPurchaseBankConfiguredAsync(int outletId, CancellationToken ct=default)
+        {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            var s = await _db.InvoiceSettings.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.OutletId == outletId, ct);
+            return s?.PurchaseBankAccountId != null;
+        }
+
+        public async Task<List<Account>> ListBankAccountsForOutletAsync(int outletId, CancellationToken ct=default)
+        {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            return await _db.Accounts.AsNoTracking()
+                .Where(a => a.OutletId == outletId
+                         && a.AllowPosting
+                         && !a.IsHeader
+                         && (a.Name.Contains("Bank") || a.Code.StartsWith("101")))
+                .OrderBy(a => a.Name)
+                .ToListAsync(ct);
+        }
+
+        public async Task<int?> GetConfiguredPurchaseBankAccountIdAsync(int outletId, CancellationToken ct = default)
+        {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            var s = await _db.InvoiceSettings.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.OutletId == outletId, ct);
+            return s?.PurchaseBankAccountId;
+        }
+
+        // --- Lightweight lookups the view needed previously via _db.Set<T> ---
+        public async Task<string?> GetPartyNameAsync(int partyId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Set<Party>().AsNoTracking()
+                .Where(x => x.Id == partyId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync(ct);
+        }
+
+
+        public async Task<Dictionary<int, (string sku, string name)>> GetItemsMetaAsync(IEnumerable<int> itemIds, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var ids = itemIds.Distinct().ToArray();
+            var list = await db.Items.AsNoTracking()
+                .Where(i => ids.Contains(i.Id))
+                .Select(i => new { i.Id, i.Sku, i.Name })
+                .ToListAsync(ct);
+
+            return list.ToDictionary(x => x.Id, x => (x.Sku ?? "", x.Name ?? $"Item #{x.Id}"));
+        }
+
+        // --- Draft loader used by Resume (status-guarded) ---
+        public async Task<Purchase?> LoadDraftWithLinesAsync(int id, CancellationToken ct=default)
+        {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            return await _db.Purchases
+                .Include(p => p.Lines)
+                .FirstOrDefaultAsync(p => p.Id == id && p.Status == PurchaseStatus.Draft, ct);
+        }
+
+        // --- Payment edits (moved out of the View) ---
+        public async Task UpdatePaymentAsync(int paymentId, decimal newAmount, TenderMethod newMethod, string? newNote, string user, CancellationToken ct=default)
+        {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            var pay = await _db.PurchasePayments.FirstOrDefaultAsync(p => p.Id == paymentId, ct);
+            if (pay is null) throw new InvalidOperationException($"Payment #{paymentId} not found.");
+
+            if (newAmount <= 0) throw new InvalidOperationException("Amount must be > 0.");
+            pay.Amount = Math.Round(newAmount, 2);
+            pay.Method = newMethod;
+            pay.Note = string.IsNullOrWhiteSpace(newNote) ? null : newNote.Trim();
+            pay.UpdatedAtUtc = DateTime.UtcNow;
+            pay.UpdatedBy = user;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        public async Task RemovePaymentAsync(int paymentId, string user, CancellationToken ct = default)
+        {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            var pay = await _db.PurchasePayments.FirstOrDefaultAsync(p => p.Id == paymentId, ct);
+            if (pay is null) return;
+            _db.PurchasePayments.Remove(pay);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        public async Task<Purchase?> LoadReturnWithLinesAsync(int returnId, CancellationToken ct = default)
+        {
+            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            return await _db.Purchases
+                .Include(p => p.Lines)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == returnId && p.IsReturn, ct);
+        }
+
     }
     // ---------- Simple DTOs for Return Draft ----------
-
-    public class PurchaseReturnDraft
-    {
-        public int PartyId { get; set; }
-        public StockTargetType TargetType { get; set; }
-        public int? OutletId { get; set; }
-        public int? WarehouseId { get; set; }
-        public int RefPurchaseId { get; set; }
-        public List<PurchaseReturnDraftLine> Lines { get; set; } = new();
-    }
-
-    public class PurchaseReturnDraftLine
-    {
-        public int? OriginalLineId { get; set; }
-        public int ItemId { get; set; }
-        public string ItemName { get; set; } = "";
-        public decimal UnitCost { get; set; }
-        public decimal MaxReturnQty { get; set; }
-        public decimal ReturnQty { get; set; }
-    }
+    
 }

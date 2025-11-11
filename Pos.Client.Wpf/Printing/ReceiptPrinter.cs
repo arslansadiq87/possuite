@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using Pos.Domain.Entities;
 using Pos.Client.Wpf.Models;
-using Pos.Client.Wpf.Services;
 using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // <-- to see CartLine from MainWindow namespace
 using System.Threading.Tasks;
+using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Printing
 {
@@ -71,12 +71,12 @@ namespace Pos.Client.Wpf.Printing
         }
 
         public static async Task PrintSaleAsync(
-    Sale sale,
-    IEnumerable<CartLine> cart,
-    TillSession? till,
-    string cashierName,
-    string? salesmanName,
-    IInvoiceSettingsService settingsSvc)
+        Sale sale,
+        IEnumerable<CartLine> cart,
+        TillSession? till,
+        string cashierName,
+        string? salesmanName,
+        Pos.Domain.Services.IInvoiceSettingsService settingsSvc)
         {
             var result = await settingsSvc.GetAsync(sale.OutletId, "en");
             var settings = result.Settings;

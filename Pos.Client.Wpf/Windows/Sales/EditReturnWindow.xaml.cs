@@ -14,16 +14,24 @@ using Microsoft.Extensions.DependencyInjection;    // GetRequiredService
 using Pos.Client.Wpf.Services;                     // IPaymentDialogService, PaymentResult
 using Pos.Persistence.Sync;                 // IOutboxWriter
 using Pos.Client.Wpf.Services.Sync;         // EnqueueAfterSaveAsync extension (if you created it)
-
+using Pos.Persistence.Services;            // IGlPostingService
+using Pos.Domain.Models.Sales;
+using Pos.Domain.Services;
+//using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Drawing;
+using ZXing;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class EditReturnWindow : Window
     {
         private readonly int _returnSaleId;
-        private readonly DbContextOptions<PosClientDbContext> _opts;
-        private Sale? _old;
-        private int _originalSaleId;
+        //private readonly DbContextOptions<PosClientDbContext> _opts;
+        //private Sale? _old;
+        //private int _originalSaleId;
+        private IReturnsService _returns;
+        private EditReturnLoadDto? _load;   // snapshot for UI
+
         public bool Confirmed { get; private set; }
         public int NewRevision { get; private set; }
         public class Row : INotifyPropertyChanged
@@ -73,10 +81,14 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             InitializeComponent();
             _returnSaleId = returnSaleId;
-            _opts = new DbContextOptionsBuilder<PosClientDbContext>()
-                .UseSqlite(DbPath.ConnectionString).Options;
+            //_opts = new DbContextOptionsBuilder<PosClientDbContext>()
+            //    .UseSqlite(DbPath.ConnectionString).Options;
+            _returns = App.Services.GetRequiredService<IReturnsService>();
+
             Grid.ItemsSource = _rows;
-            LoadReturn();
+            //LoadReturn();
+            Loaded += async (_, __) => await LoadReturnAsync();   // async load
+
             Grid.CellEditEnding += (s, e) =>
             {
                 if (e.EditAction != DataGridEditAction.Commit) return;
@@ -85,58 +97,91 @@ namespace Pos.Client.Wpf.Windows.Sales
             };
         }
 
-        private void LoadReturn()
+        private async Task LoadReturnAsync()
         {
-            using var db = new PosClientDbContext(_opts);
-            _old = db.Sales.AsNoTracking().First(s => s.Id == _returnSaleId);
-            if (!_old.IsReturn) { MessageBox.Show("Selected document is not a return."); Close(); return; }
-            if (_old.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL returns can be amended."); Close(); return; }
-            _originalSaleId = _old.OriginalSaleId ?? 0;
-            var oldLines = db.SaleLines.AsNoTracking().Where(l => l.SaleId == _returnSaleId).ToList();
-            // Original sold per item (positive)
-            var soldByItem = db.SaleLines.AsNoTracking()
-                .Where(l => l.SaleId == _originalSaleId)
-                .GroupBy(l => l.ItemId)
-                .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
-            // Already returned by OTHER returns (exclude this return)
-            var returnedByOthers = (
-                from s in db.Sales.AsNoTracking()
-                where s.IsReturn && s.OriginalSaleId == _originalSaleId && s.Status != SaleStatus.Voided && s.Id != _returnSaleId
-                join l in db.SaleLines.AsNoTracking() on s.Id equals l.SaleId
-                group l by l.ItemId into g
-                select new { ItemId = g.Key, Qty = g.Sum(x => Math.Abs(x.Qty)) }
-            ).ToDictionary(x => x.ItemId, x => x.Qty);
-            // Items metadata
-            var items = db.Items.AsNoTracking().ToDictionary(i => i.Id, i => new { i.Sku, i.Name });
-            HeaderText.Text = $"Amend Return {_old.CounterId}-{_old.InvoiceNumber}  (Rev {_old.Revision})  Total: {_old.Total:0.00}";
-            _rows.Clear();
-            foreach (var l in oldLines)
+            //using var db = new PosClientDbContext(_opts);
+            //_old = db.Sales.AsNoTracking().First(s => s.Id == _returnSaleId);
+            //if (!_old.IsReturn) { MessageBox.Show("Selected document is not a return."); Close(); return; }
+            //if (_old.Status != SaleStatus.Final) { MessageBox.Show("Only FINAL returns can be amended."); Close(); return; }
+            //_originalSaleId = _old.OriginalSaleId ?? 0;
+            //var oldLines = db.SaleLines.AsNoTracking().Where(l => l.SaleId == _returnSaleId).ToList();
+            //// Original sold per item (positive)
+            //var soldByItem = db.SaleLines.AsNoTracking()
+            //    .Where(l => l.SaleId == _originalSaleId)
+            //    .GroupBy(l => l.ItemId)
+            //    .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+            //// Already returned by OTHER returns (exclude this return)
+            //var returnedByOthers = (
+            //    from s in db.Sales.AsNoTracking()
+            //    where s.IsReturn && s.OriginalSaleId == _originalSaleId && s.Status != SaleStatus.Voided && s.Id != _returnSaleId
+            //    join l in db.SaleLines.AsNoTracking() on s.Id equals l.SaleId
+            //    group l by l.ItemId into g
+            //    select new { ItemId = g.Key, Qty = g.Sum(x => Math.Abs(x.Qty)) }
+            //).ToDictionary(x => x.ItemId, x => x.Qty);
+            //// Items metadata
+            //var items = db.Items.AsNoTracking().ToDictionary(i => i.Id, i => new { i.Sku, i.Name });
+            //HeaderText.Text = $"Amend Return {_old.CounterId}-{_old.InvoiceNumber}  (Rev {_old.Revision})  Total: {_old.Total:0.00}";
+            try
             {
-                var sold = soldByItem.TryGetValue(l.ItemId, out var sQty) ? sQty : 0;
-                var oldRetAbs = Math.Abs(l.Qty);
-                var otherReturned = returnedByOthers.TryGetValue(l.ItemId, out var rQty) ? rQty : 0;
-                var availableNow = Math.Max(0, sold - otherReturned); // capacity available for THIS amended doc
-                var meta = items.TryGetValue(l.ItemId, out var m) ? m : new { Sku = "", Name = "" };
-                _rows.Add(new Row
+                _load = await _returns.LoadReturnForAmendAsync(_returnSaleId);
+                
+                HeaderText.Text = $"Amend Return {_load.CounterId}-{_load.InvoiceNumber}  (Rev {_load.Revision})  Total: {_load.CurrentTotal:0.00}";
+                _rows.Clear();
+                foreach (var l in _load.Lines)
                 {
-                    ItemId = l.ItemId,
-                    Sku = meta.Sku ?? "",
-                    Name = meta.Name ?? "",
-                    SoldQty = sold,
-                    AlreadyReturnedExcludingThis = otherReturned,
-                    AvailableQty = availableNow,
-                    // initial value = old absolute qty, clamped to available
-                    OldReturnQty = oldRetAbs,
-                    ReturnQty = Math.Min(oldRetAbs, availableNow),
-                    UnitPrice = l.UnitPrice,
-                    DiscountPct = l.DiscountPct,
-                    DiscountAmt = l.DiscountAmt,
-                    TaxRatePct = l.TaxRatePct,
-                    TaxInclusive = l.TaxInclusive,
-                    LineRefund = 0m
-                });
-            }
-            RecalcTotals();
+                    _rows.Add(new Row
+                    {
+                        ItemId = l.ItemId,
+                        Sku = l.Sku,
+                        Name = l.Name,
+                        SoldQty = l.SoldQty,
+                        AlreadyReturnedExcludingThis = l.AlreadyReturnedExcludingThis,
+                        AvailableQty = l.AvailableQty,
+                        OldReturnQty = l.OldReturnQty,
+                        ReturnQty = Math.Min(l.OldReturnQty, l.AvailableQty),
+                        UnitPrice = l.UnitPrice,
+                        DiscountPct = l.DiscountPct,
+                        DiscountAmt = l.DiscountAmt,
+                        TaxRatePct = l.TaxRatePct,
+                        TaxInclusive = l.TaxInclusive,
+                        LineRefund = 0m
+                    });
+                }
+                RecalcTotals();
+                }
+                catch (Exception ex)
+                {
+                MessageBox.Show("Failed to load return for amend: " + ex.Message);
+                Close();
+                }
+            //_rows.Clear();
+            //foreach (var l in oldLines)
+            //{
+            //    var sold = soldByItem.TryGetValue(l.ItemId, out var sQty) ? sQty : 0;
+            //    var oldRetAbs = Math.Abs(l.Qty);
+            //    var otherReturned = returnedByOthers.TryGetValue(l.ItemId, out var rQty) ? rQty : 0;
+            //    var availableNow = Math.Max(0, sold - otherReturned); // capacity available for THIS amended doc
+            //    var meta = items.TryGetValue(l.ItemId, out var m) ? m : new { Sku = "", Name = "" };
+            //    _rows.Add(new Row
+            //    {
+            //        ItemId = l.ItemId,
+            //        Sku = meta.Sku ?? "",
+            //        Name = meta.Name ?? "",
+            //        SoldQty = sold,
+            //        AlreadyReturnedExcludingThis = otherReturned,
+            //        AvailableQty = availableNow,
+            //        // initial value = old absolute qty, clamped to available
+            //        OldReturnQty = oldRetAbs,
+            //        ReturnQty = Math.Min(oldRetAbs, availableNow),
+            //        UnitPrice = l.UnitPrice,
+            //        DiscountPct = l.DiscountPct,
+            //        DiscountAmt = l.DiscountAmt,
+            //        TaxRatePct = l.TaxRatePct,
+            //        TaxInclusive = l.TaxInclusive,
+            //        LineRefund = 0m
+            //    });
+            //}
+            //RecalcTotals();
         }
 
         private void RecalcTotals()
@@ -156,7 +201,8 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
-            if (_old == null) return;
+            //if (_old == null) return;
+            if (_load == null) return;
             var reason = ReasonBox.Text?.Trim();
             if (string.IsNullOrWhiteSpace(reason))
             {
@@ -166,191 +212,255 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 MessageBox.Show("No changes to save."); return;
             }
-            using var db = new PosClientDbContext(_opts);
-            using var tx = db.Database.BeginTransaction();
-            // Reload latest version of this return (to avoid amending an outdated revision)
-            var latest = db.Sales
-                .Where(s => s.CounterId == _old.CounterId
-                         && s.InvoiceNumber == _old.InvoiceNumber
-                         && s.IsReturn
-                         && s.Status != SaleStatus.Voided)
-                .OrderByDescending(s => s.Revision)
-                .First();
-            if (latest.Status != SaleStatus.Final) { MessageBox.Show("Current return is not FINAL."); return; }
-            var latestLines = db.SaleLines.Where(l => l.SaleId == latest.Id).ToList();
-            // Hard re-check availability inside tx (exclude this doc)
-            var soldByItem = db.SaleLines.AsNoTracking()
-                .Where(l => l.SaleId == _originalSaleId)
-                .GroupBy(l => l.ItemId)
-                .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
-            var returnedByOthersNow = (
-                from s in db.Sales.AsNoTracking()
-                where s.IsReturn && s.OriginalSaleId == _originalSaleId && s.Status != SaleStatus.Voided && s.Id != latest.Id
-                join l in db.SaleLines.AsNoTracking() on s.Id equals l.SaleId
-                group l by l.ItemId into g
-                select new { ItemId = g.Key, Qty = g.Sum(x => Math.Abs(x.Qty)) }
-            ).ToDictionary(x => x.ItemId, x => x.Qty);
-            foreach (var r in _rows)
+            //using var db = new PosClientDbContext(_opts);
+            //using var tx = db.Database.BeginTransaction();
+            //// Reload latest version of this return (to avoid amending an outdated revision)
+            //var latest = db.Sales
+            //    .Where(s => s.CounterId == _old.CounterId
+            //             && s.InvoiceNumber == _old.InvoiceNumber
+            //             && s.IsReturn
+            //             && s.Status != SaleStatus.Voided)
+            //    .OrderByDescending(s => s.Revision)
+            //    .First();
+            //if (latest.Status != SaleStatus.Final) { MessageBox.Show("Current return is not FINAL."); return; }
+            //var latestLines = db.SaleLines.Where(l => l.SaleId == latest.Id).ToList();
+            //// Hard re-check availability inside tx (exclude this doc)
+            //var soldByItem = db.SaleLines.AsNoTracking()
+            //    .Where(l => l.SaleId == _originalSaleId)
+            //    .GroupBy(l => l.ItemId)
+            //    .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+            //var returnedByOthersNow = (
+            //    from s in db.Sales.AsNoTracking()
+            //    where s.IsReturn && s.OriginalSaleId == _originalSaleId && s.Status != SaleStatus.Voided && s.Id != latest.Id
+            //    join l in db.SaleLines.AsNoTracking() on s.Id equals l.SaleId
+            //    group l by l.ItemId into g
+            //    select new { ItemId = g.Key, Qty = g.Sum(x => Math.Abs(x.Qty)) }
+            //).ToDictionary(x => x.ItemId, x => x.Qty);
+            //foreach (var r in _rows)
+            //{
+            //    var sold = soldByItem.TryGetValue(r.ItemId, out var sQty) ? sQty : 0;
+            //    var others = returnedByOthersNow.TryGetValue(r.ItemId, out var oQty) ? oQty : 0;
+            //    var availNow = Math.Max(0, sold - others);
+            //    if (r.ReturnQty > availNow)
+            //    {
+            //        MessageBox.Show($"Item {r.Sku}: requested {r.ReturnQty}, available {availNow}.");
+            //        tx.Rollback(); return;
+            //    }
+            //}
+            //// Compute NEW totals (signed: negative)
+            //var newAmounts = _rows.Select(r => PricingMath.CalcLine(new LineInput(
+            //    Qty: r.ReturnQty, UnitPrice: r.UnitPrice, DiscountPct: r.DiscountPct, DiscountAmt: r.DiscountAmt,
+            //    TaxRatePct: r.TaxRatePct, TaxInclusive: r.TaxInclusive))).ToList();
+            //var magSubtotal = newAmounts.Sum(a => a.LineNet);
+            //var magTax = newAmounts.Sum(a => a.LineTax);
+            //var magGrand = magSubtotal + magTax;
+            //// Build amended return
+            //var amended = new Sale
+            //{
+            //    Ts = DateTime.UtcNow,
+            //    OutletId = latest.OutletId,
+            //    CounterId = latest.CounterId,
+            //    TillSessionId = latest.TillSessionId,
+            //    IsReturn = true,
+            //    OriginalSaleId = _originalSaleId,
+            //    Status = SaleStatus.Final,
+            //    Revision = latest.Revision + 1,
+            //    RevisedFromSaleId = latest.Id,
+            //    InvoiceNumber = latest.InvoiceNumber,     // SAME invoice number
+            //    Subtotal = -magSubtotal,                  // signed totals (return = negative)
+            //    TaxTotal = -magTax,
+            //    Total = -magGrand,
+            //    CashierId = latest.CashierId,
+            //    SalesmanId = latest.SalesmanId,
+            //    CustomerKind = latest.CustomerKind,
+            //    CustomerId = latest.CustomerId,
+            //    CustomerName = latest.CustomerName,
+            //    CustomerPhone = latest.CustomerPhone,
+            //    Note = reason,
+            //    EReceiptToken = Guid.NewGuid().ToString("N"),
+            //    EReceiptUrl = null,
+            //    InvoiceFooter = latest.InvoiceFooter
+            //};
+            //db.Sales.Add(amended);
+            //db.SaveChanges();
+            //// New lines (negative qty for returns)
+            //var newByItem = _rows.ToDictionary(r => r.ItemId, r => r);
+            //foreach (var r in _rows)
+            //{
+            //    var a = PricingMath.CalcLine(new LineInput(
+            //        Qty: r.ReturnQty, UnitPrice: r.UnitPrice, DiscountPct: r.DiscountPct, DiscountAmt: r.DiscountAmt,
+            //        TaxRatePct: r.TaxRatePct, TaxInclusive: r.TaxInclusive));
+            //    db.SaleLines.Add(new SaleLine
+            //    {
+            //        SaleId = amended.Id,
+            //        ItemId = r.ItemId,
+            //        Qty = -r.ReturnQty,
+            //        UnitPrice = r.UnitPrice,
+            //        DiscountPct = r.DiscountPct,
+            //        DiscountAmt = r.DiscountAmt,
+            //        TaxCode = null,
+            //        TaxRatePct = r.TaxRatePct,
+            //        TaxInclusive = r.TaxInclusive,
+            //        UnitNet = -(a.UnitNet),
+            //        LineNet = -(a.LineNet),
+            //        LineTax = -(a.LineTax),
+            //        LineTotal = -(a.LineTotal)
+            //    });
+            //}
+            //db.SaveChanges();
+            //// Link previous as Revised
+            //latest.Status = SaleStatus.Revised;
+            //latest.RevisedToSaleId = amended.Id;
+            //db.SaveChanges();
+            //// STOCK DELTA (universal rule): deltaQty = newQty - oldQty (signed), QtyChange = -deltaQty
+            //var oldByItem = latestLines.ToDictionary(x => x.ItemId, x => x);
+            //var allItems = oldByItem.Keys.Union(newByItem.Keys).Distinct();
+            //foreach (var itemId in allItems)
+            //{
+            //    var oldQty = oldByItem.TryGetValue(itemId, out var o) ? o.Qty : 0;           // old return line (negative)
+            //    var newQty = newByItem.TryGetValue(itemId, out var r) ? -r.ReturnQty : 0;    // new line qty is negative
+            //    var deltaQty = newQty - oldQty;
+            //    if (deltaQty != 0)
+            //    {
+            //        db.StockEntries.Add(new StockEntry
+            //        {
+            //            LocationType = InventoryLocationType.Outlet,
+            //            LocationId = amended.OutletId,
+            //            OutletId = amended.OutletId,
+            //            ItemId = itemId,
+            //            QtyChange = -deltaQty, // sign-aware
+            //            RefType = "Amend",
+            //            RefId = amended.Id,
+            //            Ts = DateTime.UtcNow
+            //        });
+            //    }
+            //}
+            //db.SaveChanges();
+            //// PAYMENT DELTA (signed totals)
+            //var amountDelta = amended.Total - latest.Total; // signed (+collect / -refund)
+            //if (amountDelta != 0m)
+            //{
+            //    // Use in-shell overlay pay dialog
+            //    var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
+            //    var payResult = await paySvc.ShowAsync(
+            //        subtotal: Math.Abs(amended.Subtotal),
+            //        discountValue: 0m,
+            //        tax: Math.Abs(amended.TaxTotal),
+            //        grandTotal: Math.Abs(amended.Total),
+            //        items: _rows.Count,
+            //        qty: _rows.Sum(x => x.ReturnQty),
+            //        differenceMode: true,
+            //        amountDelta: amountDelta,
+            //        title: (amountDelta >= 0m) ? "Collect Difference" : "Refund Difference"
+            //    );
+            //    if (!payResult.Confirmed)
+            //    {
+            //        tx.Rollback();
+            //        MessageBox.Show("Amendment cancelled.");
+            //        return;
+            //    }
+            //    // Sign cash/card by delta direction (+ collect, - refund)
+            //    amended.CashAmount = (payResult.Cash > 0 ? (amountDelta >= 0 ? payResult.Cash : -payResult.Cash) : 0m);
+            //    amended.CardAmount = (payResult.Card > 0 ? (amountDelta >= 0 ? payResult.Card : -payResult.Card) : 0m);
+            //    amended.PaymentMethod =
+            //        (payResult.Cash > 0 && payResult.Card > 0) ? PaymentMethod.Mixed :
+            //        (payResult.Cash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
+
+            //    db.SaveChanges();
+            //}
+            //// === GL delta basis (signed) between the new amended return and the previous revision ===
+            //var deltaSub = amended.Subtotal - latest.Subtotal; // e.g., -20 means extra refund on net
+            //var deltaTax = amended.TaxTotal - latest.TaxTotal; // signed tax delta
+            //tx.Commit();
+            //var outbox = App.Services.GetRequiredService<IOutboxWriter>();
+            //await outbox.EnqueueAfterSaveAsync(db, amended, default);
+
+            //// === GL POST: Return amendment delta (runs once per revision) ===
+            //try
+            //{
+            //    using (var chk = new PosClientDbContext(_opts))
+            //    {
+            //        var already = chk.GlEntries.AsNoTracking().Any(g =>
+            //            g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturnRevision &&
+            //            g.DocId == amended.Id);
+            //        if (!already)
+            //        {
+            //            var gl = App.Services.GetRequiredService<IGlPostingService>();
+            //            await gl.PostReturnRevisionAsync(amended, deltaSub, deltaTax);
+            //        }
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    System.Diagnostics.Debug.WriteLine("GL post (return revision) failed: " + ex);
+            //}
+            //Confirmed = true;
+            //NewRevision = amended.Revision;
+            //DialogResult = true;
+            try
             {
-                var sold = soldByItem.TryGetValue(r.ItemId, out var sQty) ? sQty : 0;
-                var others = returnedByOthersNow.TryGetValue(r.ItemId, out var oQty) ? oQty : 0;
-                var availNow = Math.Max(0, sold - others);
-                if (r.ReturnQty > availNow)
-                {
-                    MessageBox.Show($"Item {r.Sku}: requested {r.ReturnQty}, available {availNow}.");
-                    tx.Rollback(); return;
-                }
-            }
-            // Compute NEW totals (signed: negative)
-            var newAmounts = _rows.Select(r => PricingMath.CalcLine(new LineInput(
-                Qty: r.ReturnQty, UnitPrice: r.UnitPrice, DiscountPct: r.DiscountPct, DiscountAmt: r.DiscountAmt,
-                TaxRatePct: r.TaxRatePct, TaxInclusive: r.TaxInclusive))).ToList();
-            var magSubtotal = newAmounts.Sum(a => a.LineNet);
-            var magTax = newAmounts.Sum(a => a.LineTax);
-            var magGrand = magSubtotal + magTax;
-            // Build amended return
-            var amended = new Sale
-            {
-                Ts = DateTime.UtcNow,
-                OutletId = latest.OutletId,
-                CounterId = latest.CounterId,
-                TillSessionId = latest.TillSessionId,
-                IsReturn = true,
-                OriginalSaleId = _originalSaleId,
-                Status = SaleStatus.Final,
-                Revision = latest.Revision + 1,
-                RevisedFromSaleId = latest.Id,
-                InvoiceNumber = latest.InvoiceNumber,     // SAME invoice number
-                Subtotal = -magSubtotal,                  // signed totals (return = negative)
-                TaxTotal = -magTax,
-                Total = -magGrand,
-                CashierId = latest.CashierId,
-                SalesmanId = latest.SalesmanId,
-                CustomerKind = latest.CustomerKind,
-                CustomerId = latest.CustomerId,
-                CustomerName = latest.CustomerName,
-                CustomerPhone = latest.CustomerPhone,
-                Note = reason,
-                EReceiptToken = Guid.NewGuid().ToString("N"),
-                EReceiptUrl = null,
-                InvoiceFooter = latest.InvoiceFooter
-            };
-            db.Sales.Add(amended);
-            db.SaveChanges();
-            // New lines (negative qty for returns)
-            var newByItem = _rows.ToDictionary(r => r.ItemId, r => r);
-            foreach (var r in _rows)
-            {
-                var a = PricingMath.CalcLine(new LineInput(
-                    Qty: r.ReturnQty, UnitPrice: r.UnitPrice, DiscountPct: r.DiscountPct, DiscountAmt: r.DiscountAmt,
-                    TaxRatePct: r.TaxRatePct, TaxInclusive: r.TaxInclusive));
-                db.SaleLines.Add(new SaleLine
-                {
-                    SaleId = amended.Id,
-                    ItemId = r.ItemId,
-                    Qty = -r.ReturnQty,
-                    UnitPrice = r.UnitPrice,
-                    DiscountPct = r.DiscountPct,
-                    DiscountAmt = r.DiscountAmt,
-                    TaxCode = null,
-                    TaxRatePct = r.TaxRatePct,
-                    TaxInclusive = r.TaxInclusive,
-                    UnitNet = -(a.UnitNet),
-                    LineNet = -(a.LineNet),
-                    LineTax = -(a.LineTax),
-                    LineTotal = -(a.LineTotal)
-                });
-            }
-            db.SaveChanges();
-            // Link previous as Revised
-            latest.Status = SaleStatus.Revised;
-            latest.RevisedToSaleId = amended.Id;
-            db.SaveChanges();
-            // STOCK DELTA (universal rule): deltaQty = newQty - oldQty (signed), QtyChange = -deltaQty
-            var oldByItem = latestLines.ToDictionary(x => x.ItemId, x => x);
-            var allItems = oldByItem.Keys.Union(newByItem.Keys).Distinct();
-            foreach (var itemId in allItems)
-            {
-                var oldQty = oldByItem.TryGetValue(itemId, out var o) ? o.Qty : 0;           // old return line (negative)
-                var newQty = newByItem.TryGetValue(itemId, out var r) ? -r.ReturnQty : 0;    // new line qty is negative
-                var deltaQty = newQty - oldQty;
-                if (deltaQty != 0)
-                {
-                    db.StockEntries.Add(new StockEntry
-                    {
-                        LocationType = InventoryLocationType.Outlet,
-                        LocationId = amended.OutletId,
-                        OutletId = amended.OutletId,
-                        ItemId = itemId,
-                        QtyChange = -deltaQty, // sign-aware
-                        RefType = "Amend",
-                        RefId = amended.Id,
-                        Ts = DateTime.UtcNow
-                    });
-                }
-            }
-            db.SaveChanges();
-            // PAYMENT DELTA (signed totals)
-            var amountDelta = amended.Total - latest.Total; // signed (+collect / -refund)
-            if (amountDelta != 0m)
-            {
-                // Use in-shell overlay pay dialog
-                var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
-                var payResult = await paySvc.ShowAsync(
-                    subtotal: Math.Abs(amended.Subtotal),
+                // Compute the NEW totals locally to know the delta direction & amount
+                var newCalcs = _rows.Select(r => Pos.Domain.Pricing.PricingMath.CalcLine(new Pos.Domain.Pricing.LineInput(
+                Qty: r.ReturnQty,
+                UnitPrice: r.UnitPrice,
+                DiscountPct: r.DiscountPct,
+                DiscountAmt: r.DiscountAmt,
+                TaxRatePct: r.TaxRatePct,
+                TaxInclusive: r.TaxInclusive
+                        ))).ToList();
+                var magSub = newCalcs.Sum(a => a.LineNet);
+                var magTax = newCalcs.Sum(a => a.LineTax);
+                var magGrand = magSub + magTax;
+                var newTotalSigned = -magGrand; // return totals are negative
+                var amountDelta = newTotalSigned - _load.CurrentTotal; // +collect / -refund
+                
+                decimal payCash = 0m, payCard = 0m;
+                        if (amountDelta != 0m)
+                            {
+                    var paySvc = App.Services.GetRequiredService<IPaymentDialogService>();
+                    var modeTitle = (amountDelta >= 0m) ? "Collect Difference" : "Refund Difference";
+                    var result = await paySvc.ShowAsync(
+                    subtotal: Math.Abs(-magSub),
                     discountValue: 0m,
-                    tax: Math.Abs(amended.TaxTotal),
-                    grandTotal: Math.Abs(amended.Total),
+                    tax: Math.Abs(-magTax),
+                    grandTotal: Math.Abs(newTotalSigned),
                     items: _rows.Count,
                     qty: _rows.Sum(x => x.ReturnQty),
                     differenceMode: true,
                     amountDelta: amountDelta,
-                    title: (amountDelta >= 0m) ? "Collect Difference" : "Refund Difference"
-                );
-                if (!payResult.Confirmed)
-                {
-                    tx.Rollback();
-                    MessageBox.Show("Amendment cancelled.");
-                    return;
-                }
-                // Sign cash/card by delta direction (+ collect, - refund)
-                amended.CashAmount = (payResult.Cash > 0 ? (amountDelta >= 0 ? payResult.Cash : -payResult.Cash) : 0m);
-                amended.CardAmount = (payResult.Card > 0 ? (amountDelta >= 0 ? payResult.Card : -payResult.Card) : 0m);
-                amended.PaymentMethod =
-                    (payResult.Cash > 0 && payResult.Card > 0) ? PaymentMethod.Mixed :
-                    (payResult.Cash > 0) ? PaymentMethod.Cash : PaymentMethod.Card;
-
-                db.SaveChanges();
-            }
-            // === GL delta basis (signed) between the new amended return and the previous revision ===
-            var deltaSub = amended.Subtotal - latest.Subtotal; // e.g., -20 means extra refund on net
-            var deltaTax = amended.TaxTotal - latest.TaxTotal; // signed tax delta
-            tx.Commit();
-            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
-            await outbox.EnqueueAfterSaveAsync(db, amended, default);
-
-            // === GL POST: Return amendment delta (runs once per revision) ===
-            try
-            {
-                using (var chk = new PosClientDbContext(_opts))
-                {
-                    var already = chk.GlEntries.AsNoTracking().Any(g =>
-                        g.DocType == Pos.Domain.Accounting.GlDocType.SaleReturnRevision &&
-                        g.DocId == amended.Id);
-                    if (!already)
-                    {
-                        var gl = App.Services.GetRequiredService<IGlPostingService>();
-                        await gl.PostReturnRevisionAsync(amended, deltaSub, deltaTax);
+                    title: modeTitle
+                                );
+                                if (!result.Confirmed) { MessageBox.Show("Amendment cancelled."); return; }
+                                // Sign by direction
+                    payCash = (result.Cash > 0 ? (amountDelta >= 0 ? result.Cash : -result.Cash) : 0m);
+                    payCard = (result.Card > 0 ? (amountDelta >= 0 ? result.Card : -result.Card) : 0m);
+                        }
+                
+                var req = new EditReturnFinalizeRequest(
+                ReturnSaleId: _returnSaleId,
+                Reason: reason!,
+                Lines: _rows.Select(r => new EditReturnFinalizeLine(
+                ItemId: r.ItemId,
+                ReturnQty: r.ReturnQty,
+                UnitPrice: r.UnitPrice,
+                DiscountPct: r.DiscountPct,
+                DiscountAmt: r.DiscountAmt,
+                TaxRatePct: r.TaxRatePct,
+                TaxInclusive: r.TaxInclusive
+                            )).ToList(),
+                PayCash: payCash,
+                PayCard: payCard
+                        );
+                
+                var res = await _returns.FinalizeReturnAmendAsync(req);
+                Confirmed = true;
+                NewRevision = res.NewRevision;
+                DialogResult = true;
                     }
-                }
-            }
-            catch (Exception ex)
+                catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("GL post (return revision) failed: " + ex);
+                MessageBox.Show("Failed to save amended return: " + ex.Message);
+                    }
             }
-            Confirmed = true;
-            NewRevision = amended.Revision;
-            DialogResult = true;
-        }
     }
 }

@@ -21,8 +21,8 @@ using Pos.Domain.DTO;                   // ItemIndexDto
 using Microsoft.Extensions.DependencyInjection;         // for GetRequiredService
 using Pos.Domain.Accounting;                            // for GlDocType
 using Pos.Persistence.Sync; // for IOutboxWriter
-
-
+using Pos.Domain.Services;          // for IGlPostingService, IItemsReadService
+using Pos.Domain.Models.Purchases;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -32,11 +32,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly int? _refPurchaseId;   // Return With
         private readonly int? _returnId;        // Amend existing return
         private readonly bool _freeForm;        // Return Without
-        // ----- Data -----
-        private readonly DbContextOptions<PosClientDbContext> _opts;
+                                                // ----- Data -----
+                                                // ----- Services (no EF in UI) -----
         private readonly PurchasesService _svc;
-
         private readonly PartyLookupService _partySvc;
+        private readonly ILookupService _lookup;       // outlets/warehouses
+        private readonly IGlPostingService _gl;        // GL posting
+        private readonly PartyService _party;
+        private readonly IItemsReadService _itemsRead;   // ✅ add
+
+
         // Supplier search
         private readonly System.Timers.Timer _supplierDebounce = new(250) { AutoReset = false };
         private List<Party> _supplierResults = new();
@@ -53,76 +58,75 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public PurchaseReturnWindow() // Return Without (free-form)
         {
             InitializeComponent();
+
             _freeForm = true;
+
+            // Resolve services from DI
+            _svc = App.Services.GetRequiredService<PurchasesService>();
+            _partySvc = App.Services.GetRequiredService<PartyLookupService>();
+            _lookup = App.Services.GetRequiredService<ILookupService>();
+            _gl = App.Services.GetRequiredService<IGlPostingService>();
+            _party = App.Services.GetRequiredService<PartyService>();
+            _itemsRead = App.Services.GetRequiredService<IItemsReadService>();
+
+
             _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
-            _opts = new DbContextOptionsBuilder<PosClientDbContext>()
-                .UseSqlite(DbPath.ConnectionString).Options;
-            //_svc = new PurchasesService(new PosClientDbContext(_opts));
-            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
-            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
 
-
-            _partySvc = new PartyLookupService(new PosClientDbContext(_opts));
             GridLines.BeginningEdit += GridLines_BeginningEdit;
             GridLines.CurrentCellChanged += GridLines_CurrentCellChanged;
+
             DataContext = VM;
+
             VM.PropertyChanged += async (_, args) =>
             {
                 if (args.PropertyName is nameof(ReturnVM.TargetType)
                     or nameof(ReturnVM.OutletId)
                     or nameof(ReturnVM.WarehouseId))
                 {
-                    // Re-cap all lines for Return-With when source changes
                     await CapReturnWithAgainstOnHandAsync();
                 }
-                // Keep your existing availability panel behavior
-                if (AvailablePanel.Visibility == Visibility.Visible)
-                {
-                    if (GridLines.CurrentItem is LineVM l)
-                        await UpdateAvailablePanelAsync(l);
-                }
+                if (AvailablePanel.Visibility == Visibility.Visible && GridLines.CurrentItem is LineVM l)
+                    await UpdateAvailablePanelAsync(l);
             };
+
             Loaded += async (_, __) =>
             {
                 await InitFreeFormAsync();
-                await LoadSourcesAsync();               // <-- add this
+                await LoadSourcesAsync();                 // now via _lookup
                 await Dispatcher.InvokeAsync(() => SupplierText.Focus());
             };
         }
 
+
         public PurchaseReturnWindow(int refPurchaseId) // Return With base purchase
         {
             InitializeComponent();
-            _refPurchaseId = refPurchaseId;
-            _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
-            _opts = new DbContextOptionsBuilder<PosClientDbContext>()
-                .UseSqlite(DbPath.ConnectionString).Options;
-            //_svc = new PurchasesService(new PosClientDbContext(_opts));
-            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
-            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
 
-            _partySvc = new PartyLookupService(new PosClientDbContext(_opts));
+            _refPurchaseId = refPurchaseId;
+
+            _svc = App.Services.GetRequiredService<PurchasesService>();
+            _partySvc = App.Services.GetRequiredService<PartyLookupService>();
+            _lookup = App.Services.GetRequiredService<ILookupService>();
+            _gl = App.Services.GetRequiredService<IGlPostingService>();
+
+            _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
             DataContext = VM;
-            // Refresh AvailablePanel if source (Outlet/Warehouse) changes mid-edit
+
             VM.PropertyChanged += async (_, args) =>
             {
                 if (args.PropertyName is nameof(ReturnVM.TargetType)
                     or nameof(ReturnVM.OutletId)
                     or nameof(ReturnVM.WarehouseId))
                 {
-                    // Re-cap all lines for Return-With when source changes
                     await CapReturnWithAgainstOnHandAsync();
                 }
-                // Keep your existing availability panel behavior
-                if (AvailablePanel.Visibility == Visibility.Visible)
-                {
-                    if (GridLines.CurrentItem is LineVM l)
-                        await UpdateAvailablePanelAsync(l);
-                }
+                if (AvailablePanel.Visibility == Visibility.Visible && GridLines.CurrentItem is LineVM l)
+                    await UpdateAvailablePanelAsync(l);
             };
+
             Loaded += async (_, __) =>
             {
-                await InitFromBaseAsync(refPurchaseId);
+                await InitFromBaseAsync(refPurchaseId);   // now fully service-backed
                 await Dispatcher.InvokeAsync(() => SupplierText.Focus());
             };
         }
@@ -130,39 +134,36 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public PurchaseReturnWindow(int returnId, bool isAmend = true) // Amend
         {
             InitializeComponent();
-            _returnId = returnId;
-            _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
-            _opts = new DbContextOptionsBuilder<PosClientDbContext>()
-                .UseSqlite(DbPath.ConnectionString).Options;
-            //_svc = new PurchasesService(new PosClientDbContext(_opts));
-            var outbox = App.Services.GetRequiredService<IOutboxWriter>();
-            _svc = new PurchasesService(new PosClientDbContext(_opts), outbox);
 
-            _partySvc = new PartyLookupService(new PosClientDbContext(_opts));
+            _returnId = returnId;
+
+            _svc = App.Services.GetRequiredService<PurchasesService>();
+            _partySvc = App.Services.GetRequiredService<PartyLookupService>();
+            _lookup = App.Services.GetRequiredService<ILookupService>();
+            _gl = App.Services.GetRequiredService<IGlPostingService>();
+
+            _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
             DataContext = VM;
-            // Refresh AvailablePanel if source (Outlet/Warehouse) changes mid-edit
+
             VM.PropertyChanged += async (_, args) =>
             {
                 if (args.PropertyName is nameof(ReturnVM.TargetType)
                     or nameof(ReturnVM.OutletId)
                     or nameof(ReturnVM.WarehouseId))
                 {
-                    // Re-cap all lines for Return-With when source changes
                     await CapReturnWithAgainstOnHandAsync();
                 }
-                // Keep your existing availability panel behavior
-                if (AvailablePanel.Visibility == Visibility.Visible)
-                {
-                    if (GridLines.CurrentItem is LineVM l)
-                        await UpdateAvailablePanelAsync(l);
-                }
+                if (AvailablePanel.Visibility == Visibility.Visible && GridLines.CurrentItem is LineVM l)
+                    await UpdateAvailablePanelAsync(l);
             };
+
             Loaded += async (_, __) =>
             {
-                await InitFromExistingReturnAsync(returnId);
+                await InitFromExistingReturnAsync(returnId);  // now via services
                 await Dispatcher.InvokeAsync(() => SupplierText.Focus());
             };
         }
+
 
         // ===== Supplier search helpers =====
         private void ApplySupplier(Party p)
@@ -231,71 +232,38 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 existing.ClampQty();
                 existing.RecomputeLineTotal();
                 VM.RecomputeTotals();
-                await SetLineMaxFromOnHandAsync(existing);  // ensure cap reflects header source
-                                                            // Focus UnitCost for quick edits
+                await SetLineMaxFromOnHandAsync(existing);
                 Dispatcher.InvokeAsync(() => FocusUnitCost(existing));
                 return;
             }
 
-            // 2) New line → fetch display/meta + last cost
-            using var db = new PosClientDbContext(_opts);
-            var row = await (
-                from i in db.Items.AsNoTracking().Where(x => x.Id == itemId)
-                join pr in db.Products.AsNoTracking() on i.ProductId equals pr.Id into gp
-                from pr in gp.DefaultIfEmpty()
-                select new
-                {
-                    i.Id,
-                    i.Sku,
-                    ItemName = i.Name,
-                    ProductName = pr != null ? pr.Name : null,
-                    i.Variant1Name,
-                    i.Variant1Value,
-                    i.Variant2Name,
-                    i.Variant2Value
-                }
-            ).FirstOrDefaultAsync();
-
-            if (row == null) return;
-            // Last purchase cost (ignoring returns)
-            var lastCost = await (
-                from pl in db.PurchaseLines.AsNoTracking()
-                join pu in db.Purchases.AsNoTracking() on pl.PurchaseId equals pu.Id
-                where pl.ItemId == itemId && !pu.IsReturn
-                orderby pu.PurchaseDate descending
-                select pl.UnitCost
-            ).FirstOrDefaultAsync();
-            var display = ProductNameComposer.Compose(
-                row.ProductName, row.ItemName,
-                row.Variant1Name, row.Variant1Value,
-                row.Variant2Name, row.Variant2Value);
+            // 2) Ask service for display meta + last purchase cost
+            var meta = await _itemsRead.GetItemMetaForReturnAsync(itemId);
+            if (meta is not { } m) return;        // m is the non-null tuple
+            var (display, sku, lastCost) = m;
 
             var line = new LineVM
             {
-                OriginalLineId = null,         // free-form
+                OriginalLineId = null,
                 ItemId = itemId,
                 DisplayName = display,
-                Sku = row.Sku ?? "",
-                UnitCost = Math.Max(0, lastCost),  // default from last cost if present
+                Sku = sku ?? "",
+                UnitCost = Math.Max(0, lastCost ?? 0m),
                 Discount = 0m,
                 TaxRate = 0m,
-                MaxReturnQty = 999999m,        // will be capped by on-hand below
+                MaxReturnQty = 999999m,
                 ReturnQty = 1m
             };
 
             var wasEmpty = VM.Lines.Count == 0;
             VM.Lines.Add(line);
-            // Cap by on-hand at current source (free-form)
             await SetLineMaxFromOnHandAsync(line);
             VM.RecomputeTotals();
-            // Lock source as soon as first line is added in free-form mode
-            if (wasEmpty && _freeForm)
-            {
-                VM.IsSourceReadonly = true;
-            }
-            // Focus UnitCost for quick edits
+            if (wasEmpty && _freeForm) VM.IsSourceReadonly = true;
             Dispatcher.InvokeAsync(() => FocusUnitCost(line));
+
         }
+
 
         private int EnsureColumnIndex(string bindingPath)
         {
@@ -476,54 +444,38 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task InitFromBaseAsync(int refPurchaseId)
         {
-            using var db = new PosClientDbContext(_opts);
+            // Draft builder gives lines+caps; fetch party name via service
             var draft = await _svc.BuildReturnDraftAsync(refPurchaseId);
-            var baseP = await db.Purchases
-                .Include(p => p.Party)
-                .FirstAsync(p => p.Id == refPurchaseId);
+            if (draft == null) throw new InvalidOperationException($"Base purchase #{refPurchaseId} not found.");
+
+            var partyName = await _party.GetPartyNameAsync(draft.PartyId) ?? $"Supplier #{draft.PartyId}";
+
+
             VM.IsSupplierReadonly = true;
             VM.SupplierId = draft.PartyId;
-            VM.SupplierDisplay = baseP.Party?.Name ?? $"Supplier #{draft.PartyId}";
+            VM.SupplierDisplay = partyName;
             VM.TargetType = draft.TargetType;
             VM.OutletId = draft.OutletId;
             VM.WarehouseId = draft.WarehouseId;
             VM.RefPurchaseId = draft.RefPurchaseId;
-            VM.BasePurchaseDisplay = !string.IsNullOrWhiteSpace(baseP.DocNo) ? baseP.DocNo : $"#{baseP.Id}";
-            var original = await db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == refPurchaseId);
-            var itemIds = original.Lines.Select(l => l.ItemId).Distinct().ToList();
-            var meta = (
-                from i in db.Items.AsNoTracking()
-                join pr in db.Products.AsNoTracking() on i.ProductId equals pr.Id into gp
-                from pr in gp.DefaultIfEmpty()
-                where itemIds.Contains(i.Id)
-                select new
-                {
-                    i.Id,
-                    ItemName = i.Name,
-                    ProductName = pr != null ? pr.Name : null,
-                    i.Variant1Name,
-                    i.Variant1Value,
-                    i.Variant2Name,
-                    i.Variant2Value,
-                    i.Sku
-                }
-            ).ToList().ToDictionary(x => x.Id);
+            VM.BasePurchaseDisplay = draft.RefPurchaseId is int rid ? $"#{rid}" : $"#{refPurchaseId}";
+
+            // Pull display meta for all line items at once
+            var itemIds = draft.Lines.Select(l => l.ItemId).Distinct().ToList();
+            var meta = await _itemsRead.GetDisplayMetaAsync(itemIds);
+
             VM.Lines.Clear();
             foreach (var d in draft.Lines)
             {
                 meta.TryGetValue(d.ItemId, out var m);
-                var display = ProductNameComposer.Compose(
-                    m?.ProductName, m?.ItemName,
-                    m?.Variant1Name, m?.Variant1Value,
-                    m?.Variant2Name, m?.Variant2Value);
                 VM.Lines.Add(new LineVM
                 {
                     OriginalLineId = d.OriginalLineId,
                     ItemId = d.ItemId,
-                    DisplayName = display,
-                    Sku = m?.Sku ?? "",
+                    DisplayName = (m.display ?? $"Item #{d.ItemId}"),
+                    Sku = m.sku ?? "",
                     UnitCost = d.UnitCost,
-                    OriginalUnitCost = d.UnitCost,     // <-- lock source price
+                    OriginalUnitCost = d.UnitCost,
                     Discount = 0m,
                     TaxRate = 0m,
                     MaxReturnQty = d.MaxReturnQty,
@@ -531,9 +483,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 });
             }
             VM.RecomputeTotals();
-            await CapReturnWithAgainstOnHandAsync();   // <-- NEW
 
+            // Cap against on-hand at selected source
+            await CapReturnWithAgainstOnHandAsync();
         }
+
 
         private async Task InitFreeFormAsync()
         {
@@ -548,49 +502,31 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task InitFromExistingReturnAsync(int returnId)
         {
-            using var db = new PosClientDbContext(_opts);
-            var ret = await db.Purchases
-                .Include(p => p.Party)
-                .Include(p => p.Lines)
-                .FirstAsync(p => p.Id == returnId && p.IsReturn);
-            // Header
+            var ret = await _svc.LoadReturnWithLinesAsync(returnId);
+            if (ret == null || !ret.IsReturn)
+                throw new InvalidOperationException($"Return #{returnId} not found.");
+
+            var partyName = await _party.GetPartyNameAsync(ret.PartyId) ?? $"Supplier #{ret.PartyId}";
+
+
             VM.IsSupplierReadonly = true;
             VM.SupplierId = ret.PartyId;
-            VM.SupplierDisplay = ret.Party?.Name ?? $"Supplier #{ret.PartyId}";
+            VM.SupplierDisplay = partyName;
             VM.TargetType = ret.TargetType;
             VM.OutletId = ret.OutletId;
             VM.WarehouseId = ret.WarehouseId;
             VM.RefPurchaseId = ret.RefPurchaseId;
             VM.ReturnNoDisplay = string.IsNullOrWhiteSpace(ret.DocNo) ? $"#{ret.Id}" : ret.DocNo;
             VM.BasePurchaseDisplay = ret.RefPurchaseId is int rid ? $"#{rid}" : "—";
-            // Item meta for display
-            var itemIds = ret.Lines.Select(l => l.ItemId).Distinct().ToList();
-            var meta = (
-                from i in db.Items.AsNoTracking()
-                join pr in db.Products.AsNoTracking() on i.ProductId equals pr.Id into gp
-                from pr in gp.DefaultIfEmpty()
-                where itemIds.Contains(i.Id)
-                select new
-                {
-                    i.Id,
-                    ItemName = i.Name,
-                    ProductName = pr != null ? pr.Name : null,
-                    i.Variant1Name,
-                    i.Variant1Value,
-                    i.Variant2Name,
-                    i.Variant2Value,
-                    i.Sku
-                }
-            ).ToList().ToDictionary(x => x.Id);
+
+            var itemIds = (ret.Lines ?? new List<PurchaseLine>()).Select(l => l.ItemId).Distinct().ToList();
+            var meta = await _itemsRead.GetDisplayMetaAsync(itemIds);
+
             VM.Lines.Clear();
-            foreach (var l in ret.Lines)
+            foreach (var l in ret.Lines ?? Enumerable.Empty<PurchaseLine>())
             {
                 meta.TryGetValue(l.ItemId, out var m);
-                var display = ProductNameComposer.Compose(
-                    m?.ProductName, m?.ItemName,
-                    m?.Variant1Name, m?.Variant1Value,
-                    m?.Variant2Name, m?.Variant2Value);
-                var currentQty = Math.Abs(l.Qty); // qty already on this saved return line
+                var currentQty = Math.Abs(l.Qty);
                 decimal max;
 
                 if (ret.RefPurchaseId is int && l.RefPurchaseLineId is int refLineId)
@@ -600,12 +536,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
                 else
                 {
-                    // allow (on-hand at header source) + (what this return already took)
-                    var onHand = await _svc.GetOnHandAsync(
-                        itemId: l.ItemId,
-                        target: VM.TargetType,
-                        outletId: VM.OutletId,
-                        warehouseId: VM.WarehouseId);
+                    var onHand = await _svc.GetOnHandAsync(l.ItemId, VM.TargetType, VM.OutletId, VM.WarehouseId);
                     max = onHand + currentQty;
                 }
 
@@ -613,10 +544,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 {
                     OriginalLineId = l.RefPurchaseLineId,
                     ItemId = l.ItemId,
-                    DisplayName = display,
-                    Sku = m?.Sku ?? "",
+                    DisplayName = (m.display ?? $"Item #{l.ItemId}"),
+                    Sku = m.sku ?? "",
                     UnitCost = l.UnitCost,
-                    OriginalUnitCost = l.UnitCost, // lock to prior return price
+                    OriginalUnitCost = l.UnitCost,
                     Discount = l.Discount,
                     TaxRate = l.TaxRate,
                     ReturnQty = currentQty,
@@ -625,10 +556,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             VM.OtherCharges = ret.OtherCharges;
             VM.RecomputeTotals();
-            // Cap by on-hand too for Amend-with-invoice
-            if (ret.RefPurchaseId is int)
-                await CapReturnWithAgainstOnHandAsync();
+
+            if (ret.RefPurchaseId is int) await CapReturnWithAgainstOnHandAsync();
         }
+
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
@@ -770,28 +701,17 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     tillSessionId: AppState.Current?.CurrentTillSessionId,
                     counterId: AppState.Current?.CurrentCounterId
                 );
-                // === GL POST: Purchase Return (post-once guard) ===
+                // === GL POST: let GL service be idempotent ===
                 try
                 {
-                    // Use a fresh context for the guard (this window keeps _opts)
-                    using var gldb = new PosClientDbContext(_opts);
-
-                    var posted = await gldb.GlEntries
-                        .AsNoTracking()
-                        .AnyAsync(g => g.DocType == GlDocType.PurchaseReturn
-                                    && g.DocId == model.Id);
-
-                    if (!posted)
-                    {
-                        var gl = App.Services.GetRequiredService<IGlPostingService>();
-                        await gl.PostPurchaseReturnAsync(model);   // model.Id should be set by SaveReturnAsync
-                    }
+                    await _gl.PostPurchaseReturnAsync(model);
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine("GL post (PurchaseReturn) failed: " + ex);
-                    // Non-fatal: the return is saved; consider logging/toast
+                    // Non-fatal
                 }
+
 
                 MessageBox.Show("Purchase Return saved.");
                 this.DialogResult = true;
@@ -1034,31 +954,24 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task LoadSourcesAsync()
         {
-            using var db = new PosClientDbContext(_opts);
-            // Outlets
-            var outlets = await db.Outlets.AsNoTracking()
-                .OrderBy(o => o.Name)
-                .Select(o => new IdName { Id = o.Id, Name = o.Name })
-                .ToListAsync();
+            var outlets = await _lookup.GetOutletsAsync();
             VM.OutletList.Clear();
-            foreach (var o in outlets) VM.OutletList.Add(o);
-            // Warehouses
-            var warehouses = await db.Warehouses.AsNoTracking()
-                .OrderBy(w => w.Name)
-                .Select(w => new IdName { Id = w.Id, Name = w.Name })
-                .ToListAsync();
+            foreach (var o in outlets.Select(x => new IdName { Id = x.Id, Name = x.Name }))
+                VM.OutletList.Add(o);
+
+            var warehouses = await _lookup.GetWarehousesAsync();
             VM.WarehouseList.Clear();
-            foreach (var w in warehouses) VM.WarehouseList.Add(w);
-            // Apply selection/locking rules for free-form mode
+            foreach (var w in warehouses.Select(x => new IdName { Id = x.Id, Name = x.Name }))
+                VM.WarehouseList.Add(w);
+
             if (_freeForm)
             {
                 var admin = IsAdmin();
                 var linked = LinkedOutletId();
+
                 if (admin)
                 {
-                    // Admin can choose; keep whatever you prefilled in InitFreeFormAsync
                     VM.IsSourceReadonly = false;
-                    // Nice default: if there’s a current outlet, preselect it for convenience
                     if (VM.TargetType == StockTargetType.Outlet && (VM.OutletId is null || VM.OutletId <= 0))
                         VM.OutletId = linked ?? VM.OutletList.FirstOrDefault()?.Id;
                     if (VM.TargetType == StockTargetType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0))
@@ -1066,7 +979,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
                 else
                 {
-                    // Non-admin: if they have a linked outlet, force it and lock the controls
                     if (linked is int lo && lo > 0)
                     {
                         VM.TargetType = StockTargetType.Outlet;
@@ -1076,7 +988,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     }
                     else
                     {
-                        // No linked outlet? Fallback to first outlet and lock
                         VM.TargetType = StockTargetType.Outlet;
                         VM.OutletId = VM.OutletList.FirstOrDefault()?.Id;
                         VM.WarehouseId = null;
@@ -1085,6 +996,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
             }
         }
+
 
         private async Task UpdateAvailablePanelAsync(LineVM? line, bool forceHideIfNoSource = true)
         {

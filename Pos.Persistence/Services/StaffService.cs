@@ -7,13 +7,18 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;       // Account, AccountType, NormalSide
 using Pos.Domain.Hr;             // Staff
+using Pos.Domain.Services;       // IStaffService
 using Pos.Domain.Utils;          // GuidUtility
 using Pos.Persistence;
 using Pos.Persistence.Sync;      // IOutboxWriter
 
 namespace Pos.Persistence.Services
 {
-    public sealed class StaffService
+    /// <summary>
+    /// EF-based implementation of IStaffService.
+    /// House rules: no EF in UI, all async, pass ct everywhere, clear messages, outbox before final SaveChanges.
+    /// </summary>
+    public sealed class StaffService : IStaffService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
@@ -28,48 +33,45 @@ namespace Pos.Persistence.Services
         public async Task<List<Staff>> GetAllAsync(CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            return await db.Staff.AsNoTracking().OrderBy(s => s.FullName).ToListAsync(ct);
+            return await db.Staff.AsNoTracking()
+                .OrderBy(s => s.FullName)
+                .ToListAsync(ct);
         }
 
         public async Task<Staff?> GetAsync(int id, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            return await db.Staff.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+            return await db.Staff.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id, ct);
         }
 
         public async Task<bool> IsNameTakenAsync(string name, int? excludingId = null, CancellationToken ct = default)
         {
-            name = (name ?? "").Trim().ToLowerInvariant();
+            var norm = (name ?? string.Empty).Trim().ToLowerInvariant();
             await using var db = await _dbf.CreateDbContextAsync(ct);
+
             return await db.Staff.AnyAsync(s =>
-                s.FullName.ToLower() == name && (excludingId == null || s.Id != excludingId.Value), ct);
+                s.FullName.ToLower() == norm &&
+                (!excludingId.HasValue || s.Id != excludingId.Value), ct);
         }
 
         public async Task<string> GenerateNextStaffCodeAsync(CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            var codes = await db.Staff.AsNoTracking().Select(s => s.Code).ToListAsync(ct);
-            int max = 0;
-            foreach (var c in codes.Where(c => !string.IsNullOrWhiteSpace(c)))
-            {
-                var last = c!.Split('-').LastOrDefault();
-                if (int.TryParse(last, out var n) && n > max) max = n;
-            }
-            return $"STF-{(max + 1).ToString("D3", CultureInfo.InvariantCulture)}";
+            return await GenerateNextStaffCodeCoreAsync(db, ct);
         }
 
         // ───────────────────────── Commands ─────────────────────────
-        /// <summary>
-        /// Create or update a Staff record, ensure it is linked to an Account under "63 Staff",
-        /// and enqueue upserts to the outbox. Returns the saved Staff.Id.
-        /// </summary>
         public async Task<int> CreateOrUpdateAsync(Staff input, CancellationToken ct = default)
         {
+            if (input is null) throw new InvalidOperationException("Input is required.");
+
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            Staff entity;
             var isCreate = input.Id == 0;
+            Staff entity;
+
             if (isCreate)
             {
                 entity = new Staff();
@@ -83,15 +85,15 @@ namespace Pos.Persistence.Services
 
             // Map fields
             entity.Code = string.IsNullOrWhiteSpace(input.Code)
-                ? await GenerateNextStaffCodeAsync(ct)
+                ? await GenerateNextStaffCodeCoreAsync(db, ct)   // use same DbContext
                 : input.Code!.Trim();
 
-            entity.FullName = (input.FullName ?? "").Trim();
-            entity.JoinedOnUtc = input.JoinedOnUtc;      // already set by caller in UTC
+            entity.FullName = (input.FullName ?? string.Empty).Trim();
+            entity.JoinedOnUtc = input.JoinedOnUtc;      // assume caller provided UTC
             entity.BasicSalary = input.BasicSalary;
             entity.ActsAsSalesman = input.ActsAsSalesman;
 
-            // 2) Ensure CoA account under "63" (Staff)
+            // Ensure CoA account under "63" (Staff)
             var parent = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Code == "63", ct);
             if (parent == null)
                 throw new InvalidOperationException("Chart of Accounts header 63 (Staff) not found. Seed CoA first.");
@@ -103,7 +105,7 @@ namespace Pos.Persistence.Services
             if (entity.AccountId.HasValue)
             {
                 linked = await db.Accounts.FirstOrDefaultAsync(a => a.Id == entity.AccountId.Value, ct);
-                if (linked == null) entity.AccountId = null; // dangling link → treat as missing
+                if (linked == null) entity.AccountId = null; // dangling → treat as missing
             }
 
             if (linked == null)
@@ -120,7 +122,7 @@ namespace Pos.Persistence.Services
                     ParentId = parent.Id
                 };
                 await db.Accounts.AddAsync(linked, ct);
-                await db.SaveChangesAsync(ct);     // need Id for link
+                await db.SaveChangesAsync(ct);               // need Id for FK
                 entity.AccountId = linked.Id;
                 accountCreated = true;
             }
@@ -131,10 +133,10 @@ namespace Pos.Persistence.Services
                 if (linked.NormalSide != NormalSide.Debit) { linked.NormalSide = NormalSide.Debit; accountUpdated = true; }
             }
 
-            // Persist entity + possible account changes
+            // Persist entity + any account edits
             await db.SaveChangesAsync(ct);
 
-            // Outbox upserts
+            // Outbox upserts BEFORE final SaveChanges
             await _outbox.EnqueueUpsertAsync(db, entity, ct);
             if (accountCreated || accountUpdated)
                 await _outbox.EnqueueUpsertAsync(db, linked!, ct);
@@ -152,10 +154,11 @@ namespace Pos.Persistence.Services
 
             var ent = await db.Staff.FirstOrDefaultAsync(x => x.Id == staffId, ct)
                       ?? throw new InvalidOperationException("Staff not found.");
+
             db.Staff.Remove(ent);
             await db.SaveChangesAsync(ct);
 
-            // Tombstone using stable Guid
+            // Tombstone with stable Guid
             await _outbox.EnqueueDeleteAsync(db, nameof(Staff), GuidUtility.FromString($"staff:{ent.Id}"), ct);
 
             await db.SaveChangesAsync(ct);
@@ -163,15 +166,29 @@ namespace Pos.Persistence.Services
         }
 
         // ───────────────────────── Helpers ─────────────────────────
+        private static async Task<string> GenerateNextStaffCodeCoreAsync(PosClientDbContext db, CancellationToken ct)
+        {
+            var codes = await db.Staff.AsNoTracking()
+                .Select(s => s.Code)
+                .ToListAsync(ct);
+
+            var max = 0;
+            foreach (var c in codes.Where(c => !string.IsNullOrWhiteSpace(c)))
+            {
+                var last = c!.Split('-').LastOrDefault();
+                if (int.TryParse(last, out var n) && n > max) max = n;
+            }
+            return $"STF-{(max + 1).ToString("D3", CultureInfo.InvariantCulture)}";
+        }
+
         private static async Task<string> GenerateNextChildCodeAsync(PosClientDbContext db, Account parent, CancellationToken ct)
         {
-            var sibs = await db.Accounts
-                .AsNoTracking()
+            var sibs = await db.Accounts.AsNoTracking()
                 .Where(a => a.ParentId == parent.Id)
                 .Select(a => a.Code)
                 .ToListAsync(ct);
 
-            int max = 0;
+            var max = 0;
             foreach (var code in sibs)
             {
                 var last = code?.Split('-').LastOrDefault();

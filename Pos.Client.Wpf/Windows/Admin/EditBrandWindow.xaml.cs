@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using Pos.Persistence.Services;   // BrandService
+using Pos.Domain.Services;   // BrandService
 using Pos.Domain.Entities;
 
 namespace Pos.Client.Wpf.Windows.Admin
@@ -11,7 +11,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     public partial class EditBrandWindow : Window
     {
         private readonly bool _design;
-        private BrandService? _svc;
+        private IBrandService? _svc;
 
         public int? EditId { get; set; }
 
@@ -22,7 +22,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _svc = App.Services.GetRequiredService<BrandService>();
+            _svc = App.Services.GetRequiredService<IBrandService>();
             Loaded += async (_, __) => await LoadOrInitAsync();
         }
 

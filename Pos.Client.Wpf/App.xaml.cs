@@ -23,6 +23,7 @@ using Pos.Client.Wpf.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Pos.Client.Wpf.Services.Sync; // ISyncService
+using Pos.Domain.Services;
 
 
 namespace Pos.Client.Wpf
@@ -84,15 +85,22 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<ITillService, TillService>();
             sc.AddSingleton<ITerminalContext, TerminalContext>();
             // Party posting (build a DbContext instance from the factory for each use)
-            sc.AddScoped<BrandService>();
-            sc.AddScoped<CategoryService>();
+            
+            
             sc.AddScoped<PartyService>();
-            sc.AddScoped<WarehouseService>();
-            sc.AddScoped<OtherAccountService>();
-            sc.AddScoped<Pos.Persistence.Services.OutletCounterService>();
-            sc.AddScoped<Pos.Persistence.Services.StaffService>();
-            sc.AddScoped<Pos.Persistence.Services.UserAdminService>();
+            // using Pos.Domain.Services;
+            // using Pos.Persistence.Services;
 
+            
+
+            //sc.AddScoped<OtherAccountService>();
+            
+                        
+            sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();
+            sc.AddScoped<ITransferQueries, TransferQueries>();
+            // Read-only helpers (no EF in UI)
+            sc.AddScoped<ILookupService, LookupService>();
+            sc.AddScoped<IInventoryReadService, InventoryReadService>();
             sc.AddTransient<PartyPostingService>(sp =>
             {
                 var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
@@ -106,17 +114,18 @@ namespace Pos.Client.Wpf
                 var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
                 return new PartyLookupService(dbf.CreateDbContext());
             });
-
+            sc.AddTransient<BarcodeLabelSettingsViewModel>();
+            
 
             sc.AddSingleton<ResetStockService>();
-            sc.AddSingleton<IUserPreferencesService, UserPreferencesService>();
+            
 
 
             // 3) App services
 
             sc.AddSingleton<AppState>(AppState.Current);
             sc.AddSingleton<AuthService>();
-            sc.AddSingleton<StockGuard>();            // ✅ Register here
+            //sc.AddSingleton<StockGuard>();            // ✅ Register here
 
 
             //sc.AddSingleton<CurrentUserService>();
@@ -154,7 +163,7 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
             sc.AddScoped<Pos.Client.Wpf.Services.IStaffDirectory, Pos.Client.Wpf.Services.StaffDirectory>();
-            sc.AddScoped<ICoaService, CoaService>();
+            
 
             sc.AddTransient<TillSessionSummaryWindow>();
             sc.AddTransient<Func<int, int, int, TillSessionSummaryWindow>>(sp =>
@@ -201,36 +210,68 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>();
 
 
-            sc.AddSingleton<IInvoiceSettingsService, InvoiceSettingsService>();
+            
             sc.AddTransient<InvoiceSettingsViewModel>();
-            sc.AddTransient<BarcodeLabelSettingsViewModel>();
-            sc.AddSingleton<IBarcodeLabelSettingsService, BarcodeLabelSettingsService>();
+            
             sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
 
             sc.AddScoped<Pos.Persistence.Services.IOpeningStockService, Pos.Persistence.Services.OpeningStockService>();
-            sc.AddScoped<CatalogService>();   // <-- register this
-            sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();
-            sc.AddScoped<ITransferQueries, TransferQueries>();
-            sc.AddScoped<ItemsService>();
+            //sc.AddScoped<CatalogService>();   // <-- register this
+            //sc.AddScoped<ItemsService>();
+            
+
+            sc.AddScoped<IPurchaseCenterReadService, PurchaseCenterReadService>();
+            sc.AddScoped<IPurchasesServiceFactory, PurchasesServiceFactory>();
+
             sc.AddScoped<IGlPostingService, GlPostingService>();
             sc.AddScoped<IAttendanceService, AttendanceService>();
             sc.AddScoped<IPayrollService, PayrollService>();
             // after DbContext/ITerminalContext registrations
-            sc.AddScoped<Pos.Client.Wpf.Services.ICoaService, Pos.Client.Wpf.Services.CoaService>();
-            sc.AddScoped<Pos.Client.Wpf.Services.IOutletService, Pos.Client.Wpf.Services.OutletService>();
+            sc.AddScoped<ICoaService, CoaService>();
+            sc.AddScoped<IOutletService, OutletService>();
             sc.AddTransient<VoucherCenterVm>();
             sc.AddTransient<VoucherCenterView>();
             sc.AddTransient<GlPostingService>();
+            
+            // using Pos.Persistence.Services;
+            
+            
+            sc.AddScoped<ISalesService, SalesService>();
+            sc.AddScoped<IInvoiceService, InvoiceService>();
+
+            //Manged services
+            //sc.AddScoped<IItemsReadService>(sp => sp.GetRequiredService<ItemsService>());
+            sc.AddScoped<IItemsReadService, ItemsService>();
+            sc.AddScoped<IInvoiceSettingsService, InvoiceSettingsService>();
+            sc.AddScoped<ICategoryService, CategoryService>();
+            sc.AddScoped<ICatalogService, CatalogService>();
+            sc.AddScoped<IBrandService, BrandService>();
+            sc.AddScoped<IBarcodeLabelSettingsService, BarcodeLabelSettingsService>();
+
+            sc.AddScoped<IOtherAccountService, OtherAccountService>();
+            sc.AddScoped<IOutletCounterService, OutletCounterService>();
+            sc.AddScoped<ILookupService, LookupService>();
+            sc.AddScoped<IPurchasesService, PurchasesService>();
+            sc.AddScoped<Pos.Domain.Services.IStaffService, Pos.Persistence.Services.StaffService>();
+            sc.AddScoped<ILedgerQueryService, LedgerQueryService>();
+            sc.AddScoped<ICoaService, CoaService>();
+            sc.AddScoped<IStockGuard, StockGuard>();
+            sc.AddScoped<IUserAdminService, UserAdminService>();
+            sc.AddSingleton<IUserPreferencesService, UserPreferencesService>();
+            sc.AddScoped<IUserReadService, UserReadService>();
+            sc.AddScoped<IVoucherCenterService, VoucherCenterService>();
+            sc.AddScoped<IWarehouseService, WarehouseService>();
+            
 
             // VM & window
             //sc.AddTransient<OpeningBalanceVm>();
             //sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>();
-            sc.AddScoped<ILedgerQueryService, LedgerQueryService>();
+            
             // Query service for AR/AP
             sc.AddScoped<IArApQueryService, ArApQueryService>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportWindow>();
-            sc.AddTransient<PurchasesService>();
+            //sc.AddTransient<PurchasesService>();
 
             // Posting service (if not already added earlier)
             //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();

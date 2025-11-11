@@ -12,17 +12,15 @@ using Pos.Persistence;
 using Pos.Persistence.Features.Transfers;
 using System.Collections.Generic;
 using Pos.Client.Wpf.Services;   // for AppState
-
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Inventory
 {
     public partial class TransferPickerWindow : Window
     {
         public enum PickerMode { Drafts, Receipts }
-
-        private readonly IServiceProvider _sp;
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly ITransferQueries _queries;
+        private readonly ILookupService _lookups;
         private readonly AppState _state;
         private readonly PickerMode _mode;
 
@@ -30,16 +28,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
         
         public int? SelectedTransferId { get; private set; }
 
-        public TransferPickerWindow(IServiceProvider sp,
-                            IDbContextFactory<PosClientDbContext> dbf,
-                            ITransferQueries queries,
-                            AppState state,
-                            PickerMode mode)
+        public TransferPickerWindow(ITransferQueries queries, ILookupService lookups, AppState state, PickerMode mode)
         {
             InitializeComponent();
-            _sp = sp;
-            _dbf = dbf;
             _queries = queries;
+            _lookups = lookups;
             _state = state;
             _mode = mode;
             Loaded += OnLoaded;
@@ -77,13 +70,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 {
                     try
                     {
-                        using var db = await _dbf.CreateDbContextAsync();
-                        _allowedToOutletIds = await db.Set<UserOutlet>()
-                            .AsNoTracking()
-                            .Where(uo => uo.UserId == _state.CurrentUser!.Id)
-                            .Select(uo => uo.OutletId)
-                            .ToListAsync();
-
+                        _allowedToOutletIds = (await _lookups.GetUserOutletIdsAsync(_state.CurrentUser!.Id)).ToList();
                         // Pre-populate To filter to Outlet + the first assigned outlet (optional convenience)
                         if (_allowedToOutletIds.Count > 0)
                         {
@@ -124,17 +111,16 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             try
             {
-                using var db = await _dbf.CreateDbContextAsync();
                 var sel = (FromTypeBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
                 if (sel == "Warehouse")
                 {
-                    FromPicker.ItemsSource = await db.Warehouses.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+                    FromPicker.ItemsSource = await _lookups.GetWarehousesAsync();
                     FromPicker.SelectedIndex = -1;
                     FromPicker.IsEnabled = true;
                 }
                 else if (sel == "Outlet")
                 {
-                    FromPicker.ItemsSource = await db.Outlets.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+                    FromPicker.ItemsSource = await _lookups.GetOutletsAsync();
                     FromPicker.SelectedIndex = -1;
                     FromPicker.IsEnabled = true;
                 }
@@ -151,17 +137,16 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             try
             {
-                using var db = await _dbf.CreateDbContextAsync();
                 var sel = (ToTypeBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
                 if (sel == "Warehouse")
                 {
-                    ToPicker.ItemsSource = await db.Warehouses.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+                    ToPicker.ItemsSource = await _lookups.GetWarehousesAsync();
                     ToPicker.SelectedIndex = -1;
                     ToPicker.IsEnabled = true;
                 }
                 else if (sel == "Outlet")
                 {
-                    ToPicker.ItemsSource = await db.Outlets.AsNoTracking().OrderBy(x => x.Name).ToListAsync();
+                    ToPicker.ItemsSource = await _lookups.GetOutletsAsync();
                     ToPicker.SelectedIndex = -1;
                     ToPicker.IsEnabled = true;
                 }

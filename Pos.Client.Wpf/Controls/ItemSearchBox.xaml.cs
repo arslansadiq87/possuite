@@ -7,7 +7,9 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.DTO;
-using Pos.Persistence.Services;
+
+//using Pos.Persistence.Services;
+using Pos.Domain.Services;
 using System.Threading.Tasks;
 
 
@@ -44,7 +46,7 @@ namespace Pos.Client.Wpf.Controls
             DependencyProperty.Register(nameof(Query), typeof(string), typeof(ItemSearchBox),
                 new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
 
-        private ItemsService _lookup;
+        private IItemsReadService _lookup;
         private readonly ObservableCollection<ItemIndexDto> _index = new();
         private ICollectionView? _view;
 
@@ -59,7 +61,7 @@ namespace Pos.Client.Wpf.Controls
             InitializeComponent();
 
             // Resolve service from App.Services
-            //_lookup = App.Services.GetRequiredService<ItemsService>();
+            _lookup = App.Services.GetRequiredService<IItemsReadService>();
 
             // async load index
             // do the rest as-is
@@ -77,7 +79,7 @@ namespace Pos.Client.Wpf.Controls
             {
                 var sp = App.Services;
                 if (sp is null) return; // still not ready (e.g., designer) — just bail quietly
-                _lookup = sp.GetService<ItemsService>();
+                _lookup = sp.GetService<IItemsReadService>();
                 if (_lookup is null) return;
             }
 

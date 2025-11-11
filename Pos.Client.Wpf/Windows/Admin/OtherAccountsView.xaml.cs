@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Client.Wpf.Services;      // AppEvents, AuthZ
-using Pos.Persistence.Services;     // OtherAccountService
+using Pos.Domain.Services;     // OtherAccountService
 using Pos.Client.Wpf.Infrastructure;
 
 
@@ -14,7 +14,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OtherAccountsView : UserControl
     {
-        private OtherAccountService? _svc;
+        private IOtherAccountService? _svc;
         private Func<OtherAccountDialog>? _dialogFactory;
         private readonly bool _design;
 
@@ -25,7 +25,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
 
-            _svc = App.Services.GetRequiredService<OtherAccountService>();
+            _svc = App.Services.GetRequiredService<IOtherAccountService>();
             _dialogFactory = () => App.Services.GetRequiredService<OtherAccountDialog>();
 
             Loaded += async (_, __) => await RefreshAsync();

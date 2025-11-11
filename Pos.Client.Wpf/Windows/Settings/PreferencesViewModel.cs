@@ -7,15 +7,17 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Persistence;
+using Pos.Persistence.Services;
 using Pos.Client.Wpf.Windows.Settings;
 using System;
 using System.Linq;
 namespace Pos.Client.Wpf.Windows.Settings;
-
+using Pos.Domain.Services;
 public partial class PreferencesViewModel : ObservableObject
 {
-    private readonly IDbContextFactory<PosClientDbContext> _dbf;
+    private readonly ILookupService _lookup;
     private readonly IUserPreferencesService _svc;
+    
     // inside class PreferencesViewModel
     public ObservableCollection<TimeZoneInfo> TimeZones { get; } = new();
 
@@ -32,10 +34,10 @@ public partial class PreferencesViewModel : ObservableObject
 
     [ObservableProperty] private bool isBusy;
 
-    public PreferencesViewModel(IDbContextFactory<PosClientDbContext> dbf, IUserPreferencesService svc)
+    public PreferencesViewModel(ILookupService lookup, IUserPreferencesService svc)
     {
-        _dbf = dbf;
-        _svc = svc;
+     _lookup = lookup;
+     _svc = svc;
     }
 
     [RelayCommand]
@@ -45,15 +47,13 @@ public partial class PreferencesViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            using var db = await _dbf.CreateDbContextAsync();
             Outlets.Clear();
             Warehouses.Clear();
+            var outlets = await _lookup.GetOutletsAsync();
+            foreach (var o in outlets.OrderBy(x => x.Name)) Outlets.Add(o);
 
-            foreach (var o in await db.Outlets.AsNoTracking().OrderBy(x => x.Name).ToListAsync())
-                Outlets.Add(o);
-
-            foreach (var w in await db.Warehouses.AsNoTracking().OrderBy(x => x.Name).ToListAsync())
-                Warehouses.Add(w);
+            var warehouses = await _lookup.GetWarehousesAsync();
+            foreach (var w in warehouses.OrderBy(x => x.Name)) Warehouses.Add(w);
 
             var p = await _svc.GetAsync();
             PurchaseDestinationScope = p.PurchaseDestinationScope ?? "Outlet";
@@ -83,14 +83,19 @@ public partial class PreferencesViewModel : ObservableObject
             {
                 PurchaseDestinationScope = PurchaseDestinationScope,
                 PurchaseDestinationId = PurchaseDestinationId,
-                DefaultBarcodeType = DefaultBarcodeType
-
+                DefaultBarcodeType = DefaultBarcodeType,
+                DisplayTimeZoneId = SelectedTimeZoneId
             };
-            p.DisplayTimeZoneId = SelectedTimeZoneId;
+
             await _svc.SaveAsync(p);
+
+            // OS/UI concern: stays in Client
             Pos.Client.Wpf.Services.TimeService.SetTimeZone(SelectedTimeZoneId);
-            MessageBox.Show("Preferences saved.", "Preferences", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            MessageBox.Show("Preferences saved.", "Preferences",
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
         finally { IsBusy = false; }
     }
+
 }

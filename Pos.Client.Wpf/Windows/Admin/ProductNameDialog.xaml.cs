@@ -6,15 +6,15 @@ using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using Pos.Domain.Entities;
-using Pos.Persistence.Services;   // ⬅ service layer (no EF in the dialog!)
+using Pos.Domain.Services;   // ⬅ service layer (no EF in the dialog!)
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class ProductNameDialog : Window
     {
         // ---- Service layer only (no DbContext here) ----
-        private readonly CatalogService _svc =
-            App.Services.GetRequiredService<CatalogService>();
+        private readonly ICatalogService _svc =
+            App.Services.GetRequiredService<ICatalogService>();
 
         // Picked images (exposed to caller)
         private string? _primaryImagePath;

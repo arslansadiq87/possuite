@@ -13,8 +13,8 @@ using Pos.Client.Wpf.Windows.Common;
 using Pos.Client.Wpf.Services;
 using Pos.Domain;
 using Pos.Domain.Utils;
-using Pos.Persistence;
-using Pos.Persistence.Services;   // service pattern
+using Pos.Domain.Services;
+//using Pos.Persistence.Services;   // service pattern
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -23,7 +23,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         public event EventHandler? RequestClose;
 
         // Service-based: the view owns NO DbContext or Outbox.
-        private readonly OutletCounterService _svc;
+        private readonly IOutletCounterService _svc;
 
         // Lightweight DTOs for safe binding (kept local to avoid XAML churn)
         private sealed class OutletRow
@@ -53,7 +53,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         public OutletsCountersView()
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<OutletCounterService>();
+            _svc = App.Services.GetRequiredService<IOutletCounterService>();
 
             Loaded += async (_, __) =>
             {

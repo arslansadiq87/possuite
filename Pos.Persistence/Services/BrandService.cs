@@ -1,14 +1,17 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
+using Pos.Domain.Models.Catalog;
+using Pos.Domain.Services;
 using Pos.Persistence.Sync;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Pos.Persistence.Services
 {
-    public class BrandService
+    public sealed class BrandService : IBrandService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
@@ -19,32 +22,28 @@ namespace Pos.Persistence.Services
             _outbox = outbox;
         }
 
-        public sealed class BrandRowDto
+        public async Task<List<BrandRowDto>> SearchAsync(string? term, bool includeInactive, CancellationToken ct = default)
         {
-            public int Id { get; set; }
-            public string Name { get; set; } = "";
-            public bool IsActive { get; set; }
-            public int ItemCount { get; set; }
-            public DateTime? CreatedAtUtc { get; set; }
-            public DateTime? UpdatedAtUtc { get; set; }
-        }
-
-        public async Task<List<BrandRowDto>> SearchAsync(string? term, bool includeInactive)
-        {
-            await using var db = _dbf.CreateDbContext();
-            term = (term ?? "").Trim().ToLower();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            term = (term ?? string.Empty).Trim();
 
             var brands = db.Brands.AsNoTracking();
             if (!includeInactive)
                 brands = brands.Where(b => b.IsActive);
 
             if (!string.IsNullOrWhiteSpace(term))
-                brands = brands.Where(b => b.Name.ToLower().Contains(term));
+            {
+                var like = $"%{term}%";
+                brands = brands.Where(b => EF.Functions.Like(b.Name, like));
+            }
 
             var products = db.Products.AsNoTracking()
                 .Where(p => p.IsActive && !p.IsVoided && p.BrandId != null);
-            var items = db.Items.AsNoTracking().Where(i => i.IsActive && !i.IsVoided);
 
+            var items = db.Items.AsNoTracking()
+                .Where(i => i.IsActive && !i.IsVoided);
+
+            // products with variants → count variants by product → attribute to BrandId
             var productsWithVariantsCounts =
                 items.Where(i => i.ProductId != null)
                      .GroupBy(i => i.ProductId!.Value)
@@ -54,21 +53,24 @@ namespace Pos.Persistence.Services
                      .GroupBy(x => x.BrandId)
                      .Select(g => new { BrandId = g.Key, Count = g.Sum(x => x.Count) });
 
+            // products without variants → count products, attribute to BrandId
             var productsWithoutVariantsCounts =
                 products.Where(p => !items.Any(i => i.ProductId == p.Id))
                         .GroupBy(p => p.BrandId!.Value)
                         .Select(g => new { BrandId = g.Key, Count = g.Count() });
 
+            // standalone items with BrandId (no product)
             var standaloneItemCounts =
                 items.Where(i => i.ProductId == null && i.BrandId != null)
                      .GroupBy(i => i.BrandId!.Value)
                      .Select(g => new { BrandId = g.Key, Count = g.Count() });
 
-            var skuCountsByBrand = productsWithVariantsCounts
-                .Concat(productsWithoutVariantsCounts)
-                .Concat(standaloneItemCounts)
-                .GroupBy(x => x.BrandId)
-                .Select(g => new { BrandId = g.Key, Count = g.Sum(x => x.Count) });
+            var skuCountsByBrand =
+                productsWithVariantsCounts
+                    .Concat(productsWithoutVariantsCounts)
+                    .Concat(standaloneItemCounts)
+                    .GroupBy(x => x.BrandId)
+                    .Select(g => new { BrandId = g.Key, Count = g.Sum(x => x.Count) });
 
             var rows = await brands
                 .GroupJoin(skuCountsByBrand, b => b.Id, sc => sc.BrandId,
@@ -84,39 +86,36 @@ namespace Pos.Persistence.Services
                 })
                 .OrderBy(r => r.Name)
                 .Take(2000)
-                .ToListAsync();
+                .ToListAsync(ct);
 
             return rows;
         }
 
-        public async Task SetActiveAsync(int brandId, bool active)
+        public async Task SetActiveAsync(int brandId, bool active, CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
-            var b = await db.Brands.FirstOrDefaultAsync(x => x.Id == brandId);
-            if (b == null) return;
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var b = await db.Brands.FirstOrDefaultAsync(x => x.Id == brandId, ct);
+            if (b is null) return;
 
             b.IsActive = active;
             b.UpdatedAtUtc = DateTime.UtcNow;
-            await db.SaveChangesAsync();
 
-            // enqueue sync record using core persistence method
-            await _outbox.EnqueueUpsertAsync(db, b, default);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, b, ct);
+            await db.SaveChangesAsync(ct);
         }
 
-        // ==========================
-        // Create or Update Brand
-        // ==========================
-        public async Task<Brand> SaveBrandAsync(int? id, string name, bool isActive)
+        public async Task<Brand> SaveBrandAsync(int? id, string name, bool isActive, CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
 
-            name = (name ?? "").Trim();
+            name = (name ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Name is required.", nameof(name));
 
-            bool exists = await db.Brands
-                .AnyAsync(b => b.Name.ToLower() == name.ToLower() && b.Id != (id ?? 0));
+            var exists = await db.Brands
+                .AnyAsync(b => b.Name.ToLower() == name.ToLower() && b.Id != (id ?? 0), ct);
+
             if (exists)
                 throw new InvalidOperationException("A brand with this name already exists.");
 
@@ -135,25 +134,23 @@ namespace Pos.Persistence.Services
             }
             else
             {
-                entity = await db.Brands.FirstAsync(b => b.Id == id.Value);
+                entity = await db.Brands.FirstAsync(b => b.Id == id.Value, ct);
                 entity.Name = name;
                 entity.IsActive = isActive;
                 entity.UpdatedAtUtc = DateTime.UtcNow;
             }
 
-            await db.SaveChangesAsync();
-            await _outbox.EnqueueUpsertAsync(db, entity, default);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, entity, ct);
+            await db.SaveChangesAsync(ct);
 
             return entity;
         }
 
-        public async Task<Brand?> GetBrandAsync(int id)
+        public async Task<Brand?> GetBrandAsync(int id, CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
-            return await db.Brands.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id);
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Brands.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
         }
-
-
     }
 }

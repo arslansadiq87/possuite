@@ -46,6 +46,7 @@ namespace Pos.Persistence.Features.Transfers
     {
         Task<(IReadOnlyList<TransferListRow> Rows, int Total)> SearchAsync(TransferSearchFilter f, CancellationToken ct = default);
         Task<StockDoc?> GetAsync(int id, CancellationToken ct = default);
+        Task<(StockDoc Doc, StockDocLine[] Lines)?> GetWithLinesAsync(int id, CancellationToken ct = default);
     }
 
     public sealed class TransferQueries : ITransferQueries
@@ -178,6 +179,19 @@ namespace Pos.Persistence.Features.Transfers
             await using var db = await _dbf.CreateDbContextAsync(ct);
             return await db.StockDocs.AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == id && d.DocType == StockDocType.Transfer, ct);
+        }
+
+        public async Task<(StockDoc Doc, StockDocLine[] Lines)?> GetWithLinesAsync(int id, CancellationToken ct = default)
+        {
+        await using var db = await _dbf.CreateDbContextAsync(ct);
+        var doc = await db.StockDocs.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == id && d.DocType == StockDocType.Transfer, ct);
+        if (doc is null) return null;
+        var lines = await db.StockDocLines.AsNoTracking()
+            .Where(l => l.StockDocId == id)
+            .OrderBy(l => l.Id)
+            .ToArrayAsync(ct);
+        return (doc, lines);
         }
     }
 }
