@@ -24,12 +24,21 @@ using System.Threading;
 using System.Threading.Tasks;
 using Pos.Client.Wpf.Services.Sync; // ISyncService
 using Pos.Domain.Services;
-
+using Pos.Domain.Services.Hr;
+using Pos.Domain.Services.Security;
+using Pos.Domain.Services.Admin;
+using Pos.Persistence.Services.Admin;
+using Pos.Domain.Services.System;
+using Pos.Persistence.Services.System;
+using Pos.Domain.Services.Accounting;
+using Pos.Persistence.Services.Accounting;
+using Pos.Persistence.Services.Hr;
 
 namespace Pos.Client.Wpf
 {
     public partial class App : Application
     {
+
         public App()
         {
             // If your file has InitializeComponent(), keep it first.
@@ -54,91 +63,41 @@ namespace Pos.Client.Wpf
         public static IServiceProvider Services { get; private set; } = null!;
         private CancellationTokenSource? _syncCts;
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-
             ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
-            //ThemeManager.Current.ThemeSyncMode = ThemeSyncMode.SyncAll;  // or SyncWithAppMode / SyncWithAccent
-            //ThemeManager.Current.SyncTheme();
-            //ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
-            // 3) Keep every open window in lock-step:
+
+            // ----- BUILD DI FIRST (moved up) -----
             var sc = new ServiceCollection();
             // 1) Connection string
             var cs = DbPath.ConnectionString;
             var dbFile = DbPath.Get();
-            // 2) DbContextFactory (client DB)
-            sc.AddDbContextFactory<PosClientDbContext>(o =>
-                o.UseSqlite(cs)
-                 .EnableSensitiveDataLogging()
-                 .LogTo(msg => Debug.WriteLine(msg))
-            );
+            // 2) Client persistence stack (DbContextFactory + bootstrapper)
+            sc.AddClientSqlitePersistence(cs);
 
+            // View navigation & dialogs
             sc.AddTransient<Windows.Shell.DashboardVm>();
             sc.AddTransient<Windows.Shell.DashboardWindow>();
-            // View navigation
             sc.AddSingleton<IViewNavigator, ViewNavigator>();
             sc.AddSingleton<IWindowNavigator, WindowNavigator>();
             sc.AddSingleton<IDialogService, DialogService>();
             sc.AddSingleton<IPaymentDialogService, PaymentDialogService>();
-            sc.AddSingleton<ITillService, TillService>();
-            sc.AddSingleton<ITerminalContext, TerminalContext>();
-            // Party posting (build a DbContext instance from the factory for each use)
-            
-            
-            sc.AddScoped<PartyService>();
-            // using Pos.Domain.Services;
-            // using Pos.Persistence.Services;
-
-            
-
-            //sc.AddScoped<OtherAccountService>();
-            
-                        
+            // Features & services (your existing registrations, unchanged)
             sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();
             sc.AddScoped<ITransferQueries, TransferQueries>();
             // Read-only helpers (no EF in UI)
             sc.AddScoped<ILookupService, LookupService>();
             sc.AddScoped<IInventoryReadService, InventoryReadService>();
-            sc.AddTransient<PartyPostingService>(sp =>
-            {
-                var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-                var outbox = sp.GetRequiredService<IOutboxWriter>();      // NEW
-                return new PartyPostingService(dbf.CreateDbContext(), outbox);
-            });
-
-            // Party lookup (construct DbContext per resolve so queries use a fresh context)
-            sc.AddTransient<PartyLookupService>(sp =>
-            {
-                var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-                return new PartyLookupService(dbf.CreateDbContext());
-            });
             sc.AddTransient<BarcodeLabelSettingsViewModel>();
-            
-
             sc.AddSingleton<ResetStockService>();
-            
-
-
-            // 3) App services
-
+            // 3) App state
             sc.AddSingleton<AppState>(AppState.Current);
-            sc.AddSingleton<AuthService>();
-            //sc.AddSingleton<StockGuard>();            // ✅ Register here
-
-
-            //sc.AddSingleton<CurrentUserService>();
-
-
             // NEW: machine/counter DI (you added these earlier)
             sc.AddSingleton<IMachineIdentityService, MachineIdentityService>();
-            sc.AddScoped<CounterBindingService>();
-
             // 4) Windows (register them so we can resolve via DI)
             sc.AddTransient<LoginWindow>();
-            
-            // Views
             sc.AddTransient<SaleInvoiceView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UsersView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>();
@@ -162,21 +121,10 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.StockReportView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
-            sc.AddScoped<Pos.Client.Wpf.Services.IStaffDirectory, Pos.Client.Wpf.Services.StaffDirectory>();
-            
 
             sc.AddTransient<TillSessionSummaryWindow>();
-            sc.AddTransient<Func<int, int, int, TillSessionSummaryWindow>>(sp =>
-            {
-                var opts = sp.GetRequiredService<DbContextOptions<PosClientDbContext>>();
-                return (tillId, outletId, counterId) =>
-                    new TillSessionSummaryWindow(opts, tillId, outletId, counterId);
-            });
             sc.AddTransient<OtherAccountsView>();
             sc.AddTransient<OtherAccountDialog>();
-
-
-
             // WINDOWS (register every window you resolve from DI)
             sc.AddTransient<BrandsWindow>();
             sc.AddTransient<EditBrandWindow>();
@@ -186,9 +134,6 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditWarehouseWindow>();
             sc.AddTransient<PreferencesViewModel>();
             sc.AddTransient<PreferencesPage>();
-            //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
-            //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
-
 
             // Windows (transient)
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView>();
@@ -201,53 +146,57 @@ namespace Pos.Client.Wpf
             // VMs
             sc.AddTransient<AccountLedgerVm>();
             sc.AddTransient<CashBookVm>();   // (for the other window as well)
-
             // ViewModels (scoped or transient)
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.VoucherEditorVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.PayrollRunVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>();
-
-
-            
             sc.AddTransient<InvoiceSettingsViewModel>();
-            
             sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
-
-            sc.AddScoped<Pos.Persistence.Services.IOpeningStockService, Pos.Persistence.Services.OpeningStockService>();
-            //sc.AddScoped<CatalogService>();   // <-- register this
-            //sc.AddScoped<ItemsService>();
-            
-
             sc.AddScoped<IPurchaseCenterReadService, PurchaseCenterReadService>();
             sc.AddScoped<IPurchasesServiceFactory, PurchasesServiceFactory>();
-
             sc.AddScoped<IGlPostingService, GlPostingService>();
-            sc.AddScoped<IAttendanceService, AttendanceService>();
-            sc.AddScoped<IPayrollService, PayrollService>();
-            // after DbContext/ITerminalContext registrations
             sc.AddScoped<ICoaService, CoaService>();
             sc.AddScoped<IOutletService, OutletService>();
             sc.AddTransient<VoucherCenterVm>();
             sc.AddTransient<VoucherCenterView>();
             sc.AddTransient<GlPostingService>();
-            
-            // using Pos.Persistence.Services;
-            
-            
             sc.AddScoped<ISalesService, SalesService>();
             sc.AddScoped<IInvoiceService, InvoiceService>();
-
             //Manged services
+            sc.AddScoped<IPartyPostingService, PartyPostingService>();
+            sc.AddScoped<IPayrollService, PayrollService>();
+            sc.AddScoped<IStaffReadService, StaffReadService>();
+
+            sc.AddSingleton<Pos.Domain.Services.Security.IAuthService, Pos.Persistence.Services.Security.AuthService>();
+            sc.AddSingleton<Pos.Domain.Services.Security.IAuthorizationService, Pos.Persistence.Services.Security.AuthorizationService>();
+            //sc.AddScoped<ICounterBindingService, CounterBindingService>();
+            sc.AddScoped<ICounterBindingService, CounterBindingService>();
+
+            sc.AddScoped<IOutletReadService, OutletReadService>();
+            sc.AddScoped<ITillService, TillService>();
+            sc.AddScoped<IArApQueryService, ArApQueryService>();
+            sc.AddScoped<IAttendanceService, AttendanceService>();
+
+            // Terminal context is provided from UI (ids only)
+            sc.AddScoped<ITerminalContext, Pos.Client.Wpf.Services.TerminalContext>();
             //sc.AddScoped<IItemsReadService>(sp => sp.GetRequiredService<ItemsService>());
+            sc.AddScoped<IReportsService, ReportsService>();
+            sc.AddScoped<ITillReadService, TillReadService>();
+            sc.AddSingleton<TillSessionSummaryVmFactory>();
+            sc.AddTransient<Func<int, int, int, TillSessionSummaryWindow>>(sp =>
+                (tillId, outletId, counterId) => new TillSessionSummaryWindow(tillId, outletId, counterId));
+            sc.AddScoped<IPartyService, PartyService>();
             sc.AddScoped<IItemsReadService, ItemsService>();
             sc.AddScoped<IInvoiceSettingsService, InvoiceSettingsService>();
             sc.AddScoped<ICategoryService, CategoryService>();
+            sc.AddScoped<IItemsWriteService, CatalogService>();
             sc.AddScoped<ICatalogService, CatalogService>();
             sc.AddScoped<IBrandService, BrandService>();
             sc.AddScoped<IBarcodeLabelSettingsService, BarcodeLabelSettingsService>();
-
+            sc.AddScoped<IPartyLookupService, PartyLookupService>();
+            sc.AddScoped<IOpeningStockService, OpeningStockService>();
             sc.AddScoped<IOtherAccountService, OtherAccountService>();
             sc.AddScoped<IOutletCounterService, OutletCounterService>();
             sc.AddScoped<ILookupService, LookupService>();
@@ -261,21 +210,10 @@ namespace Pos.Client.Wpf
             sc.AddScoped<IUserReadService, UserReadService>();
             sc.AddScoped<IVoucherCenterService, VoucherCenterService>();
             sc.AddScoped<IWarehouseService, WarehouseService>();
-            
 
             // VM & window
-            //sc.AddTransient<OpeningBalanceVm>();
-            //sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>();
-            
-            // Query service for AR/AP
-            sc.AddScoped<IArApQueryService, ArApQueryService>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ArApReportWindow>();
-            //sc.AddTransient<PurchasesService>();
-
-            // Posting service (if not already added earlier)
-            //sc.AddTransient<Pos.Client.Wpf.Services.OpeningBalanceService>();
-
             // after other services
             sc.AddSingleton<Pos.Persistence.Sync.ISyncTokenService, Pos.Persistence.Sync.SyncTokenService>();
             sc.AddSingleton<Pos.Persistence.Sync.IOutboxWriter, Pos.Persistence.Sync.OutboxWriter>();
@@ -285,13 +223,6 @@ namespace Pos.Client.Wpf
                 c.BaseAddress = new Uri("http://localhost:5089/"); // TODO: set
             });
             sc.AddSingleton<Pos.Client.Wpf.Services.Sync.ISyncService, Pos.Client.Wpf.Services.Sync.SyncService>();
-
-            //sc.AddTransient<UsersWindow>(sp =>
-            //{
-            //    var dbf = sp.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-            //    var cu = sp.GetRequiredService<CurrentUserService>().CurrentUser;
-            //    return new UsersWindow(dbf, cu);
-            //});
             sc.AddLogging(b =>
             {
                 b.ClearProviders();
@@ -312,31 +243,12 @@ namespace Pos.Client.Wpf
                 TimeService.SetTimeZone(null);
             }
 
-
-            // 5) Ensure DB + seed
+            // 5) Ensure DB + seed (delegated to persistence bootstrapper)
             try
             {
                 using var scope = Services.CreateScope();
-                var dbf = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-                using var db = dbf.CreateDbContext();
-
-                if (!File.Exists(dbFile))
-                    Debug.WriteLine($"[DB] Creating new DB at: {dbFile}");
-                else
-                    Debug.WriteLine($"[DB] Using existing DB at: {dbFile}");
-
-                db.Database.Migrate();
-                Seed.Ensure(db);  // make sure this seeds bcrypt admin/admin123
-                try
-                {
-                    // Ensure WAL, reasonable sync, and a busy timeout
-                    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
-                    db.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;");
-                    db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;");
-                }
-                catch { /* swallow if not supported */ }
-                DataFixups.NormalizeUsers(db);  // <-- add this line
-
+                var bootstrap = scope.ServiceProvider.GetRequiredService<IDbBootstrapper>();
+                bootstrap.EnsureClientDbReadyAsync().GetAwaiter().GetResult(); // sync call in startup
             }
             catch (Exception ex)
             {
@@ -344,8 +256,7 @@ namespace Pos.Client.Wpf
                 Shutdown();
                 return;
             }
-
-            // App.xaml.cs  (inside OnStartup, right before showing login)
+            // Login
             var oldMode = this.ShutdownMode;
             this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -357,85 +268,40 @@ namespace Pos.Client.Wpf
                 return;
             }
 
-            // NEW: copy the signed-in user into AppState so bindings have a value
-            var auth = App.Services.GetRequiredService<AuthService>();
-            var stForUser = App.Services.GetRequiredService<AppState>();
-            if (auth?.CurrentUser != null)
+            // Copy signed-in user to AppState
+            _ = Task.Run(async () =>
             {
-                stForUser.CurrentUserId = auth.CurrentUser.Id;
-                stForUser.CurrentUserName = string.IsNullOrWhiteSpace(auth.CurrentUser.DisplayName)
-                    ? auth.CurrentUser.Username
-                    : auth.CurrentUser.DisplayName;
-            }
-            else
-            {
-                // Fallback so UI isn’t blank even if AuthService didn’t populate yet
-                stForUser.CurrentUserId = stForUser.CurrentUserId > 0 ? stForUser.CurrentUserId : 0;
-                stForUser.CurrentUserName = string.IsNullOrWhiteSpace(stForUser.CurrentUserName) ? "admin" : stForUser.CurrentUserName;
-            }
-            // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-            // HYDRATE AppState from the current PC's counter binding.
-            // If not bound, open the Outlets & Counters window so the user can assign now.
+                var auth = App.Services.GetRequiredService<IAuthService>();
+                var state = App.Services.GetRequiredService<AppState>();
+
+                var user = await auth.GetCurrentUserAsync(CancellationToken.None);
+                if (user is not null)
+                {
+                    state.CurrentUserId = user.Id;
+                    state.CurrentUserName = string.IsNullOrWhiteSpace(user.FullName)
+                        ? user.Username
+                        : user.FullName;
+                }
+                else
+                {
+                    state.CurrentUserId = state.CurrentUserId > 0 ? state.CurrentUserId : 0;
+                    state.CurrentUserName = string.IsNullOrWhiteSpace(state.CurrentUserName) ? "admin" : state.CurrentUserName;
+                }
+            });
+
+            // ----- NOW it’s safe to ensure counter binding (DI is ready) -----
             try
             {
-                var binder = Services.GetRequiredService<CounterBindingService>();
-                var binding = binder.GetCurrentBinding();
-
-                if (binding == null)
-                {
-                    // Resolve the usercontrol and host window
-                    var view = Services.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>();
-                    var host = Services.GetRequiredService<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
-
-                    host.Title = "Outlets & Counters";
-                    host.SetView(view);
-                    host.ShowInTaskbar = true;
-
-                    MessageBox.Show(
-                        "This PC is not assigned to any counter yet.\n\n" +
-                        "Open the outlet, select a counter, and click 'Assign This PC'. Then close this window.",
-                        "Counter Assignment Required",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-
-                    // If you added the close event, wire it:
-                    view.RequestClose += (_, __) => { host.DialogResult = true; host.Close(); };
-
-                    // Show modally
-                    try
-                    {
-                        host.ShowDialog();
-                    }
-                    catch (ArgumentException aex)
-                    {
-                        MessageBox.Show("Could not open Outlets & Counters dialog:\n\n" + aex.Message,
-                                        "Window Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        Shutdown();
-                        return;
-                    }
-
-                    // Retry binding after the dialog closes
-                    binding = binder.GetCurrentBinding();
-                    if (binding == null)
-                    {
-                        MessageBox.Show(
-                            "No counter assignment was made.\n\n" +
-                            "The app will exit. Open Admin → Outlets & Counters to assign later.",
-                            "No Counter Assigned",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
-                        Shutdown();
-                        return;
-                    }
-                }
-
-                // Success: lock AppState to bound outlet+counter
-                var st = Services.GetRequiredService<AppState>();
-                st.CurrentOutletId = binding.OutletId;
-                st.CurrentCounterId = binding.CounterId;
+                using var cts = new CancellationTokenSource();
+                await EnsureCounterBindingAsync(cts.Token);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to resolve counter binding:\n\n" + ex.Message,
-                                "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    "Failed to resolve counter binding:\n\n" + ex.Message,
+                    "Startup Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 Shutdown();
                 return;
             }
@@ -457,6 +323,71 @@ namespace Pos.Client.Wpf
             Application.Current.MainWindow = shell;
             shell.Show();
             this.ShutdownMode = oldMode; // e.g. back to OnMainWindowClose
+        }
+
+        private async Task EnsureCounterBindingAsync(CancellationToken ct)
+        {
+            var sp = Services;
+            var midS = sp.GetRequiredService<IMachineIdentityService>();
+            var svc = sp.GetRequiredService<ICounterBindingService>();
+
+            var machineId = await midS.GetMachineIdAsync(ct);
+            var machineName = await midS.GetMachineNameAsync(ct);
+
+            var binding = await svc.GetCurrentBindingAsync(machineId, ct);
+            if (binding is null)
+            {
+                // Show the assignment UI
+                var view = sp.GetRequiredService<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>();
+                var host = sp.GetRequiredService<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
+
+                host.Title = "Outlets & Counters";
+                host.SetView(view);
+                host.ShowInTaskbar = true;
+
+                MessageBox.Show(
+                    "This PC is not assigned to any counter yet.\n\n" +
+                    "Open the outlet, select a counter, and click 'Assign This PC'. Then close this window.",
+                    "Counter Assignment Required",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+
+                view.RequestClose += (_, __) =>
+                {
+                    host.DialogResult = true;
+                    host.Close();
+                };
+
+                try
+                {
+                    host.ShowDialog();
+                }
+                catch (ArgumentException aex)
+                {
+                    MessageBox.Show(
+                        "Could not open Outlets & Counters dialog:\n\n" + aex.Message,
+                        "Window Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    Shutdown();
+                    return;
+                }
+
+                binding = await svc.GetCurrentBindingAsync(machineId, ct);
+                if (binding is null)
+                {
+                    MessageBox.Show(
+                        "No counter assignment was made.\n\n" +
+                        "The app will exit. Open Admin → Outlets & Counters to assign later.",
+                        "No Counter Assigned",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Shutdown();
+                    return;
+                }
+            }
+
+            var st = sp.GetRequiredService<AppState>();
+            st.CurrentOutletId = binding.OutletId;
+            st.CurrentCounterId = binding.CounterId;
         }
 
         protected override void OnExit(ExitEventArgs e)
@@ -491,9 +422,5 @@ namespace Pos.Client.Wpf
                 await Task.Delay(TimeSpan.FromSeconds(15), ct);
             }
         }
-
-
-
-
     }
 }

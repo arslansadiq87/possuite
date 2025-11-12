@@ -15,33 +15,25 @@ using Pos.Domain.Formatting;
 using System.Windows.Media;
 //using Pos.Persistence.Services;
 using Pos.Domain.Services;
+using Pos.Client.Wpf.Security;
 
 namespace Pos.Client.Wpf.Windows.Inventory
 {
     public partial class TransferEditorView : UserControl
     {
-        // at top of TransferEditorView class
         private List<Warehouse> _whs = new();
         private List<Outlet> _outs = new();
         private bool _lookupsReady = false;
         private bool _suppressSameCheck = false;
-        
         private bool _sourceLocked = false;
-        private decimal _availableOnHand = 0m;
-
-
-        //private readonly IDbContextFactory<PosClientDbContext> _dbf;
-        //private readonly ITransferService _svc;
-        //private readonly AppState _state;
+        //private decimal _availableOnHand = 0m;
         private readonly ITransferService _svc;
         private readonly ITransferQueries _queries;
         private readonly ILookupService _lookups;
         private readonly IInventoryReadService _invRead;
         private readonly AppState _state;
-
         private StockDoc? _doc;
         private ObservableCollection<StockDocLine> _lines = new();
-
         public TransferEditorView(ITransferService svc, ITransferQueries queries, ILookupService lookups, IInventoryReadService invRead, AppState state)
         {
             InitializeComponent();
@@ -55,43 +47,33 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            var u = _state.CurrentUser;
-            bool canPickSource = u.IsGlobalAdmin || u.Role == UserRole.Admin || u.Role == UserRole.Manager;
+            var u = await AuthZ.CurrentUserAsync();
+            bool canPickSource = u?.IsGlobalAdmin == true || await AuthZ.IsManagerOrAboveAsync();
             _whs = (await _lookups.GetWarehousesAsync()).ToList();
             _outs = (await _lookups.GetOutletsAsync()).ToList();
-            // defaults
             FromTypeBox.SelectedIndex = 0; // Warehouse
             ToTypeBox.SelectedIndex = 1; // Outlet
-
             FromPicker.DisplayMemberPath = "Name";
             FromPicker.SelectedValuePath = "Id";
             ToPicker.DisplayMemberPath = "Name";
             ToPicker.SelectedValuePath = "Id";
             ItemSearch.GotFocus += (_, __) => HideAvailableBadge();
-
-            // initial bind based on type selections
             RebindPickerForType(FromTypeBox, FromPicker);
             RebindPickerForType(ToTypeBox, ToPicker);
-
             if (!canPickSource)
             {
                 FromTypeBox.SelectedIndex = 1; // force Outlet for outlet user
                 RebindPickerForType(FromTypeBox, FromPicker);
-
                 var myOutId = (await _lookups.GetUserOutletIdsAsync(u.Id)).FirstOrDefault();
                 if (myOutId > 0) FromPicker.SelectedValue = myOutId;
                 FromTypeBox.IsEnabled = false;
                 FromPicker.IsEnabled = false;
             }
-
-            // now that everything is set, wire change handlers
             FromTypeBox.SelectionChanged += FromTypeBox_SelectionChanged;
             ToTypeBox.SelectionChanged += ToTypeBox_SelectionChanged;
             FromPicker.SelectionChanged += AnyPicker_SelectionChanged;
             ToPicker.SelectionChanged += AnyPicker_SelectionChanged;
-
             _lookupsReady = true;
-
             EffectiveDate.SelectedDate = DateTime.Today;
             LinesGrid.ItemsSource = _lines;
             LinesCountText.Text = "0";
@@ -100,16 +82,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private void RebindPickerForType(ComboBox typeBox, ComboBox picker)
         {
-            // ignore during initialization
             if (!_whs.Any() && !_outs.Any()) return;
-
             var isWarehouse = string.Equals(
                 (typeBox.SelectedItem as ComboBoxItem)?.Content?.ToString(),
                 "Warehouse", StringComparison.OrdinalIgnoreCase);
-
-            // preserve previous selected id if it exists in the new list
             var prevId = (int)(picker.SelectedValue ?? 0);
-
             if (isWarehouse)
             {
                 picker.ItemsSource = _whs;
@@ -127,28 +104,22 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private void EnforceNotSameLocation()
         {
             if (!_lookupsReady || _suppressSameCheck) return;
-
             var fromIsWh = string.Equals(
                 (FromTypeBox.SelectedItem as ComboBoxItem)?.Content?.ToString(),
                 "Warehouse", StringComparison.OrdinalIgnoreCase);
             var toIsWh = string.Equals(
                 (ToTypeBox.SelectedItem as ComboBoxItem)?.Content?.ToString(),
                 "Warehouse", StringComparison.OrdinalIgnoreCase);
-
             var fromType = fromIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
             var toType = toIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
-
             var fromId = (int)(FromPicker.SelectedValue ?? 0);
             var toId = (int)(ToPicker.SelectedValue ?? 0);
-
             if (fromId <= 0 || toId <= 0) return;
-
             if (fromType == toType && fromId == toId)
             {
                 _suppressSameCheck = true;
                 try
                 {
-                    // Nudge destination to a different option if possible
                     if (toIsWh)
                     {
                         var next = _whs.FirstOrDefault(w => w.Id != fromId);
@@ -166,7 +137,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private void FromTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // If From is locked (outlet user), this won't fire because box is disabled
             RebindPickerForType(FromTypeBox, FromPicker);
             EnforceNotSameLocation();
         }
@@ -183,38 +153,30 @@ namespace Pos.Client.Wpf.Windows.Inventory
             EnforceNotSameLocation();
         }
 
-
         private (InventoryLocationType fromType, int fromId, InventoryLocationType toType, int toId) GetHeader()
         {
             var fromIsWh = ((ComboBoxItem)FromTypeBox.SelectedItem)?.Content?.ToString() == "Warehouse";
             var toIsWh = ((ComboBoxItem)ToTypeBox.SelectedItem)?.Content?.ToString() == "Warehouse";
-
             var fromType = fromIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
             var toType = toIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
-
             var fromId = (int)(FromPicker.SelectedValue ?? 0);
             var toId = (int)(ToPicker.SelectedValue ?? 0);
-
             if (fromId <= 0 || toId <= 0) throw new InvalidOperationException("Select both Source and Destination.");
             if (fromType == toType && fromId == toId) throw new InvalidOperationException("Source and Destination cannot be the same.");
-
             return (fromType, fromId, toType, toId);
         }
 
         private async Task EnsureDraftAsync()
         {
             if (_doc != null && _doc.Id > 0) return;
-
             var (ft, fid, tt, tid) = GetHeader();
             var effUtc = DateTime.SpecifyKind((EffectiveDate.SelectedDate ?? DateTime.Today), DateTimeKind.Local).ToUniversalTime();
             _doc = await _svc.CreateDraftAsync(ft, fid, tt, tid, effUtc, _state.CurrentUser.Id);
-
-            // lock picking after draft
             FromTypeBox.IsEnabled = false;
             FromPicker.IsEnabled = false;
         }
 
-        private async void BtnAddLine_Click(object sender, RoutedEventArgs e)
+        private void BtnAddLine_Click(object sender, RoutedEventArgs e)
         {
         }
 
@@ -224,11 +186,9 @@ namespace Pos.Client.Wpf.Windows.Inventory
             try
             {
                 await EnsureDraftAsync();
-
                 var dtos = _lines.Where(l => l.ItemId > 0 && l.QtyExpected > 0m)
                     .Select(l => new TransferLineDto { ItemId = l.ItemId, QtyExpected = l.QtyExpected, Remarks = l.Remarks })
                     .ToList();
-
                 _doc = await _svc.UpsertLinesAsync(_doc!.Id, dtos, replaceAll: true);
                 MessageBox.Show("Draft saved.", "OK", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -241,25 +201,16 @@ namespace Pos.Client.Wpf.Windows.Inventory
             try
             {
                 await EnsureDraftAsync();
-
-                // Save the on-screen changes first
                 var dtos = _lines.Where(l => l.ItemId > 0 && l.QtyExpected > 0m)
                     .Select(l => new TransferLineDto { ItemId = l.ItemId, QtyExpected = l.QtyExpected, Remarks = l.Remarks })
                     .ToList();
-
                 _doc = await _svc.UpsertLinesAsync(_doc!.Id, dtos, replaceAll: true);
-
                 var dateLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).Date;
                 var effUtc = DateTime.SpecifyKind(dateLocal, DateTimeKind.Local).ToUniversalTime();
-
                 bool autoReceive = AutoReceiveCheck.IsChecked == true;
-
                 _doc = await _svc.DispatchAsync(_doc.Id, effUtc, _state.CurrentUser.Id, autoReceive);
-
                 MessageBox.Show(autoReceive ? "Transfer dispatched & received." : "Transfer dispatched.",
                                 "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                // Reset
                 _doc = null;
                 _lines.Clear();
                 LinesGrid.Items.Refresh();
@@ -274,10 +225,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private async void BtnOpenReceipts_Click(object sender, RoutedEventArgs e)
         {
-            // Reuse your existing TransferPickerWindow in Receipts mode
             try
             {
-                //var picker = new TransferPickerWindow(App.Services, _dbf, new TransferQueries(_dbf), _state, TransferPickerWindow.PickerMode.Receipts);
                 var picker = new TransferPickerWindow(_queries, _lookups, _state, TransferPickerWindow.PickerMode.Receipts);
                 if (picker.ShowDialog() == true && picker.SelectedTransferId.HasValue)
                 {
@@ -299,23 +248,17 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 MessageBox.Show("Open a dispatched transfer to receive.");
                 return;
             }
-
             try
             {
-                // Prefill receive = expected (editable in grid if you want)
                 var lines = _lines.Select(l => new ReceiveLineDto
                 {
                     LineId = l.Id,
                     QtyReceived = l.QtyReceived ?? l.QtyExpected,
                     VarianceNote = l.VarianceNote
                 }).ToList();
-
                 var whenUtc = DateTime.UtcNow;
                 _doc = await _svc.ReceiveAsync(_doc.Id, whenUtc, lines, _state.CurrentUser.Id);
-
                 MessageBox.Show("Received.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                // clear
                 _doc = null;
                 _lines.Clear();
                 LinesGrid.Items.Refresh();
@@ -336,7 +279,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private void DeleteLine_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not FrameworkElement fe || fe.DataContext is not StockDocLine line) return;
-
             if (_doc == null || _doc.TransferStatus == TransferStatus.Draft)
             {
                 _lines.Remove(line);
@@ -344,7 +286,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 LinesCountText.Text = _lines.Count.ToString();
                 return;
             }
-
             MessageBox.Show("Lines can only be deleted while in Draft. Undo Dispatch to edit.");
         }
 
@@ -352,7 +293,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             var pick = ((Pos.Client.Wpf.Controls.ItemSearchBox)sender).SelectedItem;
             if (pick is null) return;
-
             var existing = _lines.FirstOrDefault(l => l.ItemId == pick.Id && l.Id == 0);
             if (existing is null)
             {
@@ -367,29 +307,22 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 _lines.Add(added);
                 LinesGrid.Items.Refresh();
                 LinesCountText.Text = _lines.Count.ToString();
-
                 if (!_sourceLocked && _lines.Count == 1 && FromTypeBox.IsEnabled)
                 {
                     FromTypeBox.IsEnabled = false;
                     FromPicker.IsEnabled = false;
                     _sourceLocked = true;
                 }
-
-                // ⬇️ Show badge for this item immediately
                 await UpdateAvailableBadgeAsync(added.ItemId);
                 ShowAvailableBadge();
-
-                // focus Qty
                 BeginEditOn(added, QtyColumn);
             }
             else
             {
                 existing.QtyExpected += 1m;
                 LinesGrid.Items.Refresh();
-
                 await UpdateAvailableBadgeAsync(existing.ItemId);
                 ShowAvailableBadge();
-
                 BeginEditOn(existing, QtyColumn);
             }
         }
@@ -397,14 +330,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private void BeginEditOn(StockDocLine line, DataGridColumn column)
         {
             if (line is null || column is null) return;
-
             LinesGrid.CommitEdit();
             LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
-
             LinesGrid.SelectedItem = line;
             LinesGrid.ScrollIntoView(line, column);
             LinesGrid.CurrentCell = new DataGridCellInfo(line, column);
-
             Dispatcher.BeginInvoke(new Action(async () =>
             {
                 LinesGrid.BeginEdit();
@@ -412,14 +342,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 {
                     tb.SelectAll();
                     tb.Focus();
-
-                    // ⬇️ ensure badge is visible immediately on entering edit
                     await UpdateAvailableBadgeAsync(line.ItemId);
                     ShowAvailableBadge();
                 }
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
-
 
         private bool TryGetCurrentCellEditor(out TextBox editor)
         {
@@ -434,14 +361,10 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 await UpdateAvailableBadgeAsync(row.ItemId);
                 ShowAvailableBadge();
             }
-
             if (e.EditingElement is TextBox tb)
             {
-                // 1) Make sure our Enter navigation handler is attached
                 tb.KeyDown -= GridEditor_KeyDown;   // avoid duplicate subscriptions
                 tb.KeyDown += GridEditor_KeyDown;
-
-                // 2) For Qty editor, also ensure badge shows the instant the box gets focus
                 if (e.Column == QtyColumn)
                 {
                     tb.GotKeyboardFocus -= QtyEditor_GotKeyboardFocus;
@@ -449,7 +372,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 }
             }
         }
-
 
         private async void QtyEditor_GotKeyboardFocus(object? sender, KeyboardFocusChangedEventArgs e)
         {
@@ -464,19 +386,15 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             if (e.Key != Key.Enter) return;
             e.Handled = true;
-
             var row = LinesGrid.CurrentItem as StockDocLine;
             if (row == null) return;
-
             var col = LinesGrid.CurrentColumn;
-
             if (col == QtyColumn)
             {
                 LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
                 BeginEditOn(row, NoteColumn);          // move to Note
                 return;
             }
-
             if (col == NoteColumn)
             {
                 LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
@@ -491,20 +409,14 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             if (e.Key != Key.Enter) return;
             if (LinesGrid.CurrentItem is not StockDocLine row) return;
-
-            // If an editor already handled Enter, do nothing
-            // (We marked e.Handled in GridEditor_KeyDown. But Preview fires first, so just own it.)
             e.Handled = true;
-
             var col = LinesGrid.CurrentColumn;
-
             if (col == QtyColumn)
             {
                 LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
                 BeginEditOn(row, NoteColumn);
                 return;
             }
-
             if (col == NoteColumn)
             {
                 LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
@@ -513,11 +425,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 await FocusItemSearchTextBoxAsync();
                 return;
             }
-
-            // Not Qty/Note? Ignore; let default behavior proceed on other keys/columns.
             e.Handled = false;
         }
-
 
         private async void LinesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -539,11 +448,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private void ItemSearch_GotFocus(object sender, RoutedEventArgs e) => HideAvailableBadge();
 
-
         private void LinesGrid_KeyDown(object sender, KeyEventArgs e)
         {
-            // Any navigation inside the grid should keep badge visible;
-            // we don’t need special handling here beyond SelectionChanged.
         }
 
         private void ShowAvailableBadge()
@@ -562,80 +468,41 @@ namespace Pos.Client.Wpf.Windows.Inventory
             try
             {
                 var (fromType, fromId, _, _) = GetHeader();
-                //_availableOnHand = await GetOnHandAsync(itemId, fromType, fromId);
+
+                // keep the same “effective day end” display rule
                 var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
                 var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
-                _availableOnHand = await _invRead.GetOnHandAsync(itemId, fromType, fromId, cutoffUtc);
-                AvailableText.Text = $"Available: {_availableOnHand:0.####}";
+
+                // how much of THIS item is staged in the grid (purely for showing available)
+                var staged = _lines
+                    .Where(x => x.ItemId == itemId)
+                    .Sum(x => x.QtyExpected);
+
+                // Centralized availability (read-only)
+                var available = await _invRead.GetAvailableForIssueAsync(itemId, fromType, fromId, cutoffUtc, staged);
+
+                AvailableText.Text = $"Available: {available:0.####}";
             }
             catch
             {
-                _availableOnHand = 0m;
                 AvailableText.Text = "Available: —";
             }
         }
 
-        // On-hand at the Source (up to selected EffectiveDate end-of-day)
-        //private async Task<decimal> GetOnHandAsync(int itemId, InventoryLocationType locType, int locId)
-        //{
-        //    if (locId <= 0) return 0m;
 
-        //    using var db = await _dbf.CreateDbContextAsync();
-
-        //    var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
-        //    var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
-
-        //    var onHand = await db.Set<StockEntry>()
-        //        .AsNoTracking()
-        //        .Where(e => e.ItemId == itemId
-        //                 && e.LocationType == locType
-        //                 && e.LocationId == locId
-        //                 && e.Ts < cutoffUtc) // exclusive
-        //        .SumAsync(e => (decimal?)e.QtyChange) ?? 0m;
-
-        //    return Math.Max(onHand, 0m);
-        //}
 
         private async void LinesGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
-            // React only when user commits the Qty cell
             if (e.Column == QtyColumn && e.EditAction == DataGridEditAction.Commit && e.Row.Item is StockDocLine row)
             {
                 if (e.EditingElement is TextBox tb && decimal.TryParse(tb.Text, out var newQty))
                 {
-                    try
-                    {
-                        var (fromType, fromId, _, _) = GetHeader();
-
-                        // On-hand at source (up to end-of-day of EffectiveDate)
-                        var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
-                        var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
-                        var onHand = await _invRead.GetOnHandAsync(row.ItemId, fromType, fromId, cutoffUtc);
-
-                        // Other staged rows for the same item (exclude the row being edited)
-                        var stagedOther = _lines
-                            .Where(x => x.ItemId == row.ItemId && !ReferenceEquals(x, row))
-                            .Sum(x => x.QtyExpected);
-
-                        var available = Math.Max(onHand - stagedOther, 0m);
-
-                        if (newQty > available)
-                        {
-                            row.QtyExpected = available;
-                            tb.Text = available.ToString("0.####"); // reflect clamp in the editor
-                            MessageBox.Show(
-                                $"Only {available:0.####} available at the selected Source.",
-                                "Insufficient stock", MessageBoxButton.OK, MessageBoxImage.Information);
-                        }
-                    }
-                    catch
-                    {
-                        // UI clamp best-effort; server/service will still hard-guard on dispatch
-                    }
+                    // accept user input as-is; guard is enforced in service layer
+                    row.QtyExpected = newQty;
                 }
             }
 
-            // Refresh the availability badge AFTER the commit finalizes
+            // refresh badge for the current row (pure display)
             await Dispatcher.InvokeAsync(async () =>
             {
                 if (LinesGrid.CurrentItem is StockDocLine cur)
@@ -647,23 +514,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
 
-        //private async Task FocusItemSearchAsync()
-        //{
-        //    // First hop: let DataGrid finish committing
-        //    await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
-        //    // Second hop: ensure editors are closed and focus changes stick
-        //    await Dispatcher.InvokeAsync(() =>
-        //    {
-        //        try
-        //        {
-        //            ItemSearch.Focus();
-        //            Keyboard.Focus(ItemSearch);
-        //            HideAvailableBadge(); // badge must be hidden as we left the grid
-        //        }
-        //        catch { /* ignore */ }
-        //    }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        //}
-
         private void BtnClear_Click(object sender, RoutedEventArgs e)
         {
             ClearFormToNew();
@@ -671,29 +521,19 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private void ClearFormToNew()
         {
-            // forget current doc and staged lines
             _doc = null;
             _lines.Clear();
             LinesGrid.ItemsSource = _lines;
             LinesGrid.Items.Refresh();
             LinesCountText.Text = "0";
-
-            // unlock & reset Source/Destination
             FromTypeBox.IsEnabled = true;
             FromPicker.IsEnabled = true;
             _sourceLocked = false;
-
-            // Default types: From=Warehouse, To=Outlet (same as OnLoaded)
             if (FromTypeBox.SelectedIndex != 0) FromTypeBox.SelectedIndex = 0;
             RebindPickerForType(FromTypeBox, FromPicker);
-
             if (ToTypeBox.SelectedIndex != 1) ToTypeBox.SelectedIndex = 1;
             RebindPickerForType(ToTypeBox, ToPicker);
-
-            // Reset date
             EffectiveDate.SelectedDate = DateTime.Today;
-
-            // Hide badge, clear search, focus back
             HideAvailableBadge();
             try { ItemSearch.Clear(); } catch { }
             ItemSearch.Focus();
@@ -715,11 +555,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private async Task FocusItemSearchTextBoxAsync()
         {
-            // Let the DataGrid finish its commit/layout
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-
-            // Try to focus the actual TextBox inside ItemSearch
             var tb = FindDescendant<TextBox>(ItemSearch);
             if (tb != null)
             {
@@ -728,13 +565,9 @@ namespace Pos.Client.Wpf.Windows.Inventory
             }
             else
             {
-                // Fallback: focus the control itself
                 try { ItemSearch.Focus(); } catch { /* ignore */ }
             }
-
             HideAvailableBadge(); // hide badge once we’re back to search
         }
-
-
     }
 }

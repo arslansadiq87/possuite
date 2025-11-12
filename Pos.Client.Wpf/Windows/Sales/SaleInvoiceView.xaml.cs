@@ -3,10 +3,8 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Microsoft.EntityFrameworkCore;
 using Pos.Domain;
 using Pos.Domain.Entities;
-using Pos.Persistence;
 using Pos.Domain.Pricing;
 using Pos.Domain.Formatting;
 using System.Windows.Threading;           // DispatcherTimer
@@ -18,26 +16,32 @@ using System.Windows.Media;
 using Pos.Client.Wpf.Printing;
 using Pos.Domain.Services;
 using Pos.Domain.Models.Sales;
-//using ItemIndexDto = Pos.Domain.Models.Sales.ItemIndexDto;
-
+using System.Threading.Tasks;
+using Pos.Domain.Accounting;
+using Pos.Domain.Services.Accounting;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class SaleInvoiceView : UserControl
     {
         private readonly ISalesService _sales;
-        private readonly DbContextOptions<PosClientDbContext> _dbOptions;
+        private readonly ITerminalContext _ctx;
+        private readonly IOutletReadService _outletRead;
+        //private readonly IInvoiceSettingsService _invSettings;
+        private readonly IPartyLookupService _partyLookup;
+        private readonly IInventoryReadService _invRead;
+        private Pos.Domain.Models.Settings.InvoiceSettingsDto? _settings; // cache
+
+        //private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
-        private readonly ITerminalContext _ctx;
+        
         private int? _selectedCustomerId;
-        private readonly IInvoiceSettingsService _invSettings;
+        
         private bool _printOnSave;
         private bool _askBeforePrintOnSave;
         // --- NEW: card enable/disable flag based on invoice settings ---
-        private bool _isCardEnabled = false;
-        //public bool IsCardEnabled => _isCardEnabled;  // optional: for XAML binding if you add any indicator later
-                                                      // --- END NEW ---
+     
         public static readonly DependencyProperty IsCardEnabledProperty =
             DependencyProperty.Register(nameof(IsCardEnabled), typeof(bool), typeof(SaleInvoiceView), new PropertyMetadata(false));
 
@@ -51,10 +55,11 @@ namespace Pos.Client.Wpf.Windows.Sales
         private int CounterId => AppState.Current?.CurrentCounterId ?? 1;
         private decimal _invDiscPct = 0m;
         private decimal _invDiscAmt = 0m;
-        private bool _isWalkIn = true;
+
+        #pragma warning disable CS0649
         private string? _enteredCustomerName;
-        private string? _enteredCustomerPhone;
-        //private readonly IStaffDirectory _staff;
+        #pragma warning restore CS0649
+
         private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
         private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
         private int? _selectedSalesmanId = null;
@@ -65,17 +70,17 @@ namespace Pos.Client.Wpf.Windows.Sales
         private int _escCount = 0;
         private const int EscChordMs = 450; // double-press window
         private int? _currentHeldSaleId = null;
-        public SaleInvoiceView(IDialogService dialogs, ITerminalContext ctx, ISalesService sales)
+        public SaleInvoiceView(IDialogService dialogs, ITerminalContext ctx, IOutletReadService outletRead, ISalesService sales, IInventoryReadService invRead, IPartyLookupService partyLookup)
         {
             InitializeComponent();
             _ctx = ctx;
+            _outletRead = outletRead;
             _dialogs = dialogs;
             _sales = sales;
-            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>();
+            _invRead = invRead;                     // if present
+            _partyLookup = partyLookup;             // <-- store it
+            //_invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>();
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
-            _dbOptions = new DbContextOptionsBuilder<PosClientDbContext>()
-                .UseSqlite(DbPath.ConnectionString)   // <-- use the SAME connection string
-                .Options;
             CartGrid.ItemsSource = _cart;
             UpdateTotal();
             LoadItemIndex();
@@ -83,22 +88,21 @@ namespace Pos.Client.Wpf.Windows.Sales
             LoadSalesmen();
             AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), /*handledEventsToo:*/ true);
             FooterBox.Text = _invoiceFooter;
-            //CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
-            Loaded += (_, __) =>
+            Loaded += async (_, __) =>
             {
-                var (s, _) = _invSettings.GetAsync(_ctx.OutletId, "en").GetAwaiter().GetResult();
-                _printOnSave = s.PrintOnSave;
-                _askBeforePrintOnSave = s.AskToPrintOnSave;
-                // --- NEW: set card availability for this outlet ---
-                IsCardEnabled = (s.SalesCardClearingAccountId != null);
-                // --- END NEW ---
+                _settings = await _sales.GetInvoiceSettingsAsync(_ctx.OutletId, "en");
+                _printOnSave = _settings.PrintOnSave;
+                _askBeforePrintOnSave = _settings.AskToPrintOnSave;
+                IsCardEnabled = (_settings.SalesCardClearingAccountId != null);
 
                 UpdateInvoicePreview();
                 UpdateInvoiceDateNow();
                 UpdateLocationUi();
                 WalkInCheck_Changed(WalkInCheck!, new RoutedEventArgs());
+
                 if (Window.GetWindow(this) is Window w)
                     w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
+
                 FocusScan();
             };
         }
@@ -108,23 +112,24 @@ namespace Pos.Client.Wpf.Windows.Sales
             var doPrint = _printOnSave;
             if (_askBeforePrintOnSave)
             {
-                var ans = MessageBox.Show(
-                    "Print receipt now?",
-                    "Print",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+                var ans = MessageBox.Show("Print receipt now?", "Print", MessageBoxButton.YesNo, MessageBoxImage.Question);
                 doPrint = (ans == MessageBoxResult.Yes);
             }
             if (!doPrint) return;
+
             try
             {
+                // _settings was loaded in Loaded handler
+                var s = _settings ?? await _sales.GetInvoiceSettingsAsync(_ctx.OutletId, "en");
+
                 await ReceiptPrinter.PrintSaleAsync(
                     sale: sale,
                     cart: _cart,
                     till: open,
                     cashierName: cashierDisplay,
                     salesmanName: _selectedSalesmanName,
-                    settingsSvc: _invSettings);
+                    settings: s                                    // <-- pass DTO now
+                );
             }
             catch (Exception ex)
             {
@@ -132,14 +137,13 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
+
         private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
-            // Force static type to object so pattern matching is legal
             object? selected = box.SelectedItem;
             if (selected is null) return;
             Pos.Domain.Models.Sales.ItemIndexDto? pick = null;
-            // Case 1: new domain DTO
             if (selected is Pos.Domain.Models.Sales.ItemIndexDto d1)
             {
                 pick = d1;
@@ -432,9 +436,9 @@ namespace Pos.Client.Wpf.Windows.Sales
             foreach (var it in list) DataContextItemIndex.Add(it);
         }
 
-        private TillSession? GetOpenTill(PosClientDbContext db)
-                => db.TillSessions.OrderByDescending(t => t.Id)
-                       .FirstOrDefault(t => t.OutletId == OutletId && t.CounterId == CounterId && t.CloseTs == null);
+        //private TillSession? GetOpenTill(PosClientDbContext db)
+        //        => db.TillSessions.OrderByDescending(t => t.Id)
+        //               .FirstOrDefault(t => t.OutletId == OutletId && t.CounterId == CounterId && t.CloseTs == null);
               
         private void InvoiceDiscountChanged(object sender, TextChangedEventArgs e)
         {
@@ -475,8 +479,30 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             if (_ctx == null) return;
 
-            InventoryLocationText.Text = $"Outlet: {_ctx.OutletName}";
+            //InventoryLocationText.Text = $"Outlet: {_ctx.OutletName}";
+            _ = RefreshInventoryLocationAsync();   // fire-and-forget async populate
         }
+
+        private async Task RefreshInventoryLocationAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                var outletName = await _outletRead.GetOutletNameAsync(_ctx.OutletId, ct);
+                var counterName = await _outletRead.GetCounterNameAsync(_ctx.CounterId, ct);
+
+                // If these are WPF TextBlocks you referenced by x:Name
+                InventoryLocationText.Text = $"Outlet: {outletName}";
+                // If you also show counter somewhere:
+                // CounterText.Text = $"Counter: {counterName}";
+            }
+            catch (Exception)
+            {
+                // Keep UI resilient; show fallback instead of crashing
+                InventoryLocationText.Text = $"Outlet: #{_ctx.OutletId}";
+                // optionally log ex via your logger/dialogs
+            }
+        }
+
         private void UpdateTotal()
         {
             // 1) sum current lines (they already include per-line discounts/tax calculations)
@@ -675,7 +701,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             // 7) OPTIONAL: A/R posting for unpaid portion (keep here, or move into SalesService)
             try
             {
-                var poster = App.Services.GetRequiredService<PartyPostingService>();
+                var poster = App.Services.GetRequiredService<IPartyPostingService>();
                 var unpaid = sale.Total - (sale.CashAmount + sale.CardAmount);
                 if (unpaid > 0.009m && sale.CustomerId.HasValue)
                 {
@@ -846,7 +872,12 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private void Global_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
-            if (e.Key == Key.F9) { PayButton_Click(sender, e); e.Handled = true; return; }
+            if (e.Key == Key.F9)
+            {
+                PayButton_Click(this, e);
+                e.Handled = true;
+                return;
+            }
             if (e.Key == Key.Delete)
             {
                 if (CartGrid.SelectedItem is CartLine l) { _cart.Remove(l); UpdateTotal(); }

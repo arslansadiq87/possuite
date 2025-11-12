@@ -8,21 +8,18 @@ using Pos.Persistence.Services;     // CatalogService
 using Pos.Client.Wpf.Services;      // ThumbnailService
 using Pos.Persistence.Media;
 
-
 namespace Pos.Client.Wpf.Windows.Admin;
 
 public partial class ProductsItemsVm : ObservableObject
 {
     private readonly CatalogService _svc;
     private readonly ThumbnailService _thumbs = new ThumbnailService();
-
     public ObservableCollection<Product> Products { get; } = new();
     public ObservableCollection<string> DisplayGalleryThumbs { get; } = new();
 
     [ObservableProperty] private Item? selectedVariant;
     [ObservableProperty] private string? selectedPrimaryThumb;
     [ObservableProperty] private Product? selected;
-
     public ProductsItemsVm(CatalogService svc)
     {
         _svc = svc; // resolved from DI
@@ -32,21 +29,17 @@ public partial class ProductsItemsVm : ObservableObject
     public async Task SetProductPrimaryImageAsync()
     {
         if (Selected is null) return;
-
         var dlg = new OpenFileDialog
         {
             Title = "Choose Product Image",
             Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp"
         };
         if (dlg.ShowDialog() != true) return;
-
         MediaPaths.Ensure();
-
         _ = await _svc.SetProductPrimaryImageAsync(
             Selected.Id,
             dlg.FileName,
             stem => _thumbs.CreateThumb(dlg.FileName, stem));
-
         await LoadAsync();
         Selected = Products.FirstOrDefault(p => p.Id == Selected!.Id);
     }
@@ -56,50 +49,39 @@ public partial class ProductsItemsVm : ObservableObject
     public async Task AddProductGalleryImageAsync()
     {
         if (Selected is null) return;
-
         var dlg = new OpenFileDialog
         {
             Title = "Add Gallery Image",
             Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp"
         };
         if (dlg.ShowDialog() != true) return;
-
         MediaPaths.Ensure();
-
         _ = await _svc.AddProductGalleryImageAsync(
             Selected.Id,
             dlg.FileName,
             stem => _thumbs.CreateThumb(dlg.FileName, stem));
-
         await LoadAsync();
         Selected = Products.FirstOrDefault(p => p.Id == Selected!.Id);
     }
-
 
     [RelayCommand]
     public async Task SetVariantPrimaryImageAsync(Item? variant)
     {
         if (Selected is null || variant is null) return;
-
         var dlg = new OpenFileDialog
         {
             Title = "Choose Variant Image",
             Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp"
         };
         if (dlg.ShowDialog() != true) return;
-
         MediaPaths.Ensure();
-
         _ = await _svc.SetItemPrimaryImageAsync(
             variant.Id,
             dlg.FileName,
             stem => _thumbs.CreateThumb(dlg.FileName, stem));
-
         await LoadAsync();
         Selected = Products.FirstOrDefault(p => p.Id == Selected!.Id);
     }
-
-
 
     [RelayCommand]
     public async Task LoadAsync()
@@ -108,7 +90,6 @@ public partial class ProductsItemsVm : ObservableObject
         var list = await _svc.GetProductsForVmAsync(); // includes Brand, Category, Variants + Barcodes
         foreach (var p in list) Products.Add(p);
     }
-
 
     [RelayCommand]
     public async Task SaveAsync()
@@ -132,17 +113,14 @@ public partial class ProductsItemsVm : ObservableObject
                 categoryId: Selected.CategoryId);
             Selected = updated;
         }
-
         await LoadAsync();
         Selected = Products.FirstOrDefault(p => p.Id == Selected?.Id);
     }
-
 
     [RelayCommand]
     public async Task DeleteAsync()
     {
         if (Selected is null || Selected.Id == 0) return;
-
         var (canDelete, reason) = await _svc.CanHardDeleteProductAsync(Selected.Id);
         if (!canDelete)
         {
@@ -151,7 +129,6 @@ public partial class ProductsItemsVm : ObservableObject
                 "Cannot delete product",
                 System.Windows.MessageBoxButton.YesNo,
                 System.Windows.MessageBoxImage.Question);
-
             if (res == System.Windows.MessageBoxResult.Yes)
                 await _svc.VoidProductAsync(Selected.Id, System.Environment.UserName);
         }
@@ -164,7 +141,6 @@ public partial class ProductsItemsVm : ObservableObject
         Selected = null;
     }
 
-
     [RelayCommand]
     public void NewProduct()
     {
@@ -172,11 +148,6 @@ public partial class ProductsItemsVm : ObservableObject
         Products.Add(Selected);
     }
 
-
-    /// <summary>
-    /// Add already-constructed item variants to a product (sync-aware).
-    /// Items should already include Barcodes list, pricing/tax fields, etc.
-    /// </summary>
     public async Task AddVariantsAsync(Product product, IEnumerable<Item> items)
     {
         if (product is null) return;
@@ -186,7 +157,6 @@ public partial class ProductsItemsVm : ObservableObject
             persisted = await _svc.CreateProductAsync(product.Name ?? "", product.BrandId, product.CategoryId);
         else
             persisted = await _svc.UpdateProductAsync(product.Id, product.Name ?? "", product.BrandId, product.CategoryId);
-
         var allCodes = items
             .SelectMany(it => it.Barcodes ?? Enumerable.Empty<ItemBarcode>())
             .Select(b => b.Code)
@@ -194,7 +164,6 @@ public partial class ProductsItemsVm : ObservableObject
             .Select(s => s!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-
         if (allCodes.Count > 0)
         {
             var conflicts = await _svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
@@ -220,7 +189,6 @@ public partial class ProductsItemsVm : ObservableObject
                 return;
             }
         }
-
         foreach (var it in items)
         {
             it.ProductId = persisted.Id;
@@ -232,5 +200,4 @@ public partial class ProductsItemsVm : ObservableObject
         await LoadAsync();
         Selected = Products.FirstOrDefault(p => p.Id == persisted.Id);
     }
-
 }

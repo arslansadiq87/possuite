@@ -38,6 +38,18 @@ namespace Pos.Persistence.Services
                 .ToListAsync(ct);
         }
 
+        public async Task<List<Staff>> GetAllActiveStaffAsync(CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            return await db.Staff
+                .AsNoTracking()
+                .Where(s => s.IsActive)       // ✅ Only active staff
+                .OrderBy(s => s.FullName)
+                .ToListAsync(ct);
+        }
+
+
         public async Task<Staff?> GetAsync(int id, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);

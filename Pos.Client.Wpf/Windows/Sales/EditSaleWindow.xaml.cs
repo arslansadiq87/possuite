@@ -13,21 +13,22 @@ using Pos.Domain.Formatting;
 using Pos.Domain.Pricing;
 using Pos.Domain.Services;
 using Pos.Domain.Models.Sales;
+using DomainItemIndexDto = Pos.Domain.Models.Sales.ItemIndexDto;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class EditSaleWindow : Window
     {
-        // ----- services -----
         private readonly ISalesService _sales;
-        // ----- identity / snapshot -----
         private readonly int _saleId;
         private EditSaleLoadDto _orig = null!;
         private decimal _origSubtotal, _origTax, _origGrand;
-        // ----- UI state -----
         private readonly ObservableCollection<CartLine> _cart = new();
-        public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
-        private readonly Dictionary<string, ItemIndexDto> _barcodeIndex = new(StringComparer.OrdinalIgnoreCase);
+        //public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
+        //private readonly Dictionary<string, ItemIndexDto> _barcodeIndex = new(StringComparer.OrdinalIgnoreCase);
+        public ObservableCollection<Pos.Domain.Models.Sales.ItemIndexDto> DataContextItemIndex { get; } = new();
+        private readonly Dictionary<string, Pos.Domain.Models.Sales.ItemIndexDto> _barcodeIndex = new(StringComparer.OrdinalIgnoreCase);
+
         private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
         private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
         private int? _selectedSalesmanId = null;
@@ -37,18 +38,14 @@ namespace Pos.Client.Wpf.Windows.Sales
         private string _invoiceFooter = "";
         public bool Confirmed { get; private set; } = false;
         public int NewRevision { get; private set; } = 0;
-
         public EditSaleWindow(int saleId)
         {
             InitializeComponent();
             _saleId = saleId;
             _sales = App.Services.GetRequiredService<ISalesService>();
-
             CartGrid.ItemsSource = _cart;
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
-
             CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
-
             this.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.F9) { SaveRevision_Click(s, e); e.Handled = true; }
@@ -67,52 +64,45 @@ namespace Pos.Client.Wpf.Windows.Sales
             };
         }
 
-        // ----- Local UI DTO for the grid/search binding -----
-        public record ItemIndexDto(
-            int Id,
-            string Name,
-            string Sku,
-            string Barcode,
-            decimal Price,
-            string? TaxCode,
-            decimal DefaultTaxRatePct,
-            bool TaxInclusive,
-            decimal? DefaultDiscountPct,
-            decimal? DefaultDiscountAmt,
-            string? ProductName,
-            string? Variant1Name,
-            string? Variant1Value,
-            string? Variant2Name,
-            string? Variant2Value
-        )
-        {
-            public string DisplayName =>
-                ProductNameComposer.Compose(ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
-        }
+        //public record ItemIndexDto(
+        //    int Id,
+        //    string Name,
+        //    string Sku,
+        //    string Barcode,
+        //    decimal Price,
+        //    string? TaxCode,
+        //    decimal DefaultTaxRatePct,
+        //    bool TaxInclusive,
+        //    decimal? DefaultDiscountPct,
+        //    decimal? DefaultDiscountAmt,
+        //    string? ProductName,
+        //    string? Variant1Name,
+        //    string? Variant1Value,
+        //    string? Variant2Name,
+        //    string? Variant2Value
+        //)
+        //{
+        //    public string DisplayName =>
+        //        ProductNameComposer.Compose(ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
+        //}
 
-        // ===== Loads =====
         private async Task LoadSaleAsync()
         {
-            _orig = await _sales.GetSaleForEditAsync(_saleId);
-
+            //_orig = await _sales.GetSaleForEditAsync(_saleId);
+            _orig = await _sales.LoadForEditAsync(_saleId);
             _invDiscPct = _orig.InvoiceDiscountAmt.HasValue ? 0m : (_orig.InvoiceDiscountPct ?? 0m);
             _invDiscAmt = _orig.InvoiceDiscountAmt ?? 0m;
             _invoiceFooter = _orig.InvoiceFooter ?? "";
-
             InvDiscPctBox.Text = (_invDiscPct > 0 ? _invDiscPct.ToString(CultureInfo.InvariantCulture) : "");
             InvDiscAmtBox.Text = (_invDiscAmt > 0 ? _invDiscAmt.ToString(CultureInfo.InvariantCulture) : "");
             FooterBox.Text = _invoiceFooter;
-
             WalkInCheck.IsChecked = (_orig.CustomerKind == CustomerKind.WalkIn);
             CustNameBox.Text = _orig.CustomerName ?? "";
             CustPhoneBox.Text = _orig.CustomerPhone ?? "";
-
             _selectedSalesmanId = _orig.SalesmanId;
-
             _origSubtotal = _orig.Subtotal;
             _origTax = _orig.TaxTotal;
             _origGrand = _orig.Total;
-
             _cart.Clear();
             foreach (var l in _orig.Lines)
             {
@@ -138,18 +128,9 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async Task LoadItemIndexAsync()
         {
-            var list = await _sales.GetItemIndexAsync(); // domain ItemIndexDto
-
+            var list = await _sales.GetItemIndexAsync();
             DataContextItemIndex.Clear();
-            foreach (var it in list)
-            {
-                DataContextItemIndex.Add(new ItemIndexDto(
-                    it.Id, it.Name, it.Sku, it.Barcode, it.Price,
-                    it.TaxCode, it.DefaultTaxRatePct, it.TaxInclusive,
-                    it.DefaultDiscountPct, it.DefaultDiscountAmt,
-                    it.ProductName, it.Variant1Name, it.Variant1Value, it.Variant2Name, it.Variant2Value
-                ));
-            }
+            foreach (var it in list) DataContextItemIndex.Add(it);
 
             _barcodeIndex.Clear();
             foreach (var dto in DataContextItemIndex)
@@ -161,13 +142,13 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if (byId.TryGetValue(cl.ItemId, out var meta))
                 {
                     cl.Sku = meta.Sku;
-                    cl.DisplayName = meta.DisplayName;
+                    cl.DisplayName = ComposeDisplay(meta);
                 }
         }
 
+
         private void UpdateHeaderUi()
         {
-            // We don’t have InvoiceNumber in EditSaleLoadDto; keep a sensible display
             TitleText.Text = $"Amend Invoice  Counter {_orig.CounterId}";
             SubTitleText.Text = $"Original Rev {_orig.Revision}  •  {_orig.TsUtc.ToLocalTime():dd-MMM-yyyy HH:mm}";
             OrigTotalsText.Text = $"Original: Subtotal {_origSubtotal:N2}   Tax {_origTax:N2}   Total {_origGrand:N2}";
@@ -175,20 +156,27 @@ namespace Pos.Client.Wpf.Windows.Sales
             InvoicePreviewText.Text = $"Counter {_orig.CounterId} (Rev {_orig.Revision + 1})";
         }
 
-        private void LoadSalesmen()
+        private async void LoadSalesmen()
         {
-            // Keep your existing UI binding approach if you want (populate via another service if needed).
-            // This stub intentionally does nothing to avoid EF in the UI layer.
+            try
+            {
+                var salesmen = await _sales.GetSalesmenAsync();
+                SalesmanBox.ItemsSource = salesmen;
+                SalesmanBox.SelectedValuePath = "Id";
+                SalesmanBox.DisplayMemberPath = "DisplayName"; // or Name/FullName depending on your StaffLiteDto
+                if (_orig.SalesmanId.HasValue) SalesmanBox.SelectedValue = _orig.SalesmanId.Value;
+            }
+            catch { /* optional: toast/log */ }
         }
 
-        // ===== Item pick / cart ops =====
+
         private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
             object? selected = box.SelectedItem;
             if (selected is null) return;
 
-            Pos.Domain.Models.Sales.ItemIndexDto? pick = selected as Pos.Domain.Models.Sales.ItemIndexDto;
+            var pick = selected as DomainItemIndexDto;
             if (pick is null)
             {
                 MessageBox.Show($"Unsupported SelectedItem: {selected.GetType().FullName}");
@@ -212,16 +200,13 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
             else
             {
-                AddItemToCart(new ItemIndexDto(
-                    pick.Id, pick.Name, pick.Sku, pick.Barcode, pick.Price, pick.TaxCode,
-                    pick.DefaultTaxRatePct, pick.TaxInclusive, pick.DefaultDiscountPct, pick.DefaultDiscountAmt,
-                    pick.ProductName, pick.Variant1Name, pick.Variant1Value, pick.Variant2Name, pick.Variant2Value
-                ));
+                AddItemToCart(pick);  // ✅ domain DTO
             }
 
             UpdateTotal();
             try { ItemSearch?.FocusSearch(); } catch { }
         }
+
 
         private void AddItemToCart(ItemIndexDto item)
         {
@@ -270,7 +255,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             l.LineTotal = a.LineTotal;
         }
 
-        // ===== Grid edits & qty buttons =====
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
         {
             if (e.EditAction != DataGridEditAction.Commit) return;
@@ -280,7 +264,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if (e.Row?.Item is CartLine l)
                 {
                     var header = (e.Column.Header as string) ?? string.Empty;
-
                     if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
                     {
                         if (l.Qty <= 0) l.Qty = 1;
@@ -343,7 +326,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
         }
 
-        // ===== Invoice-level inputs =====
         private void InvoiceDiscountChanged(object sender, TextChangedEventArgs e)
         {
             decimal.TryParse(InvDiscPctBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out _invDiscPct);
@@ -422,15 +404,12 @@ namespace Pos.Client.Wpf.Windows.Sales
         }
 
 
-        // ===== Totals =====
         private void UpdateTotal()
         {
             var lines = _cart.ToList();
             var lineNetSum = lines.Sum(l => l.LineNet);
             var lineTaxSum = lines.Sum(l => l.LineTax);
-
             if (_invDiscPct > 100m) _invDiscPct = 100m;
-
             var baseForInvDisc = lineNetSum;
             var invDiscValue = 0m;
             if (baseForInvDisc > 0m)
@@ -470,7 +449,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                                    : System.Windows.Media.Brushes.Gray;
         }
 
-        // ===== Guard helpers =====
         private decimal GetOriginalQty(int itemId)
             => _orig?.Lines?.Where(l => l.ItemId == itemId).Sum(l => l.Qty) ?? 0m;
 
@@ -484,7 +462,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             return ok;
         }
 
-        // ===== Save / Revert / Cancel =====
         private async void SaveRevision_Click(object? sender, RoutedEventArgs e)
         {
             if (!_cart.Any()) { MessageBox.Show("Cart is empty."); return; }
@@ -496,7 +473,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 return;
             }
 
-            // refresh math
             foreach (var cl in _cart) RecalcLineShared(cl);
 
             var lines = _cart.ToList();
@@ -605,7 +581,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             EditSaleSaveResult result;
             try
             {
-                result = await _sales.SaveAmendmentAsync(req);
+                result = await _sales.SaveEditAsync(req);
             }
             catch (InvalidOperationException ex)
             {
@@ -617,9 +593,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show("Could not save amendment:\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
-
-            // Optional: print here if desired (reuse your printer)
-            // try { ReceiptPrinter.PrintSale(...); } catch { }
 
             Confirmed = true;
             NewRevision = result.NewRevision;
@@ -673,7 +646,10 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
             ItemSearch.FocusSearch();
         }
-
         private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
+
+        private static string ComposeDisplay(Pos.Domain.Models.Sales.ItemIndexDto it) =>
+    ProductNameComposer.Compose(it.ProductName, it.Name, it.Variant1Name, it.Variant1Value, it.Variant2Name, it.Variant2Value);
+
     }
 }

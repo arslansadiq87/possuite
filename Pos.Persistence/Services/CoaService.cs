@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.PortableExecutable;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ using Pos.Domain.Models.Accounting;
 using Pos.Domain.Services;
 using Pos.Persistence;
 using Pos.Persistence.Sync;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Pos.Persistence.Services
 {
@@ -425,29 +427,11 @@ namespace Pos.Persistence.Services
         // -------- Toolbar convenience --------
         public async Task AddCashForOutletAsync(CancellationToken ct = default)
         {
-            await using var db = await _dbf.CreateDbContextAsync(ct);
+                 await using var db = await _dbf.CreateDbContextAsync(ct);
             var outlet = await db.Outlets.AsNoTracking().FirstOrDefaultAsync(ct);
-            if (outlet == null) return;
-
-            var code = $"CASH-{outlet.Code}";
-            var exists = await db.Accounts.AnyAsync(a => a.OutletId == outlet.Id && a.Code == code, ct);
-            if (exists) return;
-
-            var acc = new Account
-            {
-                Code = code,
-                Name = $"Cash — {outlet.Name}",
-                Type = AccountType.Asset,
-                NormalSide = NormalSide.Debit,
-                IsHeader = false,
-                AllowPosting = true,
-                OutletId = outlet.Id,
-                IsActive = true
-            };
-
-            db.Accounts.Add(acc);
-            await db.SaveChangesAsync(ct);
-
+                if (outlet == null) return;
+            var id = await EnsureOutletCashAccountAsync(db, outlet.Id, ct);
+            var acc = await db.Accounts.AsNoTracking().FirstAsync(a => a.Id == id, ct);
             await _outbox.EnqueueUpsertAsync(db, acc, ct);
             await db.SaveChangesAsync(ct);
         }
@@ -455,28 +439,56 @@ namespace Pos.Persistence.Services
         public async Task AddStaffAccountAsync(CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
+            
+                // 1) Ensure a company-level "Staff" header (system)
+            var staffHeader = await db.Accounts.FirstOrDefaultAsync(
+            a => a.Code == "63" && a.OutletId == null, ct); // pick whatever canonical code you use
+                if (staffHeader == null)
+                {
+                staffHeader = new Account
+                    {
+                    Code = "63",
+                    Name = "Staff",
+                    Type = AccountType.Expense,            // or Asset if that’s your policy
+                    NormalSide = NormalSide.Debit,
+                    IsHeader = true,
+                    AllowPosting = false,
+                    IsSystem = true,
+                    OutletId = null,
+                    IsActive = true
+                    }
+                ;
+                db.Accounts.Add(staffHeader);
+                await db.SaveChangesAsync(ct);
+                    }
+            
+                // 2) Create one example staff posting account (idempotent)
             var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(ct);
-            if (user == null) return;
-
-            var code = $"STAFF-{user.Username}";
-            var exists = await db.Accounts.AnyAsync(a => a.Code == code, ct);
-            if (exists) return;
-
-            var acc = new Account
-            {
-                Code = code,
+                if (user == null) return;
+            
+            var exists = await db.Accounts.AnyAsync(a => a.ParentId == staffHeader.Id && a.Name == $"Staff — {user.Username}", ct);
+                if (exists) return;
+            
+            var next = await GenerateNextChildCodeAsync(db, staffHeader, forHeader: false, ct);
+            var leaf = new Account
+                {
+                Code = next,
                 Name = $"Staff — {user.Username}",
-                Type = AccountType.Asset,
-                NormalSide = NormalSide.Debit,
+                Type = staffHeader.Type,
+                NormalSide = DefaultNormalFor(staffHeader.Type),
                 IsHeader = false,
                 AllowPosting = true,
+                ParentId = staffHeader.Id,
+                OutletId = null,
+                IsSystem = true,
                 IsActive = true
-            };
-
-            db.Accounts.Add(acc);
+                }
+            ;
+            db.Accounts.Add(leaf);
             await db.SaveChangesAsync(ct);
-
-            await _outbox.EnqueueUpsertAsync(db, acc, ct);
+            
+            await _outbox.EnqueueUpsertAsync(db, staffHeader, ct);
+            await _outbox.EnqueueUpsertAsync(db, leaf, ct);
             await db.SaveChangesAsync(ct);
         }
     }

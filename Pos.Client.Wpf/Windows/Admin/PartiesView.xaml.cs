@@ -7,22 +7,24 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Persistence.Services;
+using Pos.Domain.Models.Parties;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class PartiesView : UserControl
     {
-        private PartyService? _svc;
+        private IPartyService? _svc;
         private Func<EditPartyWindow>? _editFactory;
         private readonly bool _design;
-        private ObservableCollection<PartyService.PartyRowDto> _rows = new();
+        private ObservableCollection<PartyRowDto> _rows = new();
 
         public PartiesView()
         {
             InitializeComponent();
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-            _svc = App.Services.GetRequiredService<PartyService>();
+            _svc = App.Services.GetRequiredService<IPartyService>();
             _editFactory = () => App.Services.GetRequiredService<EditPartyWindow>();
             Loaded += async (_, __) => await RefreshRowsAsync();
             Grid.ItemsSource = _rows;
@@ -67,7 +69,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void Edit_Click(object sender, RoutedEventArgs e)
         {
-            if (Grid.SelectedItem is not PartyService.PartyRowDto row) return;
+            if (Grid.SelectedItem is not PartyRowDto row) return;
 
             var w = _editFactory!();
             w.LoadParty(row.Id);

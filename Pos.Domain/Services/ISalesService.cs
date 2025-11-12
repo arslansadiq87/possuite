@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Pos.Domain.Entities;
 using Pos.Domain.Models.Sales;
+using Pos.Domain.Models.Settings;
 
 namespace Pos.Domain.Services
 {
@@ -35,5 +36,19 @@ namespace Pos.Domain.Services
           decimal proposedCartQty,
           CancellationToken ct = default);
         Task<EditSaleSaveResult> SaveAmendmentAsync(EditSaleSaveRequest req, CancellationToken ct = default);
+
+        Task<InvoiceSettingsDto> GetInvoiceSettingsAsync(
+            int outletId,
+            string lang = "en",
+            CancellationToken ct = default);
+
+        // Add new names alongside the old ones for a deprecation window:
+        Task<EditSaleLoadDto> LoadForEditAsync(int saleId, CancellationToken ct = default);
+        Task<EditSaleSaveResult> SaveEditAsync(EditSaleSaveRequest req, CancellationToken ct = default);
+
+        
+        
+        
+
     }
 }

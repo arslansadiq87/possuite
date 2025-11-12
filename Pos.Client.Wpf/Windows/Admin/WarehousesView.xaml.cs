@@ -8,9 +8,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
-//using Pos.Persistence.Services;
 using Pos.Client.Wpf.Services;   // AuthZ, IViewNavigator, etc.
 using Pos.Domain.Services;
+using Pos.Client.Wpf.Security;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -23,10 +23,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         public WarehousesView()
         {
             InitializeComponent();
-
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-
             _svc = App.Services.GetRequiredService<IWarehouseService>();
             _editFactory = () => App.Services.GetRequiredService<EditWarehouseWindow>();
             Loaded += async (_, __) => await LoadRowsAsync();
@@ -34,7 +32,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private bool Ready => !_design && _svc != null;
 
-        // ---------------- LOAD ----------------
         private async Task LoadRowsAsync()
         {
             if (!Ready) return;
@@ -42,10 +39,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 var term = (SearchBox.Text ?? "").Trim();
                 var showInactive = ShowInactive.IsChecked == true;
-
                 var rows = await _svc!.SearchAsync(term, showInactive);
                 WarehousesGrid.ItemsSource = rows;
-
                 UpdateActionButtons();
                 UpdateSearchRowVisibility();
             }
@@ -58,30 +53,25 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private Warehouse? Selected() => WarehousesGrid.SelectedItem as Warehouse;
 
-        // ---------------- BUTTONS ----------------
         private void UpdateActionButtons()
         {
             var row = Selected();
             EditBtn.Visibility =
                 OpeningStockBtn.Visibility =
                 (row != null ? Visibility.Visible : Visibility.Collapsed);
-
             if (row == null)
             {
                 EnableBtn.Visibility = DisableBtn.Visibility = Visibility.Collapsed;
                 return;
             }
-
             EnableBtn.Visibility = row.IsActive ? Visibility.Collapsed : Visibility.Visible;
             DisableBtn.Visibility = row.IsActive ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        // ---------------- EVENTS ----------------
         private async void SearchBox_TextChanged(object s, TextChangedEventArgs e) => await LoadRowsAsync();
         private async void FilterChanged(object s, RoutedEventArgs e) => await LoadRowsAsync();
         private void Grid_SelectionChanged(object s, SelectionChangedEventArgs e) => UpdateActionButtons();
         private void Grid_MouseDoubleClick(object s, MouseButtonEventArgs e) => Edit_Click(s, e);
-
         private void Add_Click(object s, RoutedEventArgs e)
         {
             var dlg = _editFactory!();
@@ -95,8 +85,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             var row = Selected();
             if (row is null) return;
-
-            // use service to ensure latest data
             var wh = await _svc!.GetWarehouseAsync(row.Id);
             if (wh == null)
             {
@@ -104,7 +92,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             var dlg = _editFactory!();
             dlg.Owner = Window.GetWindow(this);
             dlg.EditId = wh.Id;
@@ -116,10 +103,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             var row = Selected();
             if (row is null) return;
-
             if (MessageBox.Show($"Disable warehouse “{row.Name}”?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-
             await _svc!.SetActiveAsync(row.Id, false);
             await LoadRowsAsync();
         }
@@ -128,12 +113,10 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             var row = Selected();
             if (row is null) return;
-
             await _svc!.SetActiveAsync(row.Id, true);
             await LoadRowsAsync();
         }
 
-        // ---------------- SEARCH ROW VISIBILITY ----------------
         private void UpdateSearchRowVisibility()
         {
             var sv = FindDescendant<ScrollViewer>(WarehousesGrid);
@@ -142,7 +125,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 SearchRow.Visibility = Visibility.Collapsed;
                 return;
             }
-
             SearchRow.Visibility =
                 sv.ComputedVerticalScrollBarVisibility == Visibility.Visible
                 ? Visibility.Visible
@@ -163,7 +145,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             return null;
         }
 
-        // ---------------- KEY SHORTCUTS ----------------
         public event EventHandler? CloseRequested;
         private void Root_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -179,30 +160,24 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // ---------------- OPENING STOCK ----------------
         private void OpeningStock_Click(object s, RoutedEventArgs e)
         {
             var wh = Selected();
             if (wh == null) return;
-
-            if (!AuthZ.IsAdmin())
+            if (!AuthZ.IsAdminCached())
             {
                 MessageBox.Show("Only Admin can create or edit Opening Stock.", "Not allowed",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             var nav = App.Services.GetRequiredService<IViewNavigator>();
             var make = App.Services.GetRequiredService<Func<InventoryLocationType, int, string, OpeningStockView>>();
-
             string ctx = $"Opening:{InventoryLocationType.Warehouse}:{wh.Id}";
             string label = string.IsNullOrWhiteSpace(wh.Code)
                 ? wh.Name
                 : $"{wh.Code} - {wh.Name}";
-
             if ((nav as ViewNavigator)?.TryActivateByContext(ctx) == true)
                 return;
-
             var view = make(InventoryLocationType.Warehouse, wh.Id, label);
             var tab = nav.OpenTab(view, $"Opening Stock – {label}", ctx);
             view.CloseRequested += (_, __) => nav.CloseTab(tab);

@@ -4,21 +4,20 @@ using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Hr;
-using Pos.Persistence.Services;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class StaffDialog : Window
     {
-        private readonly StaffService _svc;
+        private readonly IStaffService _svc;
 
         private int? _id;
         public string DialogTitle => _id == null ? "New Staff" : "Edit Staff";
-
         public StaffDialog()
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<StaffService>();
+            _svc = App.Services.GetRequiredService<IStaffService>();
             DataContext = this;
         }
 
@@ -37,14 +36,10 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Close();
                     return;
                 }
-
                 CodeBox.Text = s.Code ?? "";
                 NameBox.Text = s.FullName ?? "";
-
-                // JoinedOnUtc -> local date for DatePicker
                 var localJoined = DateTime.SpecifyKind(s.JoinedOnUtc, DateTimeKind.Utc).ToLocalTime().Date;
                 JoinDatePicker.SelectedDate = localJoined;
-
                 SalaryBox.Text = s.BasicSalary.ToString(CultureInfo.InvariantCulture);
                 ActsAsSalesmanBox.IsChecked = s.ActsAsSalesman;
             }
@@ -63,15 +58,12 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 MessageBox.Show("Full Name is required."); return;
             }
-
             if (!decimal.TryParse(SalaryBox.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out var basic))
             {
                 MessageBox.Show("Salary must be a valid number."); return;
             }
-
             try
             {
-                // Basic uniqueness on FullName (optional — adjust to your rules)
                 var name = NameBox.Text.Trim();
                 var taken = await _svc.IsNameTakenAsync(name, excludingId: _id);
                 if (taken)
@@ -80,10 +72,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                         "Duplicate Name", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
                 var jdLocal = (JoinDatePicker.SelectedDate ?? DateTime.Today);
                 var jdUtc = DateTime.SpecifyKind(jdLocal, DateTimeKind.Local).ToUniversalTime();
-
                 var model = new Staff
                 {
                     Id = _id ?? 0,
@@ -95,12 +85,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     BasicSalary = basic,
                     ActsAsSalesman = ActsAsSalesmanBox.IsChecked == true
                 };
-
                 var savedId = await _svc.CreateOrUpdateAsync(model);
-
-                // Optional: if your UI needs to refresh account-bound widgets
                 try { Pos.Client.Wpf.Infrastructure.AppEvents.RaiseAccountsChanged(); } catch { /* ignore */ }
-
                 DialogResult = true;
             }
             catch (Exception ex)
@@ -109,7 +95,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
         private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
     }
 }

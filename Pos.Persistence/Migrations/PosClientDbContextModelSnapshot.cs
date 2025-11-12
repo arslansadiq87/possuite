@@ -2980,6 +2980,9 @@ namespace Pos.Persistence.Migrations
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("PeriodEndUtc")
                         .HasColumnType("TEXT");
 

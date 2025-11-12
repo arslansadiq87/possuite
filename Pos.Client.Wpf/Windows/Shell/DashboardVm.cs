@@ -11,16 +11,22 @@ using System;                        // for Action
 using System.Linq; // add this
 using Pos.Client.Wpf.Windows.Sales; // for TillSessionSummaryVm
 using Pos.Domain.Entities; // for TillSession
-
+using Pos.Domain.Services;
+using Pos.Persistence.Migrations;
+using Microsoft.VisualBasic;
+using Pos.Domain.Models.Till;
 
 namespace Pos.Client.Wpf.Windows.Shell;
 
 public sealed class DashboardVm : ObservableObject
 {
+    //private readonly IITillService _till;
     private readonly ITillService _till;
-
+    //private readonly IOutletService _outlets;             // if you have this
+    //private readonly IOutletCounterService _counters;     // if you have this
+    private readonly IOutletReadService _outletRead;      // add
     // ---------- Services ----------
-    private readonly IDbContextFactory<PosClientDbContext> _dbf;
+    //private readonly IDbContextFactory<PosClientDbContext> _dbf;
     private readonly AppState _st;
     private readonly IWindowNavigator _nav;
     private readonly IViewNavigator _views;     // single-shell view navigation (now tab-aware)
@@ -32,21 +38,22 @@ public sealed class DashboardVm : ObservableObject
 
 
     public DashboardVm(
-        IDbContextFactory<PosClientDbContext> dbf,
-        AppState st,
-        IWindowNavigator nav,
-        IViewNavigator views,
-        IDialogService dialogs,
-        ITillService till,
-        Func<int, int, int, TillSessionSummaryWindow> tillSummaryWindowFactory)   // <-- add this
-
+         AppState st,
+         IWindowNavigator nav,
+         IViewNavigator views,
+         IDialogService dialogs,
+         ITillService till,
+         IOutletReadService outletRead,
+         Func<int, int, int, TillSessionSummaryWindow> tillSummaryWindowFactory)
     {
-        _dbf = dbf;
+        //_dbf = dbf;
         _st = st;
         _nav = nav;
         _views = views;
         _dialogs = dialogs;
-        _till = till;                      // <-- NEW
+        _till = till;
+        _outletRead = outletRead;
+              
 
 
         // ---------- Defaults ----------
@@ -128,7 +135,7 @@ public sealed class DashboardVm : ObservableObject
 
 
         RefreshCmd = new AsyncRelayCommand(RefreshAsync);
-        SyncTillUi();                      // <-- NEW
+        _ = SyncTillUiAsync();
         _tillSummaryWindowFactory = tillSummaryWindowFactory;                  // <-- store it
         OpenTillSummaryCmd = new AsyncRelayCommand(OpenTillSummaryAsync);  // <-- ADD THIS
     }
@@ -401,52 +408,59 @@ public sealed class DashboardVm : ObservableObject
     // ---------- Data refresh ----------
     public async Task RefreshAsync()
     {
-        using var db = await _dbf.CreateDbContextAsync();
+        //using var db = await _dbf.CreateDbContextAsync();
 
+        //if (CurrentOutletId > 0)
+        //{
+        //    var outlet = await db.Outlets.AsNoTracking().FirstOrDefaultAsync(o => o.Id == CurrentOutletId);
+        //    OutletName = outlet?.Name ?? $"Outlet #{CurrentOutletId}";
+        //}
+        //else OutletName = "-";
+
+        //if (CurrentCounterId > 0)
+        //{
+        //    var counter = await db.Counters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == CurrentCounterId);
+        //    CounterName = counter?.Name ?? $"Counter #{CurrentCounterId}";
+        //}
+        //else CounterName = "-";
+        //if (CurrentOutletId > 0)
+        //    OutletName = await _outlets.GetOutletNameAsync(CurrentOutletId) ?? $"Outlet #{CurrentOutletId}";
         if (CurrentOutletId > 0)
-        {
-            var outlet = await db.Outlets.AsNoTracking().FirstOrDefaultAsync(o => o.Id == CurrentOutletId);
-            OutletName = outlet?.Name ?? $"Outlet #{CurrentOutletId}";
-        }
-        else OutletName = "-";
+            OutletName = await _outletRead.GetOutletNameAsync(CurrentOutletId) ?? $"Outlet #{CurrentOutletId}";
+        else
+            OutletName = "-";
 
+        //    if (CurrentCounterId > 0)
+        //CounterName = await _counters.GetCounterNameAsync(CurrentCounterId) ?? $"Counter #{CurrentCounterId}";
         if (CurrentCounterId > 0)
-        {
-            var counter = await db.Counters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == CurrentCounterId);
-            CounterName = counter?.Name ?? $"Counter #{CurrentCounterId}";
-        }
-        else CounterName = "-";
-
+            CounterName = await _outletRead.GetCounterNameAsync(CurrentCounterId) ?? $"Counter #{CurrentCounterId}";
+        else
+            CounterName = "-";
         TillStatus = "Till: —";
         OnlineText = "Offline";
         LastSyncText = "Last sync: —";
 
         // notify if you show username in the bar
         OnPropertyChanged(nameof(CurrentUserName));
-        SyncTillUi();                      // <-- NEW
+        await SyncTillUiAsync();
     }
 
-    
+
 
     private async Task OpenTillSummaryAsync()
     {
-        using var db = await _dbf.CreateDbContextAsync();
+        var status = await _till.GetStatusAsync();
 
-        var open = await db.Set<TillSession>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.OutletId == CurrentOutletId
-                                   && t.CounterId == CurrentCounterId
-                                   && t.CloseTs == null); // <-- use CloseTs (not ClosedAt)
-
-        if (open is null)
+        // If not open, show message and bail.
+        if (!status.IsOpen || status.TillSessionId is null)
         {
             await _dialogs.AlertAsync("No open till session. Open the till first.", "Till Summary");
             return;
         }
 
-        var win = _tillSummaryWindowFactory(open.Id, CurrentOutletId, CurrentCounterId);
+        // Otherwise open the summary window for the current (open) till session.
+        var win = _tillSummaryWindowFactory(status.TillSessionId.Value, CurrentOutletId, CurrentCounterId);
 
-        // give it proper owner/centering (same as your navigator would)
         if (Application.Current?.MainWindow is Window owner && owner.IsLoaded)
         {
             win.Owner = owner;
@@ -459,28 +473,110 @@ public sealed class DashboardVm : ObservableObject
 
 
 
-private void SyncTillUi()
+    //private void SyncTillUi()
+    //{
+    //    TillStatus = _till.GetStatusText();
+    //    IsTillOpen = _till.IsTillOpen();
+    //}
+    private async Task SyncTillUiAsync()
     {
-        TillStatus = _till.GetStatusText();
-        IsTillOpen = _till.IsTillOpen();
+        var status = await _till.GetStatusAsync();
+        TillStatus = status.Text;
+        IsTillOpen = status.IsOpen;
     }
 
     private async Task OpenTillAsync()
     {
-        if (await _till.OpenTillAsync())
+        //if (await _till.OpenTillAsync())
+        //{
+        //    SyncTillUi();
+        //    TillChanged?.Invoke();
+        //}
+        // Prompt user for opening float (default 0)
+        var input = Interaction.InputBox("Enter OPENING FLOAT:", "Open Till", "0.00");
+                if (!decimal.TryParse(input, System.Globalization.NumberStyles.Number,
+        System.Globalization.CultureInfo.CurrentCulture, out var openingFloat))
+                    {
+            await _dialogs.AlertAsync("Invalid amount. Till not opened.", "Open Till");
+                        return;
+                    }
+        
+                try
         {
-            SyncTillUi();
+            var res = await _till.OpenTillAsync(openingFloat);
+            await _dialogs.AlertAsync($"Till opened. Id={res.TillSessionId}", "Till");
+            await SyncTillUiAsync();
             TillChanged?.Invoke();
+                    }
+                catch (Exception ex)
+        {
+            await _dialogs.AlertAsync(ex.Message, "Open Till");
+                    }
         }
-    }
 
     private async Task CloseTillAsync()
     {
-        if (await _till.CloseTillAsync())
+        // 1) Preview — show expected cash + totals
+        TillClosePreviewDto p;
+        try
         {
-            SyncTillUi();
+            p = await _till.GetClosePreviewAsync();
+        }
+        catch (Exception ex)
+        {
+            await _dialogs.AlertAsync(ex.Message, "Close Till");
+            return;
+        }
+
+        var previewText =
+            $"=== Till Close Preview ===\n" +
+            $"Opening Float  : {p.OpeningFloat:0.00}\n" +
+            $"Sales Total    : {p.SalesTotal:0.00}\n" +
+            $"Returns Total  : {p.ReturnsTotalAbs:0.00}\n" +
+            $"Net Total      : {p.NetTotal:0.00}\n" +
+            $"Expected Cash  : {p.ExpectedCash:0.00}\n\n" +
+            $"Enter DECLARED CASH (default is Expected Cash).";
+
+        // 2) Prompt for Declared Cash with expected as default
+        var inputDefault = p.ExpectedCash.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        var input = Microsoft.VisualBasic.Interaction.InputBox(
+            previewText, "Close Till (Z Report)", inputDefault);
+
+        if (!decimal.TryParse(input, System.Globalization.NumberStyles.Number,
+                              System.Globalization.CultureInfo.CurrentCulture, out var declaredCash) &&
+            !decimal.TryParse(input, System.Globalization.NumberStyles.Number,
+                              System.Globalization.CultureInfo.InvariantCulture, out declaredCash))
+        {
+            await _dialogs.AlertAsync("Invalid amount. Till not closed.", "Close Till");
+            return;
+        }
+
+        // 3) Finalize close
+        try
+        {
+            var z = await _till.CloseTillAsync(declaredCash);
+
+            var report =
+                $"=== Z REPORT (Till {z.TillSessionId}) ===\n" +
+                $"Closed (local) : {z.ClosedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}\n" +
+                $"Opening Float  : {z.OpeningFloat:0.00}\n" +
+                $"Sales Total    : {z.SalesTotal:0.00}\n" +
+                $"Returns Total  : {z.ReturnsTotalAbs:0.00}\n" +
+                $"Net Total      : {z.NetTotal:0.00}\n" +
+                $"Expected Cash  : {z.ExpectedCash:0.00}\n" +
+                $"Declared Cash  : {z.DeclaredCash:0.00}\n" +
+                $"Over/Short     : {z.OverShort:+0.00;-0.00;0.00}";
+
+            await _dialogs.AlertAsync(report, "Z Report");
+
+            await SyncTillUiAsync();
             TillChanged?.Invoke();
         }
+        catch (Exception ex)
+        {
+            await _dialogs.AlertAsync(ex.Message, "Close Till");
+        }
     }
+
 
 }

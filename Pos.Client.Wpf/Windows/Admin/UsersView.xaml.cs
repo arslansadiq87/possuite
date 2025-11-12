@@ -14,7 +14,6 @@ using Pos.Persistence.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
-    // Row shape for the grid
     public sealed class UserRow
     {
         public int Id { get; init; }
@@ -28,12 +27,9 @@ namespace Pos.Client.Wpf.Windows.Admin
     public partial class UsersView : UserControl
     {
         private readonly IUserAdminService _svc;
-        //private readonly OutletCounterService _outletSvc; // for the Assignments dialog, if used
-
         private readonly ObservableCollection<OutletAssignRow> _outletRows = new();
         private readonly bool _currentIsGlobalAdmin;
         private readonly UserRole _currentRole;
-
         public bool CanSetGlobalAdmin => _currentIsGlobalAdmin;
 
         private bool _isNew;
@@ -72,17 +68,12 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             InitializeComponent();
             _svc = App.Services.GetRequiredService<IUserAdminService>(); // interface, not concrete
-            //_outletSvc = App.Services.GetRequiredService<OutletCounterService>();
-
             var currentUser = state.CurrentUser;
             _currentIsGlobalAdmin = currentUser?.IsGlobalAdmin == true;
             _currentRole = currentUser?.Role ?? UserRole.Cashier;
-
             DataContext = this;
             Loaded += async (_, __) => await LoadUsersAsync();
         }
-
-        // ─────────── Data loading ───────────
         private async System.Threading.Tasks.Task LoadUsersAsync()
         {
             try
@@ -99,7 +90,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         IsGlobalAdmin = u.IsGlobalAdmin
                     })
                     .ToList();
-
                 UsersGrid.ItemsSource = users;
             }
             catch (Exception ex)
@@ -111,7 +101,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadUsersAsync();
 
-        // ─────────── Toolbar actions ───────────
         private void Add_Click(object sender, RoutedEventArgs e)
         {
             if (!_currentIsGlobalAdmin && _currentRole != UserRole.Admin)
@@ -120,7 +109,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             OpenEditor(new User
             {
                 Username = "",
@@ -136,7 +124,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     adminItem.IsEnabled = false;
             }
         }
-
         private async void Edit_Click(object sender, RoutedEventArgs e)
         {
             if (UsersGrid.SelectedItem is not UserRow sel)
@@ -144,7 +131,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Select a user.");
                 return;
             }
-
             try
             {
                 var dbU = await _svc.GetAsync(sel.Id) ?? throw new InvalidOperationException("User not found.");
@@ -180,11 +166,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Select a user.");
                 return;
             }
-
             if (MessageBox.Show($"Delete user '{sel.Username}'?",
                     "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
-
             try
             {
                 await _svc.DeleteAsync(sel.Id);
@@ -204,35 +188,26 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Select a user.");
                 return;
             }
-
-            // Use the service-driven assignments window we already refactored
             var dlg = new UserOutletAssignmentsWindow(sel.Id) { };
             dlg.ShowDialog();
         }
 
-        // ─────────── Editor open/close helpers ───────────
         private async void OpenEditor(User snapshot, bool isNew)
         {
             _isNew = isNew;
             _editingUserId = isNew ? null : snapshot.Id;
-
             EditorTitle.Text = isNew ? "Add User" : "Edit User";
             EdUsername.Text = snapshot.Username ?? "";
             EdDisplayName.Text = snapshot.DisplayName ?? "";
-
             EdRole.SelectedIndex = RoleToIndex(snapshot.Role);
             EdActive.IsChecked = snapshot.IsActive;
             EdGlobalAdmin.IsChecked = snapshot.IsGlobalAdmin;
-
             EdPassword.Password = "";
-
-            // Load all outlets + current assignments via service
             _outletRows.Clear();
             var outlets = await _svc.GetOutletsAsync();
             var assigned = isNew
                 ? new System.Collections.Generic.Dictionary<int, UserRole>()
                 : await _svc.GetUserAssignmentsAsync(snapshot.Id);
-
             foreach (var o in outlets)
             {
                 var has = assigned.TryGetValue(o.Id, out var r);
@@ -248,27 +223,22 @@ namespace Pos.Client.Wpf.Windows.Admin
             EdOutletGrid.ItemsSource = _outletRows;
             ShowEditor(true);
         }
-
         private void ShowEditor(bool show)
         {
             if (show)
             {
                 _originalWidth ??= this.Width;
                 if (this.Width < 980) this.Width = 980;
-
                 EditorPanel.Visibility = Visibility.Visible;
                 EditorCol.Width = new GridLength(390);
             }
             else
             {
                 if (_originalWidth.HasValue) this.Width = _originalWidth.Value;
-
                 EditorPanel.Visibility = Visibility.Collapsed;
                 EditorCol.Width = new GridLength(0);
             }
         }
-
-        // ─────────── Editor buttons ───────────
         private void CancelEditor_Click(object sender, RoutedEventArgs e)
         {
             ShowEditor(false);
@@ -283,12 +253,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Username is required.");
                 return;
             }
-
             var selectedRole = IndexToRole(EdRole.SelectedIndex);
             var wantsGlobalAdmin = EdGlobalAdmin.IsChecked == true;
             var newPwd = EdPassword.Password ?? "";
-
-            // Permission checks
             if (!_currentIsGlobalAdmin)
             {
                 if (_currentRole == UserRole.Admin)
@@ -316,10 +283,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                     }
                 }
             }
-
             try
             {
-                // Uniqueness check
                 var taken = await _svc.IsUsernameTakenAsync(username, excludingId: _editingUserId);
                 if (taken)
                 {
@@ -327,7 +292,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         "Duplicate Username", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
                 var entity = new User
                 {
                     Id = _editingUserId ?? 0,
@@ -339,9 +303,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 };
 
                 var savedId = await _svc.CreateOrUpdateAsync(entity, string.IsNullOrWhiteSpace(newPwd) ? null : newPwd);
-
-                // Save outlet assignments from sidebar grid
-                // Save outlet assignments from sidebar grid
                 var desired = _outletRows.Select(r =>
                     new UserOutletAssignDto(
                         OutletId: r.OutletId,
@@ -349,8 +310,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         Role: TextToRole(r.Role)));
 
                 await _svc.SaveAssignmentsAsync(savedId, desired);
-
-
                 ShowEditor(false);
                 _editingUserId = null;
                 await LoadUsersAsync();
@@ -362,7 +321,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // ─────────── Role helpers ───────────
         private int RoleToIndex(UserRole role) => role switch
         {
             UserRole.Salesman => 0,

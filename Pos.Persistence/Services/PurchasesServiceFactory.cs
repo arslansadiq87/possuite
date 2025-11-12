@@ -16,20 +16,24 @@ namespace Pos.Client.Wpf.Services
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
+        private readonly IInventoryReadService _inv;   // <-- add
+        private readonly IGlPostingService _gl;        // <-- add
 
         public PurchasesServiceFactory(
             IDbContextFactory<PosClientDbContext> dbf,
-            IOutboxWriter outbox)
+            IOutboxWriter outbox, IInventoryReadService inv, IGlPostingService gl)
         {
             _dbf = dbf;
             _outbox = outbox;
+            _inv = inv;                                // <-- add
+            _gl = gl;
         }
 
         public IPurchasesService Create()
         {
             // IMPORTANT: do NOT new a DbContext here anymore.
             // PurchasesService now expects the factory.
-            return new PurchasesService(_dbf, _outbox);
+            return new PurchasesService(_dbf, _outbox, _inv, _gl);
         }
     }
 }

@@ -7,7 +7,6 @@ namespace Pos.Client.Wpf.Windows.Common
         public string TitleText { get; }
         public string Message { get; }
         public string Text { get; set; }
-
         public InputDialog(string title, string message, string defaultText)
         {
             InitializeComponent();

@@ -8,7 +8,7 @@ namespace Pos.Domain.Hr
 
     public class Staff : BaseEntity
     {
-        public int? AccountId { get; set; }   // GL account under 63-Staff
+        public int? AccountId { get; set; }           // GL account under 63-Staff
         public string Code { get; set; } = "";        // Employee No
         public string FullName { get; set; } = "";
         public int? OutletId { get; set; }            // home outlet (optional)
@@ -65,9 +65,13 @@ namespace Pos.Domain.Hr
         public DateTime PeriodEndUtc { get; set; }
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
         public bool IsFinalized { get; set; }
+
         public decimal TotalGross { get; set; }
         public decimal TotalDeductions { get; set; }
         public decimal TotalNet { get; set; }
+
+        // ✅ NEW: null until paid; set when PayAsync succeeds
+        public DateTime? PaidAtUtc { get; set; }
     }
 
     public class PayrollItem : BaseEntity

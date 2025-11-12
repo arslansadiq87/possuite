@@ -11,7 +11,6 @@ namespace Pos.Client.Wpf.Windows.Admin
     public partial class StaffView : UserControl
     {
         private readonly IStaffService _svc;
-
         public StaffView()
         {
             InitializeComponent();
@@ -28,7 +27,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             var dlg = App.Services.GetRequiredService<StaffDialog>();
             dlg.Configure(null); // New mode
-
             var owner = Window.GetWindow(this)
                        ?? Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
                        ?? Application.Current.MainWindow;
@@ -45,10 +43,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Select a staff row first.");
                 return;
             }
-
             var dlg = App.Services.GetRequiredService<StaffDialog>();
             dlg.Configure(s.Id); // Edit mode
-
             var owner = Window.GetWindow(this)
                        ?? Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
                        ?? Application.Current.MainWindow;
@@ -64,7 +60,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 MessageBox.Show("Select a staff row first."); return;
             }
-
             if (MessageBox.Show($"Delete {s.FullName}?", "Confirm", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                 return;
 

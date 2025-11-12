@@ -29,15 +29,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
             };
         }
 
-        // Toolbar buttons -> VM commands
         private async void Refresh_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is VoucherCenterVm vm) await vm.RefreshCommand.ExecuteAsync(null);
         }
-        //private async void Edit_Click(object sender, RoutedEventArgs e)
-        //{
-        //    if (DataContext is VoucherCenterVm vm) await vm.EditCommand.ExecuteAsync(null);
-        //}
         private async void Amend_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is VoucherCenterVm vm) await vm.AmendCommand.ExecuteAsync(null);
@@ -50,16 +45,17 @@ namespace Pos.Client.Wpf.Windows.Accounting
         // CommandBindings
         private async void Refresh_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e) => await Refresh_ClickAsync();
         private async void Search_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e) => await ApplyFilter_ClickAsync();
-        //private async void Edit_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e) => Edit_Click(sender, (RoutedEventArgs)e);
-        private async void Amend_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e) => Amend_Click(sender, (RoutedEventArgs)e);
-        private async void Void_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e) => Void_Click(sender, (RoutedEventArgs)e);
+        private void Amend_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        => Amend_Click(sender, (RoutedEventArgs)e);
+
+        private void Void_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+            => Void_Click(sender, (RoutedEventArgs)e);
 
         private async Task Refresh_ClickAsync()
         {
             if (DataContext is VoucherCenterVm vm) await vm.RefreshCommand.ExecuteAsync(null);
         }
 
-        // Filters popup actions
         private async void ClearFilter_Click(object sender, RoutedEventArgs e)
         {
             SearchBox.Text = "";
@@ -86,7 +82,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             vm.StartDate = FromDate.SelectedDate ?? DateTime.Today.AddDays(-30);
             vm.EndDate = (ToDate.SelectedDate ?? DateTime.Today).Date.AddDays(1).AddSeconds(-1);
 
-            // Map checkboxes → nullable filters (if a single type/status is selected, set filter; else null)
             var types = new System.Collections.Generic.List<Pos.Domain.Accounting.VoucherType>();
             if (ChkJournal.IsChecked == true) types.Add(Pos.Domain.Accounting.VoucherType.Journal);
             if (ChkDebit.IsChecked == true) types.Add(Pos.Domain.Accounting.VoucherType.Debit);
@@ -107,12 +102,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
         private async void Search_Click(object sender, RoutedEventArgs e) => await ApplyFilter_ClickAsync();
 
-        // Load right-side lines on selection change
         private async void VouchersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (DataContext is not VoucherCenterVm vm) return;
 
-            // Fallback: ensure vm.Selected tracks the grid selection
             if (VouchersGrid.SelectedItem is VoucherRow row && !ReferenceEquals(vm.Selected, row))
                 vm.Selected = row;
 
@@ -127,6 +120,5 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 HeaderText.Text = "";
             }
         }
-
     }
 }

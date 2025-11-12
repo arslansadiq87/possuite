@@ -22,8 +22,6 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private static readonly Regex _numRx = new(@"^[0-9.]$", RegexOptions.Compiled);
         
-
-        // Result
         private TaskCompletionSource<PaymentResult>? _tcs;
 
         public PayDialog()
@@ -69,7 +67,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 _tcs.TrySetResult(new PaymentResult { Confirmed = true, Cash = 0m, Card = 0m });
                 _closeOverlay?.Invoke();   // was: closeOverlay();
-                //closeOverlay();
                 return _tcs.Task;
             }
 
@@ -112,7 +109,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             ChangeText.Text = change.ToString("0.00");
         }
 
-        // Input helpers
         private void OnPasteNumericOnly(object sender, DataObjectPastingEventArgs e)
         {
             if (!e.SourceDataObject.GetDataPresent(DataFormats.Text)) { e.CancelCommand(); return; }
@@ -256,13 +252,11 @@ namespace Pos.Client.Wpf.Windows.Sales
                 }
             }
 
-            //_tcs?.TrySetResult(new PaymentResult { Confirmed = true, Cash = cash, Card = card });
             CompleteAndClose(true, cash, card);
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            //_tcs?.TrySetResult(new PaymentResult { Confirmed = false, Cash = 0m, Card = 0m });
             CompleteAndClose(false, 0m, 0m);
         }
 
@@ -280,7 +274,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 return;
             }
 
-            // Cancel via double-Escape (press Esc twice quickly)
             if (e.Key == Key.Escape)
             {
                 var now = DateTime.UtcNow;
@@ -297,8 +290,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
-
-        // add anywhere inside the class
         private bool _done;
 
         private void CompleteAndClose(bool confirmed, decimal cash, decimal card)

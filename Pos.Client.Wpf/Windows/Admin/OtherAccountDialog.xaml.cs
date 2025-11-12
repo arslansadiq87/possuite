@@ -11,9 +11,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         private readonly IOtherAccountService _svc;
         private int? _id;
-
         public string DialogTitle => _id == null ? "New Other Account" : "Edit Other Account";
-
         public OtherAccountDialog(IOtherAccountService svc)
         {
             InitializeComponent();
@@ -31,10 +29,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                 CodeBox.Text = await _svc.GenerateNextOtherCodeAsync();
                 return;
             }
-
             var row = await _svc.GetAsync(_id.Value);
             if (row == null) { DialogResult = false; Close(); return; }
-
             CodeBox.Text = row.Code ?? "";
             NameBox.Text = row.Name;
             PhoneBox.Text = row.Phone ?? "";
@@ -48,7 +44,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Name is required.");
                 return;
             }
-
             var dto = new OtherAccountUpsertDto
             {
                 Id = _id,
@@ -57,7 +52,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 Phone = PhoneBox.Text,
                 Email = EmailBox.Text
             };
-
             try
             {
                 await _svc.UpsertAsync(dto);
@@ -70,7 +64,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
         private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
     }
 }

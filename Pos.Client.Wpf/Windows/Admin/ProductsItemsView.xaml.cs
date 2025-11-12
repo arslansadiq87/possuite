@@ -5,18 +5,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
-using Pos.Persistence;
-using Pos.Persistence.Services;
-using Pos.Client.Wpf.Windows.Purchases; // ItemQuickDialog
 using Pos.Domain.Models;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Globalization;
-using Pos.Persistence.Sync;           // IOutboxWriter
-using Pos.Persistence.Media;
 using Pos.Client.Wpf.Services;   // ThumbnailService
 using Pos.Domain.Services;
 
@@ -24,38 +17,26 @@ namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class ProductsItemsView : UserControl
     {
-        // ----- services / db -----
-        // ----- services / db -----
         private readonly ICatalogService _svc;
         private readonly ThumbnailService _thumbs = new(); // already present below, keep single instance
         private bool _squelchGridEdits;
-
-
-        // ----- tracking originals & dirties -----
         private readonly Dictionary<int, ItemVariantRow> _originals = new(); // for variants list
         private readonly HashSet<int> _dirtyIds = new();                      // changed variant rows
         private ItemVariantRow? _standaloneOriginal;                          // snapshot of selected standalone
         private bool _standaloneDirty;                                        // flag for standalone
-
         private readonly ObservableCollection<string> _galleryThumbs = new();
         public ObservableCollection<string> GalleryThumbs => _galleryThumbs;
 
-        // ----- left lists -----
         private readonly ObservableCollection<Product> _products = new();
         private readonly ObservableCollection<ItemVariantRow> _standalone = new();
-        // ----- right grid (backing source) -----
         private readonly ObservableCollection<ItemVariantRow> _gridItems = new();
         private Product? _selectedProduct;
-        // flow flags
         private bool _loadingProducts;
         private bool _loadingVariants;
         private bool _loadingStandalone;
         private bool _saving;
         private enum RightMode { Variants, Standalone }
         private RightMode _mode;
-        // lookup sources (PUBLIC for binding)
-
-
         private readonly ObservableCollection<Brand> _brands = new();
         private readonly ObservableCollection<Category> _categories = new();
         public ObservableCollection<Brand> Brands => _brands;
@@ -66,38 +47,27 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             InitializeComponent();
             DataContext = this;
-
-            // resolve service layer only
             _svc = App.Services.GetRequiredService<ICatalogService>();
-
             ProductsList.ItemsSource = _products;
             StandaloneList.ItemsSource = _standalone;
             VariantsGrid.ItemsSource = _gridItems;
-
             Loaded += async (_, __) =>
             {
-                // pull lookups via service (tiny helper methods on CatalogService)
                 _brands.Clear();
                 foreach (var b in await _svc.GetActiveBrandsAsync())   // ← add this to service if missing
                     _brands.Add(b);
-
                 _categories.Clear();
                 foreach (var c in await _svc.GetActiveCategoriesAsync()) // ← add this to service if missing
                     _categories.Add(c);
-
                 LeftTabs.SelectedIndex = 0; // default: Products
                 await RefreshAsync();
             };
         }
 
-            
-
-
         private void SetRightGridMode(RightMode mode)
         {
             _mode = mode;
             var isVariants = mode == RightMode.Variants;
-
             ColName.Visibility = isVariants ? Visibility.Collapsed : Visibility.Visible;
             ColVar1Name.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
             ColVar1Value.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
@@ -105,21 +75,17 @@ namespace Pos.Client.Wpf.Windows.Admin
             ColVar2Value.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
             ColBrand.Visibility = isVariants ? Visibility.Collapsed : Visibility.Visible;
             ColCategory.Visibility = isVariants ? Visibility.Collapsed : Visibility.Visible;
-
             if (BtnAddVariant != null) BtnAddVariant.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
             if (BtnDeleteVoidItem != null) BtnDeleteVoidItem.Tag = isVariants;
             if (BtnEditVariant != null) BtnEditVariant.Tag = isVariants;
             if (BtnDeleteVoidVariant != null) BtnDeleteVoidVariant.Tag = isVariants;
             if (ColBarcode != null) ColBarcode.IsReadOnly = true;
-
-            // Always useful on both modes
             ColTaxCode.Visibility = Visibility.Visible;
             ColTaxPct.Visibility = Visibility.Visible;
             ColTaxIncl.Visibility = Visibility.Visible;
             ColDiscPct.Visibility = Visibility.Visible;
             ColDiscAmt.Visibility = Visibility.Visible;
             UpdateSaveButtonVisibility();
-
         }
 
         private async Task RefreshAsync()
@@ -138,11 +104,9 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 var term = SearchBox.Text?.Trim() ?? "";
                 var list = await _svc.SearchProductsAsync(term);
-
                 int? selectedId = (ProductsList.SelectedItem as Product)?.Id;
                 _products.Clear();
                 foreach (var p in list) _products.Add(p);
-
                 if (selectedId is int id)
                 {
                     var again = _products.FirstOrDefault(x => x.Id == id);
@@ -153,7 +117,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             await LoadSelectedProductItemsAsync();
         }
 
-
         private async Task RefreshStandaloneAsync()
         {
             if (_loadingStandalone) return;
@@ -162,30 +125,22 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 var term = SearchBox.Text?.Trim() ?? "";
                 var rows = await _svc.SearchStandaloneItemRowsAsync(term);
-
                 int? selectedId = (StandaloneList.SelectedItem as ItemVariantRow)?.Id;
-
                 _standalone.Clear();
                 foreach (var r in rows) _standalone.Add(r);
-
                 ItemVariantRow? restored = null;
                 if (selectedId is int id)
                     restored = _standalone.FirstOrDefault(x => x.Id == id);
-
                 if (restored != null)
                 {
                     StandaloneList.SelectedItem = restored;
                     StandaloneList.UpdateLayout();
                     StandaloneList.ScrollIntoView(restored);
-
                     _gridItems.Clear();
                     _gridItems.Add(restored);
                     GridTitle.Text = $"Standalone Item — {restored.Name}";
-
                     _standaloneOriginal = CloneRow(restored);
                     _standaloneDirty = false;
-
-                    // show images for restored
                     await LoadGalleryForVariantAsync(restored.Id);
                 }
                 else
@@ -206,9 +161,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             finally { _loadingStandalone = false; }
         }
 
-
-
-
         private Task LoadSelectedProductItemsAsync()
             => LoadVariantsForProduct(ProductsList.SelectedItem as Product);
 
@@ -224,7 +176,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 _dirtyIds.Clear();
                 _standaloneOriginal = null;
                 _standaloneDirty = false;
-
                 if (product == null)
                 {
                     GridTitle.Text = "Variants — (no product selected)";
@@ -247,11 +198,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                     await LoadGalleryForProductAsync(product.Id);
                 else
                     GalleryThumbs.Clear();
-
             }
             finally { _loadingVariants = false; }
         }
-
 
         private void StandaloneItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -263,7 +212,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // ---------------- UI events ----------------
         private async void Find_Click(object sender, RoutedEventArgs e) => await RefreshAsync();
         private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAsync();
 
@@ -280,7 +228,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 await LoadGalleryForProductAsync(pSel.Id);
             else
                 GalleryThumbs.Clear();
-
         }
 
         private async void NewProduct_Click(object sender, RoutedEventArgs e)
@@ -290,13 +237,10 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 var dlg = new ProductNameDialog();
                 if (dlg.ShowDialog() != true) return;
-
                 var p = await _svc.CreateProductAsync(dlg.ProductName, dlg.BrandId, dlg.CategoryId);
-
                 try
                 {
-                    MediaPaths.Ensure();
-
+                    //MediaPaths.Ensure();
                     if (!string.IsNullOrWhiteSpace(dlg.PrimaryImagePath))
                     {
                         var prim = dlg.PrimaryImagePath!;
@@ -321,7 +265,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     MessageBox.Show("Product images could not be saved: " + ex.Message);
                 }
-
                 _products.Insert(0, p);
                 ProductsList.SelectedItem = p;
             }
@@ -331,9 +274,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-
-
-        // EDIT product (same dialog you use to create, now prefilled)
         private async void EditProduct_Click(object sender, RoutedEventArgs e)
         {
             if (ProductsList.SelectedItem is not Product p)
@@ -341,16 +281,13 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Select a product first.");
                 return;
             }
-
             var dlg = new ProductNameDialog { };
             dlg.Prefill(p.Name, p.BrandId, p.CategoryId);
             if (dlg.ShowDialog() != true) return;
-
             var updated = await _svc.UpdateProductAsync(p.Id, dlg.ProductName, dlg.BrandId, dlg.CategoryId);
-
             try
             {
-                MediaPaths.Ensure();
+                //MediaPaths.Ensure();
                 if (dlg.PrimaryImagePath is string prim)
                 {
                     await _svc.SetProductPrimaryImageAsync(
@@ -389,28 +326,20 @@ namespace Pos.Client.Wpf.Windows.Admin
                 GridTitle.Text = $"Variants — {updated.Name}";
         }
 
-
-
-
         private async void AddVariants_Click(object sender, RoutedEventArgs e)
         {
             var product = _selectedProduct ?? ProductsList.SelectedItem as Product;
             if (product == null) { MessageBox.Show("Select a product first."); return; }
-            // Make sure the right grid is in Variants mode before we start adding
             GridTitle.Text = $"Variants — {product.Name}";
             SetRightGridMode(RightMode.Variants);
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.Sequential);
             dlg.SaveImmediately = true; // makes "Save & Add another" call the saver below
-
             dlg.SaveOneAsync = async (item) =>
             {
                 try
                 {
                     var saved = await _svc.CreateItemAsync(item);
-
-                    // apply staged images for this just-saved variant
                     await ApplyPendingVariantImagesAsync(dlg, saved.Id);
-
                     var primary = saved.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
                                   ?? saved.Barcodes?.FirstOrDefault()?.Code
                                   ?? "";
@@ -446,8 +375,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return false;
                 }
             };
-
-
             dlg.PrefillProduct(product);
             if (dlg.ShowDialog() != true) return;
             if (dlg.CreatedItems is { Count: > 0 })
@@ -456,11 +383,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     var saved = await _svc.CreateItemAsync(v);
                     await ApplyPendingVariantImagesAsync(dlg, saved.Id);
-
                     var primary = saved.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
                       ?? saved.Barcodes?.FirstOrDefault()?.Code
                       ?? "";
-
                     _gridItems.Add(new ItemVariantRow
                     {
                         Id = saved.Id,
@@ -482,7 +407,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         IsActive = saved.IsActive
                     });
                 }
-
                 MessageBox.Show("Variants added.");
             }
         }
@@ -491,20 +415,15 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.Sequential);
             dlg.SaveImmediately = true;
-
             dlg.SaveOneAsync = async (item) =>
             {
                 try
                 {
                     var saved = await _svc.CreateItemAsync(item);
-
-                    // apply staged images for this just-saved item
                     await ApplyPendingVariantImagesAsync(dlg, saved.Id);
-
                     var primary = saved.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
                                   ?? saved.Barcodes?.FirstOrDefault()?.Code
                                   ?? "";
-
                     var row = new ItemVariantRow
                     {
                         Id = saved.Id,
@@ -525,13 +444,11 @@ namespace Pos.Client.Wpf.Windows.Admin
                         UpdatedAt = saved.UpdatedAt,
                         IsActive = saved.IsActive
                     };
-
                     _standalone.Insert(0, row);
                     _gridItems.Clear();
                     _gridItems.Add(row);
                     GridTitle.Text = $"Standalone Item — {row.Name}";
                     SetRightGridMode(RightMode.Standalone);
-
                     return true;
                 }
                 catch (Exception ex)
@@ -540,7 +457,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return false;
                 }
             };
-
             dlg.PrefillStandalone();
             if (dlg.ShowDialog() == true && dlg.CreatedItems?.Count > 0)
             {
@@ -548,7 +464,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     var saved = await _svc.CreateItemAsync(v);
                     await ApplyPendingVariantImagesAsync(dlg, saved.Id);
-
                     var primary = saved.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
                                   ?? saved.Barcodes?.FirstOrDefault()?.Code
                                   ?? "";
@@ -600,11 +515,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     var set = _dirtyIds.ToHashSet();
                     toSave = _gridItems.Where(r => set.Contains(r.Id)).ToList();
                 }
-
-                // 🔁 Service-layer persistence (atomic + sync)
                 var savedRows = await _svc.SaveVariantRowsAsync(toSave);
-
-                // refresh snapshots/flags with fresh rows
                 if (_mode == RightMode.Standalone)
                 {
                     var fresh = savedRows.FirstOrDefault();
@@ -629,7 +540,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         }
                     }
                 }
-
                 UpdateSaveButtonVisibility();
                 MessageBox.Show("Changes saved.");
             }
@@ -645,34 +555,26 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Select a standalone item first.");
                 return;
             }
-
             var entity = await _svc.GetItemWithBarcodesAsync(row.Id);
             if (entity == null)
             {
                 MessageBox.Show("Could not load the selected item.");
                 return;
             }
-
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.EditSingle) { };
             await dlg.PrefillStandaloneForEditAsync(entity);
-
             if (dlg.ShowDialog() != true) return;
-
             try
             {
                 var edited = dlg.CreatedItems?.FirstOrDefault();
                 if (edited == null) { MessageBox.Show("No changes returned."); return; }
-
                 var freshRow = await _svc.EditSingleItemAsync(edited);
-
                 _gridItems.Clear();
                 _gridItems.Add(freshRow);
                 GridTitle.Text = $"Standalone Item — {freshRow.Name}";
                 _standaloneOriginal = CloneRow(freshRow);
                 _standaloneDirty = false;
-
                 await ApplyPendingVariantImagesAsync(dlg, freshRow.Id);
-
                 MessageBox.Show("Item updated.");
             }
             catch (Exception ex)
@@ -680,7 +582,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Update failed: " + ex.Message);
             }
         }
-
 
         private async void DeleteOrVoidProduct_Click(object sender, RoutedEventArgs e)
         {
@@ -697,7 +598,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                                          canDelete ? "Delete or Void Product" : "Void Product",
                                          canDelete ? MessageBoxButton.YesNoCancel : MessageBoxButton.YesNo,
                                          canDelete ? MessageBoxImage.Question : MessageBoxImage.Information);
-
             if (!canDelete)
             {
                 if (result == MessageBoxResult.Yes)
@@ -713,7 +613,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 if (MessageBox.Show($"Delete '{p.Name}' permanently? This cannot be undone.",
                                     "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                     return;
-
                 await _svc.DeleteProductAsync(p.Id);
                 await RefreshAsync();
                 MessageBox.Show("Product deleted.");
@@ -853,7 +752,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             await Task.CompletedTask;
         }
 
-
         private void StandaloneList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is not ItemsControl ic) return;
@@ -870,23 +768,17 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             if (e.EditAction == DataGridEditAction.Commit)
             {
-                // DO NOT call CommitEdit() here – it re-enters CellEditEnding.
                 _squelchGridEdits = true;
                 try
                 {
-                    // Defer until after the edit actually commits.
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         try
                         {
-                            // Now it’s safe to commit once at row level if needed.
                             var grid = (DataGrid)sender;
                             grid.CommitEdit(DataGridEditingUnit.Row, true);
-
-                            // Mark dirty for the edited row.
                             if (e.Row?.Item is ItemVariantRow r)
                                 MarkDirtyForCurrentRow(); // your existing comparer logic
-
                             UpdateSaveButtonVisibility();
                         }
                         finally
@@ -906,8 +798,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         private void VariantsGrid_CurrentCellChanged(object sender, EventArgs e)
         {
             if (_squelchGridEdits) return;
-
-            // Don’t force-commit here either; just check dirtiness after WPF updates bindings.
             _squelchGridEdits = true;
             try
             {
@@ -931,12 +821,10 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-
         private void MarkDirtyForCurrentRow()
         {
             var row = VariantsGrid.SelectedItem as ItemVariantRow;
             if (row is null) { UpdateSaveButtonVisibility(); return; }
-
             if (_mode == RightMode.Standalone)
             {
                 if (_standaloneOriginal is null)
@@ -976,7 +864,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void VariantsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // Only for Variants mode; in Standalone mode treat row as single item
             if (_mode == RightMode.Variants)
             {
                 var row = SelectedRow;
@@ -985,8 +872,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     await LoadGalleryForVariantAsync(row.Id);
                     return;
                 }
-
-                // No variant selected → show product-wide images
                 if (_selectedProduct?.Id > 0)
                 {
                     await LoadGalleryForProductAsync(_selectedProduct.Id);
@@ -1006,7 +891,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-
         private async void EditVariant_Click(object sender, RoutedEventArgs e)
         {
             if (_mode != RightMode.Variants)
@@ -1014,7 +898,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Switch to Products tab to edit a variant.");
                 return;
             }
-
             var row = SelectedRow;
             if (row == null || row.Id <= 0)
             {
@@ -1028,30 +911,22 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Could not load the selected variant.");
                 return;
             }
-
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.EditSingle) { };
-
             var parentProduct = _selectedProduct;
             if (parentProduct == null && entity.ProductId is int pid)
                 parentProduct = await _svc.GetProductAsync(pid);
-
             if (parentProduct != null) dlg.PrefillProduct(parentProduct);
             dlg.PrefillForEdit(entity);
             dlg.PrefillBarcodesForEdit(entity.Barcodes);
-
             if (dlg.ShowDialog() != true) return;
-
             try
             {
                 var edited = dlg.CreatedItems?.FirstOrDefault();
                 if (edited == null) { MessageBox.Show("No changes returned."); return; }
-
                 var freshRow = await _svc.EditSingleItemAsync(edited);
                 await ApplyPendingVariantImagesAsync(dlg, freshRow.Id);
-
                 var idx = _gridItems.IndexOf(row);
                 if (idx >= 0) _gridItems[idx] = freshRow;
-
                 MessageBox.Show("Variant updated.");
             }
             catch (Exception ex)
@@ -1059,8 +934,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Update failed: " + ex.Message);
             }
         }
-
-
 
         private void VariantsGrid_BeginningEdit(object sender, DataGridBeginningEditEventArgs e)
         {
@@ -1113,7 +986,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 a.BrandId == b.BrandId &&
                 a.CategoryId == b.CategoryId &&
                 a.IsActive == b.IsActive
-                // Barcode intentionally excluded — locked & edited elsewhere
                 ;
         }
 
@@ -1141,7 +1013,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 foreach (var t in vThumbs) _galleryThumbs.Add(t);
                 return;
             }
-
             var pid = await _svc.GetProductIdForItemAsync(itemId);
             if (pid is int productId) await LoadGalleryForProductAsync(productId);
             else _galleryThumbs.Clear();
@@ -1152,11 +1023,9 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             var pack = dlg.PopPendingVariantImages();   // returns (PrimaryPath, GalleryPaths)
             if (pack is null) return;
-
             try
             {
-                MediaPaths.Ensure();
-
+                //MediaPaths.Ensure();
                 if (pack.PrimaryPath is string prim)
                 {
                     await _svc.SetItemPrimaryImageAsync(
@@ -1164,7 +1033,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         prim,
                         stem => _thumbs.CreateThumb(prim, stem));
                 }
-
                 foreach (var g in pack.GalleryPaths)
                 {
                     await _svc.AddItemGalleryImageAsync(
@@ -1178,9 +1046,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show("Variant images could not be saved: " + ex.Message);
             }
         }
-
-
-
     }
 }
 

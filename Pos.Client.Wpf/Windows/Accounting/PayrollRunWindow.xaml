@@ -9,20 +9,38 @@
             <TextBlock Text="To:" VerticalAlignment="Center"/>
             <DatePicker SelectedDate="{Binding ToDate}" Margin="6,0,12,0"/>
 
-            <Button Content="Create Draft" Command="{Binding CreateDraftCmd}"/>
-            <Button Content="Refresh" Margin="8,0,0,0" Command="{Binding RefreshCmd}" IsEnabled="{Binding CurrentRun}"/>
-            <Button Content="Finalize" Margin="8,0,0,0" Command="{Binding FinalizeCmd}" IsEnabled="{Binding CurrentRun}"/>
-            <Button Content="Pay" Margin="8,0,0,0" Command="{Binding PayCmd}" IsEnabled="{Binding CurrentRun}"/>
+            <Button Content="Create Draft" Command="{Binding CreateDraftCommand}"/>
+            <Button Content="Refresh" Margin="8,0,0,0" Command="{Binding RefreshCommand}" IsEnabled="{Binding HasRun}"/>
+            <Button Content="Finalize" Margin="8,0,0,0" Command="{Binding FinalizeCommand}" IsEnabled="{Binding HasRun}"/>
+            <Button Content="Pay" Margin="8,0,0,0" Command="{Binding PayCommand}" IsEnabled="{Binding HasRun}"/>
         </StackPanel>
 
-        <DataGrid ItemsSource="{Binding Items}" AutoGenerateColumns="False" CanUserAddRows="False">
+        <DataGrid ItemsSource="{Binding Items}"
+          AutoGenerateColumns="False"
+          CanUserAddRows="False"
+          IsReadOnly="{Binding IsRunFinalized, FallbackValue=True}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Staff" Binding="{Binding StaffName}" Width="2*"/>
-                <DataGridTextColumn Header="Basic" Binding="{Binding Basic, StringFormat=N2}" Width="120"/>
-                <DataGridTextColumn Header="Allow" Binding="{Binding Allowances, StringFormat=N2}" Width="120"/>
-                <DataGridTextColumn Header="OT" Binding="{Binding Overtime, StringFormat=N2}" Width="120"/>
-                <DataGridTextColumn Header="Deduct" Binding="{Binding Deductions, StringFormat=N2}" Width="120"/>
-                <DataGridTextColumn Header="Net" Binding="{Binding Net, StringFormat=N2}" Width="120" IsReadOnly="True"/>
+
+                <!-- TwoWay for editable numeric cells -->
+                <DataGridTextColumn Header="Basic"
+                            Binding="{Binding Basic, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            Width="120"/>
+                <DataGridTextColumn Header="Allow"
+                            Binding="{Binding Allowances, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            Width="120"/>
+                <DataGridTextColumn Header="OT"
+                            Binding="{Binding Overtime, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            Width="120"/>
+                <DataGridTextColumn Header="Deduct"
+                            Binding="{Binding Deductions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            Width="120"/>
+
+                <!-- Keep formatting on read-only column -->
+                <DataGridTextColumn Header="Net"
+                            Binding="{Binding Net, StringFormat=N2}"
+                            Width="120"
+                            IsReadOnly="True"/>
             </DataGrid.Columns>
         </DataGrid>
 

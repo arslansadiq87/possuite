@@ -12,6 +12,7 @@ using Pos.Persistence.Services;           // ILookupService, IVoucherEditorServi
 using System.Windows;
 using Pos.Domain.Services;
 using Pos.Domain.Models.Accounting;
+using Pos.Client.Wpf.Security;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
@@ -28,13 +29,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private readonly IVoucherCenterService _editor;
         private readonly ILookupService _lookup;
         private readonly IServiceProvider _sp;
-
-        // null => creating new; value => editing this voucher
         private int? _editingVoucherId = null;
-
         public bool WasSaved { get; private set; } = false;
         public event Action<bool>? CloseRequested;
-
         public ObservableCollection<Account> Accounts { get; } = new();
         public ObservableCollection<Outlet> Outlets { get; } = new();
         public ObservableCollection<VoucherLineVm> Lines { get; } = new();
@@ -61,7 +58,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             _editor = editor;
             _lookup = lookup;
             _sp = sp;
-
             Lines.CollectionChanged += (_, e) =>
             {
                 if (e.OldItems != null)
@@ -75,7 +71,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public async Task ReloadAccountsAsync()
         {
             Accounts.Clear();
-            // pass null => all/global; or pass AppState.Current.CurrentOutletId if you want to scope
             var accs = await _lookup.GetAccountsAsync(null);
             foreach (var a in accs.OrderBy(a => a.Code))
                 Accounts.Add(a);
@@ -89,7 +84,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 l.Credit == 0m &&
                 string.IsNullOrWhiteSpace(l.Description));
 
-        public bool IsOutletSelectable => AuthZ.IsAdmin();
+        public bool IsOutletSelectable => AuthZ.IsAdminCached();
 
         public bool SaveEnabled
         {
@@ -97,13 +92,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
             {
                 if (SelectedOutlet == null) return false;
                 var vt = Enum.Parse<VoucherType>(Type);
-
                 if (vt == VoucherType.Debit)
                     return Lines.Any(l => l.Account != null && l.Debit > 0m);
-
                 if (vt == VoucherType.Credit)
                     return Lines.Any(l => l.Account != null && l.Credit > 0m);
-
                 return Lines.Any(l => l.Account != null && (l.Debit > 0m || l.Credit > 0m));
             }
         }
@@ -120,8 +112,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
         partial void OnTypeChanged(string value) => RecalcUi();
 
-        // ---------- Commands / Lifecycle ----------
-
         [RelayCommand]
         public void Clear()
         {
@@ -129,12 +119,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             VoucherDate = DateTime.Today;
             RefNo = "";
             Memo = "";
-
             Lines.Clear();
             AddLine();
-
-            // outlet selection based on role
-            if (!AuthZ.IsAdmin())
+            if (!AuthZ.IsAdminCached())
             {
                 var oid = AppState.Current.CurrentOutletId;
                 SelectedOutlet = Outlets.FirstOrDefault(o => o.Id == oid) ?? Outlets.FirstOrDefault();
@@ -143,7 +130,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             {
                 SelectedOutlet = Outlets[0];
             }
-
             RecalcUi();
             AccountsReloadRequested?.Invoke();
         }
@@ -180,17 +166,13 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [RelayCommand]
         public async Task LoadAsync()
         {
-            // lookups
             Accounts.Clear();
             foreach (var a in (await _lookup.GetAccountsAsync(null)).OrderBy(a => a.Code))
                 Accounts.Add(a);
-
             Outlets.Clear();
             foreach (var o in (await _lookup.GetOutletsAsync()).OrderBy(o => o.Name))
                 Outlets.Add(o);
-
-            // preselect outlet
-            if (!AuthZ.IsAdmin())
+            if (!await AuthZ.IsAdminAsync())
             {
                 var oid = AppState.Current.CurrentOutletId;
                 SelectedOutlet = Outlets.FirstOrDefault(o => o.Id == oid) ?? Outlets.FirstOrDefault();
@@ -199,7 +181,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             {
                 SelectedOutlet = SelectedOutlet ?? Outlets.FirstOrDefault();
             }
-
             if (Lines.Count == 0) AddLine();
             RecalcUi();
         }
@@ -212,24 +193,18 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 RecalcUi();
         }
 
-
         public async Task LoadAsync(int voucherId)
         {
             if (Accounts.Count == 0 || Outlets.Count == 0)
                 await LoadAsync();
-
             var dto = await _editor.LoadAsync(voucherId);
-
             _editingVoucherId = dto.Id;
             WasSaved = false;
-
             VoucherDate = dto.TsUtc.ToLocalTime().Date;
             RefNo = dto.RefNo ?? "";
             Memo = dto.Memo ?? "";
             Type = dto.Type.ToString();
-
             SelectedOutlet = Outlets.FirstOrDefault(o => o.Id == dto.OutletId) ?? Outlets.FirstOrDefault();
-
             Lines.Clear();
             foreach (var ln in dto.Lines)
             {
@@ -268,15 +243,12 @@ namespace Pos.Client.Wpf.Windows.Accounting
         {
             if (SelectedOutlet == null)
                 throw new InvalidOperationException("Select an outlet.");
-
             var vt = Enum.Parse<VoucherType>(Type);
-
             var linesToSave = Lines
                 .Where(l => l.Account != null && (l.Debit > 0m || l.Credit > 0m))
                 .ToList();
             if (linesToSave.Count == 0)
                 throw new InvalidOperationException("Enter at least one non-zero line.");
-
             if (!string.Equals(Type, "Journal", StringComparison.OrdinalIgnoreCase) && SelectedOutlet == null)
             {
                 MessageBox.Show("Select an Outlet for Debit/Credit vouchers (cash side).",
@@ -286,7 +258,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
             var totalDebit = linesToSave.Sum(l => l.Debit);
             var totalCredit = linesToSave.Sum(l => l.Credit);
-
             if (vt == VoucherType.Journal)
             {
                 if (totalDebit <= 0m || Math.Abs(totalDebit - totalCredit) > 0.004m)
@@ -303,10 +274,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     throw new InvalidOperationException("For Credit Voucher, only Credit amounts (> 0) are allowed.");
             }
 
-            // store date as UTC (date-only picked by user)
             var localDate = DateTime.SpecifyKind(VoucherDate.Date, DateTimeKind.Local);
             var tsUtc = localDate.ToUniversalTime();
-
             var dto = new VoucherEditLoadDto(
                 _editingVoucherId ?? 0,
                 tsUtc,
@@ -318,16 +287,12 @@ namespace Pos.Client.Wpf.Windows.Accounting
             );
 
             var savedId = await _editor.SaveAsync(dto);
-
             WasSaved = true;
             CloseRequested?.Invoke(true);
-
-            // reset edit state after save and clear form
             _editingVoucherId = null;
             Clear();
         }
 
-        // XAML aliases
         public IRelayCommand DeleteLineCmd => DeleteLineCommand;
         public IRelayCommand SaveCmd => SaveCommand;
         public IRelayCommand ClearCmd => ClearCommand;

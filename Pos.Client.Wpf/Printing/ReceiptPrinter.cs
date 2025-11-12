@@ -1,26 +1,38 @@
-﻿//Pos.Client.Wpf/Printing/ReceiptPrinter
+﻿// Pos.Client.Wpf/Printing/ReceiptPrinter.cs
 using System.Collections.Generic;
-using Pos.Domain.Entities;
-using Pos.Client.Wpf.Models;
-using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // <-- to see CartLine from MainWindow namespace
 using System.Threading.Tasks;
-using Pos.Persistence.Services;
+using Pos.Client.Wpf.Models;
+using Pos.Domain.Entities;
+using Pos.Domain.Models.Settings;
+using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // CartLine
 
 namespace Pos.Client.Wpf.Printing
 {
     public static class ReceiptPrinter
     {
-        public static string PrinterName = "POS80";
+        // Fallbacks if settings not provided
+        public static string DefaultPrinterName = "POS80";
+        public static string DefaultStoreName = "My Store";
 
-        // Back-compat 2-arg
+        // ---------------- Back-compat overloads (sync) ----------------
+
+        // Old 2-arg
         public static void PrintSale(Sale sale, IEnumerable<CartLine> cart)
         {
-            var bytes = EscPosReceiptBuilder.Build(sale, cart, "My Store");
-            RawPrinterHelper.SendBytesToPrinter(PrinterName, bytes);
+            // Use defaults
+            var bytes = EscPosReceiptBuilder.Build(
+                sale,
+                cart,
+                till: null,
+                storeName: DefaultStoreName,
+                cashierName: "Cashier",
+                salesmanName: null,
+                eReceiptBaseUrl: null
+            );
+            RawPrinterHelper.SendBytesToPrinter(DefaultPrinterName, bytes);
         }
 
-
-        // NEW: matches your current call site (5 args)
+        // Current 5-arg you’re calling from the view
         public static void PrintSale(
             Sale sale,
             IEnumerable<CartLine> cart,
@@ -33,15 +45,15 @@ namespace Pos.Client.Wpf.Printing
                 sale,
                 cart,
                 till: till,
-                storeName: "One Dollar Shop",
+                storeName: "One Dollar Shop",   // previous hard-coded value preserved
                 cashierName: cashierName,
                 salesmanName: salesmanName,
                 eReceiptBaseUrl: null
             );
-            RawPrinterHelper.SendBytesToPrinter(PrinterName, bytes);
+            RawPrinterHelper.SendBytesToPrinter(DefaultPrinterName, bytes);
         }
 
-        // (Optional) richest overload if you ever want to pass store/URL dynamically
+        // Richest sync overload if you want to supply a store name explicitly
         public static void PrintSale(
             Sale sale,
             IEnumerable<CartLine> cart,
@@ -55,48 +67,91 @@ namespace Pos.Client.Wpf.Printing
             var bytes = EscPosReceiptBuilder.Build(
                 sale, cart, till, storeName, cashierName, salesmanName, eReceiptBaseUrl
             );
-            RawPrinterHelper.SendBytesToPrinter(PrinterName, bytes);
+            RawPrinterHelper.SendBytesToPrinter(DefaultPrinterName, bytes);
         }
+
+        // ---------------- New async overload using InvoiceSettingsDto ----------------
+
+        public static async Task PrintSaleAsync(
+            Sale sale,
+            IEnumerable<CartLine> cart,
+            TillSession? till,
+            string cashierName,
+            string? salesmanName,
+            InvoiceSettingsDto settings)
+        {
+            // Map settings → values used by the builder/printer
+            var printerName = settings?.PrinterName ?? DefaultPrinterName;
+            var storeName = string.IsNullOrWhiteSpace(settings?.FooterText)
+                ? // if you store footer as footer only, keep the old display name fallback:
+                  (string.IsNullOrWhiteSpace(settings?.PrinterName) ? DefaultStoreName : DefaultStoreName)
+                : // you may prefer to keep OutletDisplayName in DTO later; for now keep old behavior:
+                  DefaultStoreName;
+
+            // NOTE: If your EscPosReceiptBuilder supports paper width or footer,
+            // extend its Build(...) to accept them. For now we keep current signature.
+            var bytes = EscPosReceiptBuilder.Build(
+                sale,
+                cart,
+                till: till,
+                storeName: storeName,
+                cashierName: cashierName,
+                salesmanName: salesmanName,
+                eReceiptBaseUrl: null
+            );
+
+            // If you need to inject footer text into the ticket, add it inside EscPosReceiptBuilder.Build(...)
+            // using the 'settings.FooterText' value.
+
+            RawPrinterHelper.SendBytesToPrinter(printerName, bytes);
+
+            // match async signature
+            await Task.CompletedTask;
+        }
+
+        // ---------------- Optional specialized stubs ----------------
 
         public static void PrintSaleAmended(Sale amended, IEnumerable<CartLine> cart, string revisionLabel)
         {
-            // Reuse your EscPosReceiptBuilder; add "(Rev n)" next to invoice number.
-            // e.g., EscPosReceiptBuilder.BuildAmended(...)
+            // TODO: If you have a builder variant for amended receipts, call it here.
+            // var bytes = EscPosReceiptBuilder.BuildAmended(...);
+            // RawPrinterHelper.SendBytesToPrinter(DefaultPrinterName, bytes);
         }
 
         public static void PrintReturn(Sale ret, IEnumerable<CartLine> lines)
         {
-            // Build “Return Receipt”: show Original Invoice (if any),
-            // list returned lines and refund/payment method.
+            // TODO: If you have a builder variant for returns, call it here.
         }
 
-        public static async Task PrintSaleAsync(
-        Sale sale,
-        IEnumerable<CartLine> cart,
-        TillSession? till,
-        string cashierName,
-        string? salesmanName,
-        Pos.Domain.Services.IInvoiceSettingsService settingsSvc)
+        // ---------------- Optional internal core (kept minimal) ----------------
+        // If you later extend to pass paper width / footer explicitly, add a core like this:
+
+        private static Task PrintSaleCoreAsync(
+            Sale sale,
+            IEnumerable<CartLine> cart,
+            TillSession? till,
+            string cashierName,
+            string? salesmanName,
+            string printerName,
+            int? paperWidthMm,
+            string? footerText,
+            string? storeNameOverride = null)
         {
-            var result = await settingsSvc.GetAsync(sale.OutletId, "en");
-            var settings = result.Settings;
-            // var loc = result.Local; // keep for future localization work
-
-            // Choose store display name from settings (fallback)
-            var storeName = string.IsNullOrWhiteSpace(settings.OutletDisplayName) ? "My Store" : settings.OutletDisplayName;
-
             var bytes = EscPosReceiptBuilder.Build(
                 sale,
                 cart,
-                till,
-                storeName,          // 4th param is string storeName
-                cashierName,
-                salesmanName,
-                eReceiptBaseUrl: null);
+                till: till,
+                storeName: storeNameOverride ?? DefaultStoreName,
+                cashierName: cashierName,
+                salesmanName: salesmanName,
+                eReceiptBaseUrl: null
+            );
 
-            RawPrinterHelper.SendBytesToPrinter(settings.PrinterName ?? PrinterName, bytes);
+            // If EscPosReceiptBuilder later supports paper width or footer,
+            // pass them above and remove this comment.
+
+            RawPrinterHelper.SendBytesToPrinter(printerName ?? DefaultPrinterName, bytes);
+            return Task.CompletedTask;
         }
-
-
     }
 }

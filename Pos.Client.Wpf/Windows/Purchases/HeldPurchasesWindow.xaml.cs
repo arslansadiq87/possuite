@@ -13,9 +13,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
     public partial class HeldPurchasesWindow : Window
     {
         private readonly IPurchaseCenterReadService _read;
-
         public int? SelectedPurchaseId { get; private set; }
-
         public sealed class UiDraftRow
         {
             public int PurchaseId { get; init; }
@@ -33,29 +31,24 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             InitializeComponent();
             _read = read;
-
             DraftsGrid.ItemsSource = _rows;
             Loaded += OnLoadedAsync;
         }
 
-        // ===== Load & guard =====
         private async void OnLoadedAsync(object? sender, RoutedEventArgs e)
         {
             var outletId = AppState.Current?.CurrentOutletId ?? 0;
             var counterId = AppState.Current?.CurrentCounterId ?? 0;
-
             if (outletId <= 0 || counterId <= 0)
             {
                 MessageBox.Show(
                     "Please select outlet and counter (till) before opening Held Purchases.",
                     "Outlet/Counter Required",
                     MessageBoxButton.OK, MessageBoxImage.Exclamation);
-
                 DialogResult = false;
                 Close();
                 return;
             }
-
             try
             {
                 await LoadDraftsAsync();
@@ -72,8 +65,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task LoadDraftsAsync()
         {
-            // Fetch drafts via read service (no EF here)
-            // Filters: Draft=true, Final=false, Voided=false, Include those without DocNo as well.
             var list = await _read.SearchAsync(
                 fromUtc: null,
                 toUtc: null,
@@ -82,12 +73,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 wantDraft: true,
                 wantVoided: false,
                 onlyWithDoc: false);
-
-            // Only pure purchases (no returns)
             var drafts = list.Where(r => !r.IsReturn).ToList();
-
-            // Build rows; compute Lines count via preview lines (service call)
-            // If there are many, this can be optimized later (batch/DTO).
             var rows = new List<UiDraftRow>(drafts.Count);
             foreach (var d in drafts)
             {
@@ -99,9 +85,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
                 catch
                 {
-                    // If preview fails for a document, keep going; show 0 lines.
                 }
-
                 rows.Add(new UiDraftRow
                 {
                     PurchaseId = d.PurchaseId,
@@ -112,17 +96,13 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     GrandTotal = d.GrandTotal
                 });
             }
-
-            // Preserve ordering (SearchAsync already orders by ReceivedAt/CreatedAt desc)
             _all = rows;
         }
 
-        // ===== Filtering =====
         private void ApplyFilter()
         {
             var term = (SearchBox.Text ?? "").Trim();
             IEnumerable<UiDraftRow> src = _all;
-
             if (!string.IsNullOrWhiteSpace(term))
             {
                 src = src.Where(r =>
@@ -131,7 +111,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     || (!string.IsNullOrEmpty(r.DocNoOrId) &&
                         r.DocNoOrId.Contains(term, StringComparison.OrdinalIgnoreCase)));
             }
-
             _rows.Clear();
             foreach (var r in src) _rows.Add(r);
         }
@@ -139,7 +118,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
             => ApplyFilter();
 
-        // ===== Open / Close =====
         private void DraftsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e) => OpenSelected();
         private void Open_Click(object sender, RoutedEventArgs e) => OpenSelected();
 

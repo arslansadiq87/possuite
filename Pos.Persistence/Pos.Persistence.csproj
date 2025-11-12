@@ -4,6 +4,8 @@
     <Compile Remove="AppDbContext.cs" />
     <Compile Remove="DbSeeder.cs" />
     <Compile Remove="Features\OpeningStock\IOpeningStockService.cs" />
+    <Compile Remove="Features\OpeningStock\OpeningStockDtos.cs" />
+    <Compile Remove="Features\OpeningStock\OpeningStockService.cs" />
     <Compile Remove="Seeding\CoASeeder.cs" />
     <Compile Remove="Services\SuppliersService.cs" />
   </ItemGroup>
@@ -31,6 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Features\OpeningStock\" />
     <Folder Include="Repositories\" />
   </ItemGroup>
 

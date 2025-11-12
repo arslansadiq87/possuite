@@ -20,9 +20,6 @@ public partial class BarcodeLabelSettingsPage : UserControl
             this.Loaded += (_, __) =>
                 (DataContext as BarcodeLabelSettingsViewModel)?.ForceRefreshPreview();
         }
-        //DataContext = App.Services.GetRequiredService<BarcodeLabelSettingsViewModel>();
-        //this.Loaded += (_, __) =>
-        //    (DataContext as BarcodeLabelSettingsViewModel)?.ForceRefreshPreview();
     }
 
     private void OnDragDelta(object sender, DragDeltaEventArgs e)
@@ -45,6 +42,5 @@ public partial class BarcodeLabelSettingsPage : UserControl
             case "Business": vm.BusinessXDip = newLeft; vm.BusinessYDip = newTop; break;
 
         }
-        // the TwoWay bindings propagate to mm via the proxies → preview auto-refreshes
     }
 }

@@ -23,7 +23,6 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         public int? SelectedSaleId { get; private set; }
 
-        // Service-layer constructor (no DbContextOptions)
         public HeldPickerWindow(int outletId, int counterId)
         {
             InitializeComponent();

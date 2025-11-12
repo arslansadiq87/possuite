@@ -8,24 +8,27 @@ using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;
 using Pos.Domain;
+using Pos.Domain.Services;     // IOpeningStockService, IInventoryReadService
 using Pos.Domain.Entities;
-using Pos.Persistence;
-using Pos.Persistence.Features.OpeningStock;
-using Pos.Persistence.Services;
+//using Pos.Persistence.Features.OpeningStock;
+//using Pos.Persistence.Services;
 using Microsoft.Win32;
 using System.Text;
 using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using Pos.Domain.Models.OpeningStock;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OpeningStockView : UserControl, INotifyPropertyChanged
     {
+        private readonly IOpeningStockService _svc;
+        private readonly IInventoryReadService _invRead; // ← NEW (read-only)
+
         public event EventHandler? CloseRequested;
         private bool _dirty;
         private StockDocStatus _docStatus = StockDocStatus.Draft;
@@ -120,9 +123,11 @@ namespace Pos.Client.Wpf.Windows.Admin
         public bool HasUndo => _lastImportSnapshot != null;
         private void RaiseUndo() => Raise(nameof(HasUndo));
 
-        private readonly IOpeningStockService _svc;
-
+        
+        #pragma warning disable CS0414
         private int _colSku = 0, _colItemName = 1, _colQty = 2, _colUnitCost = 3, _colSubtotal = 4, _colNote = 5;
+        #pragma warning restore CS0414
+
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
@@ -260,7 +265,9 @@ namespace Pos.Client.Wpf.Windows.Admin
             InitializeComponent();
             DataContext = this;
             _svc = App.Services.GetRequiredService<IOpeningStockService>();
+            _invRead = App.Services.GetRequiredService<IInventoryReadService>(); // ← NEW
             _state = App.Services.GetRequiredService<AppState>();
+
             Grid.PreviewKeyDown += Grid_PreviewKeyDown;
             LocationType = locationType;
             LocationId = locationId;
@@ -508,10 +515,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                         added++;
                     }
                 }
-
                 Raise(nameof(FooterSummary));
                 MarkDirty();
-
                 MessageBox.Show($"Import complete.\nAdded: {added}\nUpdated: {updated}", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -537,7 +542,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             try
             {
                 await EnsureDraftAsync(); // create header if needed
@@ -563,7 +567,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         return;
                     }
                 }
-
                 var req = new OpeningStockUpsertRequest
                 {
                     StockDocId = StockDocId,
@@ -576,7 +579,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         Note = r.Note
                     }).ToList()
                 };
-
                 await _svc.UpdateEffectiveDateAsync(StockDocId, EffectiveDateLocal);
                 var val = await _svc.ValidateLinesAsync(StockDocId, req.Lines);
                 if (!val.Ok)
@@ -605,26 +607,22 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             if (StockDocId == 0)
             {
                 MessageBox.Show("Nothing to lock. Save first.", "Info",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             if (!IsCurrentUserAdmin())
             {
                 MessageBox.Show("Only Admin can lock Opening Stock.", "Not allowed",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             try
             {
                 var s = AppState.Current;
                 var adminId = (s.CurrentUser?.Id > 0) ? s.CurrentUser.Id : s.CurrentUserId;
-
                 await _svc.LockAsync(StockDocId, adminId);
                 MessageBox.Show("Opening Stock locked.", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -658,12 +656,10 @@ namespace Pos.Client.Wpf.Windows.Admin
             public decimal Qty { get => _qty; set { _qty = value; OnChanged(nameof(Qty)); OnChanged(nameof(Subtotal)); } }
             public decimal UnitCost { get => _unitCost; set { _unitCost = value; OnChanged(nameof(UnitCost)); OnChanged(nameof(Subtotal)); } }
             public string? Note { get => _note; set { _note = value; OnChanged(nameof(Note)); } }
-
             public decimal Subtotal => Qty * UnitCost;
 
             public event PropertyChangedEventHandler? PropertyChanged;
             private void OnChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-
             public string Error => "";
             public string this[string columnName]
             {
@@ -685,7 +681,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             var meta = await _svc.GetItemDisplayByIdAsync(itemId); // (Sku, Display)
             await AddOrIncrementRowAsync(meta.Sku, meta.Display, qty);
         }
-
         private Task AddOrIncrementRowAsync(string sku, string display, decimal qty)
         {
             var existing = Rows.FirstOrDefault(r => string.Equals(r.Sku, sku, StringComparison.OrdinalIgnoreCase));
@@ -861,14 +856,16 @@ namespace Pos.Client.Wpf.Windows.Admin
             RaiseLocksAndActions();
         }
 
-
-        private async Task<bool> ConfirmCloseIfDirtyAsync()
+        private Task<bool> ConfirmCloseIfDirtyAsync()
         {
-            if (!_dirty) return true;
+            if (!_dirty)
+                return Task.FromResult(true);
+
             var r = MessageBox.Show("You have unsaved changes. Close anyway?",
                                     "Unsaved changes", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            return r == MessageBoxResult.Yes;
+            return Task.FromResult(r == MessageBoxResult.Yes);
         }
+
 
         private async void CloseTab_Click(object sender, RoutedEventArgs e)
         {
@@ -965,7 +962,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             var row = Rows.FirstOrDefault(r =>
                 string.IsNullOrWhiteSpace(r.Sku) || r.Qty <= 0 || r.UnitCost < 0m);
             if (row == null) return;
-
             int targetCol = string.IsNullOrWhiteSpace(row.Sku) ? _colSku :
                             (row.Qty <= 0 ? _colQty :
                             (row.UnitCost < 0m ? _colUnitCost : _colNote));
@@ -992,13 +988,12 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-
         private async Task LoadSpecificDocAsync(int docId)
         {
             var(doc, lines) = await _svc.ReadDocumentForUiAsync(docId);
             Rows.Clear();
              foreach (var l in lines)
-                 {
+             {
                 Rows.Add(new RowVM
                 {
                     Sku = l.Sku,
@@ -1007,7 +1002,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     UnitCost = l.UnitCost,
                     Note = l.Note ?? ""
                      });
-                 }
+                }
              foreach (var r in Rows) HookRow(r);
             StockDocId = doc.Id;
             EffectiveDateLocal = doc.EffectiveDateUtc.ToLocalTime();
@@ -1054,7 +1049,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             var ok = MessageBox.Show(
                 "Post this Opening Stock? This will create stock IN entries and make stock visible in reports.",
                 "Confirm Post", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
             if (ok != MessageBoxResult.Yes) return;
             try
             {
@@ -1118,9 +1112,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 "Start New Entry",
                 MessageBoxButton.YesNoCancel,
                 MessageBoxImage.Question);
-
             if (r == MessageBoxResult.Cancel) return;
-
             try
             {
                 if (r == MessageBoxResult.Yes)
@@ -1140,7 +1132,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             if (StockDocId == 0) return;
             if (_docStatus != StockDocStatus.Draft) return;
-
             await _svc.DeleteDraftAsync(StockDocId);  // ← use service so sync events are emitted
         }
 

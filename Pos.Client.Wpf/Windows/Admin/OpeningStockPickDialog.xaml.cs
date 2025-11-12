@@ -5,21 +5,18 @@ using System.Windows;
 //using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 //using Pos.Persistence;
-using Pos.Persistence.Features.OpeningStock;
-using Pos.Persistence.Services;
+//using Pos.Persistence.Features.OpeningStock;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OpeningStockPickDialog : Window
     {
         public enum Mode { Drafts, Locked }
-
-        //private readonly IDbContextFactory<Pos.Persistence.PosClientDbContext> _dbf;
         private readonly IOpeningStockService _svc;
         private readonly InventoryLocationType _locType;
         private readonly int _locId;
         private readonly Mode _mode;
-
         public string HeaderText { get; set; } = "";
         public ObservableCollection<Row> Docs { get; } = new();
         public int? SelectedDocId { get; private set; }
@@ -60,9 +57,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Mode.Locked => StockDocStatus.Locked,
                     _ => null
                 };
-
                 var list = await _svc.GetOpeningDocSummariesAsync(_locType, _locId, filter);
-
                 Docs.Clear();
                 foreach (var d in list)
                 {
@@ -83,7 +78,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show(ex.Message, "Load error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
 
         private void Select_Click(object sender, RoutedEventArgs e)
         {

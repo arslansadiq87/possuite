@@ -13,22 +13,17 @@ namespace Pos.Client.Wpf.Windows.Admin
     public partial class EditCounterWindow : Window
     {
         private enum Mode { Create, Edit }
-
         private readonly IOutletCounterService _svc;
         private readonly Mode _mode;
-
         private int _fixedOutletId;
-        // set in create; resolved from entity in edit
         public sealed class Vm : INotifyPropertyChanged
         {
             private int _id;
             private string _name = "";
             private bool _isActive = true;
-
             public int Id { get => _id; set { _id = value; OnPropertyChanged(); } }
             public string Name { get => _name; set { _name = value; OnPropertyChanged(); } }
             public bool IsActive { get => _isActive; set { _isActive = value; OnPropertyChanged(); } }
-
             public event PropertyChangedEventHandler? PropertyChanged;
             private void OnPropertyChanged([CallerMemberName] string? p = null)
                 => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
@@ -37,26 +32,22 @@ namespace Pos.Client.Wpf.Windows.Admin
         public Vm VM { get; } = new();
         public int SavedCounterId { get; private set; }
 
-        // CREATE
         public EditCounterWindow(int outletId)
         {
             InitializeComponent();
             _svc = App.Services.GetRequiredService<IOutletCounterService>();
             _mode = Mode.Create;
             _fixedOutletId = outletId;
-
             DataContext = VM;
             Title = "Add Counter";
             VM.IsActive = true;
         }
 
-        // EDIT
         public EditCounterWindow(int counterId, bool load = true)
         {
             InitializeComponent();
             _svc = App.Services.GetRequiredService<IOutletCounterService>();
             _mode = Mode.Edit;
-
             DataContext = VM;
             Title = "Edit Counter";
             if (load)
@@ -75,7 +66,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Close();
                     return;
                 }
-                // Lock this editor to the same outlet
                 _fixedOutletId = c.OutletId;
                 VM.Id = c.Id;
                 VM.Name = c.Name;
@@ -94,10 +84,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             var name = (VM.Name ?? "").Trim();
             if (name.Length == 0) { MessageBox.Show("Name is required."); return; }
             if (name.Length > 80) { MessageBox.Show("Name must be ≤ 80 characters."); return; }
-
             try
             {
-                // uniqueness per-outlet
                 var taken = await _svc.IsCounterNameTakenAsync(_fixedOutletId, name, excludingId: _mode == Mode.Edit ? VM.Id : (int?)null);
                 if (taken)
                 {
@@ -105,7 +93,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         "Duplicate Name", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
                 var entity = new Counter
                 {
                     Id = _mode == Mode.Edit ? VM.Id : 0,
@@ -113,13 +100,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Name = name,
                     IsActive = VM.IsActive
                 };
-
                 var savedId = await _svc.AddOrUpdateCounterAsync(entity);
                 SavedCounterId = savedId;
-
-                // ensure an upsert is enqueued with the latest snapshot
                 await _svc.UpsertCounterByIdAsync(savedId);
-
                 DialogResult = true; // close the dialog
             }
             catch (Exception ex)

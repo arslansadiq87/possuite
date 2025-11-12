@@ -6,13 +6,17 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Pos.Client.Wpf.Services;
-using Pos.Client.Wpf.Infrastructure;           // ← add (AuthZ, AppState)
+//using Pos.Client.Wpf.Infrastructure;           // ← add (AuthZ, AppState)
+using Pos.Client.Wpf.Security;
 using Pos.Domain.Entities;
 using Pos.Domain.Services;
 using Pos.Domain.Models.Accounting;
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Domain.Services.Security;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
+
     public partial class CashBookRowVm : ObservableObject
     {
         [ObservableProperty] private DateTime tsUtc;
@@ -29,6 +33,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
     {
         private readonly ILedgerQueryService _ledger;
         private readonly IOutletService _outlets;
+        
 
         [ObservableProperty] private bool includeVoided;
         [ObservableProperty] private CashBookScope scope = CashBookScope.HandOnly;
@@ -58,8 +63,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
             OutletChoices.Clear();
 
             var all = await _outlets.GetAllAsync();
-
-            if (AuthZ.IsAdmin())
+       
+            if (AuthZ.IsAdminCached())
             {
                 foreach (var o in all) OutletChoices.Add(o);
                 SelectedOutlet ??= OutletChoices.FirstOrDefault();

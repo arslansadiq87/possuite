@@ -50,7 +50,7 @@
                     </StackPanel>
                 </Button>
 
-                <Button x:Name="BtnSaveAmend" Click="SaveDraft_Click" ToolTip="Save Amendment (F11)" Visibility="Collapsed" > 
+                <Button x:Name="BtnSaveAmend" Click="SaveDraft_Click" ToolTip="Save Amendment (F11)" Visibility="Collapsed" >
                     <StackPanel Orientation="Horizontal" Margin="4,0">
                         <TextBlock Text="Save Amendment" Margin="2,0"/>
                         <TextBlock Text="(F11)" Opacity="0.6" Margin="6,0,0,0"/>
@@ -58,11 +58,11 @@
                 </Button>
 
                 <!-- (Optional) Pick Held drafts list if you have a dialog -->
-                
+
             </ToolBar>
         </ToolBarTray>
 
-        
+
         <Grid Grid.Row="1" Margin="16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -86,32 +86,13 @@
                             <!-- Supplier -->
                             <StackPanel Margin="0,0,12,0">
                                 <TextBlock Text="Supplier" FontWeight="SemiBold"/>
-                                <DockPanel>
-                                    <TextBox x:Name="SupplierText" Width="260" Height="28"
-        TextChanged="SupplierText_TextChanged"
-        PreviewKeyDown="SupplierText_KeyDown"
-        LostFocus="SupplierText_LostFocus" />
-                                    <!-- NEW -->
-                                    <!--<Button Content="+" Width="28" Height="28" Margin="6,0,0,0"
-           ToolTip="New Supplier"
-           Click="BtnNewSupplier_Click"/>-->
-                                </DockPanel>
-
-                                <!-- Suggestions popup -->
-                                <Popup x:Name="SupplierPopup"
-      PlacementTarget="{Binding ElementName=SupplierText}"
-      Placement="Bottom"
-      StaysOpen="True"
-      AllowsTransparency="True">
-                                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
-           Width="{Binding ElementName=SupplierText, Path=ActualWidth}">
-                                        <ListBox x:Name="SupplierList"
-                MouseDoubleClick="SupplierList_MouseDoubleClick"
-                MaxHeight="200"
-                DisplayMemberPath="Name"/>
-                                    </Border>
-                                </Popup>
+                                <!-- NEW: universal party search in Supplier mode -->
+                                <Controls:CustomerSearchBox
+                                    x:Name="SupplierSearch"
+                                    Width="260"
+                                    Mode="Suppliers"/>
                             </StackPanel>
+
 
                             <StackPanel Margin="0,0,12,0">
                                 <TextBlock Text="Vendor Invoice #" FontWeight="SemiBold"/>
@@ -372,34 +353,34 @@
                                     <RowDefinition Height="*"/>
                                     <RowDefinition Height="*"/>
                                     <RowDefinition Height="*"/>
-                                 </Grid.RowDefinitions>
-                                 <Grid.ColumnDefinitions>
-                                     <ColumnDefinition Width="Auto"/>
-                                     <ColumnDefinition Width="*"/>
-                                     <ColumnDefinition Width="Auto"/>
-                                     <ColumnDefinition Width="*"/>
-                                  </Grid.ColumnDefinitions>
-                                            <!-- Row 0 -->
-                                  <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" FontWeight="SemiBold" Margin="0,0,8,0"/>
-                                  <TextBlock Grid.Row="0" Grid.Column="1" x:Name="SubtotalText"/>
-                                  <TextBlock Grid.Row="0" Grid.Column="2" Text="Discount:" FontWeight="SemiBold" Margin="12,0,8,0"/>
-                                  <TextBlock Grid.Row="0" Grid.Column="3" x:Name="DiscountText"/>
-                                  <!-- Row 1 -->
-                                  <TextBlock Grid.Row="1" Grid.Column="0" Text="Tax:" FontWeight="SemiBold" Margin="0,0,8,0"/>
-                                  <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TaxText"/>
-                                  <TextBlock Grid.Row="1" Grid.Column="2" Text="Other:" FontWeight="SemiBold" Margin="12,0,8,0"/>
-                                  <TextBox Grid.Row="1" Grid.Column="3" x:Name="OtherChargesBox" TextChanged="OtherChargesBox_TextChanged" Margin="0,0,0,16"/>
-                                  <!-- Row 2 -->
-                                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Grand Total:" FontWeight="Bold" Margin="0,0,8,0"/>
-                                  <TextBlock Grid.Row="2" Grid.Column="1" x:Name="GrandTotalText" FontWeight="Bold"/>
-                             </Grid>
-                         </GroupBox>
-                     </Grid>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Row 0 -->
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="SubtotalText"/>
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="Discount:" FontWeight="SemiBold" Margin="12,0,8,0"/>
+                                <TextBlock Grid.Row="0" Grid.Column="3" x:Name="DiscountText"/>
+                                <!-- Row 1 -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Tax:" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TaxText"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="Other:" FontWeight="SemiBold" Margin="12,0,8,0"/>
+                                <TextBox Grid.Row="1" Grid.Column="3" x:Name="OtherChargesBox" TextChanged="OtherChargesBox_TextChanged" Margin="0,0,0,16"/>
+                                <!-- Row 2 -->
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Grand Total:" FontWeight="Bold" Margin="0,0,8,0"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="GrandTotalText" FontWeight="Bold"/>
+                            </Grid>
+                        </GroupBox>
+                    </Grid>
 
                 </Grid>
             </Border>
 
         </Grid>
     </Grid>
-    
+
 </UserControl>

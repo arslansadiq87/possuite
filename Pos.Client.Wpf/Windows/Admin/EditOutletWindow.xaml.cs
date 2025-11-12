@@ -6,14 +6,14 @@ using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
 using Pos.Persistence.Services;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class EditOutletWindow : Window
     {
         private enum Mode { Create, Edit }
-
-        private readonly OutletCounterService _svc;
+        private readonly IOutletCounterService _svc;
         private readonly Mode _mode;
 
         public sealed class Vm : INotifyPropertyChanged
@@ -23,7 +23,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             private string _name = "";
             private string? _address;
             private bool _isActive = true;
-
             public int Id { get => _id; set { _id = value; OnPropertyChanged(); } }
             public string Code { get => _code; set { _code = value; OnPropertyChanged(); } }
             public string Name { get => _name; set { _name = value; OnPropertyChanged(); } }
@@ -38,22 +37,20 @@ namespace Pos.Client.Wpf.Windows.Admin
         public Vm VM { get; } = new();
         public int SavedOutletId { get; private set; }
 
-        // CREATE
         public EditOutletWindow()
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<OutletCounterService>();
+            _svc = App.Services.GetRequiredService<IOutletCounterService>();
             _mode = Mode.Create;
             DataContext = VM;
             Title = "Add Outlet";
             VM.IsActive = true;
         }
 
-        // EDIT
         public EditOutletWindow(int outletId)
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<OutletCounterService>();
+            _svc = App.Services.GetRequiredService<IOutletCounterService>();
             _mode = Mode.Edit;
             DataContext = VM;
             Title = "Edit Outlet";
@@ -92,15 +89,12 @@ namespace Pos.Client.Wpf.Windows.Admin
             var code = (VM.Code ?? "").Trim();
             var name = (VM.Name ?? "").Trim();
             var address = string.IsNullOrWhiteSpace(VM.Address) ? null : VM.Address!.Trim();
-
             if (code.Length == 0) { MessageBox.Show("Code is required."); return; }
             if (name.Length == 0) { MessageBox.Show("Name is required."); return; }
             if (code.Length > 16) { MessageBox.Show("Code must be ≤ 16 characters."); return; }
             if (name.Length > 80) { MessageBox.Show("Name must be ≤ 80 characters."); return; }
-
             try
             {
-                // uniqueness
                 var taken = await _svc.IsOutletCodeTakenAsync(code, excludingId: _mode == Mode.Edit ? VM.Id : (int?)null);
                 if (taken)
                 {
@@ -117,14 +111,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Address = address,
                     IsActive = VM.IsActive
                 };
-
-                // one call handles create vs update + outbox
                 var savedId = await _svc.AddOrUpdateOutletAsync(entity);
                 SavedOutletId = savedId;
-
-                // also enqueue a fresh upsert read to guarantee payload has latest fields
                 await _svc.UpsertOutletByIdAsync(savedId);
-
                 DialogResult = true; // closes
             }
             catch (Exception ex)

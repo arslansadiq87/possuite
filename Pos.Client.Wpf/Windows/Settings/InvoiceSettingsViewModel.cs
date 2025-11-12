@@ -168,15 +168,13 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
         var outletId = IsGlobal ? (int?)null : SelectedOutlet?.Id;
 
-        //_loadedSettings = await _svc.GetAsync(outletId);
         var tuple = await _svc.GetAsync(outletId, SelectedLang);
         _loadedSettings = tuple.Settings;
          // keep the VM's local list for editing:
         _loadedLocs = _loadedSettings.Localizations?.ToList() ?? new();
          // also track current localization selection:
         CurrentLocalization = tuple.Local;
-        //_loadedLocs = _loadedSettings.Localizations?.ToList() ?? new();
-
+    
         // snapshot to fields
         OutletDisplayName = _loadedSettings.OutletDisplayName;
         AddressLine1 = _loadedSettings.AddressLine1;
@@ -244,27 +242,7 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     private async Task LoadBankAccountsAsync(int? outletId)
     {
         BankAccounts.Clear();
-        //await using var db = await _dbf.CreateDbContextAsync();
-
-        //var q = db.Accounts.AsNoTracking()
-        //    .Where(a => a.AllowPosting && !a.IsHeader);
-
-        //// Prefer outlet-scoped accounts when editing outlet-scoped settings
-        //if (outletId != null)
-        //    q = q.Where(a => a.OutletId == outletId);
-        //else
-        //    q = q.Where(a => a.OutletId == null);
-
-        //// Include typical bank & card-clearing ledgers:
-        //// - CoA prefix "113" (Bank & equivalents in your seeding)
-        //// - Names that contain "Bank", "Card", or "Clearing"
-        //q = q.Where(a =>
-        //     a.Code.StartsWith("113")
-        //  || a.Name.Contains("Bank")
-        //  || a.Name.Contains("Card")
-        //  || a.Name.Contains("Clearing"));
-
-        //var list = await q.OrderBy(a => a.Code).ThenBy(a => a.Name).ToListAsync();
+     
         var all = await _lookup.GetAccountsAsync(outletId);
         var list = all
                .Where(a => a.AllowPosting && !a.IsHeader)
@@ -295,24 +273,7 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
-        //await using var db = await _dbf.CreateDbContextAsync();
-        // --- Guardrails for missing selections (optional but recommended) ---
-        //if (SelectedSalesCardClearingAccount == null)
-        //{
-        //    System.Windows.MessageBox.Show(
-        //        "Please select a 'Sales card clearing' account in Payments section.",
-        //        "Missing setting", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-        //    return;
-        //}
-        //if (SelectedPurchaseBankAccount == null)
-        //{
-        //    System.Windows.MessageBox.Show(
-        //        "Please select a default 'Purchase bank (card)' account in Payments section.",
-        //        "Missing setting", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-        //    return;
-        //}
-        // -------------------------------------------------------------------
-
+      
         // attach or add
         var isNew = _loadedSettings!.Id == 0;
         _loadedSettings.OutletDisplayName = OutletDisplayName;
@@ -368,21 +329,8 @@ public partial class InvoiceSettingsViewModel : ObservableObject
         _loadedSettings.SalesCardClearingAccountId = SelectedSalesCardClearingAccount?.Id;
         // ---------------------------
 
-        //if (isNew) db.InvoiceSettings.Add(_loadedSettings);
-        //else db.InvoiceSettings.Update(_loadedSettings);
-
-        //foreach (var loc in _loadedLocs)
-        //{
-        //    if (loc.Id == 0) { loc.InvoiceSettings = _loadedSettings; db.Set<InvoiceLocalization>().Add(loc); }
-        //    else db.Set<InvoiceLocalization>().Update(loc);
-
-        //}
-
-        //await db.SaveChangesAsync();
         await _svc.SaveAsync(_loadedSettings, _loadedLocs);
 
-
-        // Optionally: toast/snackbar
     }
 
     [RelayCommand]
@@ -405,35 +353,20 @@ public partial class InvoiceSettingsViewModel : ObservableObject
     }
 
 
-    private async Task RenderPreviewAsync()
+    private Task RenderPreviewAsync()
     {
         try
         {
-            //await using var db = await _dbf.CreateDbContextAsync();
-            //var items = await db.Items
-            //    .AsNoTracking()
-            //    .Select(x => new { x.Name, x.Sku })
-            //    .Take(4)
-            //    .ToListAsync();
-
-            //var lines = items.Select((x, i) => new ReceiptPreviewLine
-            //{
-            //    Name = string.IsNullOrWhiteSpace(x.Name) ? $"Item {i + 1}" : x.Name!,
-            //    Sku = string.IsNullOrWhiteSpace(x.Sku) ? $"SKU{i + 1:D3}" : x.Sku!,
-            //    Qty = (i % 3) + 1,
-            //    Unit = 99.00m + i * 25m,
-            //    LineDiscount = (i == 0) ? 10m : 0m
-            //}).ToList();
-
-                   // Preview should not depend on DB. Use mock lines.
+            // Preview should not depend on DB. Use mock lines.
             var lines = Enumerable.Range(1, 4).Select(i => new ReceiptPreviewLine
-                   {
-                    Name = $"Sample Item {i}",
-                    Sku = $"SKU{i:000}",
-                    Qty = (i % 3) + 1,
-                    Unit = 99.00m + i * 25m,
-                    LineDiscount = (i == 1) ? 5m : 0m
-                    }).ToList();
+            {
+                Name = $"Sample Item {i}",
+                Sku = $"SKU{i:000}",
+                Qty = (i % 3) + 1,
+                Unit = 99.00m + i * 25m,
+                LineDiscount = (i == 1) ? 5m : 0m
+            }).ToList();
+
             if (lines.Count == 0)
             {
                 lines = Enumerable.Range(1, 3).Select(i => new ReceiptPreviewLine
@@ -446,29 +379,24 @@ public partial class InvoiceSettingsViewModel : ObservableObject
                 }).ToList();
             }
 
-            // Mock meta for preview
             var sale = new ReceiptPreviewSale
             {
-                // totals
                 Subtotal = lines.Sum(l => l.Qty * l.Unit),
                 InvoiceDiscount = 20m,
                 Tax = 30m,
                 OtherExpenses = 0m,
                 Paid = 500m,
-
-                // meta
                 Ts = DateTime.Now,
                 OutletId = SelectedOutlet?.Id,
-                OutletCode = SelectedOutlet?.Code ?? $"OUT-{(SelectedOutlet?.Id ?? 1):000}", // if Code not present, this fallback is fine
+                OutletCode = SelectedOutlet?.Code ?? $"OUT-{(SelectedOutlet?.Id ?? 1):000}",
                 CounterId = 1,
                 CounterName = "Front Counter",
                 InvoiceNumber = 1234,
                 CashierName = ShowCashierOnReceipt ? "Cashier A" : null,
-
-                // placeholders for barcode/QR
                 BarcodeText = "123456789012",
                 QrText = ShowQr ? "https://example.com/e-receipt/ABCDEF" : null
             };
+
             sale.Total = sale.Subtotal - sale.InvoiceDiscount + sale.Tax + sale.OtherExpenses;
             sale.Balance = Math.Max(0m, sale.Total - sale.Paid);
 
@@ -476,26 +404,18 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
             PreviewText = ReceiptPreviewBuilder.BuildText(
                 width,
-                // identity block
                 ShowBusinessName ? OutletDisplayName : null,
                 ShowAddress ? $"{AddressLine1}\n{AddressLine2}".Trim() : null,
                 ShowContacts ? Phone : null,
                 ShowBusinessNtn ? BusinessNtn : null,
-                // logo flag
                 ShowLogo,
-                // item row flags (note: qty now appears inline between name and unit)
                 RowShowProductName, RowShowProductSku, RowShowQty, RowShowUnitPrice, RowShowLineDiscount, RowShowLineTotal,
-                // totals flags (TOTAL & BALANCE rendered emphasized in builder)
                 TotalsShowTaxes, TotalsShowDiscounts, TotalsShowOtherExpenses, TotalsShowGrandTotal, TotalsShowPaymentRecv, TotalsShowBalance,
-                // footer text
                 ShowFooter ? CurrentLocalization?.Footer : null,
-                // FBR
                 EnableFbr, ShowFbrQr, FbrPosId,
-                // data
                 lines, sale,
-                // generic barcode/QR toggles
-                showBarcodeOnReceipt: PrintBarcodeOnReceipt,
-                showGenericQr: ShowQr
+                PrintBarcodeOnReceipt,
+                ShowQr
             );
         }
         catch (Exception ex)
@@ -503,5 +423,8 @@ public partial class InvoiceSettingsViewModel : ObservableObject
             int width = PaperWidthMm <= 58 ? 32 : 42;
             PreviewText = $"[Preview error]\n{ex.Message}\n\n{new string('-', width)}\n";
         }
+
+        return Task.CompletedTask;
     }
+
 }

@@ -13,17 +13,16 @@ using Pos.Persistence.Sync; // IOutboxWriter
 using Microsoft.Win32;
 using System.Linq;
 using System.Threading.Tasks;
-
+using System.Runtime.Intrinsics.Arm;
 
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class VariantBatchDialog : Window
     {
-        //private readonly IDbContextFactory<PosClientDbContext> _dbf;
-        //private Pos.Persistence.Sync.IOutboxWriter? _outbox; // NEW
-        private readonly ICatalogService _svc;
-
+        //private readonly ICatalogService _svc;
+        private readonly ICatalogService _svc;          // read helpers (brands, cats, thumb helpers, unique barcode)
+        private readonly IItemsWriteService _write;     // authoritative writer for items/variants
         public enum Mode { Batch, EditSingle, Sequential }
         private bool _suppressValidation;          // prevents validation during programmatic focus
         private BarcodeRow? _newlyAddedRow;        // track the just-added manual row
@@ -43,10 +42,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         public IReadOnlyList<Item> CreatedItems { get; private set; } = Array.Empty<Item>();
         public VariantBatchDialog() : this(Mode.Batch) { }
         public sealed record PendingVariantImages(string? PrimaryPath, List<string> GalleryPaths);
-
         private string? _pendingVariantPrimaryPath;
         private readonly List<string> _pendingVariantGallery = new();
-
         public PendingVariantImages PopPendingVariantImages()
         {
             var pack = new PendingVariantImages(_pendingVariantPrimaryPath, _pendingVariantGallery.ToList());
@@ -59,10 +56,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             _mode = mode;
             InitializeComponent();
-            //_dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-            //_outbox = App.Services.GetRequiredService<IOutboxWriter>();
             _svc = App.Services.GetRequiredService<ICatalogService>();
-
+            _write = App.Services.GetRequiredService<IItemsWriteService>();
             BarcodesGrid.ItemsSource = _barcodeRows;
             BarcodesGrid.RowEditEnding += BarcodesGrid_RowEditEnding;
             BarcodesGrid.CellEditEnding += BarcodesGrid_CellEditEnding;
@@ -70,23 +65,45 @@ namespace Pos.Client.Wpf.Windows.Admin
             BarcodesGrid.PreviewKeyDown += BarcodesGrid_PreviewKeyDown;
             _barcodeRows.CollectionChanged += (_, __) => HookRowEvents();
             HookRowEvents();
-            if (AutoBarcodeBox.IsChecked == true && !_barcodeRows.Any(r => r.IsPrimary))
+            //if (AutoBarcodeBox.IsChecked == true && !_barcodeRows.Any(r => r.IsPrimary))
+            //{
+            //    var code = GenerateEan13(BarcodePrefix, _seqBarcode);
+
+            //    _barcodeRows.Add(new BarcodeRow
+            //    {
+            //        Code = code,
+            //        Label = "1 pc",
+            //        Symbology = BarcodeSymbology.Ean13,
+            //        QuantityPerScan = 1,
+            //        IsPrimary = true
+            //    });
+            //    _seqBarcode++;
+            //}
+            //AutoBarcodeBox.Checked += (_, __) => EnsureDefaultPrimary();
+            Loaded += VariantBatchDialog_Loaded;
+            AutoBarcodeBox.Checked += async (_, __) => await EnsureDefaultPrimaryAsync();
+            AutoBarcodeBox.Unchecked += (_, __) => { };
+            this.Closing += VariantBatchDialog_Closing;
+        }
+
+        private async Task EnsureDefaultPrimaryAsync()
+        {
+            if (!_barcodeRows.Any(r => r.IsPrimary))
             {
-                var code = GenerateEan13(BarcodePrefix, _seqBarcode);
+                var sym = GetSelectedSymbology();
+                var (code, advanceBy) = await _svc.GenerateUniqueBarcodeAsync(sym, BarcodePrefix, _seqBarcode);
                 _barcodeRows.Add(new BarcodeRow
                 {
                     Code = code,
                     Label = "1 pc",
-                    Symbology = BarcodeSymbology.Ean13,
+                    Symbology = sym,
                     QuantityPerScan = 1,
                     IsPrimary = true
                 });
-                _seqBarcode++;
+                _seqBarcode += advanceBy;
             }
-            AutoBarcodeBox.Checked += (_, __) => EnsureDefaultPrimary();
-            AutoBarcodeBox.Unchecked += (_, __) => { };
-            this.Closing += VariantBatchDialog_Closing;
         }
+
 
         private void VariantBatchDialog_Closing(object? sender, CancelEventArgs e)
         {
@@ -103,7 +120,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Warning,
                         MessageBoxResult.No);
-
                     if (result == MessageBoxResult.Yes)
                     {
                         foreach (var r in incomplete) _barcodeRows.Remove(r);
@@ -187,22 +203,22 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        private void EnsureDefaultPrimary()
-        {
-            if (!_barcodeRows.Any(r => r.IsPrimary))
-            {
-                var code = GenerateEan13(BarcodePrefix, _seqBarcode);
-                _barcodeRows.Add(new BarcodeRow
-                {
-                    Code = code,
-                    Label = "1 pc",
-                    Symbology = BarcodeSymbology.Ean13,
-                    QuantityPerScan = 1,
-                    IsPrimary = true
-                });
-                _seqBarcode++;
-            }
-        }
+        //private void EnsureDefaultPrimary()
+        //{
+        //    if (!_barcodeRows.Any(r => r.IsPrimary))
+        //    {
+        //        var code = GenerateEan13(BarcodePrefix, _seqBarcode);
+        //        _barcodeRows.Add(new BarcodeRow
+        //        {
+        //            Code = code,
+        //            Label = "1 pc",
+        //            Symbology = BarcodeSymbology.Ean13,
+        //            QuantityPerScan = 1,
+        //            IsPrimary = true
+        //        });
+        //        _seqBarcode++;
+        //    }
+        //}
 
         public class BarcodeRow : INotifyPropertyChanged
         {
@@ -215,7 +231,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             public string? Label { get => _label; set { if (_label != value) { _label = value; OnPropertyChanged(nameof(Label)); } } }
             public BarcodeSymbology Symbology { get => _symbology; set { if (_symbology != value) { _symbology = value; OnPropertyChanged(nameof(Symbology)); } } }
             public int QuantityPerScan { get => _qty; set { if (_qty != value) { _qty = value; OnPropertyChanged(nameof(QuantityPerScan)); } } }
-
             public bool IsPrimary
             {
                 get => _isPrimary;
@@ -234,10 +249,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         }
 
         private readonly ObservableCollection<BarcodeRow> _barcodeRows = new();
-//public IReadOnlyList<BarcodeRow> BarcodeRows => _barcodeRows;
-
-//public List<BarcodeSymbology> BarcodeTypes { get; } =
-//    new() { BarcodeSymbology.Ean13, BarcodeSymbology.Ean8, BarcodeSymbology.UpcA, BarcodeSymbology.Code128 };
 
         private Item BuildSingleItem()
         {
@@ -323,20 +334,32 @@ namespace Pos.Client.Wpf.Windows.Admin
             try
             {
                 var item = BuildSingleItem();
-                if (SaveImmediately && SaveOneAsync != null)
-                {
-                    var ok = await SaveOneAsync(item);
-                    if (!ok)
+                //if (SaveImmediately && SaveOneAsync != null)
+                //{
+                //    var ok = await SaveOneAsync(item);
+                //    if (!ok)
+                //    {
+                //        MessageBox.Show("Couldn’t save the variant. Please try again.");
+                //        return;
+                //    }
+                //    PersistStickyFromCurrentControls();
+                //}
+                //else
+                //{
+                //    _staged.Add(item);
+                //}
+                if (SaveImmediately)
                     {
-                        MessageBox.Show("Couldn’t save the variant. Please try again.");
-                        return;
-                    }
+                    var saved = await _write.CreateItemAsync(item);
+                         // If the dialog included barcode rows, ReplaceBarcodesAsync ensures a single authoritative write path
+                         if (item.Barcodes?.Any() == true)
+                        await _write.ReplaceBarcodesAsync(saved.Id, item.Barcodes!, default);
                     PersistStickyFromCurrentControls();
-                }
-                else
-                {
-                    _staged.Add(item);
-                }
+                    }
+                 else
+                     {
+                    _staged.Add(item); // deferred; handled in Save_Click
+                     }
                 _rows.Add(new VariantRow
                 {
                     ExistingItemId = null,
@@ -364,7 +387,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 Axis1SingleBox.CaretIndex = Axis1SingleBox.Text.Length;
                 _barcodeRows.Clear();
                 if (AutoBarcodeBox.IsChecked == true)
-                    EnsureDefaultPrimary();
+                    await EnsureDefaultPrimaryAsync();
             }
             catch (Exception ex)
             {
@@ -376,7 +399,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
             if (!IsStandaloneMode && _product == null && _mode != Mode.Sequential)
@@ -386,12 +408,9 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             if (_mode == Mode.Sequential)
             {
-                // In standalone mode, we always consider there to be a "pending" item (name + optional barcodes),
-                // even if Axis1/Axis2 single values are empty/hidden.
                 bool hasPending = IsStandaloneMode
                     ? true
                     : (!string.IsNullOrWhiteSpace(Axis1Single) || !string.IsNullOrWhiteSpace(Axis2Single));
-
                 if (hasPending)
                 {
                     try { _staged.Add(BuildSingleItem()); }
@@ -400,18 +419,15 @@ namespace Pos.Client.Wpf.Windows.Admin
 
                 if (_staged.Count == 0)
                 {
-                    // Keep the old message for variant flow; standalone shouldn't reach here
                     MessageBox.Show(IsStandaloneMode ? "Enter the item name." : "No variants to save.");
                     return;
                 }
-
                 var allCodes = _staged
                     .SelectMany(it => it.Barcodes ?? Enumerable.Empty<ItemBarcode>())
                     .Select(b => b.Code)
                     .Where(s => !string.IsNullOrWhiteSpace(s))
                     .Select(s => s!.Trim())
                     .ToList();
-
                 var conflicts = await _svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
                 if (conflicts.Count > 0)
                 {
@@ -430,14 +446,19 @@ namespace Pos.Client.Wpf.Windows.Admin
                                     MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
-
-                CreatedItems = _staged.ToList();
+                //CreatedItems = _staged.ToList();
+                //PersistStickyFromCurrentControls();
+                //DialogResult = true;
+                 foreach (var it in _staged)
+                     {
+                    var saved = await _write.CreateItemAsync(it);
+                         if (it.Barcodes?.Any() == true)
+                        await _write.ReplaceBarcodesAsync(saved.Id, it.Barcodes!, default);
+                     }
                 PersistStickyFromCurrentControls();
                 DialogResult = true;
                 return;
             }
-
 
             if (_mode == Mode.EditSingle)
             {
@@ -453,7 +474,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 string displayName = _product != null
                     ? (_product.Name + suffix)
                     : (NameBox?.Text?.Trim() ?? _rows[0].Name);
-
                 var edited = new Item
                 {
                     Id = _rows[0].ExistingItemId ?? 0,
@@ -514,12 +534,10 @@ namespace Pos.Client.Wpf.Windows.Admin
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
-                CreatedItems = new List<Item> { edited };
+                var _ = await _write.EditSingleItemAsync(edited);
                 DialogResult = true;
                 return;
             }
-
             var now = DateTime.UtcNow;
             var created = new List<Item>();
             foreach (var r in _rows)
@@ -527,9 +545,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                 var item = new Item
                 {
                     Id = r.ExistingItemId ?? 0,
-                    ProductId = _product.Id == 0 ? null : _product.Id,
-                    Product = _product.Id == 0 ? _product : null,
-                    Name = string.IsNullOrWhiteSpace(r.Name) ? _product.Name : r.Name,
+                    ProductId = (_product?.Id is int id && id != 0) ? id : (int?)null,
+                    Product = (_product?.Id is int id2 && id2 == 0) ? _product : null,
+                    Name = string.IsNullOrWhiteSpace(r.Name) ? (_product?.Name ?? "") : r.Name,
                     Sku = r.Sku ?? "",
                     Price = r.Price,
                     TaxCode = r.TaxCode,
@@ -569,29 +587,16 @@ namespace Pos.Client.Wpf.Windows.Admin
             DialogResult = true;
         }
 
-        private void VariantBatchDialog_Loaded(object? sender, RoutedEventArgs e)
+        private async void VariantBatchDialog_Loaded(object? sender, RoutedEventArgs e)
         {
             ApplyStickyDefaults();
             UpdateTitle();
+
             if (_mode == Mode.EditSingle)
             {
                 AxesGroup.Visibility = Visibility.Collapsed;
                 AxesGroup.IsEnabled = true;
                 HideBatchValuesRows();             // keeps AxisSingleValuesPanel visible
-                //AxisSingleValuesPanel.Visibility = Visibility.Visible;
-                //AxisSingleValuesPanel.IsEnabled = true;
-                //Axis1NameBox.IsEnabled = true;
-                //Axis1NameBox.IsReadOnly = false;
-                //Axis1SingleBox.IsEnabled = true;
-                //Axis1SingleBox.IsReadOnly = false;
-                //Axis2NameBox.IsEnabled = true;
-                //Axis2NameBox.IsReadOnly = false;
-                //Axis2SingleBox.IsEnabled = true;
-                //Axis2SingleBox.IsReadOnly = false;
-                //Axis1NameBox.TabIndex = 0;
-                //Axis1SingleBox.TabIndex = 1;
-                //Axis2NameBox.TabIndex = 2;
-                //Axis2SingleBox.TabIndex = 3;
                 SaveBtn.Content = "Save";
                 SaveAddBtn.Visibility = Visibility.Collapsed;
             }
@@ -608,7 +613,26 @@ namespace Pos.Client.Wpf.Windows.Admin
                 SaveBtn.Content = "Create Variants";
                 SaveAddBtn.Visibility = Visibility.Collapsed;
             }
+
+            // NEW: seed a primary barcode via the service (no local EAN helpers, no duplication)
+            if (AutoBarcodeBox.IsChecked == true && !_barcodeRows.Any(r => r.IsPrimary))
+            {
+                var sym = GetSelectedSymbology();
+                var (code, advanceBy) = await _svc.GenerateUniqueBarcodeAsync(sym, BarcodePrefix, _seqBarcode);
+
+                _barcodeRows.Add(new BarcodeRow
+                {
+                    Code = code,
+                    Label = "1 pc",
+                    Symbology = sym,
+                    QuantityPerScan = 1,
+                    IsPrimary = true
+                });
+
+                _seqBarcode += advanceBy;
+            }
         }
+
 
         public void HideAxesForStandalone()
         {
@@ -691,7 +715,7 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private static int ParseInt(string? s, int fallback)
             => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : fallback;
-        private void Generate_Click(object sender, RoutedEventArgs e)
+        private async void Generate_Click(object sender, RoutedEventArgs e)
         {
             if (_product == null) { MessageBox.Show("Pick a product first."); return; }
 
@@ -704,9 +728,14 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             if (!a1Vals.Any()) a1Vals = new List<string> { "" };
             if (!a2Vals.Any()) a2Vals = new List<string> { "" };
+
             _rows.Clear();
             int seqSku = SkuStart;
             int seqBarcode = BarcodeStart;
+
+            // Use the currently selected symbology for auto barcodes
+            var sym = GetSelectedSymbology();
+
             foreach (var v1 in a1Vals)
                 foreach (var v2 in a2Vals)
                 {
@@ -714,6 +743,15 @@ namespace Pos.Client.Wpf.Windows.Admin
                     if (!string.IsNullOrWhiteSpace(Axis1Name) && !string.IsNullOrWhiteSpace(v1)) suffixParts.Add($"{Axis1Name}:{v1}");
                     if (!string.IsNullOrWhiteSpace(Axis2Name) && !string.IsNullOrWhiteSpace(v2)) suffixParts.Add($"{Axis2Name}:{v2}");
                     var suffix = suffixParts.Count > 0 ? " — " + string.Join(", ", suffixParts) : "";
+
+                    string barcode = "";
+                    if (AutoBarcode)
+                    {
+                        var (code, advanceBy) = await _svc.GenerateUniqueBarcodeAsync(sym, BarcodePrefix, seqBarcode);
+                        barcode = code;
+                        seqBarcode += advanceBy;     // advance by what the service used
+                    }
+
                     var row = new VariantRow
                     {
                         Variant1Name = string.IsNullOrWhiteSpace(Axis1Name) ? "" : Axis1Name,
@@ -722,7 +760,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                         Variant2Value = string.IsNullOrWhiteSpace(v2) ? "" : v2,
                         Name = _product.Name + suffix,
                         Sku = AutoSku ? $"{SkuPrefix}-{seqSku:000}" : "",
-                        Barcode = AutoBarcode ? GenerateEan13(BarcodePrefix, seqBarcode) : "",
+                        Barcode = barcode,
                         Price = Price,
                         TaxCode = TaxCode,
                         DefaultTaxRatePct = TaxPct,
@@ -731,10 +769,11 @@ namespace Pos.Client.Wpf.Windows.Admin
                         DefaultDiscountAmt = DefaultDiscAmt,
                         IsActive = MarkActive
                     };
+
                     _rows.Add(row);
                     if (AutoSku) seqSku++;
-                    if (AutoBarcode) seqBarcode++;
                 }
+
             if (_rows.Count == 0)
                 MessageBox.Show("No rows generated.");
         }
@@ -752,113 +791,135 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             if (!a1Vals.Any()) a1Vals = new List<string> { "" };
             if (!a2Vals.Any()) a2Vals = new List<string> { "" };
-            var created = new List<Item>();
-            var now = DateTime.UtcNow;
-            int seqSku = SkuStart;
-            int seqBarcode = BarcodeStart;
-            foreach (var v1 in a1Vals)
-                foreach (var v2 in a2Vals)
-                {
-                    var variantNamePieces = new List<string>();
-                    if (!string.IsNullOrEmpty(Axis1Name) && !string.IsNullOrEmpty(v1)) variantNamePieces.Add($"{Axis1Name}:{v1}");
-                    if (!string.IsNullOrEmpty(Axis2Name) && !string.IsNullOrEmpty(v2)) variantNamePieces.Add($"{Axis2Name}:{v2}");
-                    var displayNameSuffix = variantNamePieces.Count > 0 ? " — " + string.Join(", ", variantNamePieces) : "";
-                    var item = new Item
-                    {
-                        ProductId = _product.Id == 0 ? null : _product.Id,
-                        Product = _product.Id == 0 ? _product : null,
-                        Name = _product.Name + displayNameSuffix,
-                        Sku = AutoSku ? $"{SkuPrefix}-{seqSku:000}" : "",
-                        Price = Price,
-                        TaxCode = TaxCode,
-                        DefaultTaxRatePct = TaxPct,
-                        TaxInclusive = TaxInclusive,
-                        DefaultDiscountPct = DefaultDiscPct,
-                        DefaultDiscountAmt = DefaultDiscAmt,
-                        Variant1Name = string.IsNullOrWhiteSpace(Axis1Name) ? null : Axis1Name,
-                        Variant1Value = string.IsNullOrWhiteSpace(v1) ? null : v1,
-                        Variant2Name = string.IsNullOrWhiteSpace(Axis2Name) ? null : Axis2Name,
-                        Variant2Value = string.IsNullOrWhiteSpace(v2) ? null : v2,
-                        BrandId = IsStandaloneMode ? (int?)BrandBox.SelectedValue : _product?.BrandId,
-                        CategoryId = IsStandaloneMode ? (int?)CategoryBox.SelectedValue : _product?.CategoryId,
-                        IsActive = MarkActive,
-                        IsVoided = false,
-                        VoidedAtUtc = null,
-                        VoidedBy = null,
-                        UpdatedAt = now
-                    };
-                    string? primary = AutoBarcode ? GenerateEan13(BarcodePrefix, seqBarcode) : null;
-                    item.Barcodes = string.IsNullOrWhiteSpace(primary)
-                        ? new List<ItemBarcode>()
-                        : new List<ItemBarcode>
-                          {
-                  new ItemBarcode
-                  {
-                      Code = primary.Trim(),
-                      Symbology = GetSelectedSymbology(),
-                      QuantityPerScan = 1,
-                      IsPrimary = true,
-                      CreatedAt = DateTime.UtcNow,
-                      UpdatedAt = DateTime.UtcNow
-                  }
-                          };
-                    created.Add(item);
-                    if (AutoSku) seqSku++;
-                    if (AutoBarcode) seqBarcode++;
-                }
-            var allCodes = created
-    .SelectMany(it => it.Barcodes ?? Enumerable.Empty<ItemBarcode>())
-    .Select(b => b.Code)
-    .Where(s => !string.IsNullOrWhiteSpace(s))
-    .Select(s => s!.Trim())
-    .ToList();
+            //        var created = new List<Item>();
+            //        var now = DateTime.UtcNow;
+            //        int seqSku = SkuStart;
+            //        int seqBarcode = BarcodeStart;
+            //        foreach (var v1 in a1Vals)
+            //            foreach (var v2 in a2Vals)
+            //            {
+            //                var variantNamePieces = new List<string>();
+            //                if (!string.IsNullOrEmpty(Axis1Name) && !string.IsNullOrEmpty(v1)) variantNamePieces.Add($"{Axis1Name}:{v1}");
+            //                if (!string.IsNullOrEmpty(Axis2Name) && !string.IsNullOrEmpty(v2)) variantNamePieces.Add($"{Axis2Name}:{v2}");
+            //                var displayNameSuffix = variantNamePieces.Count > 0 ? " — " + string.Join(", ", variantNamePieces) : "";
+            //                var item = new Item
+            //                {
+            //                    ProductId = _product.Id == 0 ? null : _product.Id,
+            //                    Product = _product.Id == 0 ? _product : null,
+            //                    Name = _product.Name + displayNameSuffix,
+            //                    Sku = AutoSku ? $"{SkuPrefix}-{seqSku:000}" : "",
+            //                    Price = Price,
+            //                    TaxCode = TaxCode,
+            //                    DefaultTaxRatePct = TaxPct,
+            //                    TaxInclusive = TaxInclusive,
+            //                    DefaultDiscountPct = DefaultDiscPct,
+            //                    DefaultDiscountAmt = DefaultDiscAmt,
+            //                    Variant1Name = string.IsNullOrWhiteSpace(Axis1Name) ? null : Axis1Name,
+            //                    Variant1Value = string.IsNullOrWhiteSpace(v1) ? null : v1,
+            //                    Variant2Name = string.IsNullOrWhiteSpace(Axis2Name) ? null : Axis2Name,
+            //                    Variant2Value = string.IsNullOrWhiteSpace(v2) ? null : v2,
+            //                    BrandId = IsStandaloneMode ? (int?)BrandBox.SelectedValue : _product?.BrandId,
+            //                    CategoryId = IsStandaloneMode ? (int?)CategoryBox.SelectedValue : _product?.CategoryId,
+            //                    IsActive = MarkActive,
+            //                    IsVoided = false,
+            //                    VoidedAtUtc = null,
+            //                    VoidedBy = null,
+            //                    UpdatedAt = now
+            //                };
+            //                string? primary = AutoBarcode ? GenerateEan13(BarcodePrefix, seqBarcode) : null;
+            //                item.Barcodes = string.IsNullOrWhiteSpace(primary)
+            //                    ? new List<ItemBarcode>()
+            //                    : new List<ItemBarcode>
+            //                      {
+            //              new ItemBarcode
+            //              {
+            //                  Code = primary.Trim(),
+            //                  Symbology = GetSelectedSymbology(),
+            //                  QuantityPerScan = 1,
+            //                  IsPrimary = true,
+            //                  CreatedAt = DateTime.UtcNow,
+            //                  UpdatedAt = DateTime.UtcNow
+            //              }
+            //                      };
+            //                created.Add(item);
+            //                if (AutoSku) seqSku++;
+            //                if (AutoBarcode) seqBarcode++;
+            //            }
+            //        var allCodes = created
+            //.SelectMany(it => it.Barcodes ?? Enumerable.Empty<ItemBarcode>())
+            //.Select(b => b.Code)
+            //.Where(s => !string.IsNullOrWhiteSpace(s))
+            //.Select(s => s!.Trim())
+            //.ToList();
 
-            var conflicts = await _svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
-            if (conflicts.Count > 0)
-            {
-                var lines = conflicts.GroupBy(c => c.Code).Select(g =>
-                {
-                    var x = g.First();
-                    var owner = !string.IsNullOrWhiteSpace(x.ProductName)
-                        ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
-                        : $"Item: {x.ItemName}";
-                    return $"• {g.Key} → already used by {owner}";
-                });
-                MessageBox.Show("One or more barcodes are already in use:\n\n" +
-                                string.Join("\n", lines) +
-                                "\n\nPlease change these barcodes.",
-                                "Duplicate barcode(s) found",
-                                MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            CreatedItems = created;
+            //        var conflicts = await _svc.FindBarcodeConflictsAsync(allCodes, excludeItemId: null);
+            //        if (conflicts.Count > 0)
+            //        {
+            //            var lines = conflicts.GroupBy(c => c.Code).Select(g =>
+            //            {
+            //                var x = g.First();
+            //                var owner = !string.IsNullOrWhiteSpace(x.ProductName)
+            //                    ? $"Product: {x.ProductName}, Variant: {x.ItemName}"
+            //                    : $"Item: {x.ItemName}";
+            //                return $"• {g.Key} → already used by {owner}";
+            //            });
+            //            MessageBox.Show("One or more barcodes are already in use:\n\n" +
+            //                            string.Join("\n", lines) +
+            //                            "\n\nPlease change these barcodes.",
+            //                            "Duplicate barcode(s) found",
+            //                            MessageBoxButton.OK, MessageBoxImage.Warning);
+            //            return;
+            //        }
+            //        CreatedItems = created;
+            //        PersistStickyFromCurrentControls();
+            //        DialogResult = true;
+            // 1) Persist variants (names/axes/price/tax/discount) in one go
+        var created = await _write.BulkCreateVariantsAsync(
+        productId: _product!.Id,
+        itemBaseName: _product!.Name,
+        axis1Name: Axis1Name, axis1Values: Axis1Values.ToList(),
+        axis2Name: Axis2Name, axis2Values: Axis2Values.ToList(),
+        price: Price, taxCode: TaxCode, taxPct: TaxPct, taxInclusive: TaxInclusive,
+        defDiscPct: DefaultDiscPct, defDiscAmt: DefaultDiscAmt
+         );
+            
+             // 2) If AutoBarcode, assign a unique primary barcode to each saved item
+             if (AutoBarcode)
+                 {
+                var sym = GetSelectedSymbology();
+                     foreach (var it in created)
+                         {
+                    var (code, advanceBy) = await _svc.GenerateUniqueBarcodeAsync(sym, BarcodePrefix, _seqBarcode);
+                    _seqBarcode += advanceBy;
+                    await _svc.AddBarcodeAsync(it.Id, code, sym, qtyPerScan: 1, isPrimary: true, label: "1 pc");
+                         }
+                 }
+            
             PersistStickyFromCurrentControls();
             DialogResult = true;
         }
 
-
         private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 
-        private static string GenerateEan13(string prefix, int number)
-        {
-            var digits = new string((prefix ?? "").Where(char.IsDigit).ToArray()) + number.ToString(CultureInfo.InvariantCulture);
-            digits = new string(digits.Take(12).ToArray());
-            digits = digits.PadLeft(12, '0');
-            var check = ComputeEan13CheckDigit(digits);
-            return digits + check.ToString();
-        }
+        //private static string GenerateEan13(string prefix, int number)
+        //{
+        //    var digits = new string((prefix ?? "").Where(char.IsDigit).ToArray()) + number.ToString(CultureInfo.InvariantCulture);
+        //    digits = new string(digits.Take(12).ToArray());
+        //    digits = digits.PadLeft(12, '0');
+        //    var check = ComputeEan13CheckDigit(digits);
+        //    return digits + check.ToString();
+        //}
 
-        private static int ComputeEan13CheckDigit(string first12Digits)
-        {
-            int sum = 0;
-            for (int i = 0; i < 12; i++)
-            {
-                int d = first12Digits[i] - '0';
-                sum += (i % 2 == 0) ? d : (3 * d);
-            }
-            return (10 - (sum % 10)) % 10;
-        }
+        //private static int ComputeEan13CheckDigit(string first12Digits)
+        //{
+        //    int sum = 0;
+        //    for (int i = 0; i < 12; i++)
+        //    {
+        //        int d = first12Digits[i] - '0';
+        //        sum += (i % 2 == 0) ? d : (3 * d);
+        //    }
+        //    return (10 - (sum % 10)) % 10;
+        //}
 
         private void AddManualBarcode_Click(object sender, RoutedEventArgs e)
         {
@@ -897,8 +958,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
         }
-
-
 
         private async void GeneratePrimaryBarcode_Click(object sender, RoutedEventArgs e)
         {
@@ -1068,14 +1127,9 @@ namespace Pos.Client.Wpf.Windows.Admin
         private void MoveToNextRequiredCell()
         {
             if (BarcodesGrid.SelectedItem is not BarcodeRow row) return;
-
-            // Required order now: Code -> Type -> Qty (Label is optional)
             if (string.IsNullOrWhiteSpace(row.Code)) { FocusField(row, ColCode); return; }
-
             if (BarcodesGrid.CurrentCell.Column != ColSymbology) { FocusField(row, ColSymbology); return; }
-
             if (row.QuantityPerScan <= 0 || BarcodesGrid.CurrentCell.Column != ColQty) { FocusField(row, ColQty); return; }
-
             BarcodesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
             BarcodesGrid.CommitEdit(DataGridEditingUnit.Row, true);
         }
@@ -1103,9 +1157,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                 _newlyAddedRow = ReferenceEquals(_newlyAddedRow, row) ? null : _newlyAddedRow;
                 _justRemovedRow = true;
                 if (wasPrimary && AutoBarcodeBox.IsChecked == true && !_barcodeRows.Any(r => r.IsPrimary))
-                {
-                    EnsureDefaultPrimary();
-                }
+                    {
+                    _ = EnsureDefaultPrimaryAsync();  // intentionally fire-and-forget
+                    }
             }
             finally
             {
@@ -1126,7 +1180,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 _justRemovedRow = true;
 
                 if (wasPrimary && AutoBarcodeBox.IsChecked == true && !_barcodeRows.Any(r => r.IsPrimary))
-                    EnsureDefaultPrimary();
+                    _ = EnsureDefaultPrimaryAsync();
             }
             finally
             {
@@ -1147,7 +1201,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     _newlyAddedRow = ReferenceEquals(_newlyAddedRow, row) ? null : _newlyAddedRow;
                     _justRemovedRow = true;
                     if (wasPrimary && AutoBarcodeBox.IsChecked == true && !_barcodeRows.Any(r => r.IsPrimary))
-                        EnsureDefaultPrimary();
+                        _ = EnsureDefaultPrimaryAsync();
                 }
                 finally { _suppressValidation = false; }
                 return true;
@@ -1170,7 +1224,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     _justRemovedRow = true;
 
                     if (wasPrimary && AutoBarcodeBox.IsChecked == true && !_barcodeRows.Any(r => r.IsPrimary))
-                        EnsureDefaultPrimary();
+                        _ = EnsureDefaultPrimaryAsync();
                 }
                 finally { _suppressValidation = false; }
                 return true;
@@ -1245,28 +1299,19 @@ namespace Pos.Client.Wpf.Windows.Admin
             ProductText.Text = "Standalone Item";
             ProductText.Visibility = Visibility.Collapsed;
             StandaloneNameRow.Visibility = Visibility.Visible;
-
             AxesGroup.Visibility = Visibility.Collapsed;
             HideBatchValuesRows();
-
-            // ✅ Enable auto-SKU for standalone by default
             AutoSkuBox.IsChecked = true;
-
             SaveBtn.Content = "Save & Close";
             SaveAddBtn.Visibility = Visibility.Visible;
             Title = "Add Standalone Item";
-
             _seqSku = SkuStart;       // will be adjusted below
             _seqBarcode = BarcodeStart;
-
             UpdateTitle();
-
-            // ✅ After window is ready, compute a safe next SKU number based on existing data
             Loaded += async (_, __) =>
             {
                 BrandBox.ItemsSource = await _svc.GetActiveBrandsAsync();
                 CategoryBox.ItemsSource = await _svc.GetAllCategoriesAsync();
-
                 _seqSku = await _svc.GetNextSkuSequenceAsync(SkuPrefix, SkuStart);
                 SkuStartBox.Text = _seqSku.ToString(CultureInfo.InvariantCulture);
             };
@@ -1274,75 +1319,24 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         public async Task PrefillStandaloneForEditAsync(Item item)
         {
-            // Mark dialog as standalone and hide product/axes just like Add-Standalone
             IsStandaloneMode = true;
             _product = null;
-
             ProductText.Visibility = Visibility.Collapsed;
             StandaloneNameRow.Visibility = Visibility.Visible; // show Name/Brand/Category row
             AxesGroup.Visibility = Visibility.Collapsed;
             HideBatchValuesRows();
-
-            // Buttons/Title same vibe as add-standalone, but editing now
             SaveBtn.Content = "Save";
             SaveAddBtn.Visibility = Visibility.Collapsed;
             Title = "Edit Standalone Item";
             UpdateTitle(); // keeps "Edit Item" when standalone + EditSingle
-
-            // Load lookups (same as PrefillStandalone Loaded handler)
             BrandBox.ItemsSource = await _svc.GetActiveBrandsAsync();
             CategoryBox.ItemsSource = await _svc.GetAllCategoriesAsync();
-            //await using (var db = await _dbf.CreateDbContextAsync())
-            //{
-            //    var brands = await db.Brands.Where(b => b.IsActive).OrderBy(b => b.Name).ToListAsync();
-            //    BrandBox.ItemsSource = brands;
-
-            //    var cats = await db.Categories.OrderBy(c => c.Name).ToListAsync();
-            //    CategoryBox.ItemsSource = cats;
-            //}
-
-            // Pre-fill editable fields
             NameBox.Text = item.Name;
             BrandBox.SelectedValue = item.BrandId;
             CategoryBox.SelectedValue = item.CategoryId;
-
-            // Reuse your existing population logic for the rest
             PrefillForEdit(item);                 // price/tax/discount/axes textboxes/_rows[0] etc.
             PrefillBarcodesForEdit(item.Barcodes);
         }
-
-
-        //private async Task<int> GetNextSkuSequenceAsync(string prefix, int fallbackStart)
-        //{
-        //    try
-        //    {
-        //        await using var db = await _dbf.CreateDbContextAsync();
-
-        //        // Fetch only SKUs that start with "<prefix>-", then parse the numeric tail
-        //        var likePrefix = prefix + "-";
-        //        var list = await db.Items
-        //            .Where(i => i.Sku != null && i.Sku.StartsWith(likePrefix))
-        //            .Select(i => i.Sku)
-        //            .ToListAsync();
-
-        //        int maxNum = 0;
-        //        foreach (var sku in list)
-        //        {
-        //            // Expect formats like PREFIX-001, PREFIX-25, etc.
-        //            var tail = sku.Substring(likePrefix.Length);
-        //            if (int.TryParse(tail, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
-        //                if (n > maxNum) maxNum = n;
-        //        }
-
-        //        // Next available number (at least fallbackStart)
-        //        return Math.Max(maxNum + 1, fallbackStart);
-        //    }
-        //    catch
-        //    {
-        //        // If anything goes wrong, stick to the UI-provided start
-        //        return fallbackStart;
-        //    }
-        //}
 
         private void BtnVarPrimary_Click(object sender, RoutedEventArgs e)
         {
@@ -1355,7 +1349,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (dlg.ShowDialog() == true)
             {
                 _pendingVariantPrimaryPath = dlg.FileName;
-                // Optional UX: you could show a mini preview here if you like.
             }
         }
 
@@ -1374,7 +1367,5 @@ namespace Pos.Client.Wpf.Windows.Admin
                         _pendingVariantGallery.Add(f);
             }
         }
-
-
     }
 }

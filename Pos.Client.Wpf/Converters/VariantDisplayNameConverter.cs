@@ -1,4 +1,4 @@
-﻿//Pos.Client.Wpf/Converters/VariantDisplayNameConverter
+﻿// Pos.Client.Wpf/Converters/VariantDisplayNameConverter.cs
 using System;
 using System.Globalization;
 using System.Windows.Data;
@@ -15,12 +15,13 @@ namespace Pos.Client.Wpf.Converters
 
         public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
         {
-            string? productName = values[0] as string;
-            string itemName = values[1] as string ?? "";
-            string? v1Name = values[2] as string;
-            string? v1Val = values[3] as string;
-            string? v2Name = values[4] as string;
-            string? v2Val = values[5] as string;
+            // Be defensive: bindings may pass fewer than 6 values or nulls.
+            string? productName = GetStr(values, 0);
+            string itemName = GetStr(values, 1) ?? string.Empty;
+            string? v1Name = GetStr(values, 2);
+            string? v1Val = GetStr(values, 3);
+            string? v2Name = GetStr(values, 4);
+            string? v2Val = GetStr(values, 5);
 
             var opts = new ProductNameOptions
             {
@@ -30,10 +31,32 @@ namespace Pos.Client.Wpf.Converters
                 VariantPrefix = VariantPrefix
             };
 
-            return ProductNameComposer.Compose(productName, itemName, v1Name, v1Val, v2Name, v2Val, opts);
+            try
+            {
+                return ProductNameComposer.Compose(productName, itemName, v1Name, v1Val, v2Name, v2Val, opts)
+                       ?? (productName ?? itemName);
+            }
+            catch
+            {
+                // Absolute fallback: never throw from a converter
+                return productName ?? itemName;
+            }
         }
 
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
             => throw new NotImplementedException();
+
+        private static string? GetStr(object[] values, int index)
+        {
+            if (values == null || index < 0 || index >= values.Length)
+                return null;
+
+            return values[index] switch
+            {
+                null => null,
+                string s => s,
+                _ => values[index]?.ToString()
+            };
+        }
     }
 }

@@ -114,5 +114,30 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
             return await db.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         }
+
+        public async Task<string> SuggestNextCodeAsync(CancellationToken ct = default)
+        {
+            const string prefix = "WH-";
+
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            // Pull only the codes we need; no tracking for speed.
+            var codes = await db.Warehouses
+                .AsNoTracking()
+                .Where(w => w.Code != null && w.Code.StartsWith(prefix))
+                .Select(w => w.Code!)
+                .ToListAsync(ct);
+
+            var max = 0;
+            foreach (var c in codes)
+            {
+                var tail = c.Substring(prefix.Length);
+                if (int.TryParse(tail, out var n) && n > max)
+                    max = n;
+            }
+
+            return $"{prefix}{(max + 1):D3}";
+        }
+
     }
 }

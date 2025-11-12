@@ -9,7 +9,6 @@ namespace Pos.Client.Wpf.Windows.Common
         {
             InitializeComponent();
         }
-
         public void SetView(UserControl view) => ContentHost.Content = view;
     }
 }

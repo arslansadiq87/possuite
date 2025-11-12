@@ -21,17 +21,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
     public partial class PurchaseCenterView : UserControl, IRefreshOnActivate
     {
         private DateTime _lastRefreshUtc = DateTime.MinValue;
-
         public int? SelectedHeldPurchaseId { get; private set; }  // bubble selection back to caller
-
         private readonly IPurchaseCenterReadService _read;
         private readonly IPurchasesServiceFactory _svcFactory;
-
-        //private readonly DbContextOptions<PosClientDbContext> _opts;
-        //private readonly PurchasesService _svc;
         public Style? CurrentButtonStyle { get; set; }
-
-        // ----- Grid row shapes -----
         public class UiPurchaseRow
         {
             public int PurchaseId { get; set; }
@@ -46,7 +39,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public bool IsReturnWithInvoice { get; set; }
 
         }
-
         public class UiLineRow
         {
             public int ItemId { get; set; }
@@ -63,16 +55,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public PurchaseCenterView()
         {
             InitializeComponent();
-
             _read = App.Services.GetRequiredService<IPurchaseCenterReadService>();
             _svcFactory = App.Services.GetRequiredService<IPurchasesServiceFactory>();
-
             PurchasesGrid.ItemsSource = _purchases;
             LinesGrid.ItemsSource = _lines;
-
             FromDate.SelectedDate = DateTime.Today.AddDays(-30);
             ToDate.SelectedDate = DateTime.Today;
-
             UpdateFilterSummary();
             LoadPurchases();
             _ = UpdateHeldButtonVisibilityAsync();
@@ -80,23 +68,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void Refresh_Click(object sender, RoutedEventArgs e) => LoadPurchases();
 
-        private DateTime? _lastEscDown;
-        //private void PurchaseCenterWindow_PreviewKeyDown(object? sender, KeyEventArgs e)
-        //{
-        //    if (e.Key == Key.Escape)
-        //    {
-        //        var now = DateTime.UtcNow;
-        //        if (_lastEscDown.HasValue && (now - _lastEscDown.Value).TotalMilliseconds <= 600)
-        //        {
-        //            Close();
-        //            return;
-        //        }
-        //        _lastEscDown = now;
-        //        e.Handled = true;
-        //    }
-        //}
-
-        // ===== Top bar: filter summary / actions =====
+        //private DateTime? _lastEscDown;
         private void ApplyFilter_Click(object sender, RoutedEventArgs e)
         {
             PopupFilter.IsOpen = false;
@@ -104,7 +76,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             LoadPurchases();
             _ = UpdateHeldButtonVisibilityAsync();
         }
-
 
         private void ClearFilter_Click(object sender, RoutedEventArgs e)
         {
@@ -117,28 +88,22 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void UpdateFilterSummary()
         {
-            // (Optional) maintain a summary label if you add one in XAML
         }
 
         private void Search_Click(object sender, RoutedEventArgs e) => LoadPurchases();
         private void Search_Executed(object sender, ExecutedRoutedEventArgs e) => LoadPurchases();
 
-        // ===== Load & filter list (Purchases + Returns) =====
         private async void LoadPurchases()
         {
             _purchases.Clear();
-
             DateTime? fromUtc = FromDate.SelectedDate?.Date.ToUniversalTime();
             DateTime? toUtc = ToDate.SelectedDate?.AddDays(1).Date.ToUniversalTime();
-
             bool wantFinal = ChkFinal.IsChecked == true;
             bool wantDraft = ChkDraft.IsChecked == true;
             bool wantVoided = ChkVoided.IsChecked == true;
             bool onlyWithDoc = ChkOnlyWithDocNo.IsChecked == true;
             var term = (SearchBox.Text ?? "").Trim();
-
             var rows = await _read.SearchAsync(fromUtc, toUtc, term, wantFinal, wantDraft, wantVoided, onlyWithDoc);
-
             foreach (var r in rows)
             {
                 _purchases.Add(new UiPurchaseRow
@@ -160,26 +125,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
             UpdateActions(null);
         }
 
-
-        // ===== Selection → show lines =====
         private async void PurchasesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             _lines.Clear();
-
             if (PurchasesGrid.SelectedItem is not UiPurchaseRow sel)
             {
                 HeaderText.Text = "";
                 UpdateActions(null);
                 return;
             }
-
-            // Compose header text (we need a bit more data for status & total)
-            // We already have enough from the grid row:
             var kind = sel.IsReturn ? "Return" : "Purchase";
             var revPart = sel.HasRevisions ? $"  Rev {sel.Revision}  " : "  ";
             HeaderText.Text = $"{kind} {sel.DocNoOrId}{revPart}Status: {sel.Status}  Grand: {sel.GrandTotal:0.00}";
-
-            // Preview lines from service
             var rows = await _read.GetPreviewLinesAsync(sel.PurchaseId);
             foreach (var r in rows)
                 _lines.Add(new UiLineRow
@@ -191,29 +148,19 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     UnitCost = r.UnitCost,
                     LineTotal = r.LineTotal
                 });
-
             UpdateActions(sel);
         }
 
-
-
-
-        // ===== Bottom actions visibility =====
         private void UpdateActions(UiPurchaseRow? sel)
         {
-            // hide all by default
             BtnAmend.Visibility = Visibility.Collapsed;
             BtnVoidPurchase.Visibility = Visibility.Collapsed;
             BtnReturnWith.Visibility = Visibility.Collapsed;
             BtnReturnWithout.Visibility = Visibility.Visible; // independent like Sales
             BtnReceive.Visibility = Visibility.Collapsed;
-
             BtnAmendReturn.Visibility = Visibility.Collapsed;
             BtnVoidReturn.Visibility = Visibility.Collapsed;
-
             if (sel is null) return;
-
-            // Draft purchase: can Receive, Amend, Void
             if (!sel.IsReturn && sel.Status == nameof(PurchaseStatus.Draft))
             {
                 BtnReceive.Visibility = Visibility.Visible;
@@ -221,8 +168,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 BtnVoidPurchase.Visibility = Visibility.Visible;
                 return;
             }
-
-            // Final purchase: can Amend, Return With, Void (business rule: allow if you support it)
             if (!sel.IsReturn && sel.Status == nameof(PurchaseStatus.Final))
             {
                 BtnAmend.Visibility = Visibility.Visible;
@@ -230,8 +175,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 BtnVoidPurchase.Visibility = Visibility.Visible;
                 return;
             }
-
-            // Final return: can Amend Return, Void Return
             if (sel.IsReturn && sel.Status == nameof(PurchaseStatus.Final))
             {
                 BtnAmendReturn.Visibility = Visibility.Visible;
@@ -242,37 +185,27 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private UiPurchaseRow? Pick() => PurchasesGrid.SelectedItem as UiPurchaseRow;
 
-        // ===== Bottom buttons (click) =====
         private void BtnHeld_Click(object sender, RoutedEventArgs e) => OpenHeldPicker();
         private void Receive_Click(object sender, RoutedEventArgs e) => Receive_Executed(sender, null!);
         private void Amend_Click(object sender, RoutedEventArgs e) => Amend_Executed(sender, null!);
         private void Return_Click(object sender, RoutedEventArgs e) => Return_Executed(sender, null!);
         private void Void_Click(object sender, RoutedEventArgs e) => Void_Executed(sender, null!);
 
-        // ===== Command handlers =====
         private async void Receive_Executed(object? sender, ExecutedRoutedEventArgs? e)
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a purchase."); return; }
             if (sel.IsReturn) { MessageBox.Show("Returns cannot be received."); return; }
             if (sel.Status != nameof(PurchaseStatus.Draft)) { MessageBox.Show("Only DRAFT purchases can be received."); return; }
-
             var svc = _svcFactory.Create();
-
             try
             {
-                // Load effective lines & finalize using the domain service
                 var draftEff = await svc.GetEffectiveLinesAsync(sel.PurchaseId);
-
                 var header = new Purchase
                 {
                     Id = sel.PurchaseId,
                     Status = PurchaseStatus.Final
-                    // other header fields are looked up by the service inside ReceiveAsync if needed,
-                    // but if your current ReceiveAsync requires full header:
-                    // supply PartyId, TargetType, OutletId, WarehouseId, VendorInvoiceNo, PurchaseDate
                 };
-
                 var lines = draftEff.Select(x => new PurchaseLine
                 {
                     ItemId = x.ItemId,
@@ -281,10 +214,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     Discount = x.Discount,
                     TaxRate = x.TaxRate
                 }).ToList();
-
                 var user = AppState.Current?.CurrentUserName ?? "system";
                 await svc.ReceiveAsync(header, lines, user);
-
                 MessageBox.Show("Purchase received and posted.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 LoadPurchases();
                 _lines.Clear();
@@ -304,15 +235,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
-
-
         private void Amend_Executed(object? sender, ExecutedRoutedEventArgs? e)
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a purchase."); return; }
             if (sel.IsReturn) { MessageBox.Show("Use 'Amend Return' for returns."); return; }
             if (sel.Status != nameof(PurchaseStatus.Final)) { MessageBox.Show("Only FINAL purchases can be amended."); return; }
-
             var win = new EditPurchaseWindow(sel.PurchaseId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true || win.Confirmed)
             {
@@ -325,7 +253,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a purchase/return first."); return; }
-
             if (!sel.IsReturn)
             {
                 if (sel.Status != nameof(PurchaseStatus.Final))
@@ -333,38 +260,25 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     MessageBox.Show("Only FINAL purchases can have returns.");
                     return;
                 }
-
-                // “Return With” base purchase flow:
-                // If you already have a PurchaseReturnWindow, open it here; otherwise keep this placeholder.
-                // Example:
                 var retWin = new PurchaseReturnWindow(refPurchaseId: sel.PurchaseId) { Owner = Window.GetWindow(this) };
                 if (retWin.ShowDialog() == true) { LoadPurchases(); return; }
-
-                //MessageBox.Show($"Return With base purchase {sel.DocNoOrId} — TODO: open return window.");
                 LoadPurchases();
                 return;
             }
 
-            // If the selected row IS a return, route to amend-return
             AmendReturn_Click(sender!, new RoutedEventArgs());
         }
-
-        // At top of the class you already construct _svc; reuse it here.
 
         private async void Void_Executed(object? sender, ExecutedRoutedEventArgs? e)
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a document."); return; }
-
             var user = AppState.Current?.CurrentUserName ?? "system";
-
-            // VOID RETURN
             if (sel.IsReturn)
             {
                 var reason = Microsoft.VisualBasic.Interaction.InputBox(
                     $"Void return {sel.DocNoOrId}\nEnter reason:", "Void Return", "Wrong return");
                 if (string.IsNullOrWhiteSpace(reason)) return;
-
                 try
                 {
                     var svc = _svcFactory.Create();
@@ -378,12 +292,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
                 return;
             }
-
-            // VOID PURCHASE (Draft or Final)
             var reason2 = Microsoft.VisualBasic.Interaction.InputBox(
                 $"Void purchase {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong purchase");
             if (string.IsNullOrWhiteSpace(reason2)) return;
-
             try
             {
                 var svc = _svcFactory.Create();
@@ -394,7 +305,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             catch (InvalidOperationException ex)
             {
-                // will show: "Cannot void purchase — it would make stock negative: ..."
                 MessageBox.Show(ex.Message, "Void blocked", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
@@ -403,18 +313,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
-
         private void Held_Executed(object sender, ExecutedRoutedEventArgs e) => OpenHeldPicker();
 
-        private async void OpenHeldPicker()
+        private void OpenHeldPicker()
         {
             var read = App.Services.GetRequiredService<IPurchaseCenterReadService>();
             var picker = new HeldPurchasesWindow(read) { Owner = Window.GetWindow(this) };
-
             if (picker.ShowDialog() == true && picker.SelectedPurchaseId is int id)
             {
                 SelectedHeldPurchaseId = id;
-
                 if (Window.GetWindow(this) is Window host)
                 {
                     host.DialogResult = true;
@@ -422,7 +329,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
             }
         }
-
 
         private async Task UpdateHeldButtonVisibilityAsync()
         {
@@ -438,26 +344,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
-
-        // ----- Action bar buttons (wired from XAML) -----
         private void AmendReturn_Click(object sender, RoutedEventArgs e)
         {
             var sel = Pick();
             if (sel == null) { MessageBox.Show("Select a return."); return; }
             if (!sel.IsReturn) { MessageBox.Show("Pick a return to amend."); return; }
-            // TODO: open your PurchaseReturnWindow in amend mode:
             var win = new PurchaseReturnWindow(returnId: sel.PurchaseId) { Owner = Window.GetWindow(this) };
             if (win.ShowDialog() == true) LoadPurchases();
-            //MessageBox.Show($"Amend Return {sel.DocNoOrId} — TODO: open return window.");
         }
 
         public void OnActivated()
         {
-            // tiny throttle so activation + selection doesn't double-call
             var now = DateTime.UtcNow;
             if (now - _lastRefreshUtc < TimeSpan.FromMilliseconds(250)) return;
             _lastRefreshUtc = now;
-
             if (!IsLoaded) Dispatcher.BeginInvoke(new Action(LoadPurchases));
             else LoadPurchases();
         }
@@ -470,11 +370,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void ReturnWithout_Click(object sender, RoutedEventArgs e)
         {
-            // Free-form return (no base document)
-            // TODO: open your free-form return window:
             var win = new PurchaseReturnWindow(); // without RefPurchaseId
             if (win.ShowDialog() == true) LoadPurchases();
-            //MessageBox.Show("Return without base purchase — TODO: open return window.");
         }
     }
 }

@@ -13,6 +13,7 @@ using Pos.Persistence.Sync;
 using Pos.Domain.Formatting;
 using Pos.Domain.Accounting;
 using Pos.Domain.Models.Inventory;
+using Pos.Domain.Models.Settings;
 
 
 namespace Pos.Persistence.Services
@@ -23,13 +24,15 @@ namespace Pos.Persistence.Services
         private readonly IOutboxWriter _outbox;
         private readonly IGlPostingService _gl;
         private readonly IStockGuard _guard;
+        private readonly IInvoiceSettingsService _invSettings;   // <-- add
 
-        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard)
+        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard, IInvoiceSettingsService invSettings)
         {
             _db = db;
             _outbox = outbox;
             _gl = gl;
             _guard = guard;
+            _invSettings = invSettings;
         }
 
         // ---------- Reads ----------
@@ -501,6 +504,46 @@ namespace Pos.Persistence.Services
 
         private static string AppendNote(string? existing, string add)
             => string.IsNullOrWhiteSpace(existing) ? add : existing + Environment.NewLine + add;
+
+        public async Task<InvoiceSettingsDto> GetInvoiceSettingsAsync(
+    int outletId,
+    string lang = "en",
+    CancellationToken ct = default)
+        {
+            var (s, loc) = await _invSettings.GetAsync(outletId, lang, ct);
+
+            // Normalize paper width & footer similar to your service’s behavior
+            var width = s.PaperWidthMm <= 0 ? 80 : s.PaperWidthMm;
+            var footer = string.IsNullOrWhiteSpace(loc.Footer)
+                ? "Thank you for shopping with us!"
+                : loc.Footer!;
+
+            return new InvoiceSettingsDto(
+                PrintOnSave: s.PrintOnSave,
+                AskToPrintOnSave: s.AskToPrintOnSave,
+                PaperWidthMm: width,
+                SalesCardClearingAccountId: s.SalesCardClearingAccountId,
+                PrinterName: s.PrinterName,
+                FooterText: footer
+            );
+        }
+
+        // NEW: interface-conform aliases for the amend/edit flow
+        public Task<Pos.Domain.Models.Sales.EditSaleLoadDto> LoadForEditAsync(
+            int saleId,
+            CancellationToken ct = default)
+        {
+            // Existing implementation already does this work
+            return GetSaleForEditAsync(saleId);
+        }
+
+        public Task<Pos.Domain.Models.Sales.EditSaleSaveResult> SaveEditAsync(
+            Pos.Domain.Models.Sales.EditSaleSaveRequest req,
+            CancellationToken ct = default)
+        {
+            // Existing implementation already does this work
+            return SaveAmendmentAsync(req, ct);
+        }
 
 
 

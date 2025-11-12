@@ -1,14 +1,18 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// Pos.Persistence/Services/PartyService.cs
+using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
+using Pos.Domain.Models.Parties;
+using Pos.Domain.Services;
 using Pos.Persistence.Sync;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Pos.Persistence.Services
 {
-    public class PartyService
+    public sealed class PartyService : IPartyService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
@@ -19,31 +23,19 @@ namespace Pos.Persistence.Services
             _outbox = outbox;
         }
 
-        public sealed class PartyRowDto
-        {
-            public int Id { get; set; }
-            public string Name { get; set; } = "";
-            public string? Phone { get; set; }
-            public string? Email { get; set; }
-            public string? TaxNumber { get; set; }
-            public bool IsActive { get; set; }
-            public bool IsSharedAcrossOutlets { get; set; }
-            public string RolesText { get; set; } = "";
-        }
-
         public async Task<List<PartyRowDto>> SearchAsync(
             string? term,
             bool onlyActive,
             bool includeCustomer,
-            bool includeSupplier)
+            bool includeSupplier,
+            CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
 
             term = (term ?? "").Trim();
-            var q = db.Parties
+            IQueryable<Party> q = db.Parties
                 .Include(p => p.Roles)
-                .AsNoTracking()
-                .AsQueryable();
+                .AsNoTracking();
 
             if (!string.IsNullOrWhiteSpace(term))
             {
@@ -63,7 +55,7 @@ namespace Pos.Persistence.Services
                 q = q.Where(p => p.Roles.Any(r => r.Role == role));
             }
 
-            var list = await q
+            return await q
                 .OrderBy(p => p.Name)
                 .Select(p => new PartyRowDto
                 {
@@ -76,19 +68,17 @@ namespace Pos.Persistence.Services
                     IsSharedAcrossOutlets = p.IsSharedAcrossOutlets,
                     RolesText = string.Join(", ", p.Roles.Select(r => r.Role.ToString()))
                 })
-                .ToListAsync();
-
-            return list;
+                .ToListAsync(ct);
         }
 
-        public async Task<Party?> GetPartyAsync(int id)
+        public async Task<Party?> GetPartyAsync(int id, CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
             return await db.Parties
                 .Include(p => p.Roles)
                 .Include(p => p.Outlets)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == id);
+                .FirstOrDefaultAsync(p => p.Id == id, ct);
         }
 
         public async Task SavePartyAsync(
@@ -101,10 +91,11 @@ namespace Pos.Persistence.Services
             bool isShared,
             bool roleCustomer,
             bool roleSupplier,
-            IEnumerable<(int OutletId, bool IsActive, bool AllowCredit, decimal? CreditLimit)> outlets)
+            IEnumerable<(int OutletId, bool IsActive, bool AllowCredit, decimal? CreditLimit)> outlets,
+            CancellationToken ct = default)
         {
-            await using var db = _dbf.CreateDbContext();
-            using var tx = await db.Database.BeginTransactionAsync();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
 
             Party party;
             var removedLinks = new List<PartyOutlet>();
@@ -119,7 +110,7 @@ namespace Pos.Persistence.Services
                 party = await db.Parties
                     .Include(p => p.Roles)
                     .Include(p => p.Outlets)
-                    .FirstAsync(p => p.Id == id.Value);
+                    .FirstAsync(p => p.Id == id.Value, ct);
             }
 
             // --- basics ---
@@ -179,20 +170,23 @@ namespace Pos.Persistence.Services
             var isCust = party.Roles.Any(r => r.Role == RoleType.Customer);
             var isSupp = party.Roles.Any(r => r.Role == RoleType.Supplier);
             string headerCode = isCust ? "62" : "61";
-            var parent = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Code == headerCode);
+
+            var parent = await db.Accounts.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Code == headerCode, ct);
             if (parent == null)
                 throw new InvalidOperationException($"CoA header {headerCode} not found.");
 
             Account? linked = null;
             if (party.AccountId.HasValue)
             {
-                linked = await db.Accounts.FirstOrDefaultAsync(a => a.Id == party.AccountId.Value);
+                linked = await db.Accounts
+                    .FirstOrDefaultAsync(a => a.Id == party.AccountId.Value, ct);
                 if (linked == null) party.AccountId = null;
             }
 
             if (linked == null)
             {
-                var code = await GenerateNextChildCodeAsync(db, parent, false);
+                var code = await GenerateNextChildCodeAsync(db, parent, forHeader: false, ct);
                 linked = new Account
                 {
                     Code = code,
@@ -204,7 +198,7 @@ namespace Pos.Persistence.Services
                     ParentId = parent.Id
                 };
                 db.Accounts.Add(linked);
-                await db.SaveChangesAsync();
+                await db.SaveChangesAsync(ct);
                 party.AccountId = linked.Id;
             }
             else
@@ -214,31 +208,47 @@ namespace Pos.Persistence.Services
                 linked.NormalSide = isSupp && !isCust ? NormalSide.Credit : NormalSide.Debit;
             }
 
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
 
-            // --- Outbox ---
-            await _outbox.EnqueueUpsertAsync(db, party);
+            // --- Outbox (enqueue before final save/commit) ---
+            await _outbox.EnqueueUpsertAsync(db, party, ct);
             foreach (var link in party.Outlets)
-                await _outbox.EnqueueUpsertAsync(db, link);
+                await _outbox.EnqueueUpsertAsync(db, link, ct);
+
             if (linked != null)
-                await _outbox.EnqueueUpsertAsync(db, linked);
+                await _outbox.EnqueueUpsertAsync(db, linked, ct);
+
             foreach (var del in removedLinks)
             {
                 var topic = nameof(PartyOutlet);
                 var publicId = Pos.Domain.Utils.GuidUtility.FromString($"{topic}:{del.PartyId}:{del.OutletId}");
-                await _outbox.EnqueueDeleteAsync(db, topic, publicId, default);
+                await _outbox.EnqueueDeleteAsync(db, topic, publicId, ct);
             }
 
-            await db.SaveChangesAsync();
-            await tx.CommitAsync();
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
         }
 
-        private static async Task<string> GenerateNextChildCodeAsync(PosClientDbContext db, Account parent, bool forHeader)
+        public async Task<string?> GetPartyNameAsync(int partyId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Parties
+                .AsNoTracking()
+                .Where(p => p.Id == partyId)
+                .Select(p => p.Name)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        private static async Task<string> GenerateNextChildCodeAsync(
+            PosClientDbContext db,
+            Account parent,
+            bool forHeader,
+            CancellationToken ct)
         {
             var sibs = await db.Accounts.AsNoTracking()
                 .Where(a => a.ParentId == parent.Id)
                 .Select(a => a.Code)
-                .ToListAsync();
+                .ToListAsync(ct);
 
             int max = 0;
             foreach (var code in sibs)
@@ -250,17 +260,5 @@ namespace Pos.Persistence.Services
             var suffix = forHeader ? next.ToString("D2") : next.ToString("D3");
             return $"{parent.Code}-{suffix}";
         }
-
-        public async Task<string?> GetPartyNameAsync(int partyId, CancellationToken ct = default)
-        {
-            await using var db = _dbf.CreateDbContext();
-            return await db.Parties
-                .AsNoTracking()
-                .Where(p => p.Id == partyId)
-                .Select(p => p.Name)
-                .FirstOrDefaultAsync(ct);
-        }
-
-
     }
 }

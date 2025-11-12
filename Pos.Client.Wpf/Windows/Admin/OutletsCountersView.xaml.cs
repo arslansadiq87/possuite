@@ -12,20 +12,18 @@ using Pos.Domain.Entities;
 using Pos.Client.Wpf.Windows.Common;
 using Pos.Client.Wpf.Services;
 using Pos.Domain;
-using Pos.Domain.Utils;
+using Pos.Domain.Services.Admin;
 using Pos.Domain.Services;
-//using Pos.Persistence.Services;   // service pattern
+using Pos.Domain.Services.System;
+using Pos.Client.Wpf.Security;
+
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class OutletsCountersView : UserControl
     {
         public event EventHandler? RequestClose;
-
-        // Service-based: the view owns NO DbContext or Outbox.
         private readonly IOutletCounterService _svc;
-
-        // Lightweight DTOs for safe binding (kept local to avoid XAML churn)
         private sealed class OutletRow
         {
             public int Id { get; init; }
@@ -44,17 +42,14 @@ namespace Pos.Client.Wpf.Windows.Admin
             public string? AssignedTo { get; init; }
         }
 
-        // Selection memory + views for filtering
         private int? _selectedOutletId;
         private ICollectionView? _outletView;
         private ICollectionView? _counterView;
 
-        // parameterless: this is a UserControl loaded in XAML
         public OutletsCountersView()
         {
             InitializeComponent();
             _svc = App.Services.GetRequiredService<IOutletCounterService>();
-
             Loaded += async (_, __) =>
             {
                 await SafeLoadOutletsAsync();
@@ -65,7 +60,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             };
         }
 
-        // -------------------- Data loading via service --------------------
         private async Task SafeLoadOutletsAsync()
         {
             try
@@ -79,7 +73,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     Address = o.Address,
                     IsActive = o.IsActive
                 }).ToList();
-
                 UsersafeBindOutlets(outlets);
             }
             catch (Exception ex)
@@ -94,8 +87,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             OutletsGrid.ItemsSource = outlets;
             _outletView = CollectionViewSource.GetDefaultView(OutletsGrid.ItemsSource);
             _outletView.Filter = OutletFilter;
-
-            // restore selection if possible
             if (_selectedOutletId is int id)
             {
                 var again = outlets.FirstOrDefault(o => o.Id == id);
@@ -126,7 +117,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     IsActive = c.IsActive,
                     AssignedTo = c.AssignedTo
                 }).ToList();
-
                 CountersGrid.ItemsSource = counters;
                 _counterView = CollectionViewSource.GetDefaultView(CountersGrid.ItemsSource);
                 _counterView.Filter = CounterFilter;
@@ -140,7 +130,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // -------------------- Filters & search boxes --------------------
         private bool OutletFilter(object obj)
         {
             if (obj is not OutletRow row) return false;
@@ -178,21 +167,16 @@ namespace Pos.Client.Wpf.Windows.Admin
             UpdateCounterSearchRowVisibility();
         }
 
-        // -------------------- Grid selection & refresh --------------------
         private async void OutletsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
             {
                 var row = OutletsGrid.SelectedItem as OutletRow;
                 _selectedOutletId = row?.Id;
-
-                // clear previous counter search so new outlet’s counters show up
                 if (CounterSearchBox != null && CounterSearchBox.Text?.Length > 0)
                     CounterSearchBox.Text = string.Empty;
-
                 CountersGrid.ItemsSource = null;
                 _counterView = null;
-
                 if (_selectedOutletId is int id)
                     await SafeLoadCountersAsync(id);
                 else
@@ -207,17 +191,13 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void Refresh_Click(object sender, RoutedEventArgs e)
             => await SafeLoadOutletsAsync();
-
-        // -------------------- CRUD — Outlets (dialogs + service) --------------------
         private async void AddOutlet_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                //var dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
                 var dlg = new EditOutletWindow(); // was: new EditOutletWindow(dbf)
                 if (dlg.ShowDialog() == true && dlg.SavedOutletId is int id)
                 {
-                    // Ensure outbox upsert (reload + enqueue inside service)
                     await _svc.UpsertOutletByIdAsync(id);
                     _selectedOutletId = id;
                     await SafeLoadOutletsAsync();
@@ -239,9 +219,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBox.Show("Select an outlet.");
                     return;
                 }
-                //var dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
                 var dlg = new EditOutletWindow(sel.Id); // was: new EditOutletWindow(dbf, sel.Id)
-
                 if (dlg.ShowDialog() == true)
                 {
                     await _svc.UpsertOutletByIdAsync(sel.Id);
@@ -268,7 +246,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 if (MessageBox.Show($"Delete outlet '{sel.Name}'?", "Confirm",
                         MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                     return;
-
                 await _svc.DeleteOutletAsync(sel.Id);
                 _selectedOutletId = null;
                 await SafeLoadOutletsAsync();
@@ -280,7 +257,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // -------------------- CRUD — Counters (dialogs + service) --------------------
         private async void AddCounter_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -290,13 +266,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBox.Show("Select an outlet first.");
                     return;
                 }
-                //var dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
                 var dlg = new EditCounterWindow(outletId); // was: new EditCounterWindow(_dbf, outletId)
                 if (dlg.ShowDialog() == true)
                 {
-                    // We don't have SavedCounterId; reload last created or simply refresh list.
-                    // To ensure outbox upsert, call service to upsert the most recent counter id (optional),
-                    // but simplest is to reload the grid:
                     await SafeLoadCountersAsync(outletId);
                 }
             }
@@ -321,11 +293,9 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBox.Show("Select a counter.");
                     return;
                 }
-                //var dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
                 var dlg = new EditCounterWindow(row.Id); // was: new EditCounterWindow(_dbf, row.Id)
                 if (dlg.ShowDialog() == true)
                 {
-                    // Ensure outbox upsert
                     await _svc.UpsertCounterByIdAsync(row.Id);
                     await SafeLoadCountersAsync(outletId);
                 }
@@ -365,7 +335,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // -------------------- Assign / Unassign this PC --------------------
         private async void AssignThisPc_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -381,14 +350,16 @@ namespace Pos.Client.Wpf.Windows.Admin
                     return;
                 }
 
-                // Keep existing CounterBindingService for local side-effects if needed
-                var binder = App.Services.GetRequiredService<CounterBindingService>();
-                binder.AssignThisPcToCounter(outletId, row.Id); // local config (if any)
+                var sp = App.Services;
+                var midS = sp.GetRequiredService<IMachineIdentityService>();
+                var svc = sp.GetRequiredService<ICounterBindingService>();
 
-                var machine = Environment.MachineName;
-                await _svc.AssignThisPcAsync(outletId, row.Id, machine);
+                var machineId = await midS.GetMachineIdAsync();
+                var machineName = await midS.GetMachineNameAsync();
 
+                await svc.AssignAsync(machineId, machineName, outletId, row.Id, CancellationToken.None);
                 await SafeLoadCountersAsync(outletId);
+
                 MessageBox.Show("This PC is now assigned to the selected counter.",
                     "Binding", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -403,12 +374,13 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             try
             {
-                // Keep existing CounterBindingService for local side-effects if needed
-                var binder = App.Services.GetRequiredService<CounterBindingService>();
-                binder.UnassignThisPc();
+                var sp = App.Services;
+                var midS = sp.GetRequiredService<IMachineIdentityService>();
+                var svc = sp.GetRequiredService<ICounterBindingService>();
 
-                var machine = Environment.MachineName;
-                await _svc.UnassignThisPcAsync(machine);
+                var machineId =await midS.GetMachineIdAsync();
+
+                await svc.UnassignAsync(machineId, CancellationToken.None);
 
                 if (_selectedOutletId is int outletId)
                     await SafeLoadCountersAsync(outletId);
@@ -423,13 +395,12 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // -------------------- UI helpers --------------------
+
         private void UpdateOutletSearchRowVisibility()
         {
             try
             {
                 if (OutletSearchRow == null || OutletsGrid == null) return;
-
                 bool hasRows = OutletsGrid.Items != null && OutletsGrid.Items.Count > 0;
                 bool isScrollable = IsGridVerticallyScrollable(OutletsGrid);
                 OutletSearchRow.Visibility = (hasRows && isScrollable) ? Visibility.Visible : Visibility.Collapsed;
@@ -476,7 +447,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             int id = row?.Id ?? (_selectedOutletId ?? 0);
             if (id == 0) return;
 
-            if (!IsCurrentUserAdmin())
+            if (!AuthZ.IsAdminCached())
             {
                 MessageBox.Show("Only Admin can create or edit Opening Stock.", "Not allowed",
                     MessageBoxButton.OK, MessageBoxImage.Warning);

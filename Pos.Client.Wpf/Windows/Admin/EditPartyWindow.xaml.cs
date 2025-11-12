@@ -7,17 +7,18 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
-using Pos.Persistence.Services;
+//using Pos.Persistence.Services;
 using Pos.Client.Wpf.Infrastructure;
+using Pos.Domain.Services;
+
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class EditPartyWindow : Window
     {
         private readonly bool _design;
-        private PartyService? _svc;
+        private IPartyService? _svc;
         private int? _partyId;
-
         public class OutletVM
         {
             public int OutletId { get; set; }
@@ -32,11 +33,9 @@ namespace Pos.Client.Wpf.Windows.Admin
         public EditPartyWindow()
         {
             InitializeComponent();
-
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-
-            _svc = App.Services.GetRequiredService<PartyService>();
+            _svc = App.Services.GetRequiredService<IPartyService>();
             Loaded += async (_, __) => await LoadFormAsync();
         }
 
@@ -66,7 +65,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
             if (_svc == null) return;
-
             ErrorText.Text = "";
             var name = (NameText.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(name))
@@ -92,7 +90,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     RoleCustomerCheck.IsChecked == true,
                     RoleSupplierCheck.IsChecked == true,
                     outlets);
-
                 AppEvents.RaiseAccountsChanged();
                 DialogResult = true;
                 Close();
@@ -113,7 +110,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private void SharedChanged(object sender, RoutedEventArgs e)
         {
-            // No-op: kept only to satisfy existing XAML binding.
         }
 
     }

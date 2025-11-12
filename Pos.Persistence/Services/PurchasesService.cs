@@ -13,36 +13,31 @@ using Pos.Persistence.Sync;
 
 namespace Pos.Persistence.Services 
 {
-    // NEW: lightweight DTO to carry refund instructions from UI
-    //public record SupplierRefundSpec(TenderMethod Method, decimal Amount, string? Note);
 
     public class PurchasesService : IPurchasesService
     {
-        //private readonly PosClientDbContext _db;
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox; // NEW
+        private readonly IInventoryReadService _inv;   // <-- add
+        private readonly IGlPostingService _gl; // ✅ add
+        public PurchasesService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox, IInventoryReadService inv, IGlPostingService gl)
+        {
+            _dbf = dbf;
+            _outbox = outbox;
+            _inv = inv; // <-- add
+            _gl = gl; // ✅ add
+        }
 
-        //public PurchasesService(PosClientDbContext db, IOutboxWriter outbox /* keep your other deps if any */)
-        //{
-        //    _db = db;
-        //    _outbox = outbox;
-        //}
-        public PurchasesService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox)
-        { _dbf = dbf; _outbox = outbox; }
-        //public PurchasesService(PosClientDbContext db) => _db = db;
 
-       
+
         // ---------- Public API ----------
 
         /// <summary>
         /// Create or update a DRAFT purchase (no stock postings).
         /// Replaces lines on update to keep things simple.
         /// </summary>
-        //public async Task<Purchase> SaveDraftAsync(Purchase draft, IEnumerable<PurchaseLine> lines, string? user = null)
         public async Task<Purchase> SaveDraftAsync(Purchase draft, IEnumerable<PurchaseLine> lines, string? user = null, CancellationToken ct = default)
         {
-            // Drafts are *purchases*, not returns. We coerce negatives to zero.
-            //var lineList = NormalizeAndCompute(lines);
             await using var _db = await _dbf.CreateDbContextAsync(ct);
             var lineList = NormalizeAndCompute(lines);
             ComputeHeaderTotals(draft, lineList);
@@ -61,9 +56,7 @@ namespace Pos.Persistence.Services
             }
             else
             {
-                //var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id);
                 var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id, ct);
-
                 // header fields allowed in Draft
                 existing.PartyId = draft.PartyId;
                 existing.TargetType = draft.TargetType;
@@ -102,8 +95,6 @@ namespace Pos.Persistence.Services
 
                 draft = existing;
             }
-
-            //await _db.SaveChangesAsync();
             await _db.SaveChangesAsync(ct);
             return draft;
         }
@@ -111,14 +102,9 @@ namespace Pos.Persistence.Services
         private async Task<string> EnsurePurchaseNumberAsync(Purchase p, CancellationToken ct)
         {
             await using var _db = await _dbf.CreateDbContextAsync(ct);
-            // Simple safe fallback: if DocNo already set, keep it.
             if (!string.IsNullOrWhiteSpace(p.DocNo)) return p.DocNo!;
-
-            // Minimal, local-only sequence: PO-YYYYMMDD-### (per day)
             var today = DateTime.UtcNow.Date;
             var prefix = $"PO-{today:yyyyMMdd}-";
-
-            // Count existing Finals for today and +1 (works fine per-terminal/offline; replace with series later)
             var countToday = await _db.Purchases
                 .AsNoTracking()
                 .CountAsync(x => x.Status == PurchaseStatus.Final
@@ -183,7 +169,8 @@ namespace Pos.Persistence.Services
                 // === SYNC: finalized Purchase (first-time) ===
                 await _outbox.EnqueueUpsertAsync(_db, model, default);
                 await _db.SaveChangesAsync(ct);
-
+                // ✅ GL posting (non-fatal). Service owns the side-effect; UI stays thin.
+                try { await _gl.PostPurchaseAsync(model); } catch { /* non-fatal; log if you want */ }
                 return model;
             }
 
@@ -277,19 +264,17 @@ namespace Pos.Persistence.Services
 
                 var itemIds = movingByItem.Select(x => x.ItemId).ToArray();
 
-                var onhandOld = await _db.StockEntries
-                    .AsNoTracking()
-                    .Where(se => se.LocationType == oldLocType
-                                 && se.LocationId == oldLocId
-                                 && itemIds.Contains(se.ItemId))
-                    .GroupBy(se => se.ItemId)
-                    .Select(g => new { ItemId = g.Key, OnHand = g.Sum(x => x.QtyChange) })
-                    .ToDictionaryAsync(x => x.ItemId, x => x.OnHand);
+                var onhandOld = await _inv.GetOnHandBulkAsync(
+                    movingByItem.Select(x => x.ItemId),
+                    oldLocType,
+                    oldLocId,
+                    DateTime.UtcNow,
+                    ct);
 
                 var names = await _db.Items
                     .Where(i => itemIds.Contains(i.Id))
                     .Select(i => new { i.Id, i.Name })
-                    .ToDictionaryAsync(x => x.Id, x => x.Name);
+                    .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
 
                 var negHits = new List<string>();
                 foreach (var m in movingByItem)
@@ -331,7 +316,7 @@ namespace Pos.Persistence.Services
                 // replace lines once (draft → final)
                 _db.PurchaseLines.RemoveRange(existing.Lines);
                 await _db.SaveChangesAsync(ct);
-
+                
                 foreach (var l in lineList)
                 {
                     l.Id = 0;
@@ -344,7 +329,7 @@ namespace Pos.Persistence.Services
 
                 // normal purchase postings (IN to current destination on header)
                 await PostPurchaseStockAsync(existing, lineList, user ?? "system");
-
+                try { await _gl.PostPurchaseAsync(existing); } catch { /* non-fatal */ }
                 try
                 {
                     await ApplySupplierCreditsAsync(
@@ -490,19 +475,18 @@ namespace Pos.Persistence.Services
                 {
                     var itemIdsForGuard = deltaByItem.Keys.ToList();
 
-                    var onhand = await _db.StockEntries
-                        .AsNoTracking()
-                        .Where(se => se.LocationType == locType
-                                  && se.LocationId == locId
-                                  && itemIdsForGuard.Contains(se.ItemId))
-                        .GroupBy(se => se.ItemId)
-                        .Select(g => new { ItemId = g.Key, OnHand = g.Sum(x => x.QtyChange) })
-                        .ToDictionaryAsync(x => x.ItemId, x => x.OnHand);
+                    var onhand = await _inv.GetOnHandBulkAsync(
+                        itemIdsForGuard,
+                        locType,
+                        locId,
+                        DateTime.UtcNow,
+                        ct);
 
                     var names = await _db.Items
                         .Where(i => itemIdsForGuard.Contains(i.Id))
                         .Select(i => new { i.Id, i.Name })
-                        .ToDictionaryAsync(x => x.Id, x => x.Name);
+                        .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
+
 
                     var negHits = new List<string>();
                     foreach (var kv in deltaByItem)
@@ -548,6 +532,7 @@ namespace Pos.Persistence.Services
                 await tx.CommitAsync(ct);
                 await _outbox.EnqueueUpsertAsync(_db, model, default);
                 await _db.SaveChangesAsync(ct);
+                try { await _gl.PostPurchaseAsync(existing); } catch { /* non-fatal */ }
 
             }
 
@@ -556,45 +541,45 @@ namespace Pos.Persistence.Services
         }
 
         // Resolve or create per-outlet "Supplier Advances" posting account without using WPF services.
-        private async Task<int> GetSupplierAdvancesAccountIdAsync(int outletId, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            // Need outlet code to build our deterministic account code
-            var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
-            var code = $"113-{outlet.Code}-ADV";
+        //private async Task<int> GetSupplierAdvancesAccountIdAsync(int outletId, CancellationToken ct = default)
+        //{
+        //    await using var _db = await _dbf.CreateDbContextAsync(ct);
+        //    // Need outlet code to build our deterministic account code
+        //    var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
+        //    var code = $"113-{outlet.Code}-ADV";
 
-            // If exists, return it
-            var existingId = await _db.Accounts
-                .AsNoTracking()
-                .Where(a => a.OutletId == outletId && a.Code == code)
-                .Select(a => a.Id)
-                .FirstOrDefaultAsync(ct);
-            if (existingId != 0) return existingId;
+        //    // If exists, return it
+        //    var existingId = await _db.Accounts
+        //        .AsNoTracking()
+        //        .Where(a => a.OutletId == outletId && a.Code == code)
+        //        .Select(a => a.Id)
+        //        .FirstOrDefaultAsync(ct);
+        //    if (existingId != 0) return existingId;
 
-            // Try to find an "Assets" header to attach under; if not found, parent is null
-            int? assetHeaderId = await _db.Accounts
-                .AsNoTracking()
-                .Where(a => a.OutletId == outletId && a.IsHeader &&
-                            (a.Code == "1" || a.Name == "Assets"))     // adjust if your chart differs
-                .Select(a => (int?)a.Id)
-                .FirstOrDefaultAsync(ct);
+        //    // Try to find an "Assets" header to attach under; if not found, parent is null
+        //    int? assetHeaderId = await _db.Accounts
+        //        .AsNoTracking()
+        //        .Where(a => a.OutletId == outletId && a.IsHeader &&
+        //                    (a.Code == "1" || a.Name == "Assets"))     // adjust if your chart differs
+        //        .Select(a => (int?)a.Id)
+        //        .FirstOrDefaultAsync(ct);
 
-            var acc = new Pos.Domain.Entities.Account
-            {
-                OutletId = outletId,
-                Code = code,
-                Name = "Supplier Advances",
-                Type = Pos.Domain.Entities.AccountType.Asset,
-                IsHeader = false,
-                AllowPosting = true,
-                ParentId = assetHeaderId,
-                IsSystem = true
-            };
+        //    var acc = new Pos.Domain.Entities.Account
+        //    {
+        //        OutletId = outletId,
+        //        Code = code,
+        //        Name = "Supplier Advances",
+        //        Type = Pos.Domain.Entities.AccountType.Asset,
+        //        IsHeader = false,
+        //        AllowPosting = true,
+        //        ParentId = assetHeaderId,
+        //        IsSystem = true
+        //    };
 
-            _db.Accounts.Add(acc);
-            await _db.SaveChangesAsync(ct);
-            return acc.Id;
-        }
+        //    _db.Accounts.Add(acc);
+        //    await _db.SaveChangesAsync(ct);
+        //    return acc.Id;
+        //}
 
 
 
@@ -675,12 +660,24 @@ namespace Pos.Persistence.Services
                 : (outletId > 0 ? outletId : throw new InvalidOperationException("Outlet is required for recording the payment."));
 
             // ---------- Method constraints ----------
-            if (method != TenderMethod.Cash && method != TenderMethod.Bank)
-                throw new NotSupportedException("Only Cash and Bank methods are allowed for purchase payments.");
+            if (kind == PurchasePaymentKind.Adjustment)
+            {
+                // Allow non-cash, non-bank adjustment (supplier credit application)
+                if (method != TenderMethod.Cash &&
+                    method != TenderMethod.Bank &&
+                    method != TenderMethod.Other)
+                    throw new NotSupportedException("Unsupported method for adjustment.");
+            }
+            else
+            {
+                // Draft-Advance or Final-OnReceive: only Cash/Bank from UI
+                if (method != TenderMethod.Cash && method != TenderMethod.Bank)
+                    throw new NotSupportedException("Only Cash or Bank are allowed for purchase payments.");
+            }
 
+            // If it's a BANK payment, require config + explicit bank account
             if (method == TenderMethod.Bank)
             {
-                // Require PurchaseBankAccountId configured for the outlet
                 var settings = await _db.InvoiceSettings.AsNoTracking()
                     .FirstOrDefaultAsync(x => x.OutletId == payOutletId, ct);
 
@@ -713,24 +710,29 @@ namespace Pos.Persistence.Services
             await _db.SaveChangesAsync(ct);
 
             // ---------- GL Posting ----------
-            // Resolve credit account for payment: Cash (per-outlet) OR chosen Bank account
             var ts = DateTime.UtcNow;
 
             int creditAccountId;
             if (method == TenderMethod.Cash)
             {
-                // Cash-in-Hand account per outlet: code "111-{Outlet.Code}"
-                var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == payOutletId);
+                // Cash-in-Hand per outlet (e.g., "11101-{Outlet.Code}")
+                var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == payOutletId, ct);
                 var cashCode = $"11101-{outlet.Code}";
                 creditAccountId = await _db.Accounts.AsNoTracking()
                     .Where(a => a.Code == cashCode && a.OutletId == payOutletId)
                     .Select(a => a.Id)
                     .FirstAsync(ct);
             }
-            else // Bank
+            else if (method == TenderMethod.Bank)
             {
-                creditAccountId = pay.BankAccountId!.Value; // enforced above
+                creditAccountId = bankAccountId!.Value; // validated above
             }
+            else // method == TenderMethod.Other  (supplier credit application)
+            {
+                // Post to Supplier Advances as the *credit* side (no cash/bank movement)
+                creditAccountId = await ResolveSupplierAdvancesAccountIdAsync(payOutletId);
+            }
+
 
             if (purchase.Status == PurchaseStatus.Draft)
             {
@@ -1222,32 +1224,30 @@ namespace Pos.Persistence.Services
             return model;
         }
 
-        public async Task<decimal> GetOnHandAsync(int itemId, StockTargetType target, int? outletId, int? warehouseId, CancellationToken ct = default)
+        public Task<decimal> GetOnHandAsync(int itemId, StockTargetType target, int? outletId, int? warehouseId, CancellationToken ct = default)
         {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            if (itemId <= 0) return 0m;
+            if (itemId <= 0) return Task.FromResult(0m);
+
+            InventoryLocationType locType;
+            int locId;
 
             if (target == StockTargetType.Outlet)
             {
-                if (outletId is not int o || o <= 0) return 0m;
-
-                return await _db.StockEntries
-                    .Where(se => se.ItemId == itemId
-                              && se.LocationType == InventoryLocationType.Outlet
-                              && se.LocationId == o)
-                    .SumAsync(se => se.QtyChange);
+                if (outletId is not int o || o <= 0) return Task.FromResult(0m);
+                locType = InventoryLocationType.Outlet;
+                locId = o;
             }
-            else // Warehouse
+            else
             {
-                if (warehouseId is not int w || w <= 0) return 0m;
-
-                return await _db.StockEntries
-                    .Where(se => se.ItemId == itemId
-                              && se.LocationType == InventoryLocationType.Warehouse
-                              && se.LocationId == w)
-                    .SumAsync(se => se.QtyChange);
+                if (warehouseId is not int w || w <= 0) return Task.FromResult(0m);
+                locType = InventoryLocationType.Warehouse;
+                locId = w;
             }
+
+            // Centralized logic (strict-before + clamp)
+            return _inv.GetOnHandAtLocationAsync(itemId, locType, locId, DateTime.UtcNow, ct);
         }
+
 
 
 
@@ -1709,14 +1709,7 @@ namespace Pos.Persistence.Services
             // Check current on-hand at the same location for these items
             var itemIds = netByItem.Keys.ToArray();
 
-            var onhandByItem = await _db.StockEntries
-                .AsNoTracking()
-                .Where(se => se.LocationType == locType &&
-                             se.LocationId == locId &&
-                             itemIds.Contains(se.ItemId))
-                .GroupBy(se => se.ItemId)
-                .Select(g => new { ItemId = g.Key, OnHand = g.Sum(x => x.QtyChange) })
-                .ToDictionaryAsync(x => x.ItemId, x => x.OnHand, ct);
+            var onhandByItem = await _inv.GetOnHandBulkAsync(itemIds, locType, locId, DateTime.UtcNow, ct);
 
             // Validate no item would go below zero after removal
             var violations = new List<string>();

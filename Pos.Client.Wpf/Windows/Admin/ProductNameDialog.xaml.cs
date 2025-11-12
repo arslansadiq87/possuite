@@ -12,26 +12,21 @@ namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class ProductNameDialog : Window
     {
-        // ---- Service layer only (no DbContext here) ----
         private readonly ICatalogService _svc =
             App.Services.GetRequiredService<ICatalogService>();
 
-        // Picked images (exposed to caller)
         private string? _primaryImagePath;
         private readonly List<string> _galleryImagePaths = new();
 
-        // Expose for caller/XAML
         public string? PrimaryImagePath => _primaryImagePath;
         public IReadOnlyList<string> GalleryImagePaths => _galleryImagePaths;
 
-        // Tiny preview strip for the dialog UI
         private readonly ObservableCollection<string> _thumbs = new();
         public ObservableCollection<string> ThumbPreview => _thumbs;
 
         private readonly ObservableCollection<Brand> _brands = new();
         private readonly ObservableCollection<Category> _categories = new();
         public bool IsEditMode { get; private set; } = false;
-
         public ProductNameDialog()
         {
             InitializeComponent();
@@ -40,22 +35,17 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             Loaded += async (_, __) =>
             {
-                // Lookups via service layer
                 _brands.Clear();
                 foreach (var b in await _svc.GetActiveBrandsAsync())
                     _brands.Add(b);
-
                 _categories.Clear();
                 foreach (var c in await _svc.GetAllCategoriesAsync())
                     _categories.Add(c);
-
-                // Bind once lists are loaded
                 BrandCombo.ItemsSource = _brands;
                 CategoryCombo.ItemsSource = _categories;
             };
         }
 
-        // Expose values to caller
         public string ProductName => NameBox.Text.Trim();
 
         public int? BrandId =>
@@ -80,23 +70,18 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             NameBox.Text = name ?? "";
 
-            // Make sure ItemsSource is assigned (Loaded handler runs first in normal flow).
-            // If dialog was constructed and Prefill called before Loaded, we’ll set SelectedValue after load too.
             void applySelection()
             {
                 if (brandId.HasValue) BrandCombo.SelectedValue = brandId.Value; else BrandCombo.SelectedIndex = -1;
                 if (categoryId.HasValue) CategoryCombo.SelectedValue = categoryId.Value; else CategoryCombo.SelectedIndex = -1;
             }
-
             if (BrandCombo.ItemsSource is null || CategoryCombo.ItemsSource is null)
             {
                 Loaded += (_, __) => applySelection();
             }
             else applySelection();
-
             Title = "Edit Product";
             if (BtnSave != null) BtnSave.Content = "Update";
-
             NameBox.Focus();
             NameBox.SelectAll();
         }
@@ -112,8 +97,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (dlg.ShowDialog() == true)
             {
                 _primaryImagePath = dlg.FileName;
-
-                // keep primary at index 0 in preview
                 if (ThumbPreview.Count == 0) ThumbPreview.Add(_primaryImagePath);
                 else ThumbPreview[0] = _primaryImagePath;
             }
@@ -132,8 +115,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 foreach (var f in dlg.FileNames)
                     if (!_galleryImagePaths.Contains(f, StringComparer.OrdinalIgnoreCase))
                         _galleryImagePaths.Add(f);
-
-                // rebuild preview: primary (if any) first, then gallery
                 ThumbPreview.Clear();
                 if (_primaryImagePath != null) ThumbPreview.Add(_primaryImagePath);
                 foreach (var g in _galleryImagePaths) ThumbPreview.Add(g);

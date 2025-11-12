@@ -8,7 +8,7 @@ using Pos.Domain.Entities;
 using Pos.Client.Wpf.Services;      // AppEvents, AuthZ
 using Pos.Domain.Services;     // OtherAccountService
 using Pos.Client.Wpf.Infrastructure;
-
+using Pos.Client.Wpf.Security;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -21,18 +21,14 @@ namespace Pos.Client.Wpf.Windows.Admin
         public OtherAccountsView()
         {
             InitializeComponent();
-
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-
             _svc = App.Services.GetRequiredService<IOtherAccountService>();
             _dialogFactory = () => App.Services.GetRequiredService<OtherAccountDialog>();
-
             Loaded += async (_, __) => await RefreshAsync();
         }
 
         private bool Ready => !_design && _svc != null;
-
         // ---------------- REFRESH ----------------
         private async Task RefreshAsync()
         {
@@ -48,16 +44,14 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        // ---------------- BUTTONS ----------------
         private async void New_Click(object sender, RoutedEventArgs e)
         {
-            if (!AuthZ.IsManagerOrAbove())
+            if (! await AuthZ.IsManagerOrAboveAsync())
             {
                 MessageBox.Show("Only Manager or Admin can create new accounts.", "Access Denied",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             var dlg = _dialogFactory!();
             dlg.Configure(null);
             if (dlg.ShowDialog() == true)
@@ -67,14 +61,12 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async void Edit_Click(object sender, RoutedEventArgs e)
         {
             if (Grid.SelectedItem is not OtherAccount row) return;
-
-            if (!AuthZ.IsManagerOrAbove())
+            if (!await AuthZ.IsAdminAsync())
             {
                 MessageBox.Show("Only Manager or Admin can edit accounts.", "Access Denied",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             var dlg = _dialogFactory!();
             dlg.Configure(row.Id);
             if (dlg.ShowDialog() == true)
@@ -84,18 +76,15 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async void Delete_Click(object sender, RoutedEventArgs e)
         {
             if (Grid.SelectedItem is not OtherAccount row) return;
-
-            if (!AuthZ.IsAdmin())
+            if (!await AuthZ.IsAdminAsync())
             {
                 MessageBox.Show("Only Admin can delete accounts.", "Access Denied",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             if (MessageBox.Show($"Delete account “{row.Name}”?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
-
             try
             {
                 var ok = await _svc!.DeleteAsync(row.Id);
@@ -105,7 +94,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         "Other Accounts", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
                 AppEvents.RaiseAccountsChanged();
                 await RefreshAsync();
             }

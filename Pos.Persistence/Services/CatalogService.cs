@@ -14,7 +14,7 @@ using Pos.Persistence.Outbox;
 
 namespace Pos.Persistence.Services
 {
-    public sealed class CatalogService : ICatalogService
+    public sealed class CatalogService : ICatalogService, IItemsWriteService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
@@ -44,6 +44,7 @@ namespace Pos.Persistence.Services
         public async Task<ProductImage> SetProductPrimaryImageAsync(
             int productId, string originalLocalPath, Func<string, string> createThumbAt, CancellationToken ct = default)
         {
+            EnsureMedia();
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             _ = await db.Products.FindAsync(new object?[] { productId }, ct)
@@ -125,6 +126,7 @@ namespace Pos.Persistence.Services
         public async Task<ItemImage> SetItemPrimaryImageAsync(
             int itemId, string originalLocalPath, Func<string, string> createThumbAt, CancellationToken ct = default)
         {
+            EnsureMedia();
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             _ = await db.Items.FindAsync(new object?[] { itemId }, ct)
@@ -197,6 +199,7 @@ namespace Pos.Persistence.Services
         public async Task<ProductImage> AddProductGalleryImageAsync(
             int productId, string originalLocalPath, Func<string, string> createThumbAt, CancellationToken ct = default)
         {
+            EnsureMedia();
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             var ext = Path.GetExtension(originalLocalPath);
@@ -242,6 +245,7 @@ namespace Pos.Persistence.Services
         public async Task<ItemImage> AddItemGalleryImageAsync(
             int itemId, string originalLocalPath, Func<string, string> createThumbAt, CancellationToken ct = default)
         {
+            EnsureMedia();
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             _ = await db.Items.FindAsync(new object?[] { itemId }, ct)
@@ -1200,5 +1204,11 @@ namespace Pos.Persistence.Services
             }
             return Math.Max(maxNum + 1, fallbackStart);
         }
+
+        private static void EnsureMedia()
+        {
+            Pos.Persistence.Media.MediaPaths.Ensure();
+        }
+
     }
 }

@@ -7,7 +7,6 @@ namespace Pos.Client.Wpf.Windows.Common
     public partial class SimplePromptWindow : Window
     {
         private readonly Dictionary<string, FrameworkElement> _controls = new();
-
         public SimplePromptWindow(string title, params (string key, object value)[] fields)
         {
             InitializeComponent();
@@ -26,7 +25,6 @@ namespace Pos.Client.Wpf.Windows.Common
 
         public string GetText(string key) => _controls[key] is TextBox t ? t.Text : "";
         public bool GetBool(string key) => _controls[key] is CheckBox c && (c.IsChecked ?? false);
-
         private void Ok_Click(object? s, RoutedEventArgs e) => DialogResult = true;
         private void Cancel_Click(object? s, RoutedEventArgs e) => DialogResult = false;
     }

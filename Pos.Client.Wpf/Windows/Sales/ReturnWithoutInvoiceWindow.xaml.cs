@@ -20,19 +20,18 @@ namespace Pos.Client.Wpf.Windows.Sales
     public partial class ReturnWithoutInvoiceWindow : Window
     {
         private readonly ObservableCollection<ReturnLine> _cart = new();
-
         private readonly ISalesService _sales;
+        private readonly IInventoryReadService _invRead;
+        private readonly IItemsReadService _items;
+
         private readonly AppState _state;
         private readonly IPaymentDialogService _pay;
-
         // Scope (constructor params)
         private readonly int _outletId;
         private readonly int _counterId;
-
         // Selected salesman
         private int? _selectedSalesmanId = null;
         private string? _selectedSalesmanName = null;
-
         // Invoice-level discount
         private decimal _invDiscPct = 0m;
         private decimal _invDiscAmt = 0m;
@@ -40,10 +39,8 @@ namespace Pos.Client.Wpf.Windows.Sales
         // Footer
         private string _footer = "Return processed — thank you!";
 
-        // Designer-safe
         public ReturnWithoutInvoiceWindow() : this(1, 1) { }
-
-        // Main (use outlet/counter from caller)
+        
         public ReturnWithoutInvoiceWindow(int outletId, int counterId)
         {
             InitializeComponent();
@@ -54,7 +51,8 @@ namespace Pos.Client.Wpf.Windows.Sales
             _sales = App.Services.GetRequiredService<ISalesService>();
             _state = App.Services.GetRequiredService<AppState>();
             _pay = App.Services.GetRequiredService<IPaymentDialogService>();
-
+            _invRead = App.Services.GetRequiredService<IInventoryReadService>();
+            _items = App.Services.GetRequiredService<IItemsReadService>();
             this.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.F9) { RefundButton_Click(s, e); e.Handled = true; return; }
@@ -103,7 +101,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             // StaffLiteDto: Id, DisplayName
             var list = await _sales.GetSalesmenAsync();
 
-            // Add "-- None --" row at top
             var withNone = list.ToList();
             withNone.Insert(0, new StaffLiteDto(0, "-- None --"));
 
@@ -129,7 +126,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
-        // Map Pos.Domain.DTO.ItemIndexDto (from ItemSearchBox) to this window's local ItemIndexDto
         private ItemIndexDto AdaptItem(Pos.Domain.DTO.ItemIndexDto src)
         {
             return new ItemIndexDto(
@@ -151,15 +147,48 @@ namespace Pos.Client.Wpf.Windows.Sales
             );
         }
 
-        private void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        // BEFORE
+        // private void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+
+        // AFTER
+        private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
             var pick = box.SelectedItem; // Pos.Domain.DTO.ItemIndexDto
             if (pick is null) return;
-            var adapted = AdaptItem(pick);
-            AddItemToCart(adapted);
+
+            // Read display/sku/lastCost from the single source of truth
+            var meta = await _items.GetItemMetaForReturnAsync(pick.Id);
+
+            // Fallbacks if meta is null or partially missing
+            var display = meta?.display
+                ?? ProductNameComposer.Compose(pick.ProductName, pick.Name ?? pick.DisplayName ?? "",
+                                               pick.Variant1Name, pick.Variant1Value, pick.Variant2Name, pick.Variant2Value);
+            var sku = meta?.sku ?? (pick.Sku ?? "");
+
+            // Optional: if you want to show current on-hand for this outlet (purely informational)
+            // var onHand = await _invRead.GetOnHandAsync(pick.Id,
+            //     InventoryLocationType.Outlet, _outletId, DateTime.UtcNow);
+
+            AddItemToCart(new ItemIndexDto(
+                Id: pick.Id,
+                Name: pick.Name ?? pick.DisplayName ?? "",
+                Sku: sku,
+                Barcode: pick.Barcode ?? "",
+                Price: pick.Price,
+                TaxCode: pick.TaxCode,
+                DefaultTaxRatePct: pick.DefaultTaxRatePct,
+                TaxInclusive: pick.TaxInclusive,
+                DefaultDiscountPct: pick.DefaultDiscountPct,
+                DefaultDiscountAmt: pick.DefaultDiscountAmt,
+                ProductName: pick.ProductName,
+                Variant1Name: pick.Variant1Name, Variant1Value: pick.Variant1Value,
+                Variant2Name: pick.Variant2Name, Variant2Value: pick.Variant2Value
+            ));
+
             try { ItemSearch?.FocusSearch(); } catch { }
         }
+
 
         public record ItemIndexDto(
             int Id,
@@ -198,7 +227,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 ItemId = item.Id,
                 Sku = item.Sku,
-                DisplayName = ProductNameComposer.Compose(item.ProductName, item.Name, item.Variant1Name, item.Variant1Value, item.Variant2Name, item.Variant2Value),
+                DisplayName = item.DisplayName, // <-- use the prebuilt display (from meta fallback chain)
                 UnitPrice = item.Price,
                 Qty = 1,
                 TaxCode = item.TaxCode,
@@ -214,6 +243,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
         }
 
+     
         private static void RecalcLineShared(ReturnLine l)
         {
             var a = PricingMath.CalcLine(new LineInput(
@@ -370,14 +400,11 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             if (!_cart.Any()) { MessageBox.Show("Nothing to return — cart is empty."); return; }
 
-            // Ensure till open
             var open = await _sales.GetOpenTillAsync(_outletId, _counterId);
             if (open == null) { MessageBox.Show("Till is CLOSED. Please open till before refund.", "Till Closed"); return; }
 
-            // Line recompute (safety)
             foreach (var l in _cart) RecalcLineShared(l);
 
-            // Totals with invoice-level discount
             var lineNetSum = _cart.Sum(l => l.LineNet);
             var lineTaxSum = _cart.Sum(l => l.LineTax);
 
@@ -471,7 +498,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 InvoiceDiscountPct = (_invDiscAmt > 0m) ? (decimal?)null : _invDiscPct,
                 InvoiceDiscountAmt = (_invDiscAmt > 0m) ? _invDiscAmt : (decimal?)null,
                 InvoiceDiscountValue = invDiscValue,
-                //DiscountBeforeTax = true,
 
                 Subtotal = subtotal,
                 TaxTotal = tax,
@@ -489,7 +515,6 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 Lines = _cart.Select(l =>
                 {
-                    // Recompute (already done, but keep consistent calc object)
                     var a = PricingMath.CalcLine(new LineInput(
                         Qty: l.Qty,
                         UnitPrice: l.UnitPrice,

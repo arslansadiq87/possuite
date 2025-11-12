@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Client.Wpf.Services;
 using Pos.Domain;
 using Pos.Domain.Entities;
-using Pos.Persistence;
+//using Pos.Persistence;
 using System.Windows.Threading;
 using Pos.Client.Wpf.Infrastructure;
 using System; // <-- add this
@@ -22,7 +22,6 @@ using Pos.Domain.Models.Accounting;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
-    // ---------- Node shown in the tree/grid ----------
     public partial class AccountNode : ObservableObject
     {
         [ObservableProperty] private int id;
@@ -43,12 +42,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
             && CanEditOpenings
             && SystemKey != SystemAccountKey.CashInTillOutlet;   // 👈 block Till accounts
 
-        // Set from VM based on current user's permissions
         public bool CanEditOpenings { get; set; }
 
         public ObservableCollection<AccountNode> Children { get; } = new();
 
-        //public bool IsOpeningEditable => !IsHeader && !IsOpeningLocked && CanEditOpenings;
     }
 
     // ---------- Flat row for the GridView pseudo-tree ----------
@@ -81,15 +78,12 @@ namespace Pos.Client.Wpf.Windows.Accounting
     {
         private readonly ICoaService _coa;   // NEW
 
-        // Hierarchical roots (unused by the view directly, but used to build Flat)
         public ObservableCollection<AccountNode> Roots { get; } = new();
 
-        // Flat rows bound to the ListView/GridView
         public ObservableCollection<AccountFlatRow> Flat { get; } = new();
        
         private readonly HashSet<int> _expanded = new();
         private static bool IsPartyTree(AccountNode n) => n.Type == AccountType.Parties;
-
 
         private static NormalSide DefaultNormalFor(AccountType t) => t switch
         {
@@ -106,10 +100,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private static bool IsHeaderNode(AccountNode n) => n.IsHeader || !n.AllowPosting;
         private static bool IsPostingLeaf(AccountNode n) => !n.IsHeader && n.AllowPosting;
 
-        // Only allow creating children under header/grouping nodes
         private static bool CanHaveChildren(AccountNode n) => IsHeaderNode(n);
 
-        // Selection (toolbar commands use this)
         private AccountNode? _selectedNode;
         public AccountNode? SelectedNode
         {
@@ -118,10 +110,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
             {
                 if (SetProperty(ref _selectedNode, value))
                 {
-                    // Re-evaluate toolbar button CanExecute when selection changes
                     EditAccountCommand.NotifyCanExecuteChanged();
                     DeleteAccountCommand.NotifyCanExecuteChanged();
-                    // NEW:
                     NewHeaderCommand.NotifyCanExecuteChanged();
                     NewAccountCommand.NotifyCanExecuteChanged();
                     OnPropertyChanged(nameof(CanRename));
@@ -136,35 +126,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private bool CanEditOrDelete()
             => SelectedNode != null && !IsPartyTree(SelectedNode);
 
-        // Generate next numeric child code under the parent.
-        // Headers: ..-01, ..-02 (2 digits)
-        // Accounts: ..-001, ..-002 (3 digits)
-        private static async Task<string> GenerateNextChildCodeAsync(PosClientDbContext db, Account parent, bool forHeader)
-        {
-            var siblingsCodes = await db.Accounts
-                .AsNoTracking()
-                .Where(a => a.ParentId == parent.Id)
-                .Select(a => a.Code)
-                .ToListAsync();
-
-            int max = 0;
-            foreach (var code in siblingsCodes)
-            {
-                var lastSeg = code?.Split('-').LastOrDefault();
-                if (int.TryParse(lastSeg, out var num))
-                    if (num > max) max = num;
-            }
-
-            var next = max + 1;
-            var suffix = forHeader ? next.ToString("D2") : next.ToString("D3");
-            return $"{parent.Code}-{suffix}";
-        }
-
-        // Simple name prompt wrapper (uses your existing MessageBox prompt pattern)
         private static string AskName(string title, string suggested)
         {
-            // If you later add a real input dialog, wire it here.
-            // For now, reuse your Prompt stub to keep flow consistent.
             var name = Prompt(title, suggested);
             name = string.IsNullOrWhiteSpace(name) ? suggested : name.Trim();
             return name;
@@ -175,7 +138,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             _coa = coa;
             AppEvents.AccountsChanged += OnAccountsChanged;
         }
-
 
         private async void OnAccountsChanged()
         {
@@ -193,11 +155,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
             catch
             {
-                // swallow to avoid UI crash if signal arrives during shutdown
             }
         }
 
-        // ---- Role helpers ----
         private static bool IsAdmin()
         {
             var u = AppState.Current?.CurrentUser;
@@ -207,7 +167,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private static bool CanManageCoA() => IsAdmin();
         private static bool CanLockOpenings() => IsAdmin();
 
-        // ---- Load tree and build flat list ----
         [RelayCommand]
         public async Task LoadAsync()
         {
@@ -249,7 +208,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             RebuildFlat();
         }
 
-
         private bool CanRenameSelected()
     => SelectedNode != null
     && !IsPartyTree(SelectedNode)
@@ -261,13 +219,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             && !(SelectedNode?.IsSystem ?? true)                 // cannot delete system nodes
             && (SelectedNode?.AllowPosting ?? false)             // only delete posting leaves
             && !(SelectedNode?.IsHeader ?? false);               // (redundant with AllowPosting, but explicit)
-
-        // Passthrough props for XAML bindings if buttons use IsEnabled directly
         public bool CanRename => CanRenameSelected();
         public bool CanDelete => CanDeleteSelected();
 
-
-        // ---- New header/account ----
         [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
         public async Task NewHeaderAsync()
         {
@@ -277,12 +231,10 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 MessageBox.Show("Select a header (non-posting) under a non-Party branch.", "Chart of Accounts");
                 return;
             }
-
             var name = AskName("Header name:", "New Header");
             await _coa.CreateHeaderAsync(SelectedNode.Id, name);
             await LoadAsync();
         }
-
 
         [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
         public async Task NewAccountAsync()
@@ -293,16 +245,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 MessageBox.Show("Select a header (non-posting) under a non-Party branch.", "Chart of Accounts");
                 return;
             }
-
             var name = AskName("Account name:", "New Account");
             await _coa.CreateAccountAsync(SelectedNode.Id, name);
             await LoadAsync();
         }
 
-
-
-
-        // ---- Convenience creators ----
         [RelayCommand]
         public async Task AddCashForOutletAsync()
         {
@@ -319,8 +266,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             await LoadAsync();
         }
 
-
-        // ---- Lock & save openings ----
         [RelayCommand]
         public async Task LockOpeningsAsync()
         {
@@ -328,7 +273,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             await _coa.LockAllOpeningsAsync();
             await LoadAsync();
         }
-
 
         [RelayCommand]
         public async Task SaveOpeningsAsync()
@@ -353,20 +297,16 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-
-        // ---- Edit/Delete ----
         [RelayCommand(CanExecute = nameof(CanRenameSelected))]
         public async Task EditAccountAsync()
         {
             if (!CanManageCoA() || SelectedNode is null) return;
             if (IsPartyTree(SelectedNode)) { MessageBox.Show("Party accounts are managed from their own forms."); return; }
             if (SelectedNode.IsSystem) { MessageBox.Show("System accounts cannot be edited."); return; }
-
             var newCode = Prompt("Account Code:", SelectedNode.Code) ?? SelectedNode.Code;
             var newName = Prompt("Account Name:", SelectedNode.Name) ?? SelectedNode.Name;
             var isHeader = MessageBoxYesNo("Mark as Header (no posting)?", SelectedNode.IsHeader);
             var allowPosting = !isHeader && MessageBoxYesNo("Allow Posting on this account?", SelectedNode.AllowPosting);
-
             try
             {
                 await _coa.EditAsync(new AccountEdit(SelectedNode.Id, newCode, newName, isHeader, allowPosting));
@@ -378,16 +318,13 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-
         [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
         public async Task DeleteAccountAsync()
         {
             if (!CanManageCoA() || SelectedNode is null) return;
             if (IsPartyTree(SelectedNode)) { MessageBox.Show("Party accounts are managed from their own forms."); return; }
-
             if (MessageBox.Show($"Delete account '{SelectedNode.Code} - {SelectedNode.Name}'?",
                 "Confirm", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-
             try
             {
                 await _coa.DeleteAsync(SelectedNode.Id);
@@ -399,21 +336,13 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-
-
-        // ---- Expand/Collapse for GridView pseudo-tree ----
         [RelayCommand]
         private void ToggleExpandCmd(AccountFlatRow row)
         {
             if (!row.HasChildren) return;
-
-            // flip the row flag
             row.IsExpanded = !row.IsExpanded;
-
-            // persist per-node expansion state
             if (row.IsExpanded) _expanded.Add(row.Node.Id);
             else _expanded.Remove(row.Node.Id);
-
             RebuildFlat();
         }
 
@@ -429,7 +358,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             var expanded = _expanded.Contains(node.Id);
             var flatRow = new AccountFlatRow(node, level, expanded);
             Flat.Add(flatRow);
-
             if (expanded && node.Children.Any())
             {
                 foreach (var child in node.Children.OrderBy(c => c.Code))
@@ -437,7 +365,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-        // ---- Helpers ----
         private static IEnumerable<AccountNode> Enumerate(AccountNode n)
         {
             yield return n;
@@ -452,18 +379,15 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 foreach (var n in Enumerate(r))
                     yield return n;
         }
-
                 
         public void Dispose()
         {
             AppEvents.AccountsChanged -= OnAccountsChanged;
         }
 
-        // Real prompts
         private static string? Prompt(string caption, string defaultValue)
         {
             var owner = Application.Current?.Windows.Count > 0 ? Application.Current.Windows[0] : null;
-            // Single-line input for names/codes
             var text = Pos.Client.Wpf.Windows.Common.InputDialog.Show(owner, caption, "", defaultValue);
             return text;
         }
@@ -472,7 +396,5 @@ namespace Pos.Client.Wpf.Windows.Accounting
             var r = MessageBox.Show(message, "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question);
             return r == MessageBoxResult.Yes;
         }
-
-
     }
 }

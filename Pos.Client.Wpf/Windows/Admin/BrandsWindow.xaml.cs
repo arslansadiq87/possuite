@@ -24,13 +24,10 @@ namespace Pos.Client.Wpf.Windows.Admin
         public BrandsWindow()
         {
             InitializeComponent();
-
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-
             _svc = App.Services.GetRequiredService<IBrandService>();
             _editBrandFactory = () => App.Services.GetRequiredService<EditBrandWindow>();
-
             Loaded += async (_, __) =>
             {
                 await LoadRowsAsync();
@@ -39,7 +36,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             SizeChanged += (_, __) => UpdateSearchVisibilitySoon();
         }
 
-        // Row DTO for UI binding (mapped from BrandService.BrandRowDto)
         private sealed class BrandRow
         {
             public int Id { get; set; }
@@ -53,7 +49,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async Task LoadRowsAsync()
         {
             if (_design || _svc == null) return;
-
             try
             {
                 var term = (SearchBox.Text ?? "").Trim();
@@ -135,7 +130,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             if (_design) return;
             var row = Selected(); if (row is null) return;
-
             var dlg = _editBrandFactory!();
             dlg.Owner = this;
             dlg.EditId = row.Id;
@@ -149,7 +143,6 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             if (MessageBox.Show($"Disable brand “{row.Name}”?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-
             await _svc.SetActiveAsync(row.Id, false);
             await LoadRowsAsync();
         }
@@ -167,13 +160,10 @@ namespace Pos.Client.Wpf.Windows.Admin
             else if (e.Key == Key.Enter) Edit_Click(sender, e);
         }
 
-        // --- Search visibility (only when scrolling) -------------------------
-
         private void UpdateSearchVisibilitySoon()
         {
             if (_queuedVisibilityCheck) return;
             _queuedVisibilityCheck = true;
-
             _visOp = Dispatcher.InvokeAsync(() =>
             {
                 _queuedVisibilityCheck = false;
@@ -208,12 +198,10 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (root == null) return null;
             var q = new System.Collections.Generic.Queue<DependencyObject>();
             q.Enqueue(root);
-
             while (q.Count > 0)
             {
                 var cur = q.Dequeue();
                 if (cur is T hit) return hit;
-
                 int count = VisualTreeHelper.GetChildrenCount(cur);
                 for (int i = 0; i < count; i++)
                     q.Enqueue(VisualTreeHelper.GetChild(cur, i));

@@ -10,6 +10,5 @@ namespace Pos.Domain.Services
             IEnumerable<int> itemIds, CancellationToken ct = default);
         Task<(string display, string sku, decimal? lastCost)?> GetItemMetaForReturnAsync(
     int itemId, CancellationToken ct = default);
-
     }
 }

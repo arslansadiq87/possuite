@@ -7,32 +7,37 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Pos.Client.Wpf.Services;
 using Pos.Domain.Hr;
-using Pos.Persistence;
+using Pos.Domain.Services;
+using Pos.Domain.Services.Hr;
+//using Pos.Persistence;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
     public partial class AttendancePunchVm : ObservableObject
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        //private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IAttendanceService _svc;
+        private readonly IStaffService _Staff;
 
         public ObservableCollection<Staff> Staff { get; } = new();
         public ObservableCollection<AttendancePunch> TodayPunches { get; } = new();
 
         [ObservableProperty] private Staff? selectedStaff;
 
-        public AttendancePunchVm(IDbContextFactory<PosClientDbContext> dbf, IAttendanceService svc)
+        public AttendancePunchVm(IAttendanceService svc, IStaffService staff)
         {
-            _dbf = dbf; _svc = svc;
+            _svc = svc;
+            _Staff = staff;
         }
 
         [RelayCommand]
         public async Task LoadAsync()
         {
-            using var db = await _dbf.CreateDbContextAsync();
+            //using var db = await _dbf.CreateDbContextAsync();
             Staff.Clear();
-            foreach (var s in await db.Staff.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.FullName).ToListAsync())
-                Staff.Add(s);
+            var list = await _Staff.GetAllActiveStaffAsync();
+            //foreach (var s in await db.Staff.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.FullName).ToListAsync())
+            //    Staff.Add(s);
         }
 
         private async Task RefreshTodayAsync()
@@ -40,14 +45,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             TodayPunches.Clear();
             if (SelectedStaff == null) return;
 
-            var d0 = DateTime.UtcNow.Date;
-            var d1 = d0.AddDays(1);
+            var punches = await _svc.GetPunchesForDayAsync(SelectedStaff.Id, DateTime.UtcNow.Date);
 
-            using var db = await _dbf.CreateDbContextAsync();
-            var list = await db.AttendancePunches.AsNoTracking()
-                .Where(p => p.StaffId == SelectedStaff.Id && p.TsUtc >= d0 && p.TsUtc < d1)
-                .OrderBy(p => p.TsUtc).ToListAsync();
-            foreach (var p in list) TodayPunches.Add(p);
+            foreach (var p in punches) TodayPunches.Add(p);
         }
 
         partial void OnSelectedStaffChanged(Staff? value) => _ = RefreshTodayAsync();

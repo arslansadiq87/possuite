@@ -18,7 +18,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
 {
     public partial class VoucherEditorView : UserControl
     {
-        private ListCollectionView? _accountView;   // per-active editor
         private ComboBox? _activeAccountCombo;      // current cell's editor
         private readonly ObservableCollection<Account> _accountFiltered = new(); // data for ComboBox
         private List<(Account acc, string key)> _accountIndex = new();           // precomputed lowercase "code name"
@@ -28,7 +27,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private bool _suppressNextAmountValidation = false;
 
         private bool _wired;
-
         public VoucherEditorView()
         {
             InitializeComponent();
@@ -55,7 +53,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 TypeBox.Focus();
             };
 
-
             LinesGrid.CurrentCellChanged += (s, e) =>
             {
                 var col = LinesGrid.CurrentColumn?.Header?.ToString();
@@ -68,7 +65,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 }
             };
 
-            // --- Enter navigation on header controls ---
             TypeBox.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.Enter) { DateBox.Focus(); e.Handled = true; }
@@ -79,7 +75,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 if (e.Key == Key.Enter)
                 {
                     var v = (VoucherEditorVm)DataContext;
-                    // If admin, go to Outlet; if not admin but multiple outlets visible, still go to outlet (it may be locked)
                     if (v.IsOutletSelectable || (!v.IsOutletSelectable && v.Outlets.Count > 1))
                         OutletBox.Focus();
                     else
@@ -101,7 +96,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     FocusGridAccountFirstCell();   // jumps to Account and begins edit
                 }
             };
-
 
             LinesGrid.PreviewKeyDown += (s, e) =>
             {
@@ -141,21 +135,15 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     }
                 }
             };
-
-
-
         }
 
         private void AccountEditor_TextChanged(object? sender, TextChangedEventArgs e)
         {
             if (_activeAccountCombo == null) return;
-
             _pendingQuery = (sender as TextBox)?.Text ?? "";
             EnsureDebouncer();
             _accountDebounce!.Stop();
             _accountDebounce!.Start();
-
-            // UX: keep list open and no selection while user types
             _activeAccountCombo.IsDropDownOpen = true;
             _activeAccountCombo.SelectedIndex = -1;
             _activeAccountCombo.SelectedItem = null;
@@ -167,42 +155,31 @@ namespace Pos.Client.Wpf.Windows.Accounting
             return FindVisualChild<TextBox>(root);
         }
 
-
         private void LinesGrid_CellEditEnding_ValidateAmountAndDescription(object? sender, DataGridCellEditEndingEventArgs e)
         {
             if (e.EditAction != DataGridEditAction.Commit) return;
             if (_suppressNextAmountValidation)
             {
-                // swallow the duplicate validation call that immediately follows the first
                 _suppressNextAmountValidation = false;
                 _lastEditCancelled = true;   // keep the "don’t advance" behavior
                 e.Cancel = true;
                 return;
             }
             _lastEditCancelled = false;
-
             if (e.EditAction != DataGridEditAction.Commit) return;
             if (LinesGrid.SelectedItem is not VoucherLineVm line) return;
-
             var vm = (VoucherEditorVm)DataContext;
             var colHeader = e.Column.Header?.ToString() ?? "";
-
-            // 3a) Amount validation per voucher type
             if (colHeader == "Debit" || colHeader == "Credit")
             {
-                // <-- NEW: always find the inner TextBox inside template
                 TextBox? tb = e.EditingElement as TextBox
                               ?? (e.EditingElement as FrameworkElement != null
                                   ? GetInnerTextBox((FrameworkElement)e.EditingElement)
                                   : null);
-
                 decimal val;
                 if (tb == null || !decimal.TryParse(tb.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out val))
                     val = 0m;
-
                 var vt = Enum.Parse<VoucherType>(vm.Type);
-
-
                 if (vt == VoucherType.Debit)
                 {
                     if (colHeader == "Debit" && val <= 0m)
@@ -218,7 +195,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                                 tb.SelectAll();
                             }));
                         }
-
                         MessageBox.Show("Amount must be greater than zero for Debit vouchers.",
                             "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
@@ -231,7 +207,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                         e.Cancel = true;
                         _lastEditCancelled = true;
                         _suppressNextAmountValidation = true;   // <-- add this line
-
                         if (tb != null)
                         {
                             tb.Dispatcher.BeginInvoke(new Action(() =>
@@ -254,7 +229,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                         e.Cancel = true;
                         _lastEditCancelled = true;
                         _suppressNextAmountValidation = true;   // <-- add this line
-
                         if (tb != null)
                         {
                             tb.Dispatcher.BeginInvoke(new Action(() =>
@@ -263,8 +237,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                                 tb.SelectAll();
                             }));
                         }
-
-
                         MessageBox.Show("For Journal, either Debit or Credit must be greater than zero on each row.",
                             "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
@@ -272,8 +244,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 }
             }
 
-
-            // 4) Auto-fill Description when left blank
             if (colHeader == "Description")
             {
                 if (e.EditingElement is TextBox tbDesc)
@@ -284,8 +254,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                         string auto = vm.Type == nameof(VoucherType.Debit) ? "Cash Payment Voucher"
                                     : vm.Type == nameof(VoucherType.Credit) ? "Cash Receiving Voucher"
                                     : "Journal Voucher";
-
-                        // write both to textbox and to model
                         tbDesc.Text = auto;
                         if (LinesGrid.SelectedItem is VoucherLineVm ln)
                             ln.Description = auto;
@@ -301,7 +269,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             {
                 await vm.ReloadAccountsAsync();  // fetch fresh list from DB
                 BuildAccountIndex(vm);           // rebuild in-memory index
-                                                 // If an editor is open, re-apply current query to keep UX seamless
                 if (_activeAccountCombo?.Template.FindName("PART_EditableTextBox", _activeAccountCombo) is TextBox tb)
                     ApplyAccountFilter(tb.Text);
             };
@@ -318,8 +285,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     return (a, key);
                 })
                 .ToList();
-
-            // optional: keep list small for UI: start empty
             _accountFiltered.Clear();
         }
 
@@ -345,12 +310,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             var tokens = q.Length == 0
                 ? Array.Empty<string>()
                 : q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
             IEnumerable<Account> results;
-
             if (tokens.Length == 0)
             {
-                // NEW: show full list on blank query
                 results = _accountIndex.Select(t => t.acc);
             }
             else
@@ -363,109 +325,74 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 })
                 .Select(t => t.acc);
             }
-
-            // optional cap to keep dropdown snappy; adjust or remove
             results = results.Take(500);
-
             _accountFiltered.Clear();
             foreach (var a in results) _accountFiltered.Add(a);
-
             if (_activeAccountCombo != null)
             {
                 _activeAccountCombo.IsDropDownOpen = true;
-
-                // IMPORTANT: do NOT auto-select anything here
                 _activeAccountCombo.SelectedIndex = -1;
                 _activeAccountCombo.SelectedItem = null;
             }
         }
 
-
         private void FocusGridAccountFirstCell()
         {
             if (LinesGrid.Items.Count == 0) return;
-
             LinesGrid.SelectedIndex = 0;
             var firstItem = LinesGrid.Items[0];
-
-            // Try by header first, then by index fallback
             var accountCol = LinesGrid.Columns.FirstOrDefault(c => c.Header?.ToString() == "Account")
                              ?? LinesGrid.Columns.ElementAtOrDefault(1);
             if (accountCol == null) return;
-
             LinesGrid.CurrentCell = new DataGridCellInfo(firstItem, accountCol);
             LinesGrid.ScrollIntoView(firstItem, accountCol);
-
-            // IMPORTANT: BeginEdit must be deferred to allow the cell to realize
             LinesGrid.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
                 LinesGrid.BeginEdit(); // triggers AccountCombo_Loaded → focuses editable textbox
             }));
         }
 
-
-        // Open dropdown and put caret in the editable textbox
-
         private void AccountCombo_Loaded(object sender, RoutedEventArgs e)
         {
             if (sender is not ComboBox cb) return;
-
             _activeAccountCombo = cb;
-
-            // use the fast filtered list
             cb.IsSynchronizedWithCurrentItem = false;
             cb.ItemsSource = _accountFiltered;
-
-            // If no account bound -> open unselected & empty
             if (cb.SelectedItem is not Account)
             {
                 cb.SelectedIndex = -1;
                 cb.SelectedItem = null;
                 cb.Text = "";
             }
-
             cb.IsDropDownOpen = true;
             cb.Focus();
             Keyboard.Focus(cb);
-
             if (cb.Template.FindName("PART_EditableTextBox", cb) is TextBox tb)
             {
                 tb.PreviewKeyDown -= AccountEditor_PreviewKeyDown;
                 tb.PreviewKeyDown += AccountEditor_PreviewKeyDown;
-
                 tb.TextChanged -= AccountEditor_TextChanged;
                 tb.TextChanged += AccountEditor_TextChanged;
-
                 tb.CaretIndex = tb.Text?.Length ?? 0;
                 tb.Focus();
                 Keyboard.Focus(tb);
-
-                // NEW: show full list when editor opens blank
                 ApplyAccountFilter(tb.Text ?? "");
             }
-
         }
 
         private void AccountEditor_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
             if (_activeAccountCombo == null) return;
-
-            // We need access to the editor textbox to preserve user text
             var tb = _activeAccountCombo.Template?.FindName("PART_EditableTextBox", _activeAccountCombo) as TextBox;
-
             if (e.Key is Key.Down or Key.Up or Key.PageDown or Key.PageUp or Key.Home or Key.End)
             {
                 e.Handled = true;
-
                 int count = _accountFiltered.Count;
                 if (count == 0) return;
-
-                // Preserve current typed text and caret BEFORE we change SelectedIndex
                 string prevText = tb?.Text ?? "";
                 int caret = tb?.CaretIndex ?? prevText.Length;
                 int selLen = tb != null ? tb.SelectionLength : 0;
                 int selStart = tb != null ? tb.SelectionStart : caret;
-
                 int pos = _activeAccountCombo.SelectedIndex; // -1 initially
                 switch (e.Key)
                 {
@@ -476,12 +403,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     case Key.Home: pos = 0; break;
                     case Key.End: pos = count - 1; break;
                 }
-
-                // Move visual highlight
                 _activeAccountCombo.SelectedIndex = pos;
                 _activeAccountCombo.IsDropDownOpen = true;
-
-                // RESTORE the user's typed text & caret so query does NOT change
                 if (tb != null)
                 {
                     tb.Text = prevText;
@@ -494,15 +417,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 }
                 return;
             }
-
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
-
-                // If nothing highlighted but results exist, take first result
                 if (_activeAccountCombo.SelectedItem == null && _accountFiltered.Count > 0)
                     _activeAccountCombo.SelectedIndex = 0;
-
                 if (_activeAccountCombo.SelectedItem != null)
                 {
                     BindingOperations.GetBindingExpression(_activeAccountCombo, ComboBox.SelectedItemProperty)
@@ -511,7 +430,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 }
                 return;
             }
-
             if (e.Key == Key.Escape)
             {
                 e.Handled = true;
@@ -519,28 +437,19 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 LinesGrid.Focus();
                 return;
             }
-
-            // All other keys (letters/digits/backspace) fall through:
-            // the TextBox handles typing, our debounce will re-filter.
         }
 
         private void AccountSearch_AccountCommitted(object sender, RoutedEventArgs e)
         {
-            // Only proceed if Account is actually set
             var line = LinesGrid.SelectedItem as VoucherLineVm;
             if (line?.Account == null) return;
-
             CommitCurrentCell();
             MoveToColumn("Description", beginEdit: true);
         }
 
-
-
-
         private void AccountCombo_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (sender is not ComboBox cb) return;
-
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
@@ -548,7 +457,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                                  ?.UpdateSource();
                 CommitAccountAndGoToDescription();
             }
-            // Esc handled in AccountEditor_PreviewKeyDown
         }
 
         private void AccountCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -562,7 +470,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-
         private void CommitAccountAndGoToDescription()
         {
             LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
@@ -570,15 +477,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
             MoveToColumn("Description", beginEdit: true);
         }
 
-
-
-        // Commit when user clicks an item in the dropdown
         private void AccountComboItem_Click(object sender, MouseButtonEventArgs e)
         {
             CommitAccountAndGoToDescription();
             e.Handled = true;
         }
-
 
         private void CommitCurrentCell()
         {
@@ -591,20 +494,14 @@ namespace Pos.Client.Wpf.Windows.Accounting
             if (LinesGrid.SelectedItem == null) return;
             var col = LinesGrid.Columns.FirstOrDefault(c => c.Header?.ToString() == header);
             if (col == null) return;
-
             LinesGrid.CurrentCell = new DataGridCellInfo(LinesGrid.SelectedItem, col);
             LinesGrid.ScrollIntoView(LinesGrid.SelectedItem, col);
-
             if (beginEdit)
                 LinesGrid.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => LinesGrid.BeginEdit()));
         }
 
-        // ...
-
         private void AccountSearchBox_Loaded(object sender, RoutedEventArgs e)
         {
-            // When the Account cell enters edit mode, this is invoked.
-            // Ensure the box gets keyboard focus immediately.
             if (sender is FrameworkElement fe)
             {
                 fe.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
@@ -614,7 +511,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 }));
             }
         }
-
 
         private static TChild? FindVisualChild<TChild>(DependencyObject parent, Func<TChild, bool>? predicate = null)
             where TChild : DependencyObject
@@ -653,35 +549,24 @@ namespace Pos.Client.Wpf.Windows.Accounting
             var isDebit = vm.Type == nameof(VoucherType.Debit);
             var isCredit = vm.Type == nameof(VoucherType.Credit);
             var isJournal = vm.Type == nameof(VoucherType.Journal);
-
             DataGridColumn? targetCol = null;
-
             if (isDebit || isJournal)
                 targetCol = LinesGrid.Columns.FirstOrDefault(c => (c.Header?.ToString() ?? "") == "Debit")
                             ?? LinesGrid.Columns.ElementAtOrDefault(3);
-
             if ((isCredit || isJournal) && (targetCol == null || isCredit))
                 targetCol = LinesGrid.Columns.FirstOrDefault(c => (c.Header?.ToString() ?? "") == "Credit")
                             ?? LinesGrid.Columns.ElementAtOrDefault(4);
-
             if (targetCol == null || LinesGrid.SelectedItem == null) return;
-
-            // Commit description, move, then DEFER editing
             LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
             LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
-
             LinesGrid.CurrentCell = new DataGridCellInfo(LinesGrid.SelectedItem, targetCol);
             LinesGrid.ScrollIntoView(LinesGrid.SelectedItem, targetCol);
-
             LinesGrid.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
                 LinesGrid.BeginEdit();
-
-                // focus the numeric TextBox inside the cell
                 var content = targetCol.GetCellContent(LinesGrid.SelectedItem);
                 if (content != null)
                 {
-                    // TemplateColumn → content is TextBlock in view mode, but TextBox in edit container
                     var tb = FindVisualChild<TextBox>(content) ?? content as TextBox;
                     if (tb != null)
                     {
@@ -692,7 +577,5 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 }
             }));
         }
-
-
     }
 }

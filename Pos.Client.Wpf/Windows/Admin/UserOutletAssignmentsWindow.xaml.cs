@@ -7,19 +7,18 @@ using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Windows.Common;
 using Pos.Domain;
 using Pos.Domain.Entities;
-using Pos.Persistence.Services;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class UserOutletAssignmentsWindow : Window
     {
-        private readonly OutletCounterService _svc;
+        private readonly IOutletCounterService _svc;
         private readonly int _userId;
-
         public UserOutletAssignmentsWindow(int userId)
         {
             InitializeComponent();
-            _svc = App.Services.GetRequiredService<OutletCounterService>();
+            _svc = App.Services.GetRequiredService<IOutletCounterService>();
             _userId = userId;
             Loaded += async (_, __) => await LoadRowsAsync();
         }
@@ -42,7 +41,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             try
             {
-                // Simple prompt — can replace later with a nicer dialog
                 var allOutlets = (await _svc.GetOutletsAsync()).OrderBy(o => o.Name).ToList();
                 var dlg = new SimplePromptWindow(
                     "Assign Outlet",
@@ -55,13 +53,11 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     MessageBox.Show("Invalid OutletId"); return;
                 }
-
                 if (!Enum.TryParse<UserRole>(
                         dlg.GetText("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)"),
                         true,
                         out var role))
                     role = UserRole.Cashier;
-
                 await _svc.AssignOutletAsync(_userId, outletId, role);
                 await LoadRowsAsync();
             }
@@ -80,19 +76,16 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     MessageBox.Show("Select a row."); return;
                 }
-
                 var dlg = new SimplePromptWindow(
                     "Edit Role",
                     ("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)", row.Role.ToString())
                 );
                 if (dlg.ShowDialog() != true) return;
-
                 if (!Enum.TryParse<UserRole>(
                         dlg.GetText("Role(enum:Salesman,Cashier,Supervisor,Manager,Admin)"),
                         true,
                         out var newRole))
                     newRole = row.Role;
-
                 await _svc.UpdateUserOutletRoleAsync(_userId, row.OutletId, newRole);
                 await LoadRowsAsync();
             }
@@ -111,7 +104,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     MessageBox.Show("Select a row."); return;
                 }
-
                 if (MessageBox.Show(
                         $"Remove outlet '{row.Outlet?.Name ?? row.OutletId.ToString()}' from user?",
                         "Confirm",
@@ -119,7 +111,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                         MessageBoxImage.Warning
                     ) != MessageBoxResult.Yes)
                     return;
-
                 await _svc.RemoveUserOutletAsync(_userId, row.OutletId);
                 await LoadRowsAsync();
             }
@@ -129,7 +120,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                     "Assignments", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
     }
 }

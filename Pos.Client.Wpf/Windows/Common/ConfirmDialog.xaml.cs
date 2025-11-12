@@ -9,22 +9,16 @@ namespace Pos.Client.Wpf.Windows.Common
     public partial class ConfirmDialog : UserControl
     {
         public event Action<DialogResult>? OnResult;
-
         public ConfirmDialog() : this("Are you sure?", "Confirm", DialogButtons.YesNo) { }
-
         public ConfirmDialog(string message, string? title, DialogButtons buttons)
         {
             InitializeComponent();
-
             TitleBlock.Text = string.IsNullOrWhiteSpace(title) ? "Confirm" : title!;
             MessageBlock.Text = message;
-
-            // Show/hide buttons based on requested set
             OkBtn.Visibility = Visibility.Collapsed;
             CancelBtn.Visibility = Visibility.Collapsed;
             YesBtn.Visibility = Visibility.Collapsed;
             NoBtn.Visibility = Visibility.Collapsed;
-
             switch (buttons)
             {
                 case DialogButtons.OK:
@@ -45,7 +39,6 @@ namespace Pos.Client.Wpf.Windows.Common
                     break;
             }
         }
-
         private void Ok_Click(object s, RoutedEventArgs e) => OnResult?.Invoke(DialogResult.OK);
         private void Cancel_Click(object s, RoutedEventArgs e) => OnResult?.Invoke(DialogResult.Cancel);
         private void Yes_Click(object s, RoutedEventArgs e) => OnResult?.Invoke(DialogResult.Yes);

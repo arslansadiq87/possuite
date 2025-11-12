@@ -90,16 +90,17 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     partial void OnSkuXmmChanged(double value) => RefreshPreviewDebounced();
     partial void OnSkuYmmChanged(double value) => RefreshPreviewDebounced();
 
-    partial void OnBarcodeMarginLeftMmChanged(double _) => RefreshPreviewDebounced();
-    partial void OnBarcodeMarginTopMmChanged(double _) => RefreshPreviewDebounced();
-    partial void OnBarcodeMarginRightMmChanged(double _) => RefreshPreviewDebounced();
-    partial void OnBarcodeMarginBottomMmChanged(double _) => RefreshPreviewDebounced();
-    partial void OnBarcodeHeightMmChanged(double _) => RefreshPreviewDebounced();
+    partial void OnBarcodeMarginLeftMmChanged(double value) => RefreshPreviewDebounced();
+    partial void OnBarcodeMarginTopMmChanged(double value) => RefreshPreviewDebounced();
+    partial void OnBarcodeMarginRightMmChanged(double value) => RefreshPreviewDebounced();
+    partial void OnBarcodeMarginBottomMmChanged(double value) => RefreshPreviewDebounced();
+    partial void OnBarcodeHeightMmChanged(double value) => RefreshPreviewDebounced();
 
-    partial void OnShowBusinessNameChanged(bool _) => RefreshPreviewDebounced();
-    partial void OnBusinessNameChanged(string _) => RefreshPreviewDebounced();
-    partial void OnBusinessXmmChanged(double _) => RefreshPreviewDebounced();
-    partial void OnBusinessYmmChanged(double _) => RefreshPreviewDebounced();
+    partial void OnShowBusinessNameChanged(bool value) => RefreshPreviewDebounced();
+    partial void OnBusinessNameChanged(string value) => RefreshPreviewDebounced();
+    partial void OnBusinessXmmChanged(double value) => RefreshPreviewDebounced();
+    partial void OnBusinessYmmChanged(double value) => RefreshPreviewDebounced();
+
 
 
     [ObservableProperty] private ImageSource? previewImage;
@@ -156,7 +157,6 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
 
         await LoadAsync();
     }
-
 
     partial void OnIsGlobalChanged(bool value) => _ = LoadAsync();
     partial void OnSelectedOutletChanged(Outlet? value) { if (!IsGlobal) _ = LoadAsync(); }

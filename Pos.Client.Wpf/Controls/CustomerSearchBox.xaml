@@ -13,18 +13,21 @@
 
         <!-- The textbox -->
         <TextBox x:Name="QueryBox"
-           Margin="0"
-           Padding="8,6"
-           VerticalContentAlignment="Center"
-           Text="{Binding Query, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}"
-           ToolTip="Type name or phone (min 2 chars)." />
+         Margin="0"
+         Padding="8,6"
+         VerticalContentAlignment="Center"
+         Text="{Binding Query, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}"
+         TextChanged="QueryBox_TextChanged"
+         PreviewKeyDown="QueryBox_PreviewKeyDown"
+         ToolTip="Type name or phone (min 2 chars)."/>
+
 
         <!-- Watermark overlay (shows when Text is empty and not focused) -->
-        <TextBlock Text="Type customer's name or phone"
-             Foreground="#888"
-             Margin="12,0,0,0"
-             VerticalAlignment="Center"
-             IsHitTestVisible="False">
+        <TextBlock Text="{Binding WatermarkText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                   Foreground="#888"
+                   Margin="12,0,0,0"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -45,10 +48,10 @@
 
         <!-- Suggestions popup -->
         <Popup x:Name="SuggestPopup"
-         PlacementTarget="{Binding ElementName=QueryBox}"
-         Placement="Bottom"
-         StaysOpen="False"
-         AllowsTransparency="True">
+       PlacementTarget="{Binding ElementName=QueryBox}"
+       Placement="Bottom"
+       StaysOpen="True"
+       AllowsTransparency="True">
             <Border Background="White"
             BorderBrush="#DDD"
             BorderThickness="1"
@@ -56,8 +59,9 @@
             Padding="4"
             Width="{Binding ElementName=QueryBox, Path=ActualWidth}">
                 <ListBox x:Name="SuggestList"
-               MouseDoubleClick="SuggestList_MouseDoubleClick"
-               ItemsSource="{Binding Suggestions, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                 MouseDoubleClick="SuggestList_MouseDoubleClick"
+                 PreviewKeyDown="SuggestList_PreviewKeyDown"
+                 ItemsSource="{Binding Suggestions, RelativeSource={RelativeSource AncestorType=UserControl}}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" Margin="8,4">
@@ -70,6 +74,7 @@
                 </ListBox>
             </Border>
         </Popup>
+
     </Grid>
 
 </UserControl>

@@ -207,7 +207,7 @@
                              TextChanged="FooterBox_TextChanged"/>
                             
                         </StackPanel>
-                        <TextBlock Text="Card disabled for this outlet"
+                        <TextBlock Text="Card payments disabled for this outlet"
            Foreground="OrangeRed"
            FontWeight="SemiBold"
            Visibility="{Binding ElementName=RootSaleView, Path=IsCardEnabled,

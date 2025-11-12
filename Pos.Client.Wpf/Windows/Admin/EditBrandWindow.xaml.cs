@@ -12,29 +12,21 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         private readonly bool _design;
         private IBrandService? _svc;
-
         public int? EditId { get; set; }
-
         public EditBrandWindow()
         {
             InitializeComponent();
-
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-
             _svc = App.Services.GetRequiredService<IBrandService>();
             Loaded += async (_, __) => await LoadOrInitAsync();
         }
-
         private async Task LoadOrInitAsync()
         {
             if (_design || _svc == null) return;
-
             if (EditId is null) return; // creating new
-
             var row = await _svc.GetBrandAsync(EditId.Value);
             if (row is null) { DialogResult = false; Close(); return; }
-
             NameBox.Text = row.Name;
             IsActiveBox.IsChecked = row.IsActive;
         }
@@ -42,10 +34,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
             if (_svc == null) return;
-
             var name = (NameBox.Text ?? "").Trim();
             var active = IsActiveBox.IsChecked ?? true;
-
             try
             {
                 await _svc.SaveBrandAsync(EditId, name, active);

@@ -22,13 +22,10 @@ namespace Pos.Client.Wpf.Windows.Admin
         public CategoriesWindow()
         {
             InitializeComponent();
-
             _design = DesignerProperties.GetIsInDesignMode(this);
             if (_design) return;
-
             _svc = App.Services.GetRequiredService<ICategoryService>();
             _editCategoryFactory = () => App.Services.GetRequiredService<EditCategoryWindow>();
-
             Loaded += async (_, __) =>
             {
                 await LoadRowsAsync();
@@ -63,7 +60,6 @@ namespace Pos.Client.Wpf.Windows.Admin
         {
             if (EditBtn == null || EnableBtn == null || DisableBtn == null)
                 return;
-
             var row = Selected();
             if (row == null)
             {
@@ -72,7 +68,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 DisableBtn.Visibility = Visibility.Collapsed;
                 return;
             }
-
             EditBtn.Visibility = Visibility.Visible;
             if (row.IsActive)
             {
@@ -123,10 +118,8 @@ namespace Pos.Client.Wpf.Windows.Admin
         private async void Disable_Click(object sender, RoutedEventArgs e)
         {
             var row = Selected(); if (row == null || _svc == null) return;
-
             if (MessageBox.Show($"Disable category “{row.Name}”?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-
             await _svc.SetActiveAsync(row.Id, false);
             await LoadRowsAsync();
         }
@@ -143,8 +136,6 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (e.Key == Key.Escape) Close();
             else if (e.Key == Key.Enter) Edit_Click(sender, e);
         }
-
-        // --- Search visibility handling --------------------------------------
 
         private void UpdateSearchVisibilitySoon()
         {

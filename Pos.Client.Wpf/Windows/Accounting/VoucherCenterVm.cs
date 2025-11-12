@@ -43,10 +43,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [ObservableProperty] private string? searchText;
         public List<VoucherType> TypeMulti { get; set; } = new();
         public List<VoucherStatus> StatusMulti { get; set; } = new();
-
         public ObservableCollection<VoucherLineRow> Lines { get; } = new();
         public ObservableCollection<VoucherRow> Rows { get; } = new();
-
         public VoucherCenterVm(IVoucherCenterService svc, IServiceProvider sp)
         {
             _svc = svc;
@@ -134,8 +132,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 MessageBox.Show(ex.Message, "Amend Voucher");
                 return;
             }
-
-            // Open editor for the draft
             var vm = _sp.GetRequiredService<VoucherEditorVm>();
             await vm.LoadAsync(newVoucherId);
             var win = new VoucherEditorDialog(vm)
@@ -143,15 +139,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 Owner = Application.Current.MainWindow
             };
             win.ShowDialog();
-
-            // If user did NOT save: delete the draft and stop
             if (!vm.WasSaved)
             {
                 await _svc.DeleteDraftAsync(newVoucherId);
                 return;
             }
-
-            // Finalize revision: post delta & mark old amended; ensure new posted
             try
             {
                 await _svc.FinalizeRevisionAsync(newVoucherId, oldId);

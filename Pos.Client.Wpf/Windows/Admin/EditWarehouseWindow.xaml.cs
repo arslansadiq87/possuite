@@ -1,41 +1,37 @@
 ﻿using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.Entities;
-using Pos.Persistence;
-using Pos.Persistence.Sync;
+using Pos.Domain.Services;   // IWarehouseService
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
     public partial class EditWarehouseWindow : Window
     {
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
-        private readonly IOutboxWriter _outbox; // + add
+        private readonly IWarehouseService _svc;
 
         public int? EditId { get; set; } // null = add, non-null = edit
 
+        // Prefer ctor injection; this window is already registered in DI as Transient
         public EditWarehouseWindow()
         {
             InitializeComponent();
-            _dbf = App.Services.GetRequiredService<IDbContextFactory<PosClientDbContext>>();
-            _outbox = App.Services.GetRequiredService<IOutboxWriter>(); // + add
-            Loaded += (_, __) => LoadModel();
+            _svc = App.Services.GetRequiredService<IWarehouseService>();
+            Loaded += async (_, __) => await LoadModelAsync();
         }
 
-        private void LoadModel()
+        private async Task LoadModelAsync()
         {
-            using var db = _dbf.CreateDbContext();
             if (EditId == null)
             {
-                // Add mode: prefill code and defaults
-                CodeBox.Text = GenerateNextWarehouseCode(db);
+                CodeBox.Text = await GenerateNextWarehouseCodeAsync();
                 ActiveBox.IsChecked = true;
                 return;
             }
 
-            var w = db.Warehouses.AsNoTracking().FirstOrDefault(x => x.Id == EditId.Value);
+            var w = await _svc.GetWarehouseAsync(EditId.Value);
             if (w == null) { DialogResult = false; Close(); return; }
 
             CodeBox.Text = w.Code;
@@ -46,17 +42,24 @@ namespace Pos.Client.Wpf.Windows.Admin
             NoteBox.Text = w.Note;
         }
 
-        private static string GenerateNextWarehouseCode(PosClientDbContext db)
+        // No EF here: ask the service for data and compute next code in UI.
+        // (If you expect very large row counts, consider adding a SuggestNextCodeAsync() to IWarehouseService later.)
+        private async Task<string> GenerateNextWarehouseCodeAsync()
         {
             const string prefix = "WH-";
-            var max = db.Warehouses
-                .AsNoTracking()
+            var list = await _svc.SearchAsync(term: null, showInactive: true, take: 10_000);
+
+            var max = list
                 .Select(w => w.Code)
-                .Where(c => c != null && c.StartsWith(prefix))
-                .AsEnumerable()
-                .Select(c => int.TryParse(c!.Substring(prefix.Length), out var n) ? n : 0)
+                .Where(c => !string.IsNullOrWhiteSpace(c) && c.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(c =>
+                {
+                    var tail = c!.Substring(prefix.Length);
+                    return int.TryParse(tail, out var n) ? n : 0;
+                })
                 .DefaultIfEmpty(0)
                 .Max();
+
             return $"{prefix}{(max + 1):D3}";
         }
 
@@ -65,66 +68,46 @@ namespace Pos.Client.Wpf.Windows.Admin
             var code = (CodeBox.Text ?? "").Trim().ToUpperInvariant();
             var name = (NameBox.Text ?? "").Trim();
 
-            if (string.IsNullOrWhiteSpace(code)) { MessageBox.Show("Code is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning); CodeBox.Focus(); return; }
-            if (string.IsNullOrWhiteSpace(name)) { MessageBox.Show("Name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning); NameBox.Focus(); return; }
-
-            using var db = _dbf.CreateDbContext();
-            Warehouse w;
-
-            // Uniqueness
-            var codeTaken = db.Warehouses.AsNoTracking()
-                .Any(x => x.Code == code && (EditId == null || x.Id != EditId.Value));
-            if (codeTaken) { MessageBox.Show("This Code already exists. Please choose a different code.", "Duplicate Code", MessageBoxButton.OK, MessageBoxImage.Warning); CodeBox.Focus(); return; }
-
-            if (EditId == null)
+            if (string.IsNullOrWhiteSpace(code))
             {
-                w = new Warehouse
-                {
-                    Code = code,
-                    Name = name,
-                    IsActive = ActiveBox.IsChecked == true,
-                    City = string.IsNullOrWhiteSpace(CityBox.Text) ? null : CityBox.Text.Trim(),
-                    Phone = string.IsNullOrWhiteSpace(PhoneBox.Text) ? null : PhoneBox.Text.Trim(),
-                    Note = string.IsNullOrWhiteSpace(NoteBox.Text) ? null : NoteBox.Text.Trim(),
-                    CreatedAtUtc = DateTime.UtcNow
-                };
-                db.Warehouses.Add(w);
+                MessageBox.Show("Code is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                CodeBox.Focus(); return;
             }
-            else
+            if (string.IsNullOrWhiteSpace(name))
             {
-                w = db.Warehouses.FirstOrDefault(x => x.Id == EditId.Value)!;
-                if (w == null) { DialogResult = false; Close(); return; }
-
-                w.Code = code;
-                w.Name = name;
-                w.IsActive = ActiveBox.IsChecked == true;
-                w.City = string.IsNullOrWhiteSpace(CityBox.Text) ? null : CityBox.Text.Trim();
-                w.Phone = string.IsNullOrWhiteSpace(PhoneBox.Text) ? null : PhoneBox.Text.Trim();
-                w.Note = string.IsNullOrWhiteSpace(NoteBox.Text) ? null : NoteBox.Text.Trim();
-                w.UpdatedAtUtc = DateTime.UtcNow;
-                db.Warehouses.Update(w);
+                MessageBox.Show("Name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                NameBox.Focus(); return;
             }
+
+            // Build the DTO/entity and let the service enforce uniqueness + upsert
+            var w = new Warehouse
+            {
+                Id = EditId ?? 0,
+                Code = code,
+                Name = name,
+                IsActive = ActiveBox.IsChecked == true,
+                City = string.IsNullOrWhiteSpace(CityBox.Text) ? null : CityBox.Text.Trim(),
+                Phone = string.IsNullOrWhiteSpace(PhoneBox.Text) ? null : PhoneBox.Text.Trim(),
+                Note = string.IsNullOrWhiteSpace(NoteBox.Text) ? null : NoteBox.Text.Trim(),
+                // CreatedAtUtc / UpdatedAtUtc are handled in the service
+            };
 
             try
             {
-                // 1) persist entity changes (ensures Id for new rows)
-                await db.SaveChangesAsync();
-
-                // 2) enqueue upsert for sync
-                await _outbox.EnqueueUpsertAsync(db, w);
-
-                // 3) persist outbox record
-                await db.SaveChangesAsync();
-
+                await _svc.SaveWarehouseAsync(w);
                 DialogResult = true;
                 Close();
             }
-            catch (DbUpdateException ex)
+            catch (InvalidOperationException ex)
+            {
+                // e.g., duplicate code error thrown by service
+                MessageBox.Show(ex.Message, "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
             {
                 MessageBox.Show("Save failed: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
 
         private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {

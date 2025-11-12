@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
-using Pos.Client.Wpf.Services;
+//using Pos.Client.Wpf.Services;
 using Pos.Domain.Entities;
-using Pos.Persistence;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
@@ -24,7 +24,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
     public partial class ArApReportVm : ObservableObject
     {
         private readonly IArApQueryService _svc;
-        private readonly IDbContextFactory<PosClientDbContext> _dbf;
+        private readonly IOutletService _outletSvc;
+        //private readonly IDbContextFactory<PosClientDbContext> _dbf;
 
         public ObservableCollection<Outlet> Outlets { get; } = new();
         public ObservableCollection<ArApRowVm> ArRows { get; } = new();
@@ -37,16 +38,18 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
         public IAsyncRelayCommand RefreshCmd { get; }
 
-        public ArApReportVm(IArApQueryService svc, IDbContextFactory<PosClientDbContext> dbf)
+        public ArApReportVm(IArApQueryService svc, IOutletService outletSvc)
         {
-            _svc = svc; _dbf = dbf;
+            _svc = svc;
             RefreshCmd = new AsyncRelayCommand(LoadAsync);
+            _outletSvc = outletSvc;
         }
 
         public async Task InitAsync()
         {
-            using var db = await _dbf.CreateDbContextAsync();
-            var outlets = await db.Outlets.AsNoTracking().OrderBy(o => o.Name).ToListAsync();
+            //using var db = await _dbf.CreateDbContextAsync();
+            var outlets = await _outletSvc.GetAllAsync();
+            //await db.Outlets.AsNoTracking().OrderBy(o => o.Name).ToListAsync();
             Outlets.Clear();
             foreach (var o in outlets) Outlets.Add(o);
             SelectedOutlet = null; // All

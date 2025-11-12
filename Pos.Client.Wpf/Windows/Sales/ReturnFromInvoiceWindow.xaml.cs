@@ -11,7 +11,6 @@ using Pos.Domain;
 using Pos.Domain.Models.Sales;
 using Pos.Domain.Pricing;                 // PricingMath
 using Pos.Domain.Services;                // ISalesService
-//using Pos.Client.Wpf.Services;            // AppState
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -20,7 +19,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly int _origSaleId;
         private readonly ISalesService _sales;
         private readonly AppState _state;
-
         public bool Confirmed { get; private set; }
         public decimal RefundMagnitude { get; private set; } // absolute amount
 
@@ -78,10 +76,8 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             Loaded += async (_, __) =>
             {
-                // Load via service (read-only DTO)
                 var dto = await _sales.GetReturnFromInvoiceAsync(_origSaleId);
                 HeaderText.Text = dto.HeaderHuman;
-
                 _rows.Clear();
                 foreach (var x in dto.Lines)
                 {
@@ -106,7 +102,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 RecalcTotals();
             };
 
-            // Recalc safely after grid commit
             Grid.CellEditEnding += (_, e) =>
             {
                 if (e.EditAction != DataGridEditAction.Commit) return;

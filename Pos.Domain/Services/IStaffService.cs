@@ -12,6 +12,7 @@ namespace Pos.Domain.Services
     {
         // ─────────────── Queries ───────────────
         Task<List<Staff>> GetAllAsync(CancellationToken ct = default);
+        Task<List<Staff>> GetAllActiveStaffAsync(CancellationToken ct = default);
         Task<Staff?> GetAsync(int id, CancellationToken ct = default);
         Task<bool> IsNameTakenAsync(string name, int? excludingId = null, CancellationToken ct = default);
         Task<string> GenerateNextStaffCodeAsync(CancellationToken ct = default);

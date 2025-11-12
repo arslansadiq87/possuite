@@ -2,11 +2,24 @@
 
   <ItemGroup>
     <Compile Remove="Contracts\IScanFocusable.cs" />
+    <Compile Remove="Services\ArApQueryService.cs" />
+    <Compile Remove="Services\AttendanceService.cs" />
+    <Compile Remove="Services\AuthService.cs" />
+    <Compile Remove="Services\AuthZ.cs" />
     <Compile Remove="Services\CoaService.cs" />
+    <Compile Remove="Services\Context\TerminalContext.cs" />
+    <Compile Remove="Services\CounterBindingService.cs" />
     <Compile Remove="Services\CurrentUserService.cs" />
+    <Compile Remove="Services\ITillService.cs" />
+    <Compile Remove="Services\MachineIdentityService.cs" />
     <Compile Remove="Services\MediaPaths.cs" />
     <Compile Remove="Services\OpeningBalanceService.cs" />
+    <Compile Remove="Services\PartyLookupService.cs" />
+    <Compile Remove="Services\PartyPostingService.cs" />
+    <Compile Remove="Services\PayrollService.cs" />
+    <Compile Remove="Services\StaffDirectory.cs" />
     <Compile Remove="Services\StockGuard_old.cs" />
+    <Compile Remove="Services\TillService.cs" />
     <Compile Remove="Services\WindowNavigator.cs" />
     <Compile Remove="Windows\Accounting\AccountDialog.xaml.cs" />
     <Compile Remove="Windows\Accounting\AccountFlatRow.cs" />
@@ -60,6 +73,7 @@
 
   <ItemGroup>
     <Folder Include="Resources\Icons\" />
+    <Folder Include="Services\Context\" />
   </ItemGroup>
 
   <PropertyGroup>
