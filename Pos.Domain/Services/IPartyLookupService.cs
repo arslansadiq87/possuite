@@ -28,5 +28,6 @@ namespace Pos.Domain.Services
 
         /// <summary>Customer by exact (case-insensitive) name if visible to the outlet; otherwise null.</summary>
         Task<Party?> FindCustomerByExactNameAsync(string name, int outletId, CancellationToken ct = default);
+        Task<string?> GetPartyNameAsync(int partyId, CancellationToken ct = default);
     }
 }

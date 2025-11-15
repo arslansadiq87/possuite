@@ -233,7 +233,7 @@ namespace Pos.Persistence
                  .HasForeignKey(x => x.PartyId)
                  .OnDelete(DeleteBehavior.Restrict);
                 e.Property(x => x.Status).HasConversion<int>();
-                e.Property(x => x.TargetType).HasConversion<int>();
+                e.Property(x => x.LocationType).HasConversion<int>();
                 e.Property(x => x.VendorInvoiceNo).HasMaxLength(100);
                 e.Property(x => x.DocNo).HasMaxLength(50);
                 e.Property(x => x.Subtotal).HasColumnType("decimal(18,2)");
@@ -246,7 +246,7 @@ namespace Pos.Persistence
                 e.HasIndex(x => x.Status);
                 e.HasIndex(x => x.DocNo);
                 e.HasMany(x => x.Lines)
-                 .WithOne()
+                 .WithOne(l => l.Purchase)           // <- explicit nav to avoid shadow FK (PurchaseId1)
                  .HasForeignKey(l => l.PurchaseId)
                  .OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(x => x.Payments)
@@ -714,6 +714,15 @@ namespace Pos.Persistence
                   .WithMany()
                   .HasForeignKey(x => x.ItemId)
                   .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<GlEntry>(e =>
+            {
+                e.HasIndex(x => new { x.DocType, x.DocId });
+                e.HasIndex(x => new { x.ChainId, x.IsEffective });
+                e.HasIndex(x => new { x.AccountId, x.EffectiveDate });
+                e.HasIndex(x => x.PartyId);
+                e.Property(x => x.DocSubType).HasConversion<short>();
             });
 
 

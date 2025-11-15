@@ -5,7 +5,7 @@ namespace Pos.Domain.Entities
 {
     // Keep single, canonical stock ledger elsewhere (StockEntry). No duplicate StockTxn here.
     public enum PurchaseStatus { Draft = 0, Final = 1, Voided = 2, Revised = 3 }
-    public enum StockTargetType { Outlet = 1, Warehouse = 2 }
+    //public enum StockTargetType { Outlet = 1, Warehouse = 2 }
     public enum PurchasePaymentKind { Advance = 0, OnReceive = 1, Adjustment = 2 }
     public enum TenderMethod { Cash = 0, Card = 1, Bank = 2, Other = 3 }
 
@@ -16,7 +16,9 @@ namespace Pos.Domain.Entities
         public Party? Party { get; set; }
 
         // Where stock lands
-        public StockTargetType TargetType { get; set; } = StockTargetType.Outlet;
+        //public StockTargetType TargetType { get; set; } = StockTargetType.Outlet;
+        public InventoryLocationType LocationType { get; set; } = InventoryLocationType.Outlet;
+
         public int? OutletId { get; set; }
         public Outlet? Outlet { get; set; }
         public int? WarehouseId { get; set; }
@@ -52,6 +54,7 @@ namespace Pos.Domain.Entities
         // --- Optional revision links (you already have Revision int) ---
         public int? RevisedFromPurchaseId { get; set; }
         public int? RevisedToPurchaseId { get; set; }
+        public string? VoidReason { get; set; }   // <-- add this
 
     }
 
@@ -80,8 +83,9 @@ namespace Pos.Domain.Entities
         public Purchase Purchase { get; set; } = null!;
 
         public int SupplierId { get; set; }
-        public int OutletId { get; set; }
-
+        //public int OutletId { get; set; }
+        public int? OutletId { get; set; }                // nullable; used if LocationType=Outlet
+        public int? WarehouseId { get; set; }            // used if LocationType=Warehouse
         public DateTime TsUtc { get; set; }
 
         public PurchasePaymentKind Kind { get; set; }
@@ -90,6 +94,8 @@ namespace Pos.Domain.Entities
 
         public decimal Amount { get; set; }
         public string? Note { get; set; }
+        public bool IsEffective { get; set; } = true;   // <-- NEW
+
     }
 
     public class CashLedger : BaseEntity

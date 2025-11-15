@@ -1,11 +1,12 @@
 ﻿using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
-    public partial class AccountLedgerWindow : Window
+    public partial class AccountLedgerView : UserControl
     {
-        public AccountLedgerWindow(AccountLedgerVm vm)
+        public AccountLedgerView(AccountLedgerVm vm)
         {
             InitializeComponent();
             DataContext = vm;

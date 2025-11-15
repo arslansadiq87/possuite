@@ -24,7 +24,7 @@
             <local:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
             <local:ProductPrimaryToThumbConverter x:Key="ProductPrimaryToThumbConverter"/>
             <local:VariantThumbPathConverter x:Key="VariantThumbPathConverter"/>
-
+            <local:PersistedToReadOnlyConverter x:Key="PersistedToReadOnlyConverter"/>
             <!-- NEW: globally center all Windows relative to their Owner/MainWindow -->
         </ResourceDictionary>
         

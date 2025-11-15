@@ -12,7 +12,7 @@ namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
     [Migration("20251107200433_init")]
-    partial class init
+    partial class init1
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

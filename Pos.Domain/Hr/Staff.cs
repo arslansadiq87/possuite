@@ -63,7 +63,7 @@ namespace Pos.Domain.Hr
     {
         public DateTime PeriodStartUtc { get; set; }
         public DateTime PeriodEndUtc { get; set; }
-        public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+        public new DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
         public bool IsFinalized { get; set; }
 
         public decimal TotalGross { get; set; }

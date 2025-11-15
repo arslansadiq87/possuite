@@ -126,5 +126,15 @@ namespace Pos.Persistence.Services
             );
         }
 
+        public async Task<string?> GetPartyNameAsync(int partyId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Set<Party>().AsNoTracking()
+                .Where(x => x.Id == partyId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync(ct);
+        }
+
+
     }
 }

@@ -20,18 +20,12 @@ namespace Pos.Client.Wpf.Windows.Shell;
 
 public sealed class DashboardVm : ObservableObject
 {
-    //private readonly IITillService _till;
     private readonly ITillService _till;
-    //private readonly IOutletService _outlets;             // if you have this
-    //private readonly IOutletCounterService _counters;     // if you have this
     private readonly IOutletReadService _outletRead;      // add
-    // ---------- Services ----------
-    //private readonly IDbContextFactory<PosClientDbContext> _dbf;
     private readonly AppState _st;
     private readonly IWindowNavigator _nav;
     private readonly IViewNavigator _views;     // single-shell view navigation (now tab-aware)
     private readonly IDialogService _dialogs;   // overlay-based confirms, etc.
-    // keep your existing TillStatus string property — do NOT switch to [ObservableProperty]
     private bool _isTillOpen;
     public bool IsTillOpen { get => _isTillOpen; set => SetProperty(ref _isTillOpen, value); }
     private readonly Func<int, int, int, TillSessionSummaryWindow> _tillSummaryWindowFactory;
@@ -53,8 +47,7 @@ public sealed class DashboardVm : ObservableObject
         _dialogs = dialogs;
         _till = till;
         _outletRead = outletRead;
-              
-
+             
 
         // ---------- Defaults ----------
         OutletName = "-";
@@ -87,11 +80,7 @@ public sealed class DashboardVm : ObservableObject
         OpenOutletsCountersCmd = new RelayCommand(OpenOutletCountersTab);
         OpenWarehousesCmd = new RelayCommand(OpenWarehousesTab);
         OpenStockCheckCmd = new RelayCommand(StockCheckTab);
-        // Keep this one as a WINDOW for now (if you haven't converted to a view yet)
-        //OpenOutletsCountersCmd = new RelayCommand(() => _nav.Open<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>());
-        //OpenOutletsCountersCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Admin.OutletsCountersWindow>());
         OpenUsersCmd = new RelayCommand(OpenUsersTab);
-        //OpenReportsCmd = new RelayCommand(OpenReportsTab);
         // NEW till commands
         OpenTillCmd = new AsyncRelayCommand(OpenTillAsync);
         CloseTillCmd = new AsyncRelayCommand(CloseTillAsync);
@@ -105,24 +94,16 @@ public sealed class DashboardVm : ObservableObject
         CloseRightCmd = new RelayCommand(CloseRightTabs);
         OpenOtherAccountsCmd = new RelayCommand(OpenOtherAccountsTab);
         OpenVoucherEditorCmd = new RelayCommand(OpenVouchersTab);
-        //OpenOpeningBalanceCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Accounting.OpeningBalanceWindow>());
+        OpenCashBookCmd = new RelayCommand((OpenCashBookTab));
 
+            
         OpenChartOfAccountsCmd = new RelayCommand(OpenChartOfAccountsTab);
 
         OpenVoucherCenterCmd = new RelayCommand(OpenVoucherCenterTab);
 
-        //    OpenChartOfAccountsCmd = new RelayCommand(() =>
-        //_nav.Show<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsWindow>());
+        OpenAccounteLedgerCmd = new RelayCommand((OpenAccounteLedgerTab));
 
-        //OpenVoucherEditorCmd = new RelayCommand(() =>
-        //    _nav.Show<Pos.Client.Wpf.Windows.Accounting.VoucherEditorWindow>());
-        OpenAccounteLedgerCmd = new RelayCommand(() =>
-            _nav.Show<Pos.Client.Wpf.Windows.Accounting.AccountLedgerWindow>());
-
-        OpenCashBookCmd = new RelayCommand(() =>
-            _nav.Show<Pos.Client.Wpf.Windows.Accounting.CashBookWindow>());
-
-
+      
         OpenPayrollCmd = new RelayCommand(() =>
             _nav.Show<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>());
 
@@ -130,10 +111,8 @@ public sealed class DashboardVm : ObservableObject
             _nav.Show<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>());
 
         OpenArApReportCmd = new RelayCommand(() => _nav.Show<Pos.Client.Wpf.Windows.Accounting.ArApReportWindow>());
-
-
-
-
+        OpenReportsCmd = new RelayCommand(() => _ = NotImplementedAsync("Reports"));
+        OpenVouchersCmd = new RelayCommand(OpenVouchersTab);
         RefreshCmd = new AsyncRelayCommand(RefreshAsync);
         _ = SyncTillUiAsync();
         _tillSummaryWindowFactory = tillSummaryWindowFactory;                  // <-- store it
@@ -145,22 +124,20 @@ public sealed class DashboardVm : ObservableObject
         await _dialogs.AlertAsync($"{feature} — feature not implemented yet. Continue anyway?", "POS"); // OK
     }
 
-
-
     // ---------- Top strip / status ----------
-    private string _outletName;
+    private string _outletName = "-";
     public string OutletName { get => _outletName; set => SetProperty(ref _outletName, value); }
 
-    private string _counterName;
+    private string _counterName = "-";
     public string CounterName { get => _counterName; set => SetProperty(ref _counterName, value); }
 
-    private string _tillStatus;
+    private string _tillStatus = "-";
     public string TillStatus { get => _tillStatus; set => SetProperty(ref _tillStatus, value); }
 
-    private string _onlineText;
+    private string _onlineText = "-";
     public string OnlineText { get => _onlineText; set => SetProperty(ref _onlineText, value); }
 
-    private string _lastSyncText;
+    private string _lastSyncText = "-";
     public string LastSyncText { get => _lastSyncText; set => SetProperty(ref _lastSyncText, value); }
 
     public string CurrentUserName => _st.CurrentUserName;
@@ -168,36 +145,34 @@ public sealed class DashboardVm : ObservableObject
     public int CurrentCounterId => _st.CurrentCounterId;
 
     // ---------- KPIs ----------
-    private string _todaySalesFormatted;
+    private string _todaySalesFormatted = "-";
     public string TodaySalesFormatted { get => _todaySalesFormatted; set => SetProperty(ref _todaySalesFormatted, value); }
 
-    private string _todaySalesInvoicesText;
+    private string _todaySalesInvoicesText = "-";
     public string TodaySalesInvoicesText { get => _todaySalesInvoicesText; set => SetProperty(ref _todaySalesInvoicesText, value); }
 
-    private string _todayReturnsFormatted;
+    private string _todayReturnsFormatted = "-";
     public string TodayReturnsFormatted { get => _todayReturnsFormatted; set => SetProperty(ref _todayReturnsFormatted, value); }
 
-    private string _todayReturnsCountText;
+    private string _todayReturnsCountText = "-";
     public string TodayReturnsCountText { get => _todayReturnsCountText; set => SetProperty(ref _todayReturnsCountText, value); }
 
-    private string _shiftCashFormatted;
+    private string _shiftCashFormatted = "-";
     public string ShiftCashFormatted { get => _shiftCashFormatted; set => SetProperty(ref _shiftCashFormatted, value); }
 
-    private string _shiftHint;
+    private string _shiftHint = "-";
     public string ShiftHint { get => _shiftHint; set => SetProperty(ref _shiftHint, value); }
 
     // ---------- Back-compat (single-shell content) ----------
     // Keep this so any old bindings/XAML compile even if center host is now TabControl.
-    private object _currentView;
-    public object CurrentView { get => _currentView; set => SetProperty(ref _currentView, value); }
-
+    private object? _currentView;
+    public object? CurrentView { get => _currentView; set => SetProperty(ref _currentView, value); }
     // ---------- Overlay region (for in-shell dialogs) ----------
     private bool _isOverlayOpen;
     public bool IsOverlayOpen { get => _isOverlayOpen; set => SetProperty(ref _isOverlayOpen, value); }
 
-    private object _overlayView;
-    public object OverlayView { get => _overlayView; set => SetProperty(ref _overlayView, value); }
-
+    private object? _overlayView;
+    public object? OverlayView { get => _overlayView; set => SetProperty(ref _overlayView, value); }
     // ---------- Contextual tabs ----------
     private bool _transferTabVisible;
     public bool TransferTabVisible { get => _transferTabVisible; set => SetProperty(ref _transferTabVisible, value); }
@@ -205,8 +180,8 @@ public sealed class DashboardVm : ObservableObject
     // ---------- Tabbed documents ----------
     public ObservableCollection<ViewTab> Tabs { get; }
 
-    private ViewTab _activeTab;
-    public ViewTab ActiveTab
+    private ViewTab? _activeTab;
+    public ViewTab? ActiveTab
     {
         get => _activeTab;
         set => SetProperty(ref _activeTab, value);
@@ -241,11 +216,9 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand OpenVoucherEditorCmd { get; }
     public IRelayCommand OpenVoucherCenterCmd { get; }
     public IRelayCommand OpenPayrollCmd { get; }
-
     public IRelayCommand OpenAccounteLedgerCmd { get; }
     public IRelayCommand OpenCashBookCmd { get; }
     public IRelayCommand OpenArApReportCmd { get; }
-    
     public IRelayCommand OpenAttendanceCmd { get; }
     //public IRelayCommand OpenOpeningBalanceCmd { get; }
     public IRelayCommand OpenStaffCmd { get; }
@@ -255,7 +228,6 @@ public sealed class DashboardVm : ObservableObject
     // NEW commands
     public IAsyncRelayCommand OpenTillCmd { get; }
     public IAsyncRelayCommand CloseTillCmd { get; }
-
     
     // Notify views if you want (optional hook from window/tabs)
     public event Action? TillChanged;
@@ -271,8 +243,6 @@ public sealed class DashboardVm : ObservableObject
         ActiveTab = existing;
         return true;
     }
-
-
 
     // ---------- Openers => Tabs ----------
     private void OpenTransferTab()
@@ -367,8 +337,17 @@ public sealed class DashboardVm : ObservableObject
         _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.VoucherCenterView>("Voucher Center", "Voucher Center");
     }
 
-    //private void OpenReportsTab()
-    //    => _views.OpenTab<Pos.Client.Wpf.Windows.Reports.ReportsView>("Reports", "Reports");
+    private void OpenCashBookTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.CashBookView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.CashBookView>("Cash Book", "Cash Book");
+    }
+
+    private void OpenAccounteLedgerTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.AccountLedgerView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.AccountLedgerView>("Account Ledger", "Account Ledger");
+    }
 
     // ---------- Bulk tab ops ----------a
     private async void CloseAllTabs()
@@ -408,30 +387,11 @@ public sealed class DashboardVm : ObservableObject
     // ---------- Data refresh ----------
     public async Task RefreshAsync()
     {
-        //using var db = await _dbf.CreateDbContextAsync();
-
-        //if (CurrentOutletId > 0)
-        //{
-        //    var outlet = await db.Outlets.AsNoTracking().FirstOrDefaultAsync(o => o.Id == CurrentOutletId);
-        //    OutletName = outlet?.Name ?? $"Outlet #{CurrentOutletId}";
-        //}
-        //else OutletName = "-";
-
-        //if (CurrentCounterId > 0)
-        //{
-        //    var counter = await db.Counters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == CurrentCounterId);
-        //    CounterName = counter?.Name ?? $"Counter #{CurrentCounterId}";
-        //}
-        //else CounterName = "-";
-        //if (CurrentOutletId > 0)
-        //    OutletName = await _outlets.GetOutletNameAsync(CurrentOutletId) ?? $"Outlet #{CurrentOutletId}";
         if (CurrentOutletId > 0)
             OutletName = await _outletRead.GetOutletNameAsync(CurrentOutletId) ?? $"Outlet #{CurrentOutletId}";
         else
             OutletName = "-";
 
-        //    if (CurrentCounterId > 0)
-        //CounterName = await _counters.GetCounterNameAsync(CurrentCounterId) ?? $"Counter #{CurrentCounterId}";
         if (CurrentCounterId > 0)
             CounterName = await _outletRead.GetCounterNameAsync(CurrentCounterId) ?? $"Counter #{CurrentCounterId}";
         else
@@ -444,8 +404,6 @@ public sealed class DashboardVm : ObservableObject
         OnPropertyChanged(nameof(CurrentUserName));
         await SyncTillUiAsync();
     }
-
-
 
     private async Task OpenTillSummaryAsync()
     {
@@ -471,13 +429,6 @@ public sealed class DashboardVm : ObservableObject
         win.ShowDialog();
     }
 
-
-
-    //private void SyncTillUi()
-    //{
-    //    TillStatus = _till.GetStatusText();
-    //    IsTillOpen = _till.IsTillOpen();
-    //}
     private async Task SyncTillUiAsync()
     {
         var status = await _till.GetStatusAsync();
@@ -487,12 +438,6 @@ public sealed class DashboardVm : ObservableObject
 
     private async Task OpenTillAsync()
     {
-        //if (await _till.OpenTillAsync())
-        //{
-        //    SyncTillUi();
-        //    TillChanged?.Invoke();
-        //}
-        // Prompt user for opening float (default 0)
         var input = Interaction.InputBox("Enter OPENING FLOAT:", "Open Till", "0.00");
                 if (!decimal.TryParse(input, System.Globalization.NumberStyles.Number,
         System.Globalization.CultureInfo.CurrentCulture, out var openingFloat))

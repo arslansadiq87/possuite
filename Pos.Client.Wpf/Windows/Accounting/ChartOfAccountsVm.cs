@@ -19,6 +19,7 @@ using Pos.Persistence.Sync;                 // IOutboxWriter
 using Microsoft.Extensions.DependencyInjection; // App.Services.GetRequiredService
 using Pos.Domain.Services;        // IOutboxWriter
 using Pos.Domain.Models.Accounting;
+using Pos.Client.Wpf.Security;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
@@ -158,14 +159,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
             }
         }
 
-        private static bool IsAdmin()
-        {
-            var u = AppState.Current?.CurrentUser;
-            return (u != null && (u.Role == UserRole.Admin));
-        }
-        private static bool CanEditOpenings() => IsAdmin();
-        private static bool CanManageCoA() => IsAdmin();
-        private static bool CanLockOpenings() => IsAdmin();
+        
+        private static bool CanEditOpenings() => AuthZ.IsAdminCached();
+        
+        private static bool CanManageCoA() => AuthZ.IsAdminCached();
+        private static bool CanLockOpenings() => AuthZ.IsAdminCached();
 
         [RelayCommand]
         public async Task LoadAsync()

@@ -52,6 +52,9 @@ namespace Pos.Client.Wpf.Controls
     public partial class CustomerSearchBox : UserControl
     {
         public enum PartyLookupMode { Customers, Suppliers, Both }
+        // Add near other fields
+        private bool _squelchSearch = false;   // prevents debounce when we set Query internally
+        private bool _suppressOpen = false;    // prevents popup reopening during internal updates
 
         public ObservableCollection<CustomerLookupRow> Suggestions { get; } = new();
 
@@ -167,17 +170,20 @@ namespace Pos.Client.Wpf.Controls
 
         private void QueryBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            // keep Query in sync and (debounced) refresh suggestions
+            if (_squelchSearch) return;               // ⬅️ don’t react to our own set
             Query = QueryBox.Text ?? string.Empty;
+
             _debounce.Stop();
             _debounce.Start();
 
-            // open popup immediately if we already have suggestions; otherwise it will open after search
+            if (_suppressOpen) { SetPopup(false); return; } // ⬅️ stop re-open
+
             var has = Suggestions.Count > 0;
             SetPopup(has && Query.Length >= 2);
             if (SuggestPopup.IsOpen && SuggestList.Items.Count > 0 && SuggestList.SelectedIndex < 0)
                 SuggestList.SelectedIndex = 0;
         }
+
 
         private void QueryBox_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
@@ -232,9 +238,11 @@ namespace Pos.Client.Wpf.Controls
         private static void OnQueryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var self = (CustomerSearchBox)d;
+            if (self._squelchSearch) return;          // ⬅️ skip debounce when internal
             self._debounce.Stop();
             self._debounce.Start();
         }
+
 
         private void CancelPendingSearch()
         {
@@ -252,6 +260,7 @@ namespace Pos.Client.Wpf.Controls
 
         private async Task RunSearchAsync()
         {
+            if (_squelchSearch) return;               // ⬅️ ignore during internal set
             _debounce.Stop();
             CancelPendingSearch();
             _cts = new CancellationTokenSource();
@@ -308,12 +317,28 @@ namespace Pos.Client.Wpf.Controls
 
         private void Pick(CustomerLookupRow? row)
         {
+            _squelchSearch = true;
+            _suppressOpen = true;
+
             SelectedCustomer = row;
             SelectedCustomerId = row?.Id;
-            Query = row?.ToString() ?? string.Empty;
+
+            // keep TextBox and DP in sync without triggering a new search
+            QueryBox.Text = row?.ToString() ?? string.Empty;
+            Query = QueryBox.Text;
+
+            Suggestions.Clear();
             SetPopup(false);
+
+            _squelchSearch = false;
+            _suppressOpen = false;
+
             RaiseEvent(new RoutedEventArgs(CustomerPickedEvent));
+
+            // move focus to next control (see section 2)
+            MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
         }
+
 
         private void SuggestList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {

@@ -491,5 +491,118 @@ namespace Pos.Persistence.Services
             await _outbox.EnqueueUpsertAsync(db, leaf, ct);
             await db.SaveChangesAsync(ct);
         }
+
+        // ---- Inventory / Supplier helpers (public) ----
+        public async Task<int> EnsureInventoryAccountIdAsync(CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            // Try to find an existing company-level posting account named "Inventory"
+            var inv = await db.Accounts.AsNoTracking()
+                .FirstOrDefaultAsync(a =>
+                    a.OutletId == null &&
+                    !a.IsHeader &&
+                    a.AllowPosting &&
+                    a.Type == AccountType.Asset &&
+                    a.Name == "Inventory", ct);
+
+            if (inv != null) return inv.Id;
+
+            // Create a simple company-level posting account if missing
+            var acc = new Account
+            {
+                Code = "INVENTORY",               // safe, non-numeric; won’t collide with your numeric scheme
+                Name = "Inventory",
+                Type = AccountType.Asset,
+                NormalSide = NormalSide.Debit,
+                IsHeader = false,
+                AllowPosting = true,
+                IsSystem = true,
+                OutletId = null,
+                IsActive = true
+            };
+            db.Accounts.Add(acc);
+            await db.SaveChangesAsync(ct);
+
+            await _outbox.EnqueueUpsertAsync(db, acc, ct);
+            await db.SaveChangesAsync(ct);
+
+            return acc.Id;
+        }
+
+        public async Task<int> EnsureSupplierAccountIdAsync(int partyId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == partyId, ct)
+                        ?? throw new InvalidOperationException("Supplier/Party not found.");
+
+            // If party already linked to an account, return it (and ensure it still exists)
+            if (party.AccountId.HasValue)
+            {
+                var exists = await db.Accounts.AsNoTracking()
+                    .AnyAsync(a => a.Id == party.AccountId.Value, ct);
+                if (exists) return party.AccountId.Value;
+                // fall through to (re)create if dangling
+            }
+
+            // Ensure a company-level "Parties" header (Type = Parties). Prefer an existing one.
+            var partiesHeader = await db.Accounts.FirstOrDefaultAsync(a =>
+                a.OutletId == null &&
+                a.IsHeader &&
+                a.Type == AccountType.Parties, ct);
+
+            if (partiesHeader == null)
+            {
+                partiesHeader = new Account
+                {
+                    Code = "6",                    // conventional high-level code for Parties (company-scope)
+                    Name = "Parties",
+                    Type = AccountType.Parties,
+                    NormalSide = DefaultNormalFor(AccountType.Parties),
+                    IsHeader = true,
+                    AllowPosting = false,
+                    IsSystem = true,
+                    OutletId = null,
+                    IsActive = true
+                };
+                db.Accounts.Add(partiesHeader);
+                await db.SaveChangesAsync(ct);
+
+                await _outbox.EnqueueUpsertAsync(db, partiesHeader, ct);
+                await db.SaveChangesAsync(ct);
+            }
+
+            // Create a leaf posting account for this supplier
+            var leafCode = await GenerateNextChildCodeAsync(db, partiesHeader, forHeader: false, ct);
+            var leaf = new Account
+            {
+                Code = leafCode,
+                Name = $"Supplier — {party.Name}",
+                Type = AccountType.Parties,
+                NormalSide = DefaultNormalFor(AccountType.Parties),
+                IsHeader = false,
+                AllowPosting = true,
+                ParentId = partiesHeader.Id,
+                OutletId = null,
+                IsSystem = true,
+                IsActive = true
+            };
+            db.Accounts.Add(leaf);
+            await db.SaveChangesAsync(ct);
+
+            // Link party → account
+            party.AccountId = leaf.Id;
+            await db.SaveChangesAsync(ct);
+
+            await _outbox.EnqueueUpsertAsync(db, partiesHeader, ct);
+            await _outbox.EnqueueUpsertAsync(db, leaf, ct);
+            await _outbox.EnqueueUpsertAsync(db, party, ct);
+            await db.SaveChangesAsync(ct);
+
+            return leaf.Id;
+        }
+
+
     }
 }

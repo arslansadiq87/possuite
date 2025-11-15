@@ -71,10 +71,5 @@ namespace Pos.Domain.Entities
         public string? TransferNo { get; set; }
         public bool AutoReceiveOnDispatch { get; set; }    // UI toggle
     }
-
-    public enum InventoryLocationType
-    {
-        Outlet = 1,
-        Warehouse = 2
-    }
+    
 }

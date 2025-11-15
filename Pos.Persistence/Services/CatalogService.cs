@@ -477,31 +477,32 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             return await db.Items
-                .Where(i => i.ProductId == productId)
+                .Where(i => i.ProductId == productId)           // (optionally also && i.Product != null)
                 .Include(i => i.Brand)
                 .Include(i => i.Category)
-                .Include(i => i.Product)!.ThenInclude(p => p.Brand)
-                .Include(i => i.Product)!.ThenInclude(p => p.Category)
+                .Include(i => i.Product)
+                    .ThenInclude(p => p!.Brand)                  // ← tell the analyzer p isn’t null here
+                .Include(i => i.Product)
+                    .ThenInclude(p => p!.Category)               // ← same here
                 .OrderBy(i => i.Sku)
                 .Select(i => new ItemVariantRow
                 {
                     Id = i.Id,
                     Sku = i.Sku,
                     Name = i.Name,
-                    ProductName = i.Product!.Name,
-                    Barcode = i.Barcodes
-                                .OrderByDescending(b => b.IsPrimary)
-                                .Select(b => b.Code)
-                                .FirstOrDefault(),
+                    ProductName = i.Product != null ? i.Product.Name : null,
+                    Barcode = i.Barcodes.OrderByDescending(b => b.IsPrimary).Select(b => b.Code).FirstOrDefault(),
                     Price = i.Price,
                     Variant1Name = i.Variant1Name,
                     Variant1Value = i.Variant1Value,
                     Variant2Name = i.Variant2Name,
                     Variant2Value = i.Variant2Value,
-                    BrandId = i.BrandId ?? i.Product!.BrandId,
-                    BrandName = (i.Brand != null ? i.Brand.Name : i.Product!.Brand != null ? i.Product.Brand.Name : null),
-                    CategoryId = i.CategoryId ?? i.Product!.CategoryId,
-                    CategoryName = (i.Category != null ? i.Category.Name : i.Product!.Category != null ? i.Product.Category.Name : null),
+                    BrandId = i.BrandId ?? (i.Product != null ? i.Product.BrandId : (int?)null),
+                    BrandName = i.Brand != null ? i.Brand.Name
+                             : (i.Product != null && i.Product.Brand != null ? i.Product.Brand.Name : null),
+                    CategoryId = i.CategoryId ?? (i.Product != null ? i.Product.CategoryId : (int?)null),
+                    CategoryName = i.Category != null ? i.Category.Name
+                                : (i.Product != null && i.Product.Category != null ? i.Product.Category.Name : null),
                     TaxCode = i.TaxCode,
                     DefaultTaxRatePct = i.DefaultTaxRatePct,
                     TaxInclusive = i.TaxInclusive,
@@ -899,11 +900,12 @@ namespace Pos.Persistence.Services
 
             return await db.Items
                 .Include(i => i.Barcodes)
-                .Include(i => i.Product).ThenInclude(p => p.Brand)
-                .Include(i => i.Product).ThenInclude(p => p.Category)
+                .Include(i => i.Product).ThenInclude(p => p!.Brand)     // p! here
+                .Include(i => i.Product).ThenInclude(p => p!.Category)  // p! here
                 .Include(i => i.Brand)
                 .Include(i => i.Category)
                 .FirstOrDefaultAsync(i => i.Id == itemId, ct);
+
         }
 
         public async Task<List<string>> GetProductThumbsAsync(int productId, CancellationToken ct = default)
@@ -911,24 +913,24 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             return await db.ProductImages.AsNoTracking()
-                .Where(pi => pi.ProductId == productId)
+                .Where(pi => pi.ProductId == productId && pi.LocalThumbPath != null)
                 .OrderBy(pi => pi.SortOrder)
-                .Select(pi => pi.LocalThumbPath!)
-                .Where(p => p != null)
+                .Select(pi => pi.LocalThumbPath!) // safe after null filter
                 .ToListAsync(ct);
         }
+
 
         public async Task<List<string>> GetItemThumbsAsync(int itemId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             return await db.ItemImages.AsNoTracking()
-                .Where(ii => ii.ItemId == itemId)
+                .Where(ii => ii.ItemId == itemId && ii.LocalThumbPath != null)
                 .OrderBy(ii => ii.SortOrder)
-                .Select(ii => ii.LocalThumbPath!)
-                .Where(p => p != null)
+                .Select(ii => ii.LocalThumbPath!) // safe after null filter
                 .ToListAsync(ct);
         }
+
 
         public async Task<int?> GetProductIdForItemAsync(int itemId, CancellationToken ct = default)
         {
@@ -1008,12 +1010,13 @@ namespace Pos.Persistence.Services
             var ids = list.Select(x => x.Id).Distinct().ToList();
             var fresh = await db.Items
                 .Include(i => i.Barcodes)
-                .Include(i => i.Product).ThenInclude(p => p.Brand)
-                .Include(i => i.Product).ThenInclude(p => p.Category)
+                .Include(i => i.Product).ThenInclude(p => p!.Brand)     // p!
+                .Include(i => i.Product).ThenInclude(p => p!.Category)  // p!
                 .Include(i => i.Brand)
                 .Include(i => i.Category)
                 .Where(i => ids.Contains(i.Id))
                 .ToListAsync(ct);
+
 
             return fresh.Select(ToRow).ToList();
         }
@@ -1084,11 +1087,12 @@ namespace Pos.Persistence.Services
 
             var dbItem = await db.Items
                 .Include(i => i.Barcodes)
-                .Include(i => i.Product).ThenInclude(p => p.Brand)
-                .Include(i => i.Product).ThenInclude(p => p.Category)
+                .Include(i => i.Product).ThenInclude(p => p!.Brand)     // p!
+                .Include(i => i.Product).ThenInclude(p => p!.Category)  // p!
                 .Include(i => i.Brand)
                 .Include(i => i.Category)
                 .FirstAsync(i => i.Id == editedWithBarcodes.Id, ct);
+
 
             dbItem.Sku = editedWithBarcodes.Sku ?? dbItem.Sku;
             if (!string.IsNullOrWhiteSpace(editedWithBarcodes.Name)) dbItem.Name = editedWithBarcodes.Name!;
@@ -1122,24 +1126,26 @@ namespace Pos.Persistence.Services
 
             var thumbs = new List<string>();
 
+            // product-level thumbs
             thumbs.AddRange(await db.ProductImages.AsNoTracking()
-                .Where(pi => pi.ProductId == productId)
+                .Where(pi => pi.ProductId == productId && pi.LocalThumbPath != null)
                 .OrderBy(pi => pi.SortOrder)
-                .Select(pi => pi.LocalThumbPath!)
-                .Where(p => p != null)
+                .Select(pi => pi.LocalThumbPath!) // safe
                 .ToListAsync(ct));
 
+            // variant-level thumbs
             var vThumbs = await (
                 from ii in db.ItemImages.AsNoTracking()
                 join it in db.Items.AsNoTracking() on ii.ItemId equals it.Id
-                where it.ProductId == productId
+                where it.ProductId == productId && ii.LocalThumbPath != null
                 orderby ii.SortOrder
                 select ii.LocalThumbPath!
-            ).Where(p => p != null).ToListAsync(ct);
+            ).ToListAsync(ct);
 
             thumbs.AddRange(vThumbs);
             return thumbs;
         }
+
 
         // ---------- misc ----------
         private static string MakeSku(string baseName, string v1, string v2)

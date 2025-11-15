@@ -33,9 +33,8 @@ namespace Pos.Client.Wpf.Printing
     {
         public static void Print(LabelTestConfig cfg)
         {
-            float mmToInch = 1f / 25.4f;
-            float dpi = cfg.Dpi;
-            float pxPerMm = dpi * mmToInch;
+            const float mmToInch = 1f / 25.4f;
+            float pxPerMm = cfg.Dpi * mmToInch;
 
             // Convert geometry to pixels
             float labelWpx = cfg.LabelWidthMm * pxPerMm;
@@ -43,7 +42,7 @@ namespace Pos.Client.Wpf.Printing
             float marginLpx = cfg.MarginLeftMm * pxPerMm;
             float marginTpx = cfg.MarginTopMm * pxPerMm;
 
-            var pd = new PrintDocument();
+            using var pd = new PrintDocument();
             if (!string.IsNullOrWhiteSpace(cfg.PrinterName))
                 pd.PrinterSettings.PrinterName = cfg.PrinterName;
 
@@ -55,6 +54,7 @@ namespace Pos.Client.Wpf.Printing
             pd.PrintPage += (s, e) =>
             {
                 var g = e.Graphics;
+                if (g is null) { e.HasMorePages = false; return; } // <-- fix CS8602
                 g.PageUnit = GraphicsUnit.Pixel;
 
                 using var pen = new Pen(Color.DimGray, 1);
@@ -85,10 +85,11 @@ namespace Pos.Client.Wpf.Printing
                         if (cfg.ShowPrice) g.DrawString("PKR 999", font, brush, px, py);
                         if (cfg.ShowSku) g.DrawString("SKU: ABC-123", font, brush, sx, sy);
 
-                        // Draw a placeholder barcode line (bottom)
+                        // Placeholder barcode text (bottom)
                         float pad = 2 * pxPerMm;
                         string code = $"[{cfg.CodeType}] 123456789012";
-                        float tx = rect.Left + (rect.Width - g.MeasureString(code, font).Width) / 2;
+                        float codeW = g.MeasureString(code, font).Width;
+                        float tx = rect.Left + (rect.Width - codeW) / 2f;
                         g.DrawString(code, font, brush, tx, rect.Bottom - font.Height - pad);
                     }
                 }
@@ -96,5 +97,6 @@ namespace Pos.Client.Wpf.Printing
 
             pd.Print();
         }
+
     }
 }

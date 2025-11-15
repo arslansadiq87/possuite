@@ -436,9 +436,13 @@ namespace Pos.Persistence.Features.Transfers
             if (doc.TransferStatus != TransferStatus.Draft)
                 throw new InvalidOperationException("Only Draft transfers can be dispatched.");
 
-            if (doc.LocationType == null || doc.ToLocationType == null || doc.LocationId == null || doc.ToLocationId == null)
+            if (doc.LocationType == default
+                || !doc.ToLocationType.HasValue
+                || doc.LocationId <= 0
+                || !doc.ToLocationId.HasValue)
+            {
                 throw new InvalidOperationException("From/To not set.");
-
+            }
             var fromType = doc.LocationType;
             var fromId = doc.LocationId;
             var toType = doc.ToLocationType.Value;

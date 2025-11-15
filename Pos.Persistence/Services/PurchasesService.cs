@@ -1,592 +1,956 @@
 ﻿// Pos.Persistence/Services/PurchasesService.cs
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
+using Pos.Domain.Models.Purchases;
 using Pos.Domain.Services;
-using Pos.Domain.Models.Purchases;   // <-- add
 using Pos.Persistence.Sync;
-
-
-namespace Pos.Persistence.Services 
+using Pos.Domain.Models.Inventory;
+namespace Pos.Persistence.Services
 {
-
-    public class PurchasesService : IPurchasesService
+    /// <summary>
+    /// Fresh, rule-true purchase pipeline:
+    /// - Draft Save  : post only payments (advance). No stock. No gross AP.
+    /// - Post & Save : post stock + gross AP; also post any payments (delta).
+    /// - Amend       : compute strict deltas (stock + GL + payments). Enforce no-negative-stock.
+    /// - Void        : reverse stock and payments (IsEffective=false + reversing rows). Guard negatives.
+    /// All postings use GlEntry.IsEffective with delta chains under ChainId = Purchase.PublicId.
+    /// </summary>
+    public sealed class PurchasesService : IPurchasesService
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
-        private readonly IOutboxWriter _outbox; // NEW
-        private readonly IInventoryReadService _inv;   // <-- add
-        private readonly IGlPostingService _gl; // ✅ add
-        public PurchasesService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox, IInventoryReadService inv, IGlPostingService gl)
+        private readonly IInventoryReadService _inv;
+        private readonly IStockGuard _stockGuard;
+        private readonly ICoaService _coa;
+        private readonly IGlPostingService _gl;
+        private readonly IOutboxWriter _outbox;
+
+        public PurchasesService(
+            IDbContextFactory<PosClientDbContext> dbf,
+            IInventoryReadService inv,
+            IStockGuard stockGuard,
+            ICoaService coa,
+            IGlPostingService gl,
+            IOutboxWriter outbox)
         {
             _dbf = dbf;
+            _inv = inv;
+            _stockGuard = stockGuard;
+            _coa = coa;
+            _gl = gl;
             _outbox = outbox;
-            _inv = inv; // <-- add
-            _gl = gl; // ✅ add
         }
 
+        // -------------------------------
+        // Public API (rule-aligned)
+        // -------------------------------
 
-
-        // ---------- Public API ----------
-
-        /// <summary>
-        /// Create or update a DRAFT purchase (no stock postings).
-        /// Replaces lines on update to keep things simple.
-        /// </summary>
-        public async Task<Purchase> SaveDraftAsync(Purchase draft, IEnumerable<PurchaseLine> lines, string? user = null, CancellationToken ct = default)
+        // DRAFT SAVE — payments only (advance). No stock. No gross AP yet.
+        public async Task<Purchase> SaveDraftAsync(
+            Purchase draft,
+            IEnumerable<PurchaseLine> lines,
+            string? user = null,
+            CancellationToken ct = default)
         {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var lineList = NormalizeAndCompute(lines);
-            ComputeHeaderTotals(draft, lineList);
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            NormalizeAndCompute(draft, lines);
             draft.Status = PurchaseStatus.Draft;
-            draft.DocNo = null;                    // ⬅️ never number a Draft
-            draft.ReceivedAtUtc = null;            // ⬅️ Drafts are not “received”
+            draft.DocNo = null;
+            draft.ReceivedAtUtc = null;
             draft.UpdatedAtUtc = DateTime.UtcNow;
             draft.UpdatedBy = user;
 
-            if (draft.Id == 0)
-            {
-                draft.CreatedAtUtc = DateTime.UtcNow;
-                draft.CreatedBy = user;
-                draft.Lines = lineList;
-                _db.Purchases.Add(draft);
-            }
-            else
-            {
-                var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == draft.Id, ct);
-                // header fields allowed in Draft
-                existing.PartyId = draft.PartyId;
-                existing.TargetType = draft.TargetType;
-                existing.OutletId = draft.OutletId;
-                existing.WarehouseId = draft.WarehouseId;
-                existing.PurchaseDate = draft.PurchaseDate;
-                existing.VendorInvoiceNo = draft.VendorInvoiceNo;
+            UpsertHeaderAndLines(db, draft, lines);
 
-                existing.DocNo = null;
-                existing.ReceivedAtUtc = null;
+            await PostPaymentsDeltaAsync(db, draft, user, ct);
 
-                existing.Subtotal = draft.Subtotal;
-                existing.Discount = draft.Discount;
-                existing.Tax = draft.Tax;
-                existing.OtherCharges = draft.OtherCharges;
-                existing.GrandTotal = draft.GrandTotal;
-
-                existing.Status = PurchaseStatus.Draft;
-                existing.UpdatedAtUtc = draft.UpdatedAtUtc;
-                existing.UpdatedBy = draft.UpdatedBy;
-
-                // clear old lines
-                _db.PurchaseLines.RemoveRange(existing.Lines);
-                //await _db.SaveChangesAsync();
-                await _db.SaveChangesAsync(ct);
-
-
-                // 🔑 re-attach new lines properly
-                foreach (var l in lineList)
-                {
-                    l.Id = 0;                   // force EF to insert
-                    l.PurchaseId = existing.Id; // make sure FK is set
-                    l.Purchase = null;          // don’t carry over detached ref
-                }
-                existing.Lines = lineList;
-
-                draft = existing;
-            }
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, draft, ct);
+            await tx.CommitAsync(ct);
             return draft;
         }
 
-        private async Task<string> EnsurePurchaseNumberAsync(Purchase p, CancellationToken ct)
+        // POST & SAVE — stock + gross AP + payments (delta)
+        public async Task<Purchase> FinalizeReceiveAsync(
+            Purchase purchase,
+            IEnumerable<PurchaseLine> lines,
+            IEnumerable<(TenderMethod method, decimal amount, string? note)> onReceivePayments,
+            int outletId, int supplierId, int? tillSessionId, int? counterId, string user,
+            CancellationToken ct = default)
         {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            if (!string.IsNullOrWhiteSpace(p.DocNo)) return p.DocNo!;
-            var today = DateTime.UtcNow.Date;
-            var prefix = $"PO-{today:yyyyMMdd}-";
-            var countToday = await _db.Purchases
-                .AsNoTracking()
-                .CountAsync(x => x.Status == PurchaseStatus.Final
-                              && x.ReceivedAtUtc >= today
-                              && x.ReceivedAtUtc < today.AddDays(1), ct);
+            var trace = $"[FinalizeReceive] {Guid.NewGuid():N}";
+            global::System.Diagnostics.Debug.WriteLine($"{trace} ENTER user={user} outlet={outletId} supplier={supplierId}");
 
-            return prefix + (countToday + 1).ToString("D3");
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            using var tx = await db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                var isNew = purchase.Id == 0;
+                var nowUtc = DateTime.UtcNow;
+                Purchase? existing = null;
+                if (!isNew)
+                {
+                    existing = await db.Purchases
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.Id == purchase.Id, ct)
+                        ?? throw new InvalidOperationException("Purchase not found for amendment.");
+
+                    var currentRevision = existing.Revision;
+                    var wasDraft = existing.Status == PurchaseStatus.Draft;
+                    var becomingFinal = purchase.Status == PurchaseStatus.Final;
+
+                    if (wasDraft && becomingFinal && currentRevision == 0)
+                        purchase.Revision = currentRevision;
+                    else
+                        purchase.Revision = currentRevision + 1;
+
+                    if (purchase.PublicId == Guid.Empty)
+                        purchase.PublicId = existing.PublicId;       
+                    
+                    if (string.IsNullOrWhiteSpace(purchase.DocNo))
+                        purchase.DocNo = existing.DocNo;
+
+                    if (purchase.PublicId == Guid.Empty)
+                        purchase.PublicId = existing.PublicId;
+
+                    purchase.CreatedAtUtc = existing.CreatedAtUtc;
+                    purchase.CreatedBy = existing.CreatedBy;
+                }
+                else
+                {
+                    purchase.Revision = 0;
+
+                }
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 01.Normalize+Compute");
+                NormalizeAndCompute(purchase, lines);
+
+                purchase.Status = PurchaseStatus.Final;
+                purchase.UpdatedAtUtc = nowUtc;
+                purchase.UpdatedBy = user;
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 02.UpsertHeaderAndLines");
+                UpsertHeaderAndLines(db, purchase, lines);
+
+                if (isNew)
+                {
+                    // ✅ ensure audit on brand-new header
+                    purchase.CreatedAtUtc = nowUtc;
+                    purchase.CreatedBy = user;
+                    global::System.Diagnostics.Debug.WriteLine($"{trace} 03.Numbering");
+                    purchase.DocNo ??= await NextPurchaseNoAsync(db, outletId, ct);
+                    purchase.ReceivedAtUtc = nowUtc;
+                }
+
+                // 03b.SAVE HEADER (+LINES) so purchase.Id is non-zero for FKs
+                System.Diagnostics.Debug.WriteLine($"{trace} 03b.SaveHeader");
+                await db.SaveChangesAsync(ct);
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 04.BuildPurchaseStockDeltas");
+                var stockDeltas = BuildPurchaseStockDeltas(db, purchase);
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 05.StockGuard");
+                await _stockGuard.EnsureNoNegativeAtLocationAsync(stockDeltas, nowUtc, ct);
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 06.ApplyStock");
+                await ApplyStockAsync(db, purchase, stockDeltas, nowUtc, user, ct);
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 07.GL Gross (Inventory DR / Supplier CR)");
+                await ((IGlPostingServiceDb)_gl).PostPurchaseAsync(db, purchase, ct);
+
+                // ---- ON-RECEIVE PAYMENTS (optional) ----
+                if (onReceivePayments != null)
+                {
+                    foreach (var (method, amount, note) in onReceivePayments)
+                    {
+                        if (amount <= 0) continue;
+                        var pay = NewPaymentRow(purchase, supplierId, method, amount, note, user, outletId);
+                        db.PurchasePayments.Add(pay);
+                    }
+
+                    await PreflightValidateStagedPaymentsAsync(db, purchase, outletId, trace, ct);
+                    // 08b.SAVE staged payments so the snapshot sees them
+                    System.Diagnostics.Debug.WriteLine($"{trace} 08.StagePayments.SaveChanges");
+                    await db.SaveChangesAsync(ct);
+
+                    await EnsureNotOverpayAsync(db, purchase, "FinalizeReceive", ct);
+
+                }
+
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 09.GL Payment Snapshot");
+                await PostPaymentsDeltaAsync(db, purchase, user, ct);
+                
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 10.Outbox.Upsert");
+                await _outbox.EnqueueUpsertAsync(db, purchase, ct);
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 11.SaveChanges");
+                await db.SaveChangesAsync(ct);
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} 12.Commit");
+                await tx.CommitAsync(ct);
+
+                global::System.Diagnostics.Debug.WriteLine($"{trace} EXIT OK DocNo={purchase.DocNo}");
+                return purchase;
+            }
+            catch (Exception ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine($"{trace} EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+                if (ex.InnerException != null)
+                    global::System.Diagnostics.Debug.WriteLine($"{trace} INNER: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+                System.Diagnostics.Debug.WriteLine($"{trace} STACK: {ex.StackTrace}");
+                try { await tx.RollbackAsync(ct); } catch { /* ignore */ }
+                throw;
+            }
+        }
+
+        private static decimal Round2(decimal v) => decimal.Round(v, 2, MidpointRounding.AwayFromZero);
+
+        private async Task EnsureNotOverpayAsync(
+            PosClientDbContext db, Purchase p, string? when, CancellationToken ct)
+        {
+            // Sum all *effective* payments for this purchase after any pending inserts/edits
+            var paid = await db.PurchasePayments
+                .Where(x => x.PurchaseId == p.Id && x.IsEffective)
+                .SumAsync(x => x.Amount, ct);
+
+            var total = Round2(p.GrandTotal);
+            var paid2 = Round2(paid);
+
+            if (paid2 > total)
+                throw new InvalidOperationException(
+                    $"{when ?? "Validation"}: payments ({paid2:N2}) cannot exceed invoice total ({total:N2}).");
+        }
+
+
+        private async Task PreflightValidateStagedPaymentsAsync(
+    PosClientDbContext db, Purchase p, int outletId, string trace, CancellationToken ct)
+        {
+            // Grab only NEW, unsaved PurchasePayment rows (staged in this txn)
+            var staged = db.ChangeTracker.Entries<PurchasePayment>()
+                .Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Added)
+                .Select(e => e.Entity)
+                .ToList();
+
+            System.Diagnostics.Debug.WriteLine($"{trace} [VALIDATE] StagedPayments.Count={staged.Count}");
+
+            foreach (var pay in staged)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"{trace} [VALIDATE] Pay Id=0 PurchaseId={pay.PurchaseId} SupplierId={pay.SupplierId} OutletId={pay.OutletId} Method={pay.Method} BankAccountId={pay.BankAccountId} Amount={pay.Amount}");
+
+                // 1) Purchase exists
+                var hasPurchase = await db.Purchases.AsNoTracking().AnyAsync(x => x.Id == pay.PurchaseId, ct);
+                if (!hasPurchase) throw new InvalidOperationException($"{trace} FK check failed: Purchase {pay.PurchaseId} not found.");
+
+                // 2) Supplier/Party exists
+                var hasParty = await db.Parties.AsNoTracking().AnyAsync(x => x.Id == pay.SupplierId, ct);
+                if (!hasParty) throw new InvalidOperationException($"{trace} FK check failed: Supplier/Party {pay.SupplierId} not found.");
+
+                // 3) Outlet exists (always required for payments; cash account belongs to an outlet)
+                if (!(pay.OutletId is int oId) || oId == 0)
+                    throw new InvalidOperationException($"{trace} FK check failed: Payment.OutletId is null/0.");
+                var hasOutlet = await db.Outlets.AsNoTracking().AnyAsync(x => x.Id == oId, ct);
+                if (!hasOutlet) throw new InvalidOperationException($"{trace} FK check failed: Outlet {oId} not found.");
+
+                // 4) Bank method must have a valid bank account
+                // 4) Bank method must have a valid, postable (leaf) bank account
+                if (pay.Method == TenderMethod.Bank)
+                {
+                    if (!(pay.BankAccountId is int bId) || bId == 0)
+                        throw new InvalidOperationException($"{trace} FK check failed: Bank payment missing BankAccountId.");
+
+                    var bankMeta = await db.Accounts
+                        .AsNoTracking()
+                        .Where(a => a.Id == bId)
+                        .Select(a => new { a.Id, a.AllowPosting, a.IsHeader, a.Type })
+                        .FirstOrDefaultAsync(ct);
+
+                    if (bankMeta is null)
+                        throw new InvalidOperationException($"{trace} FK check failed: Bank account {bId} not found.");
+
+                    if (!bankMeta.AllowPosting || bankMeta.IsHeader)
+                        throw new InvalidOperationException($"{trace} Bank account {bId} is not a leaf/postable account.");
+
+                    if (bankMeta.Type != AccountType.Asset)
+                        throw new InvalidOperationException($"{trace} Bank account {bId} must be an Asset type.");
+                }
+
+            }
+        }
+
+
+        // Legacy ReceiveAsync kept as thin alias to FinalizeReceiveAsync (UI compatibility)
+        public Task<Purchase> ReceiveAsync(
+            Purchase model,
+            IEnumerable<PurchaseLine> lines,
+            string? user = null,
+            CancellationToken ct = default)
+            => FinalizeReceiveAsync(model, lines, Array.Empty<(TenderMethod, decimal, string?)>(),
+                                    model.OutletId ?? 0, model.PartyId, null, null, user ?? "system", ct);
+
+        // ------- Payments API (CASH or BANK only) -------
+
+        public async Task<PurchasePayment> AddPaymentAsync(
+    int purchaseId,
+    PurchasePaymentKind kind,
+    TenderMethod method,
+    decimal amount,
+    string? note,
+    int outletId,
+    int supplierId,
+    string user,
+    int? bankAccountId = null,
+    CancellationToken ct = default)
+        {
+            if (amount <= 0m) throw new InvalidOperationException("Amount must be > 0.");
+
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var p = await db.Purchases.FirstAsync(x => x.Id == purchaseId, ct);
+
+            var pay = new PurchasePayment
+            {
+                PurchaseId = p.Id,
+                SupplierId = supplierId,
+                OutletId = outletId,
+                WarehouseId = p.WarehouseId,
+                Kind = kind,
+                Method = method,
+                Amount = Round2(amount),
+                Note = note,
+                BankAccountId = method == TenderMethod.Bank ? bankAccountId : null,
+                IsEffective = true,
+                TsUtc = DateTime.UtcNow,
+                CreatedAtUtc = DateTime.UtcNow,
+                CreatedBy = user,
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedBy = user
+            };
+
+            db.PurchasePayments.Add(pay);
+            await db.SaveChangesAsync(ct);
+
+            // Guard against overpay (includes the row we just saved)
+            await EnsureNotOverpayAsync(db, p, "AddPayment", ct);
+
+            // (Rebuild the GL payment snapshot using the same db)
+            await PostPaymentsDeltaAsync(db, p, user, ct);
+
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, pay, ct);
+            await tx.CommitAsync(ct);
+            return pay;
+        }
+
+
+        public async Task UpdatePaymentAsync(
+    int paymentId,
+    decimal newAmount,
+    TenderMethod newMethod,
+    string? newNote,
+    string user,
+    CancellationToken ct = default)
+        {
+            if (newAmount <= 0m) throw new InvalidOperationException("Payment amount must be > 0.");
+
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var pay = await db.PurchasePayments
+                              .Include(x => x.Purchase)
+                              .FirstOrDefaultAsync(x => x.Id == paymentId, ct)
+                      ?? throw new InvalidOperationException("Payment not found.");
+
+            // Apply edits
+            pay.Amount = decimal.Round(newAmount, 2);
+            pay.Method = newMethod;               // allow method change from UI
+            pay.Note = newNote;
+            pay.UpdatedAtUtc = DateTime.UtcNow;
+            pay.UpdatedBy = user;
+
+            // Guard: if switching to Bank, we must already have a BankAccountId on that payment
+            if (newMethod == TenderMethod.Bank && !pay.BankAccountId.HasValue)
+                throw new InvalidOperationException("Bank account is required when changing the payment method to Bank.");
+
+            // Rebuild payment snapshot for this purchase (cash/bank grouped logic lives here)
+            await PostPaymentsDeltaAsync(db, pay.Purchase!, user, ct);
+
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, pay, ct);
+            await tx.CommitAsync(ct);
+        }
+
+        public async Task RemovePaymentAsync(int paymentId, string user, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var pay = await db.PurchasePayments.Include(x => x.Purchase)
+                                               .FirstOrDefaultAsync(x => x.Id == paymentId, ct)
+                      ?? throw new InvalidOperationException("Payment not found.");
+
+            pay.IsEffective = false;
+            pay.UpdatedAtUtc = DateTime.UtcNow;
+            pay.UpdatedBy = user;
+
+            // Re-post delta for purchase chain
+            await PostPaymentsDeltaAsync(db, pay.Purchase!, user, ct);
+
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, pay, ct);
+            await tx.CommitAsync(ct);
+        }
+
+        public async Task<IReadOnlyList<PurchasePayment>> GetPaymentsAsync(int purchaseId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.PurchasePayments.AsNoTracking()
+                        .Where(x => x.PurchaseId == purchaseId && x.IsEffective)
+                        .OrderBy(x => x.TsUtc)
+                        .ToListAsync(ct);
+        }
+
+        public async Task<bool> IsPurchaseBankConfiguredAsync(int outletId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var id = await db.InvoiceSettings.Where(x => x.OutletId == outletId)
+                        .Select(x => x.PurchaseBankAccountId).FirstOrDefaultAsync(ct);
+            return id.HasValue;
+        }
+
+        public async Task<List<Account>> ListBankAccountsForOutletAsync(int outletId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Accounts.AsNoTracking()
+                     .Where(a => a.AllowPosting && a.Type == AccountType.Asset && a.OutletId == null) // company-scope banks
+                     .OrderBy(a => a.Name)
+                     .ToListAsync(ct);
+        }
+
+        public async Task<int?> GetConfiguredPurchaseBankAccountIdAsync(int outletId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.InvoiceSettings.Where(x => x.OutletId == outletId)
+                       .Select(x => x.PurchaseBankAccountId).FirstOrDefaultAsync(ct);
+        }
+
+        // ------- VOID -------
+
+        public async Task VoidPurchaseAsync(int purchaseId, string reason, string? user = null, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var p = await db.Purchases
+                .Include(x => x.Lines)
+                .Include(x => x.Payments)
+                .FirstOrDefaultAsync(x => x.Id == purchaseId, ct)
+                ?? throw new InvalidOperationException("Purchase not found.");
+
+            // Guard: cannot void original if any active returns exist
+            var hasActiveReturns = await db.Purchases.AsNoTracking()
+                .AnyAsync(r => r.IsReturn
+                            && r.RefPurchaseId == p.Id
+                            && r.Status != PurchaseStatus.Voided, ct);
+            if (hasActiveReturns)
+                throw new InvalidOperationException("This purchase has non-voided returns and cannot be voided. Void the returns first.");
+
+            if (p.Status == PurchaseStatus.Voided) return;
+
+            // Compute stock reversal deltas and guard negatives at destination
+            var deltas = BuildVoidStockDeltas(p);
+            await _stockGuard.EnsureNoNegativeAtLocationAsync(deltas, DateTime.UtcNow, ct);
+
+            // Reverse stock ledger (entries for each item negative of original)
+            await ApplyStockVoidAsync(db, p, DateTime.UtcNow, user ?? "system", ct);
+
+            // Reverse GL chain for this purchase (gross + payments) by marking IsEffective=false
+            await ((IGlPostingServiceDb)_gl).PostPurchaseVoidAsync(db, p, ct);
+                        
+
+            p.Status = PurchaseStatus.Voided;
+            p.VoidReason = reason;
+            p.UpdatedAtUtc = DateTime.UtcNow;
+            p.UpdatedBy = user;
+
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, p, ct);
+            await tx.CommitAsync(ct);
+        }
+
+        public Task VoidReturnAsync(int returnId, string reason, string? user = null, CancellationToken ct = default)
+            => throw new NotImplementedException("Purchase Return void will be implemented in ReturnsService.");
+
+        // -------------------------------
+        // Internals
+        // -------------------------------
+
+        private static void NormalizeAndCompute(Purchase header, IEnumerable<PurchaseLine> lines)
+        {
+            var lineList = lines.ToList(); // local only; do NOT assign to header.Lines
+
+            decimal sub = 0m;
+            foreach (var l in lineList)
+            {
+                l.Qty = decimal.Round(l.Qty, 4);
+                l.UnitCost = decimal.Round(l.UnitCost, 4);
+                l.LineTotal = decimal.Round(l.Qty * l.UnitCost, 2);
+                sub += l.LineTotal;
+            }
+            header.Subtotal = decimal.Round(sub, 2);
+            header.GrandTotal = decimal.Round(header.Subtotal - header.Discount + header.Tax + header.OtherCharges, 2);
+            header.CreditDue = decimal.Round(header.GrandTotal - header.CashPaid, 2);
+        }
+
+        // Pos.Persistence/Services/PurchasesService.cs
+        private static void UpsertHeaderAndLines(PosClientDbContext db, Purchase header, IEnumerable<PurchaseLine> lines)
+        {
+            var nowUtc = DateTime.UtcNow;
+            var user = header.UpdatedBy ?? header.CreatedBy ?? "system";
+
+            // ensure the nav collection exists and is empty before we add
+            if (header.Lines == null)
+                header.Lines = new List<PurchaseLine>();
+            else
+                header.Lines.Clear();
+
+            if (header.Id == 0)
+            {
+                header.CreatedAtUtc = nowUtc;
+                header.CreatedBy = user;
+                header.UpdatedAtUtc = nowUtc;
+                header.UpdatedBy = user;
+
+                db.Purchases.Add(header);
+            }
+            else
+            {
+                header.UpdatedAtUtc = nowUtc;
+                header.UpdatedBy = user;
+
+                db.Purchases.Update(header);
+
+                // remove persisted lines for this header from DB
+                var existing = db.PurchaseLines.Where(x => x.PurchaseId == header.Id);
+                db.PurchaseLines.RemoveRange(existing);
+            }
+
+            foreach (var l in lines)
+            {
+                // treat incoming lines as fresh rows for this save
+                l.Id = 0;
+                l.PurchaseId = 0; // EF will set via nav after save
+                l.CreatedAtUtc = l.CreatedAtUtc == default ? nowUtc : l.CreatedAtUtc;
+                l.CreatedBy = string.IsNullOrWhiteSpace(l.CreatedBy) ? user : l.CreatedBy;
+                l.UpdatedAtUtc = null;
+                l.UpdatedBy = null;
+
+                header.Lines.Add(l); // attach via nav so FK is populated safely
+            }
+        }
+
+
+
+        private async Task<string> NextPurchaseNoAsync(PosClientDbContext db, int outletId, CancellationToken ct)
+        {
+            var today = DateTime.UtcNow;
+            var y = today.Year;
+            var count = await db.Purchases.AsNoTracking().CountAsync(x =>
+                x.OutletId == outletId && x.CreatedAtUtc.Year == y && x.Status != PurchaseStatus.Draft, ct);
+
+            return $"PO-{y:0000}-{count + 1:00000}";
+        }
+
+        // In PurchasesService
+        private IEnumerable<Pos.Domain.Models.Inventory.StockDeltaDto> BuildPurchaseStockDeltas(PosClientDbContext db, Purchase p)
+        {
+            // Resolve destination (Outlet or Warehouse)
+            (InventoryLocationType locType, int locId) = ResolveDestination(p);
+
+            // Desired qty per item from current purchase lines
+            var desiredByItem = p.Lines
+                .GroupBy(l => l.ItemId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+
+            // Already posted net qty per item for this purchase+location
+            var postedByItem = db.StockEntries.AsNoTracking()
+                .Where(se => se.RefType == "Purchase"
+                          && se.RefId == p.Id
+                          && se.LocationType == locType
+                          && se.LocationId == locId)
+                .GroupBy(se => se.ItemId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.QtyChange));
+
+            // 1) Items present in lines: delta = desired - posted
+            foreach (var kv in desiredByItem)
+            {
+                var itemId = kv.Key;
+                postedByItem.TryGetValue(itemId, out var posted);
+                var delta = kv.Value - posted;
+                if (delta != 0)
+                {
+                    // When yielding deltas:
+                    yield return new StockDeltaDto(
+                        ItemId: itemId,
+                        OutletId: p.OutletId ?? 0,
+                        LocType: locType,
+                        LocId: locId,
+                        Delta: delta
+                    );
+                }
+            }
+
+            // 2) Items that were previously posted but now removed from lines → delta = 0 - posted
+            foreach (var kv in postedByItem)
+            {
+                if (desiredByItem.ContainsKey(kv.Key)) continue;
+                var delta = 0 - kv.Value;
+                if (delta != 0)
+                {
+                    yield return new StockDeltaDto(
+                     ItemId: kv.Key,
+                     OutletId: p.OutletId ?? 0,
+                     LocType: locType,
+                     LocId: locId,
+                     Delta: delta
+                 );
+                }
+            }
+        }
+
+        private async Task ApplyStockAsync(
+    PosClientDbContext db, Purchase p,
+    IEnumerable<Pos.Domain.Models.Inventory.StockDeltaDto> deltas,
+    DateTime nowUtc, string user, CancellationToken ct)
+        {
+            foreach (var d in deltas)
+            {
+                if (d.Delta == 0) continue;
+
+                db.StockEntries.Add(new StockEntry
+                {
+                    OutletId = p.OutletId ?? 0,
+                    ItemId = d.ItemId,
+                    QtyChange = d.Delta,          // + for add, - for reduce
+                    UnitCost = 0m,               // keep as-is in your schema
+                    LocationType = d.LocType,
+                    LocationId = d.LocId,
+                    RefType = "Purchase",
+                    RefId = p.Id,
+                    Ts = nowUtc,
+                    Note = p.DocNo,
+                    // ✅ audit
+                    CreatedAtUtc = nowUtc,
+                    CreatedBy = user,
+                    UpdatedAtUtc = null,
+                    UpdatedBy = null
+                });
+            }
+            await Task.CompletedTask;
+        }
+
+
+        // inside PurchasesService (private region)
+        private static (InventoryLocationType locType, int locId) ResolveDestination(Purchase p)
+        {
+            // Prefer the explicit destination set on the Purchase header
+            switch (p.LocationType)
+            {
+                case InventoryLocationType.Outlet:
+                    if (p.OutletId is int oid && oid > 0) return (InventoryLocationType.Outlet, oid);
+                    break;
+
+                case InventoryLocationType.Warehouse:
+                    if (p.WarehouseId is int wid && wid > 0) return (InventoryLocationType.Warehouse, wid);
+                    break;
+            }
+
+            // Fallbacks (only if you really want them; otherwise throw):
+            if (p.OutletId is int oid2 && oid2 > 0) return (InventoryLocationType.Outlet, oid2);
+            if (p.WarehouseId is int wid2 && wid2 > 0) return (InventoryLocationType.Warehouse, wid2);
+
+            throw new InvalidOperationException("Purchase destination is not set correctly (Outlet/Warehouse missing).");
+        }
+
+
+        private static IEnumerable<Pos.Domain.Models.Inventory.StockDeltaDto> BuildVoidStockDeltas(Purchase p)
+        {
+            var locType = p.LocationType;
+            int locId;
+            if (locType == InventoryLocationType.Warehouse)
+            {
+                if (!(p.WarehouseId is int wid) || wid == 0)
+                    throw new InvalidOperationException("WarehouseId is required for LocationType=Warehouse.");
+                locId = wid;
+            }
+            else
+            {
+                if (!(p.OutletId is int oid) || oid == 0)
+                    throw new InvalidOperationException("OutletId is required for LocationType=Outlet.");
+                locId = oid;
+            }
+
+            foreach (var l in p.Lines)
+            {
+                yield return new Pos.Domain.Models.Inventory.StockDeltaDto(
+                    ItemId: l.ItemId,
+                    OutletId: p.OutletId ?? 0,
+                    LocType: locType,
+                    LocId: locId,
+                    Delta: -l.Qty
+                );
+            }
+        }
+
+
+
+        private async Task ApplyStockVoidAsync(
+    PosClientDbContext db, Purchase p,
+    DateTime nowUtc, string user, CancellationToken ct)
+        {
+            var (lt, lid) = ResolveDestination(p);
+
+            // Net currently posted for this purchase at this location
+            var nets = await db.StockEntries.AsNoTracking()
+                .Where(se => se.RefType == "Purchase"
+                          && se.RefId == p.Id
+                          && se.LocationType == lt
+                          && se.LocationId == lid)
+                .GroupBy(se => se.ItemId)
+                .Select(g => new { ItemId = g.Key, Net = g.Sum(x => x.QtyChange) })
+                .ToListAsync(ct);
+
+            foreach (var r in nets)
+            {
+                if (r.Net == 0) continue;
+                db.StockEntries.Add(new StockEntry
+                {
+                    OutletId = p.OutletId ?? 0,
+                    ItemId = r.ItemId,
+                    QtyChange = -r.Net,          // full reversal to zero the purchase’s net
+                    UnitCost = 0m,
+                    LocationType = lt,
+                    LocationId = lid,
+                    RefType = "PurchaseVoid",
+                    RefId = p.Id,
+                    Ts = nowUtc,
+                    Note = $"VOID {p.DocNo}",
+                            // ✅ audit
+                    CreatedAtUtc = nowUtc,
+                    CreatedBy = user,
+                    UpdatedAtUtc = null,
+                    UpdatedBy = null
+                });
+            }
+            await Task.CompletedTask;
+        }
+
+
+        private PurchasePayment NewPaymentRow(
+    Purchase p,
+    int supplierId,
+    TenderMethod method,
+    decimal amount,
+    string? note,
+    string user,
+    int outletIdForCash)   // ✅ explicit outlet for payment (cash/bank)
+        {
+            return new PurchasePayment
+            {
+                PurchaseId = p.Id,
+                SupplierId = supplierId,
+                OutletId = outletIdForCash,   // ✅ always set
+                WarehouseId = p.WarehouseId,  // ok if null
+                Kind = PurchasePaymentKind.OnReceive,
+                Method = method,
+                Amount = decimal.Round(amount, 2),
+                Note = note,
+                IsEffective = true,
+                TsUtc = DateTime.UtcNow,
+                CreatedAtUtc = DateTime.UtcNow,
+                CreatedBy = user,
+                UpdatedAtUtc = DateTime.UtcNow,
+                UpdatedBy = user
+            };
+        }
+
+
+        private async Task<int> RequireDefaultBankAsync(PosClientDbContext db, int outletId, CancellationToken ct)
+        {
+            var id = await db.InvoiceSettings.Where(x => x.OutletId == outletId)
+                    .Select(x => x.PurchaseBankAccountId).FirstOrDefaultAsync(ct);
+            if (!id.HasValue) throw new InvalidOperationException("No default Purchase Bank account configured for this outlet.");
+            return id.Value;
         }
 
         /// <summary>
-        /// Finalize (Receive) a purchase: sets Status=Final, stamps ReceivedAtUtc,
-        /// replaces lines, recomputes totals. (Stock ledger posting comes next step.)
+        /// Computes delta across all effective payments and posts two rows per payment delta:
+        /// Supplier (DR) vs Cash-in-hand (CR) OR Bank (CR).
         /// </summary>
-        public async Task<Purchase> ReceiveAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, CancellationToken ct = default)
+        private async Task PostPaymentsDeltaAsync(PosClientDbContext db, Purchase p, string? user, CancellationToken ct)
         {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
+            // Snapshot payments
+            var pays = await db.PurchasePayments
+                .Where(x => x.PurchaseId == p.Id && x.IsEffective)
+                .ToListAsync(ct);
 
-            // 0) Normalize + compute monetary totals on incoming UI payload
-            ValidateDestination(model);
-            // SAFETY RAIL: all settlements must be recorded via AddPaymentAsync (OnReceive/Adjustment).
-            if (model.CashPaid > 0m)
-                throw new InvalidOperationException(
-                    "Paid-now must be recorded via AddPaymentAsync (OnReceive). Remove header snapshot usage.");
+            var cashTotal = pays.Where(x => x.Method == TenderMethod.Cash).Sum(x => x.Amount);
+            var bankGroups = pays.Where(x => x.Method == TenderMethod.Bank)
+                                 .GroupBy(x => x.BankAccountId)
+                                 .Where(g => g.Key.HasValue);
 
-            var lineList = NormalizeAndCompute(lines);   // your helper
-            ComputeHeaderTotals(model, lineList);        // sets Subtotal/Discount/Tax/GrandTotal on model
+            // Mirror header
+            var bankTotal = bankGroups.Sum(g => g.Sum(x => x.Amount));
+            p.CashPaid = cashTotal;
+            p.CreditDue = decimal.Round(p.GrandTotal - p.CashPaid - bankTotal, 2);
+            p.UpdatedAtUtc = DateTime.UtcNow;
+            p.UpdatedBy = user;
 
-            // common header stamps
-            model.Status = PurchaseStatus.Final;
-            model.ReceivedAtUtc ??= DateTime.UtcNow;
-            model.UpdatedAtUtc = DateTime.UtcNow;
-            model.UpdatedBy = user;
+            // Inactivate previous PAYMENT snapshot
+            await db.GlEntries
+            .Where(e =>
+                e.IsEffective &&
+                e.DocType == GlDocType.Purchase &&
+                e.DocSubType == GlDocSubType.Purchase_Payment &&
+                (
+                    e.ChainId == p.PublicId ||
+                    e.DocId == p.Id
+                ))
+            .ExecuteUpdateAsync(u => u.SetProperty(x => x.IsEffective, false), ct);
 
-            // -----------------------------
-            // 1) FIRST-TIME FINALIZATION
-            // -----------------------------
-            if (model.Id == 0)
+
+            var tsUtc = DateTime.UtcNow;
+            var eff = tsUtc;
+            var outletId = p.OutletId;
+
+            // Supplier account (must exist)
+            var supplierAccId = await db.Parties.AsNoTracking()
+                .Where(x => x.Id == p.PartyId)
+                .Select(x => x.AccountId)
+                .FirstOrDefaultAsync(ct);
+
+            if (!supplierAccId.HasValue)
+                throw new InvalidOperationException("Supplier Party.AccountId is missing. Link the supplier to a ledger account before posting payments.");
+
+            // Resolve Cash-in-Hand (must exist for this outlet)
+            int cashAccId = 0;
+            if (cashTotal > 0m)
             {
-                model.CreatedAtUtc = DateTime.UtcNow;
-                model.CreatedBy = user;
-                model.DocNo = await EnsurePurchaseNumberAsync(model, CancellationToken.None);
-                model.Revision = 0;
-
-                model.Lines = lineList;
-                _db.Purchases.Add(model);
-
-                await _db.SaveChangesAsync(ct);
-
-                // normal purchase postings (IN to the chosen destination)
-                await PostPurchaseStockAsync(model, lineList, user ?? "system");
-
-                // non-fatal convenience
-                try
-                {
-                    await ApplySupplierCreditsAsync(
-                        supplierId: model.PartyId,
-                        outletId: model.OutletId,
-                        purchase: model,
-                        user: user ?? "system");
-                }
-                catch { /* ignore */ }
-                // === SYNC: finalized Purchase (first-time) ===
-                await _outbox.EnqueueUpsertAsync(_db, model, default);
-                await _db.SaveChangesAsync(ct);
-                // ✅ GL posting (non-fatal). Service owns the side-effect; UI stays thin.
-                try { await _gl.PostPurchaseAsync(model); } catch { /* non-fatal; log if you want */ }
-                return model;
-            }
-
-            // -----------------------------
-            // 2) AMEND OR FIRST-TIME FINAL?
-            // -----------------------------
-            var existing = await _db.Purchases
-                                    .Include(p => p.Lines)
-                                    .FirstAsync(p => p.Id == model.Id, ct);
-
-            var wasFinal = existing.Status == PurchaseStatus.Final;
-
-            // --- capture OLD destination before overwriting header ---
-            var oldLocType = existing.TargetType == StockTargetType.Warehouse
-                ? InventoryLocationType.Warehouse
-                : InventoryLocationType.Outlet;
-            var oldLocId = existing.TargetType == StockTargetType.Warehouse
-                ? (existing.WarehouseId ?? 0)
-                : (existing.OutletId ?? 0);
-
-            // --- compute NEW destination from the incoming model (what user selected) ---
-            var newLocType = model.TargetType == StockTargetType.Warehouse
-                ? InventoryLocationType.Warehouse
-                : InventoryLocationType.Outlet;
-            var newLocId = model.TargetType == StockTargetType.Warehouse
-                ? (model.WarehouseId ?? 0)
-                : (model.OutletId ?? 0);
-
-            // Will destination change?
-            bool destinationChanged =
-                (existing.TargetType != model.TargetType) ||
-                (oldLocId != newLocId);
-
-            // Update header (lines are immutable once Final; we won't touch them in Amend)
-            existing.PartyId = model.PartyId;
-            existing.TargetType = model.TargetType;
-            existing.OutletId = model.OutletId;
-            existing.WarehouseId = model.WarehouseId;
-            existing.PurchaseDate = model.PurchaseDate;
-            existing.VendorInvoiceNo = model.VendorInvoiceNo;
-
-            existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
-                ? (existing.DocNo ?? await EnsurePurchaseNumberAsync(existing, CancellationToken.None))
-                : model.DocNo;
-
-            // Money totals reflect the desired state user has on screen
-            existing.Subtotal = model.Subtotal;
-            existing.Discount = model.Discount;
-            existing.Tax = model.Tax;
-            existing.OtherCharges = model.OtherCharges;
-            existing.GrandTotal = model.GrandTotal;
-
-            existing.Status = PurchaseStatus.Final;
-            existing.ReceivedAtUtc = model.ReceivedAtUtc;
-            existing.UpdatedAtUtc = model.UpdatedAtUtc;
-            existing.UpdatedBy = model.UpdatedBy;
-
-            // Revision: bump on amendments only
-            if (wasFinal)
-                existing.Revision = (existing.Revision <= 0 ? 1 : existing.Revision + 1);
-            else
-                existing.Revision = 0;
-
-            // ---------------------------------------------------------
-            // 2X) IF ALREADY FINAL AND DESTINATION CHANGED → MOVE STOCK
-            //      STRATEGY: retag existing postings (Purchase + Amend)
-            //      so all readers immediately reflect the new location.
-            // ---------------------------------------------------------
-            if (wasFinal && destinationChanged)
-            {
-                var relevantRefTypes = new[] { "Purchase", "PurchaseAmend" };
-
-                // 1) Load ALL postings for this purchase that currently sit at the OLD destination
-                var oldPostings = await _db.StockEntries
-                    .Where(se => se.RefId == existing.Id
-                                 && se.LocationType == oldLocType
-                                 && se.LocationId == oldLocId
-                                 && relevantRefTypes.Contains(se.RefType))
-                    .ToListAsync(ct);
-
-                // Nothing posted at old destination (e.g., it was already moved previously) → nothing to do
-                if (oldPostings.Count == 0)
-                    goto AfterMove;
-
-                // 2) Negative guard at OLD destination:
-                //    Compute total qty we are about to remove (per item) and ensure old location won't go < 0.
-                var movingByItem = oldPostings
-                    .GroupBy(se => se.ItemId)
-                    .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
-                    .ToList();
-
-                var itemIds = movingByItem.Select(x => x.ItemId).ToArray();
-
-                var onhandOld = await _inv.GetOnHandBulkAsync(
-                    movingByItem.Select(x => x.ItemId),
-                    oldLocType,
-                    oldLocId,
-                    DateTime.UtcNow,
-                    ct);
-
-                var names = await _db.Items
-                    .Where(i => itemIds.Contains(i.Id))
-                    .Select(i => new { i.Id, i.Name })
-                    .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
-
-                var negHits = new List<string>();
-                foreach (var m in movingByItem)
-                {
-                    var curr = onhandOld.TryGetValue(m.ItemId, out var oh) ? oh : 0m;
-                    var after = curr - m.Qty;   // we will remove exactly this qty from OLD
-                    if (after < 0m)
-                    {
-                        var label = names.TryGetValue(m.ItemId, out var nm) ? $"{nm} (#{m.ItemId})" : $"Item #{m.ItemId}";
-                        negHits.Add($"{label}: on-hand at old {curr:0.##} → after move {after:0.##}");
-                    }
-                }
-                if (negHits.Count > 0)
-                    throw new InvalidOperationException(
-                        "Cannot change destination — it would make stock negative at the original location:\n" +
-                        string.Join("\n", negHits));
-
-                // 3) Retag the existing rows to NEW destination (update in-place).
-                //    This keeps the same RefType ("Purchase"/"PurchaseAmend"), same quantities/costs/audit,
-                //    but they now reside at the new location so every stock reader reflects it.
-                foreach (var se in oldPostings)
-                {
-                    se.LocationType = newLocType;
-                    se.LocationId = newLocId;
-                    se.Note = "Relocated on amend (dest change)";
-                    // (Optional) se.Ts = DateTime.UtcNow;  // only if you want to bump the timestamp
-                }
-                await _db.SaveChangesAsync(ct);
-
-            AfterMove:;
+                // ✅ your COA service that guarantees the right outlet cash-in-hand
+                cashAccId = await _coa.GetCashAccountIdAsync(outletId!.Value, ct);
+                if (cashAccId == 0)
+                    throw new InvalidOperationException($"Cash-in-Hand account for outlet {outletId} not found.");
             }
 
 
-            // -----------------------------------------------
-            // 2A) FIRST-TIME FINAL FROM DRAFT (NOT FINAL YET)
-            // -----------------------------------------------
-            if (!wasFinal)
+            // DEBUG: log resolved ids so we can see the exact numbers
+            System.Diagnostics.Debug.WriteLine($"[PaymentsSnapshot] SupplierAccId={supplierAccId} CashAccId={cashAccId} OutletId={outletId} CashTotal={cashTotal} BankGroups={bankGroups.Count()}");
+
+            // Cash rows
+            if (cashTotal > 0m)
             {
-                // replace lines once (draft → final)
-                _db.PurchaseLines.RemoveRange(existing.Lines);
-                await _db.SaveChangesAsync(ct);
-                
-                foreach (var l in lineList)
+                db.GlEntries.Add(new GlEntry
                 {
-                    l.Id = 0;
-                    l.PurchaseId = existing.Id;
-                    l.Purchase = null;
-                }
-                existing.Lines = lineList;
-
-                await _db.SaveChangesAsync(ct);
-
-                // normal purchase postings (IN to current destination on header)
-                await PostPurchaseStockAsync(existing, lineList, user ?? "system");
-                try { await _gl.PostPurchaseAsync(existing); } catch { /* non-fatal */ }
-                try
+                    TsUtc = tsUtc,
+                    EffectiveDate = eff,
+                    OutletId = outletId,
+                    AccountId = supplierAccId.Value,
+                    Debit = cashTotal,
+                    Credit = 0m,
+                    DocType = GlDocType.Purchase,
+                    DocSubType = GlDocSubType.Purchase_Payment,
+                    DocId = p.Id,
+                    DocNo = p.DocNo,
+                    ChainId = p.PublicId,
+                    IsEffective = true,
+                    PartyId = p.PartyId,
+                    Memo = "Payment (Cash)"
+                });
+                db.GlEntries.Add(new GlEntry
                 {
-                    await ApplySupplierCreditsAsync(
-                        supplierId: existing.PartyId,
-                        outletId: existing.OutletId,
-                        purchase: existing,
-                        user: user ?? "system");
-                }
-                catch { /* ignore */ }
-                await _outbox.EnqueueUpsertAsync(_db, model, default);
-                await _db.SaveChangesAsync(ct);
-
-                return existing;
+                    TsUtc = tsUtc,
+                    EffectiveDate = eff,
+                    OutletId = outletId,
+                    AccountId = cashAccId,
+                    Debit = 0m,
+                    Credit = cashTotal,
+                    DocType = GlDocType.Purchase,
+                    DocSubType = GlDocSubType.Purchase_Payment,
+                    DocId = p.Id,
+                    DocNo = p.DocNo,
+                    ChainId = p.PublicId,
+                    IsEffective = true,
+                    PartyId = p.PartyId,
+                    Memo = "Payment (Cash)"
+                });
             }
 
-            // -----------------------------------------------
-            // 2B) AMENDMENT OF AN ALREADY-FINAL PURCHASE
-            // -----------------------------------------------
-            // IMPORTANT: Do NOT modify existing.Lines.
-            // Baseline must be: ORIGINAL LINES + ALL PRIOR AMENDMENTS (PurchaseAmend).
-            // Then write ONLY the new delta as StockEntry (append-only).
-
-            // Sum prior amendment deltas for this purchase (all locations)
-            var priorAmendQtyByItem = await _db.StockEntries
-                .AsNoTracking()
-                .Where(se => se.RefType == "PurchaseAmend" && se.RefId == existing.Id)
-                .GroupBy(se => se.ItemId)
-                .Select(g => new { ItemId = g.Key, Qty = g.Sum(x => x.QtyChange) })
-                .ToDictionaryAsync(x => x.ItemId, x => x.Qty);
-
-            // Build BASELINE map (current effective qty = original + prior amendments)
-            var cur = existing.Lines
-                .GroupBy(l => l.ItemId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => new
-                    {
-                        qty = g.Sum(x => x.Qty) + (priorAmendQtyByItem.TryGetValue(g.Key, out var aq) ? aq : 0m),
-                        unitCost = g.Any() ? Math.Round(g.Average(x => x.UnitCost), 2) : 0m
-                    });
-
-            // Include items that exist only via prior amendments (no original line)
-            foreach (var kv in priorAmendQtyByItem)
+            // Bank rows (per bank account id)
+            foreach (var g in bankGroups)
             {
-                if (!cur.ContainsKey(kv.Key))
+                var total = g.Sum(x => x.Amount);
+                if (total <= 0m) continue;
+
+                var bankAccId = g.Key!.Value;
+
+                // Validate the bank account exists (FK safety)
+                var exists = await db.Accounts.AsNoTracking().AnyAsync(a => a.Id == bankAccId, ct);
+                if (!exists) throw new InvalidOperationException($"Selected bank account (Id={bankAccId}) not found.");
+
+                db.GlEntries.Add(new GlEntry
                 {
-                    cur[kv.Key] = new { qty = kv.Value, unitCost = 0m };
-                }
-            }
-
-            // DESIRED state from the screen (incoming now)
-            var nxt = lineList
-                .GroupBy(l => l.ItemId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => new
-                    {
-                        qty = g.Sum(x => x.Qty),
-                        unitCost = g.Any() ? Math.Round(g.Average(x => x.UnitCost), 2) : 0m
-                    });
-
-            var allItemIds = cur.Keys.Union(nxt.Keys).ToList();
-
-            // === HARD RULE: Amended qty per item cannot be below the qty already returned for THIS purchase
-            var returnedByItem = await _db.PurchaseLines
-                .AsNoTracking()
-                .Where(l => l.Purchase.IsReturn
-                         && l.Purchase.Status == PurchaseStatus.Final   // <— Final only
-                         && l.Purchase.RefPurchaseId == existing.Id)
-                .GroupBy(l => l.ItemId)
-                .Select(g => new { ItemId = g.Key, Returned = -g.Sum(x => x.Qty) }) // flip sign → positive
-                .ToDictionaryAsync(x => x.ItemId, x => x.Returned);
-
-            if (returnedByItem.Count > 0)
-            {
-                foreach (var kv in returnedByItem)
+                    TsUtc = tsUtc,
+                    EffectiveDate = eff,
+                    OutletId = outletId,
+                    AccountId = supplierAccId.Value,
+                    Debit = total,
+                    Credit = 0m,
+                    DocType = GlDocType.Purchase,
+                    DocSubType = GlDocSubType.Purchase_Payment,
+                    DocId = p.Id,
+                    DocNo = p.DocNo,
+                    ChainId = p.PublicId,
+                    IsEffective = true,
+                    PartyId = p.PartyId,
+                    Memo = "Payment (Bank)"
+                });
+                db.GlEntries.Add(new GlEntry
                 {
-                    var itemId = kv.Key;
-                    var returned = kv.Value; // positive
-                    var desired = nxt.TryGetValue(itemId, out var n) ? n.qty : 0m;
-
-                    if (desired < returned)
-                    {
-                        var name = await _db.Items.Where(i => i.Id == itemId)
-                                                  .Select(i => i.Name)
-                                                  .FirstOrDefaultAsync() ?? $"Item #{itemId}";
-                        throw new InvalidOperationException(
-                            $"Cannot amend '{name}' below {returned:0.##} because that much is already returned. " +
-                            $"Amended qty: {desired:0.##}.");
-                    }
-                }
+                    TsUtc = tsUtc,
+                    EffectiveDate = eff,
+                    OutletId = outletId,
+                    AccountId = bankAccId,
+                    Debit = 0m,
+                    Credit = total,
+                    DocType = GlDocType.Purchase,
+                    DocSubType = GlDocSubType.Purchase_Payment,
+                    DocId = p.Id,
+                    DocNo = p.DocNo,
+                    ChainId = p.PublicId,
+                    IsEffective = true,
+                    PartyId = p.PartyId,
+                    Memo = "Payment (Bank)"
+                });
             }
-
-            // Resolve normalized NEW location from header (it may have changed above)
-            InventoryLocationType locType;
-            int locId;
-            if (existing.TargetType == StockTargetType.Warehouse)
-            {
-                locType = InventoryLocationType.Warehouse;
-                if (!existing.WarehouseId.HasValue)
-                    throw new InvalidOperationException("TargetType=Warehouse but WarehouseId is null.");
-                locId = existing.WarehouseId.Value;
-            }
-            else
-            {
-                locType = InventoryLocationType.Outlet;
-                if (!existing.OutletId.HasValue)
-                    throw new InvalidOperationException("TargetType=Outlet but OutletId is null.");
-                locId = existing.OutletId.Value;
-            }
-
-            // For StockEntry.OutletId (required): use purchase's OutletId when present, else 0 for warehouse-only receipts
-            var entryOutletId2 = existing.OutletId ?? 0;
-
-            // ---- Make 2B atomic
-            using (var tx = await _db.Database.BeginTransactionAsync())
-            {
-                // 1) Compute deltas first (DON'T add to Db yet)
-                var deltas = new List<(int itemId, decimal dQty, decimal unitCost)>();
-                var deltaByItem = new Dictionary<int, decimal>();
-
-                foreach (var itemId in allItemIds)
-                {
-                    var before = cur.TryGetValue(itemId, out var c) ? c.qty : 0m;
-                    var after = nxt.TryGetValue(itemId, out var n) ? n.qty : 0m;
-                    var dQty = after - before; // + IN, – OUT
-                    if (dQty == 0m) continue;
-
-                    if (deltaByItem.TryGetValue(itemId, out var agg))
-                        deltaByItem[itemId] = agg + dQty;
-                    else
-                        deltaByItem[itemId] = dQty;
-
-                    var unitCost =
-                        (nxt.TryGetValue(itemId, out var nMeta) ? nMeta.unitCost
-                         : (cur.TryGetValue(itemId, out var cMeta) ? cMeta.unitCost : 0m));
-
-                    deltas.Add((itemId, dQty, unitCost));
-                }
-
-                // 2) Guard: ensure these deltas won't make on-hand negative at destination
-                if (deltaByItem.Count > 0)
-                {
-                    var itemIdsForGuard = deltaByItem.Keys.ToList();
-
-                    var onhand = await _inv.GetOnHandBulkAsync(
-                        itemIdsForGuard,
-                        locType,
-                        locId,
-                        DateTime.UtcNow,
-                        ct);
-
-                    var names = await _db.Items
-                        .Where(i => itemIdsForGuard.Contains(i.Id))
-                        .Select(i => new { i.Id, i.Name })
-                        .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
-
-
-                    var negHits = new List<string>();
-                    foreach (var kv in deltaByItem)
-                    {
-                        var itemId = kv.Key;
-                        var d = kv.Value;
-                        var curOn = onhand.TryGetValue(itemId, out var oh) ? oh : 0m;
-                        var nextOn = curOn + d;
-
-                        if (nextOn < 0m)
-                        {
-                            var label = names.TryGetValue(itemId, out var nm) ? $"{nm} (#{itemId})" : $"Item #{itemId}";
-                            negHits.Add($"{label}: on-hand {curOn:0.##} + change {d:0.##} = {nextOn:0.##}");
-                        }
-                    }
-
-                    if (negHits.Count > 0)
-                        throw new InvalidOperationException(
-                            "This amendment would make stock negative at the destination:\n" +
-                            string.Join("\n", negHits) +
-                            "\nReceive stock or undo other movements first.");
-                }
-
-                // 3) Safe → append StockEntry rows now
-                foreach (var (itemId, dQty, unitCost) in deltas)
-                {
-                    _db.StockEntries.Add(new StockEntry
-                    {
-                        OutletId = entryOutletId2,
-                        ItemId = itemId,
-                        QtyChange = dQty,
-                        UnitCost = unitCost,
-                        LocationType = locType,
-                        LocationId = locId,
-                        RefType = "PurchaseAmend",
-                        RefId = existing.Id,
-                        Ts = DateTime.UtcNow,
-                        Note = $"Amend Rev {existing.Revision}"
-                    });
-                }
-
-                await _db.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
-                await _outbox.EnqueueUpsertAsync(_db, model, default);
-                await _db.SaveChangesAsync(ct);
-                try { await _gl.PostPurchaseAsync(existing); } catch { /* non-fatal */ }
-
-            }
-
-            return existing;
-
         }
-
-        // Resolve or create per-outlet "Supplier Advances" posting account without using WPF services.
-        //private async Task<int> GetSupplierAdvancesAccountIdAsync(int outletId, CancellationToken ct = default)
-        //{
-        //    await using var _db = await _dbf.CreateDbContextAsync(ct);
-        //    // Need outlet code to build our deterministic account code
-        //    var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
-        //    var code = $"113-{outlet.Code}-ADV";
-
-        //    // If exists, return it
-        //    var existingId = await _db.Accounts
-        //        .AsNoTracking()
-        //        .Where(a => a.OutletId == outletId && a.Code == code)
-        //        .Select(a => a.Id)
-        //        .FirstOrDefaultAsync(ct);
-        //    if (existingId != 0) return existingId;
-
-        //    // Try to find an "Assets" header to attach under; if not found, parent is null
-        //    int? assetHeaderId = await _db.Accounts
-        //        .AsNoTracking()
-        //        .Where(a => a.OutletId == outletId && a.IsHeader &&
-        //                    (a.Code == "1" || a.Name == "Assets"))     // adjust if your chart differs
-        //        .Select(a => (int?)a.Id)
-        //        .FirstOrDefaultAsync(ct);
-
-        //    var acc = new Pos.Domain.Entities.Account
-        //    {
-        //        OutletId = outletId,
-        //        Code = code,
-        //        Name = "Supplier Advances",
-        //        Type = Pos.Domain.Entities.AccountType.Asset,
-        //        IsHeader = false,
-        //        AllowPosting = true,
-        //        ParentId = assetHeaderId,
-        //        IsSystem = true
-        //    };
-
-        //    _db.Accounts.Add(acc);
-        //    await _db.SaveChangesAsync(ct);
-        //    return acc.Id;
-        //}
 
 
 
         /// <summary>
         /// Auto-pick last UnitCost/Discount/TaxRate from latest FINAL purchase line of this item.
         /// </summary>
-        public async Task<(decimal unitCost, decimal discount, decimal taxRate)?> GetLastPurchaseDefaultsAsync(int itemId, CancellationToken ct=default)
+        public async Task<(decimal unitCost, decimal discount, decimal taxRate)?> GetLastPurchaseDefaultsAsync(int itemId, CancellationToken ct = default)
         {
             await using var _db = await _dbf.CreateDbContextAsync(ct);
             var last = await _db.PurchaseLines
@@ -602,792 +966,13 @@ namespace Pos.Persistence.Services
             return (last.UnitCost, last.Discount, last.TaxRate);
         }
 
-        // (Optional convenience) add/record a payment against a purchase
-        public async Task<PurchasePayment> AddPaymentAsync(
-    int purchaseId,
-    PurchasePaymentKind kind,
-    TenderMethod method,
-    decimal amount,
-    string? note,
-    int outletId,
-    int supplierId,
-    int? tillSessionId,
-    int? counterId,
-    string user,
-    int? bankAccountId = null, CancellationToken ct = default) // NEW
-        {
-            // ---------- Load & basic guards ----------
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var purchase = await _db.Purchases
-                .Include(p => p.Payments)
-                .FirstAsync(p => p.Id == purchaseId, ct);
-
-            if (purchase.Status == PurchaseStatus.Voided)
-                throw new InvalidOperationException("Cannot pay a voided purchase.");
-
-            var amt = Math.Round(amount, 2);
-            if (amt <= 0m)
-                throw new InvalidOperationException("Amount must be > 0.");
-
-            // ---------- Business rules by status ----------
-            switch (purchase.Status)
-            {
-                case PurchaseStatus.Draft:
-                    // Only ADVANCE allowed on held (draft) purchases
-                    if (kind != PurchasePaymentKind.Advance)
-                        throw new InvalidOperationException("Only Advance payments are allowed on held (draft) purchases.");
-                    break;
-
-                case PurchaseStatus.Final:
-                    // For finalized purchases, use OnReceive or Adjustment
-                    if (kind == PurchasePaymentKind.Advance)
-                        throw new InvalidOperationException("Use OnReceive or Adjustment for finalized purchases.");
-                    break;
-
-                default:
-                    break;
-            }
-
-            // Prevent overpayment (against GrandTotal)
-            var currentPaid = purchase.Payments.Sum(p => p.Amount);
-            if (currentPaid + amt > purchase.GrandTotal)
-                throw new InvalidOperationException("Payment exceeds total.");
-
-            // Determine outlet on which to record the payment
-            var payOutletId =
-                (purchase.TargetType == StockTargetType.Outlet && purchase.OutletId is int po && po > 0)
-                ? po
-                : (outletId > 0 ? outletId : throw new InvalidOperationException("Outlet is required for recording the payment."));
-
-            // ---------- Method constraints ----------
-            if (kind == PurchasePaymentKind.Adjustment)
-            {
-                // Allow non-cash, non-bank adjustment (supplier credit application)
-                if (method != TenderMethod.Cash &&
-                    method != TenderMethod.Bank &&
-                    method != TenderMethod.Other)
-                    throw new NotSupportedException("Unsupported method for adjustment.");
-            }
-            else
-            {
-                // Draft-Advance or Final-OnReceive: only Cash/Bank from UI
-                if (method != TenderMethod.Cash && method != TenderMethod.Bank)
-                    throw new NotSupportedException("Only Cash or Bank are allowed for purchase payments.");
-            }
-
-            // If it's a BANK payment, require config + explicit bank account
-            if (method == TenderMethod.Bank)
-            {
-                var settings = await _db.InvoiceSettings.AsNoTracking()
-                    .FirstOrDefaultAsync(x => x.OutletId == payOutletId, ct);
-
-                if (settings?.PurchaseBankAccountId is null)
-                    throw new InvalidOperationException("Bank payments are disabled: configure Purchase Bank Account in Invoice Settings for this outlet.");
-
-                if (bankAccountId is null)
-                    throw new InvalidOperationException("Select a bank account for this payment.");
-            }
-
-            // ---------- Atomic write: payment + GL + (cash ledger) ----------
-            using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-            var pay = new PurchasePayment
-            {
-                PurchaseId = purchase.Id,
-                SupplierId = purchase.PartyId, // trust the purchase header
-                OutletId = payOutletId,
-                TsUtc = DateTime.UtcNow,
-                Kind = kind,
-                Method = method,
-                Amount = amt,
-                Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
-                CreatedAtUtc = DateTime.UtcNow,
-                CreatedBy = user,
-                BankAccountId = bankAccountId // null for Cash; required for Bank (validated above)
-            };
-
-            _db.PurchasePayments.Add(pay);
-            await _db.SaveChangesAsync(ct);
-
-            // ---------- GL Posting ----------
-            var ts = DateTime.UtcNow;
-
-            int creditAccountId;
-            if (method == TenderMethod.Cash)
-            {
-                // Cash-in-Hand per outlet (e.g., "11101-{Outlet.Code}")
-                var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == payOutletId, ct);
-                var cashCode = $"11101-{outlet.Code}";
-                creditAccountId = await _db.Accounts.AsNoTracking()
-                    .Where(a => a.Code == cashCode && a.OutletId == payOutletId)
-                    .Select(a => a.Id)
-                    .FirstAsync(ct);
-            }
-            else if (method == TenderMethod.Bank)
-            {
-                creditAccountId = bankAccountId!.Value; // validated above
-            }
-            else // method == TenderMethod.Other  (supplier credit application)
-            {
-                // Post to Supplier Advances as the *credit* side (no cash/bank movement)
-                creditAccountId = await ResolveSupplierAdvancesAccountIdAsync(payOutletId);
-            }
-
-
-            if (purchase.Status == PurchaseStatus.Draft)
-            {
-                // DRAFT: Dr Supplier Advances, Cr Cash/Bank
-                //var coa = App.Services.GetRequiredService<ICoaService>();
-                var advancesId = await ResolveSupplierAdvancesAccountIdAsync(payOutletId);
-
-
-                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
-                {
-                    TsUtc = ts,
-                    OutletId = payOutletId,
-                    AccountId = advancesId,
-                    Debit = amt,
-                    Credit = 0m,
-                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
-                    DocId = purchase.Id,
-                    Memo = $"Advance to supplier ({method})"
-                });
-                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
-                {
-                    TsUtc = ts,
-                    OutletId = payOutletId,
-                    AccountId = creditAccountId,
-                    Debit = 0m,
-                    Credit = amt,
-                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
-                    DocId = purchase.Id,
-                    Memo = $"Advance to supplier ({method})"
-                });
-
-                await _db.SaveChangesAsync(ct);
-            }
-            else if (purchase.Status == PurchaseStatus.Final)
-            {
-                // FINAL: Dr Accounts Payable (AP), Cr Cash/Bank
-                // NOTE: adjust "6100" if your AP code is different.
-                var apId = await _db.Accounts.AsNoTracking()
-                    .Where(a => a.Code == "6100")
-                    .Select(a => a.Id)
-                    .FirstAsync(ct);
-
-                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
-                {
-                    TsUtc = ts,
-                    OutletId = payOutletId,
-                    AccountId = apId,
-                    Debit = amt,
-                    Credit = 0m,
-                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
-                    DocId = purchase.Id,
-                    Memo = $"Supplier payment ({kind}, {method})"
-                });
-                _db.GlEntries.Add(new Pos.Domain.Accounting.GlEntry
-                {
-                    TsUtc = ts,
-                    OutletId = payOutletId,
-                    AccountId = creditAccountId,
-                    Debit = 0m,
-                    Credit = amt,
-                    DocType = Pos.Domain.Accounting.GlDocType.Purchase,
-                    DocId = purchase.Id,
-                    Memo = $"Supplier payment ({kind}, {method})"
-                });
-
-                await _db.SaveChangesAsync(ct);
-            }
-
-            // ---------- Cash drawer (only for Cash) ----------
-            CashLedger? cash = null;
-            if (method == TenderMethod.Cash)
-            {
-                cash = new CashLedger
-                {
-                    OutletId = payOutletId,
-                    CounterId = counterId,
-                    TillSessionId = tillSessionId,
-                    TsUtc = DateTime.UtcNow,
-                    Delta = -amt, // cash leaves the drawer to pay supplier
-                    RefType = "PurchasePayment",
-                    RefId = pay.Id,
-                    Note = note,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    CreatedBy = user
-                };
-                _db.CashLedgers.Add(cash);
-                await _db.SaveChangesAsync(ct);
-            }
-
-
-            // ---------- Snapshots (paid/due) ----------
-            // Recompute from DB to include this brand-new row reliably
-            var newPaid = await _db.PurchasePayments
-                .Where(p => p.PurchaseId == purchase.Id)
-                .SumAsync(p => p.Amount);
-
-            purchase.CashPaid = newPaid;
-            purchase.CreditDue = Math.Max(0, purchase.GrandTotal - newPaid);
-            await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-            // === SYNC: payment + (optional) cash ledger + purchase balance ===
-            await _outbox.EnqueueUpsertAsync(_db, pay, default);
-            if (cash != null)
-            {
-                await _outbox.EnqueueUpsertAsync(_db, cash, default);
-            }
-            await _outbox.EnqueueUpsertAsync(_db, purchase, default);
-            await _db.SaveChangesAsync(ct);
-
-            return pay;
-        }
-
-        // ----------------- Account resolvers (no App / no ICoaService) -----------------
-
-        /// <summary>
-        /// Returns the Outlet Cash-in-Hand account id using code pattern "111-{Outlet.Code}".
-        /// Throws a clear error if not found (so you notice missing seeding).
-        /// </summary>
-        private async Task<int> ResolveCashAccountIdAsync(int outletId, CancellationToken ct = default)
+        public async Task<Purchase?> LoadDraftWithLinesAsync(int id, CancellationToken ct = default)
         {
             await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
-            var cashCode = $"11101-{outlet.Code}";
-            var cashId = await _db.Accounts.AsNoTracking()
-                .Where(a => a.Code == cashCode && a.OutletId == outletId)
-                .Select(a => a.Id)
-                .FirstOrDefaultAsync(ct);
-
-            if (cashId == 0)
-                throw new InvalidOperationException($"Cash account '{cashCode}' not found for outlet #{outletId}. Make sure COA seeding created it.");
-
-            return cashId;
+            return await _db.Purchases
+                .Include(p => p.Lines)
+                .FirstOrDefaultAsync(p => p.Id == id && p.Status == PurchaseStatus.Draft, ct);
         }
-
-        /// <summary>
-        /// Returns (or creates) the per-outlet "Supplier Advances" posting account under Assets.
-        /// Code pattern: "113-{Outlet.Code}-ADV".
-        /// If the asset header cannot be found, throws with a clear message.
-        /// </summary>
-        private async Task<int> ResolveSupplierAdvancesAccountIdAsync(int outletId, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var outlet = await _db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId);
-            var code = $"113-{outlet.Code}-ADV";
-
-            // Try existing
-            var existingId = await _db.Accounts.AsNoTracking()
-                .Where(a => a.Code == code && a.OutletId == outletId)
-                .Select(a => a.Id)
-                .FirstOrDefaultAsync(ct);
-            if (existingId != 0) return existingId;
-
-            // Find an Assets header for this outlet (preferred) or a shared one.
-            var assetHeader = await _db.Accounts
-                .Where(a => a.IsHeader && a.AllowPosting == false && a.Type == Pos.Domain.Entities.AccountType.Asset
-                            && (a.OutletId == outletId || a.OutletId == null))
-                .OrderByDescending(a => a.OutletId) // prefer outlet-specific over shared
-                .FirstOrDefaultAsync(ct);
-
-            if (assetHeader == null)
-                throw new InvalidOperationException("Assets header account not found. Ensure your Chart of Accounts seeding includes an Asset header.");
-
-            var acc = new Pos.Domain.Entities.Account
-            {
-                OutletId = outletId,
-                Code = code,
-                Name = "Supplier Advances",
-                Type = Pos.Domain.Entities.AccountType.Asset,
-                IsHeader = false,
-                AllowPosting = true,
-                ParentId = assetHeader.Id,
-                IsSystem = true
-            };
-
-            _db.Accounts.Add(acc);
-            await _db.SaveChangesAsync(ct);
-            return acc.Id;
-        }
-
-
-        public async Task<(Purchase purchase, List<PurchasePayment> payments)> GetWithPaymentsAsync(int purchaseId, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var purchase = await _db.Purchases.FirstAsync(p => p.Id == purchaseId, ct);
-            var pays = await _db.PurchasePayments.Where(x => x.PurchaseId == purchaseId).OrderBy(x => x.TsUtc).ToListAsync(ct);
-            return (purchase, pays);
-        }
-
-        public async Task<Purchase> FinalizeReceiveAsync(
-            Purchase purchase,
-            IEnumerable<PurchaseLine> lines,
-            IEnumerable<(TenderMethod method, decimal amount, string? note)> onReceivePayments,
-            int outletId,
-            int supplierId,
-            int? tillSessionId,
-            int? counterId,
-            string user, CancellationToken ct=default)
-        {
-            // SAFETY RAIL: all settlements must be recorded via AddPaymentAsync (OnReceive/Adjustment).
-            if (purchase.CashPaid > 0m)
-                throw new InvalidOperationException(
-                    "Paid-now must be recorded via AddPaymentAsync (OnReceive). Remove header snapshot usage.");
-
-
-            // 1) Finalize the purchase
-            var model = await ReceiveAsync(purchase, lines, user);
-
-            // 2) Auto-apply any Supplier Credits first
-            try
-            {
-                await ApplySupplierCreditsAsync(
-                    supplierId: model.PartyId,
-                    outletId: model.OutletId,
-                    purchase: model,
-                    user: user ?? "system"
-                );
-            }
-            catch
-            {
-                // non-fatal
-            }
-
-            // 3) Record OnReceive cash/card/bank payments
-            foreach (var p in onReceivePayments)
-            {
-                await AddPaymentAsync(model.Id, PurchasePaymentKind.OnReceive, p.method, p.amount, p.note,
-                    outletId, supplierId, tillSessionId, counterId, user);
-            }
-
-            return model;
-        }
-
-        // ---------- PURCHASE RETURNS (with refunds & supplier credit) ----------
-
-        /// <summary>
-        /// Build a draft for a return from a FINAL purchase.
-        /// Pre-fills remaining-allowed quantities per line.
-        /// </summary>
-        public async Task<PurchaseReturnDraft> BuildReturnDraftAsync(int originalPurchaseId, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var p = await _db.Purchases
-                .Include(x => x.Lines).ThenInclude(l => l.Item)
-                .Include(x => x.Party)
-                .FirstAsync(x => x.Id == originalPurchaseId && x.Status == PurchaseStatus.Final && !x.IsReturn, ct);
-
-            // Already returned per original line (stored as negative qty; convert to positive for math)
-            var already = await _db.Purchases
-                .Where(r => r.IsReturn && r.RefPurchaseId == originalPurchaseId && r.Status != PurchaseStatus.Voided)
-                .SelectMany(r => r.Lines)
-                .Where(l => l.RefPurchaseLineId != null)
-                .GroupBy(l => l.RefPurchaseLineId!.Value)
-                .Select(g => new { OriginalLineId = g.Key, ReturnedAbs = Math.Abs(g.Sum(z => z.Qty)) })
-                .ToListAsync(ct);
-
-            var returnedByLine = already.ToDictionary(x => x.OriginalLineId, x => x.ReturnedAbs);
-
-            return new PurchaseReturnDraft
-            {
-                PartyId = p.PartyId,
-                TargetType = p.TargetType,
-                OutletId = p.OutletId,
-                WarehouseId = p.WarehouseId,
-                RefPurchaseId = p.Id,
-                Lines = p.Lines.Select(ol =>
-                {
-                    var done = returnedByLine.TryGetValue(ol.Id, out var r) ? r : 0m;
-                    var remain = Math.Max(0, ol.Qty - done);
-
-                    return new PurchaseReturnDraftLine
-                    {
-                        OriginalLineId = ol.Id,
-                        ItemId = ol.ItemId,
-                        ItemName = ol.Item?.Name ?? "",
-                        UnitCost = ol.UnitCost,
-                        MaxReturnQty = remain,
-                        ReturnQty = remain
-                    };
-                })
-                .Where(x => x.MaxReturnQty > 0)
-                .ToList()
-            };
-        }
-
-        /// <summary>
-        /// Save a FINAL purchase return (same table).
-        /// Forces negative line Qty, validates per-line remaining caps, computes totals from |Qty|.
-        /// Overload kept to avoid breaking existing callers (no refunds).
-        /// </summary>
-        public Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, CancellationToken ct = default)
-        => SaveReturnAsync(model, lines, user, refunds: null, tillSessionId: null, counterId: null, ct);
-
-
-        /// <summary>
-        /// Save a FINAL purchase return with optional refunds and auto-credit creation.
-        /// </summary>
-        public async Task<Purchase> SaveReturnAsync(Purchase model, IEnumerable<PurchaseLine> lines, string? user = null, IEnumerable<SupplierRefundSpec>? refunds = null, int? tillSessionId = null, int? counterId = null, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            if (!model.IsReturn)
-                throw new InvalidOperationException("Model must be a return (IsReturn=true).");
-
-            // === NEW: Determine mode ===
-            var hasRefPurchase = model.RefPurchaseId.HasValue && model.RefPurchaseId > 0;
-            var anyLineReferencesOriginal = lines.Any(l => l.RefPurchaseLineId.HasValue);
-
-            // === NEW: Validation for the two modes ===
-            if (hasRefPurchase)
-            {
-                // Referenced return is OK; lines MAY reference original lines.
-                // (No extra check needed here.)
-            }
-            else
-            {
-                ValidateDestination(model);
-                if (anyLineReferencesOriginal)
-                    throw new InvalidOperationException("Free-form returns cannot contain lines with RefPurchaseLineId.");
-            }
-
-            // Normalize for returns (keep negative qty, round, etc.)
-            var lineList = NormalizeAndComputeReturn(lines);
-
-            // === CHANGED: Cap checks only when we HAVE a RefPurchaseId
-            if (hasRefPurchase)
-            {
-                // Cap check vs remaining allowed on the referenced purchase
-                var draft = await BuildReturnDraftAsync(model.RefPurchaseId!.Value);
-                var maxMap = draft.Lines
-                    .Where(x => x.OriginalLineId.HasValue)
-                    .ToDictionary(x => x.OriginalLineId!.Value, x => x.MaxReturnQty);
-
-                foreach (var l in lineList)
-                {
-                    if (l.RefPurchaseLineId.HasValue &&
-                        maxMap.TryGetValue(l.RefPurchaseLineId.Value, out var maxAllowed))
-                    {
-                        var req = Math.Abs(l.Qty); // l.Qty is negative
-                        if (req - maxAllowed > 0.0001m)
-                            throw new InvalidOperationException("Return qty exceeds remaining for one or more lines.");
-                    }
-                }
-            }
-            else
-            {
-                // Free-form: no cap checks against a base purchase.
-                // We still allow editable UnitCost coming from the UI.
-            }
-
-            // Compute header totals from the prepared line list
-            ComputeHeaderTotalsForReturn(model, lineList);
-
-            model.Status = PurchaseStatus.Final;
-            model.ReceivedAtUtc ??= DateTime.UtcNow;
-            model.UpdatedAtUtc = DateTime.UtcNow;
-            model.UpdatedBy = user;
-
-            using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-            if (model.Id == 0)
-            {
-                model.CreatedAtUtc = DateTime.UtcNow;
-                model.CreatedBy = user;
-                model.DocNo = await EnsureReturnNumberAsync(model, CancellationToken.None);
-                model.Revision = 0;
-                model.Lines = lineList;
-                _db.Purchases.Add(model);
-            }
-            else
-            {
-                // Amending an existing return
-                var existing = await _db.Purchases.Include(p => p.Lines).FirstAsync(p => p.Id == model.Id);
-
-                if (!existing.IsReturn)
-                    throw new InvalidOperationException("Cannot overwrite a purchase with a return.");
-
-                var wasFinal = existing.Status == PurchaseStatus.Final;
-
-                existing.PartyId = model.PartyId;
-                existing.TargetType = model.TargetType;
-                existing.OutletId = model.OutletId;
-                existing.WarehouseId = model.WarehouseId;
-                existing.PurchaseDate = model.PurchaseDate;
-                existing.VendorInvoiceNo = model.VendorInvoiceNo;
-
-                existing.RefPurchaseId = model.RefPurchaseId; // may be null for free-form
-
-                existing.DocNo = string.IsNullOrWhiteSpace(model.DocNo)
-                    ? await EnsureReturnNumberAsync(existing, CancellationToken.None)
-                    : model.DocNo;
-
-                existing.Subtotal = model.Subtotal;
-                existing.Discount = model.Discount;
-                existing.Tax = model.Tax;
-                existing.OtherCharges = model.OtherCharges;
-                existing.GrandTotal = model.GrandTotal;
-
-                existing.Status = PurchaseStatus.Final;
-                existing.ReceivedAtUtc = model.ReceivedAtUtc;
-                existing.UpdatedAtUtc = model.UpdatedAtUtc;
-                existing.UpdatedBy = model.UpdatedBy;
-
-                existing.Revision = wasFinal
-                    ? (existing.Revision <= 0 ? 1 : existing.Revision + 1)
-                    : 0;
-
-                _db.PurchaseLines.RemoveRange(existing.Lines);
-                await _db.SaveChangesAsync(ct);
-
-                foreach (var l in lineList)
-                {
-                    l.Id = 0; l.PurchaseId = existing.Id; l.Purchase = null;
-                }
-                existing.Lines = lineList;
-
-                model = existing;
-            }
-
-            await _db.SaveChangesAsync(ct);
-            await PostPurchaseReturnStockAsync(model, lineList, user ?? "system");
-
-            // === CHANGED: Only auto-apply against original if one exists.
-            decimal appliedToOriginal = 0m;
-            if (hasRefPurchase)
-            {
-                try
-                {
-                    appliedToOriginal = await AutoApplyReturnToOriginalAsync_ReturnApplied(model, user ?? "system");
-                }
-                catch
-                {
-                    // non-fatal; optionally log
-                }
-            }
-
-            // Compute leftover value of the return
-            var leftover = model.GrandTotal - appliedToOriginal;
-
-            // If operator entered refunds, record CASH IN (positive delta)
-            var totalRefund = Math.Round((refunds ?? Array.Empty<SupplierRefundSpec>()).Sum(r => Math.Max(0, r.Amount)), 2);
-            if (totalRefund > 0)
-            {
-                // For free-form, appliedToOriginal = 0, so this still guards against over-refund
-                if (totalRefund > leftover + 0.0001m)
-                    throw new InvalidOperationException("Refund exceeds leftover after applying to the original invoice.");
-
-                var outletForCash = model.OutletId ?? 0; // adjust if you want warehouse-specific handling
-                var who = user ?? "system";
-
-                foreach (var r in refunds!)
-                    await RecordSupplierRefundAsync(
-                        returnId: model.Id,
-                        supplierId: model.PartyId,
-                        outletId: outletForCash,
-                        tillSessionId: tillSessionId,
-                        counterId: counterId,
-                        refund: r,
-                        user: who
-                    );
-
-                leftover -= totalRefund;
-            }
-
-            // Any remaining leftover becomes Supplier Credit
-            if (leftover > 0.0001m)
-            {
-                var credit = new SupplierCredit
-                {
-                    SupplierId = model.PartyId,
-                    OutletId = model.OutletId, // or null to keep credit global per supplier
-                    Amount = Math.Round(leftover, 2),
-                    Source = $"Return {(string.IsNullOrWhiteSpace(model.DocNo) ? $"#{model.Id}" : model.DocNo)}"
-                };
-                _db.SupplierCredits.Add(credit);
-                await _db.SaveChangesAsync(ct);
-                await _outbox.EnqueueUpsertAsync(_db, credit, default);
-                await _db.SaveChangesAsync(ct);
-
-            }
-
-            // TODO: Post stock ledger with negative deltas for all lines:
-            // - Location: OutletId or WarehouseId depending on model.TargetType
-            // - Delta: l.Qty (already negative)
-            // - Valuation: l.UnitCost (free-form uses edited cost; referenced uses locked cost)
-
-            await tx.CommitAsync(ct);
-            await _outbox.EnqueueUpsertAsync(_db, model, default);
-            await _db.SaveChangesAsync(ct);
-
-            return model;
-        }
-
-        public Task<decimal> GetOnHandAsync(int itemId, StockTargetType target, int? outletId, int? warehouseId, CancellationToken ct = default)
-        {
-            if (itemId <= 0) return Task.FromResult(0m);
-
-            InventoryLocationType locType;
-            int locId;
-
-            if (target == StockTargetType.Outlet)
-            {
-                if (outletId is not int o || o <= 0) return Task.FromResult(0m);
-                locType = InventoryLocationType.Outlet;
-                locId = o;
-            }
-            else
-            {
-                if (warehouseId is not int w || w <= 0) return Task.FromResult(0m);
-                locType = InventoryLocationType.Warehouse;
-                locId = w;
-            }
-
-            // Centralized logic (strict-before + clamp)
-            return _inv.GetOnHandAtLocationAsync(itemId, locType, locId, DateTime.UtcNow, ct);
-        }
-
-
-
-
-        private async Task<string> EnsureReturnNumberAsync(Purchase p, CancellationToken ct)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            if (!string.IsNullOrWhiteSpace(p.DocNo)) return p.DocNo!;
-
-            var day = (p.ReceivedAtUtc ?? DateTime.UtcNow).Date;
-            var prefix = $"PR-{day:yyyyMMdd}-";
-
-            var countToday = await _db.Purchases
-                .AsNoTracking()
-                .CountAsync(x => x.IsReturn
-                              && x.Status == PurchaseStatus.Final
-                              && x.ReceivedAtUtc >= day
-                              && x.ReceivedAtUtc < day.AddDays(1), ct);
-
-            return prefix + (countToday + 1).ToString("D3");
-        }
-
-        // ---------- Helpers ----------
-
-        private static List<PurchaseLine> NormalizeAndCompute(IEnumerable<PurchaseLine> lines)
-        {
-            // For purchases (not returns). Negative qtys are coerced to zero.
-            var list = lines.ToList();
-            foreach (var l in list)
-            {
-                l.Qty = l.Qty < 0 ? 0 : l.Qty;
-                l.UnitCost = l.UnitCost < 0 ? 0 : l.UnitCost;
-                l.Discount = l.Discount < 0 ? 0 : l.Discount;
-                l.TaxRate = l.TaxRate < 0 ? 0 : l.TaxRate;
-
-                var baseAmt = l.Qty * l.UnitCost;
-                var taxable = Math.Max(0, baseAmt - l.Discount);
-                var tax = Math.Round(taxable * (l.TaxRate / 100m), 2);
-                l.LineTotal = Math.Round(taxable + tax, 2);
-            }
-            return list;
-        }
-
-        private static List<PurchaseLine> NormalizeAndComputeReturn(IEnumerable<PurchaseLine> lines)
-        {
-            // For returns. FORCE negative quantity; compute amounts on ABS(qty)
-            var list = lines.ToList();
-            foreach (var l in list)
-            {
-                if (l.Qty > 0) l.Qty = -l.Qty;                // make sure it's negative
-                l.UnitCost = l.UnitCost < 0 ? 0 : l.UnitCost;
-                l.Discount = l.Discount < 0 ? 0 : l.Discount;
-                l.TaxRate = l.TaxRate < 0 ? 0 : l.TaxRate;
-
-                var qtyAbs = Math.Abs(l.Qty);
-                var baseAmt = qtyAbs * l.UnitCost;
-                var taxable = Math.Max(0, baseAmt - l.Discount);
-                var tax = Math.Round(taxable * (l.TaxRate / 100m), 2);
-                l.LineTotal = Math.Round(taxable + tax, 2);
-
-                // IMPORTANT: line.RefPurchaseLineId should be set by caller when "Return With..."
-                // (We don't enforce it here because you might allow free-form returns too.)
-            }
-            return list;
-        }
-
-        private static void ComputeHeaderTotals(Purchase p, IReadOnlyCollection<PurchaseLine> lines)
-        {
-            // Standard purchase math (qty assumed >= 0)
-            p.Subtotal = Math.Round(lines.Sum(x => x.Qty * x.UnitCost), 2);
-            p.Discount = Math.Round(lines.Sum(x => x.Discount), 2);
-            p.Tax = Math.Round(lines.Sum(x =>
-                                 Math.Max(0, x.Qty * x.UnitCost - x.Discount) * (x.TaxRate / 100m)), 2);
-            // keep p.OtherCharges as set by caller (UI)
-            p.GrandTotal = Math.Round(p.Subtotal - p.Discount + p.Tax + p.OtherCharges, 2);
-
-            try
-            {
-                p.CashPaid = Math.Min(p.CashPaid, p.GrandTotal);
-                p.CreditDue = Math.Max(0, p.GrandTotal - p.CashPaid);
-            }
-            catch { /* ignore if fields not present */ }
-        }
-
-        private static void ComputeHeaderTotalsForReturn(Purchase p, IReadOnlyCollection<PurchaseLine> lines)
-        {
-            // Return math – amounts based on ABS(qty), but the document is a credit (GrandTotal positive).
-            var subtotal = lines.Sum(x => Math.Abs(x.Qty) * x.UnitCost);
-            var discount = lines.Sum(x => x.Discount);
-            var tax = lines.Sum(x => Math.Round(Math.Max(0, Math.Abs(x.Qty) * x.UnitCost - x.Discount) * (x.TaxRate / 100m), 2));
-
-            p.Subtotal = Math.Round(subtotal, 2);
-            p.Discount = Math.Round(discount, 2);
-            p.Tax = Math.Round(tax, 2);
-            p.GrandTotal = Math.Round(p.Subtotal - p.Discount + p.Tax + p.OtherCharges, 2);
-
-            // For returns, you typically *reduce payable*. Payments/credits handled outside.
-        }
-
-        private static void ValidateDestination(Purchase p)
-        {
-            if (p.PartyId <= 0)
-                throw new InvalidOperationException("Supplier required.");
-
-            if (p.TargetType == StockTargetType.Outlet)
-            {
-                if (p.OutletId is null || p.OutletId <= 0)
-                    throw new InvalidOperationException("Outlet required.");
-            }
-            else if (p.TargetType == StockTargetType.Warehouse)
-            {
-                if (p.WarehouseId is null || p.WarehouseId <= 0)
-                    throw new InvalidOperationException("Warehouse required.");
-            }
-        }
-
-        // ---------- Convenience Queries for UI Pickers ----------
-
-        public async Task<List<Purchase>> ListHeldAsync(CancellationToken ct = default)
-        {
-            await using var db = await _dbf.CreateDbContextAsync(ct);
-            return await db.Purchases
-                .AsNoTracking()
-                .Include(p => p.Party)
-                .Where(p => p.Status == PurchaseStatus.Draft)
-                .OrderByDescending(p => p.PurchaseDate)
-                .ToListAsync(ct);
-        }
-
-
-        public async Task<List<Purchase>> ListPostedAsync(CancellationToken ct = default)
-        {
-            await using var db = await _dbf.CreateDbContextAsync(ct);
-            return await db.Purchases
-                .AsNoTracking()
-                .Include(p => p.Party)
-                .Where(p => p.Status == PurchaseStatus.Final)
-                .OrderByDescending(p => p.ReceivedAtUtc ?? p.PurchaseDate)
-                .ToListAsync(ct);
-        }
-
 
         public async Task<Purchase> LoadWithLinesAsync(int id, CancellationToken ct = default)
         {
@@ -1397,392 +982,6 @@ namespace Pos.Persistence.Services
                 .Include(p => p.Party)
                 .FirstAsync(p => p.Id == id, ct);
         }
-
-
-        // ---------- INTERNAL CREDIT/REFUND HELPERS ----------
-
-        /// <summary>
-        /// Non-cash adjustment on original purchase for return value. Returns amount applied.
-        /// </summary>
-        private async Task<decimal> AutoApplyReturnToOriginalAsync_ReturnApplied(Purchase savedReturn, string user, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            if (!savedReturn.IsReturn || savedReturn.RefPurchaseId is null or <= 0)
-                return 0m;
-
-            var original = await _db.Purchases
-                .Include(p => p.Payments)
-                .FirstAsync(p => p.Id == savedReturn.RefPurchaseId.Value, ct);
-
-            if (original.Status == PurchaseStatus.Voided)
-                return 0m; // nothing to apply
-
-            var alreadyPaid = original.Payments.Sum(p => p.Amount);
-            var due = Math.Max(0, original.GrandTotal - alreadyPaid);
-            if (due <= 0) return 0m;
-
-            var toApply = Math.Min(due, savedReturn.GrandTotal);
-            if (toApply <= 0) return 0m;
-
-            await AddPaymentAsync(
-                purchaseId: original.Id,
-                kind: PurchasePaymentKind.Adjustment,
-                method: TenderMethod.Other, // non-cash
-                amount: toApply,
-                note: $"Auto-applied from Return {(string.IsNullOrWhiteSpace(savedReturn.DocNo) ? $"#{savedReturn.Id}" : savedReturn.DocNo)}",
-                outletId: original.OutletId ?? savedReturn.OutletId ?? 0,
-                supplierId: original.PartyId,
-                tillSessionId: null,
-                counterId: null,
-                user: user
-            );
-
-            return toApply;
-        }
-
-        /// <summary>
-        /// Record supplier refund cash/bank/card IN tied to a purchase return (positive cash delta).
-        /// </summary>
-        private async Task RecordSupplierRefundAsync(
-            int returnId,
-            int supplierId,
-            int outletId,
-            int? tillSessionId,
-            int? counterId,
-            SupplierRefundSpec refund,
-            string user, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var amt = Math.Round(refund.Amount, 2);
-            if (amt <= 0) throw new InvalidOperationException("Refund amount must be > 0.");
-
-            var cash = new CashLedger
-            {
-                OutletId = outletId,
-                CounterId = counterId,
-                TillSessionId = tillSessionId,
-                TsUtc = DateTime.UtcNow,
-                Delta = +amt, // CASH IN
-                RefType = "PurchaseReturnRefund",
-                RefId = returnId,
-                Note = $"{refund.Method} refund — {refund.Note}",
-                CreatedAtUtc = DateTime.UtcNow,
-                CreatedBy = user
-            };
-
-            _db.CashLedgers.Add(cash);
-            await _db.SaveChangesAsync(ct);
-        }
-
-        /// <summary>
-        /// Consume available SupplierCredits as non-cash adjustments on a purchase.
-        /// Prefers outlet-scoped credits, then global credits; oldest first.
-        /// </summary>
-        private async Task<decimal> ApplySupplierCreditsAsync(
-            int supplierId, int? outletId, Purchase purchase, string user, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            // Determine how much we still need to cover
-            var currentPaid = purchase.Payments.Sum(p => p.Amount);
-            var need = Math.Max(0, purchase.GrandTotal - currentPaid);
-            if (need <= 0) return 0m;
-
-            // Pull credits (oldest first). Prefer outlet-specific first, then global.
-            var credits = await _db.SupplierCredits
-                .Where(c => c.SupplierId == supplierId && (c.OutletId == outletId || c.OutletId == null) && c.Amount > 0)
-                .OrderBy(c => c.CreatedAtUtc)
-                .ToListAsync(ct);
-
-            decimal used = 0m;
-            var touched = new List<SupplierCredit>(); // track credits we modify
-
-            foreach (var c in credits)
-            {
-                if (need <= 0) break;
-                var take = Math.Min(c.Amount, need);
-                if (take <= 0) continue;
-
-                await AddPaymentAsync(
-                    purchaseId: purchase.Id,
-                    kind: PurchasePaymentKind.Adjustment,
-                    method: TenderMethod.Other,
-                    amount: take,
-                    note: $"Applied Supplier Credit ({c.Source})",
-                    outletId: purchase.OutletId ?? outletId ?? 0,
-                    supplierId: supplierId,
-                    tillSessionId: null,
-                    counterId: null,
-                    user: user
-                );
-
-                c.Amount = Math.Round(c.Amount - take, 2);
-                touched.Add(c); // mark changed
-                used += take;
-                need -= take;
-            }
-
-
-            // Remove zeroed credits to keep table clean
-            var zeroed = credits.Where(c => c.Amount <= 0.0001m).ToList();
-            if (zeroed.Count > 0)
-                _db.SupplierCredits.RemoveRange(zeroed);
-
-            await _db.SaveChangesAsync(ct);
-            // === SYNC: updated credits + purchase balance
-            foreach (var c in touched.Where(x => x.Amount > 0.0001m))
-            {
-                await _outbox.EnqueueUpsertAsync(_db, c, default);
-            }
-            // For removed credits, you can skip (treat as fully consumed). If you want to mirror deletions,
-            // consider a soft-delete flag in the future.
-            await _outbox.EnqueueUpsertAsync(_db, purchase, default);
-            await _db.SaveChangesAsync(ct);
-
-            return used;
-        }
-
-        // using Microsoft.EntityFrameworkCore;
-        // using Pos.Domain.Entities;
-        // ...
-
-        private async Task PostPurchaseStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            // Determine ledger location
-            var locType = model.TargetType == StockTargetType.Warehouse
-                ? InventoryLocationType.Warehouse
-                : InventoryLocationType.Outlet;
-
-            var locId = model.TargetType == StockTargetType.Warehouse
-                ? model.WarehouseId!.Value
-                : model.OutletId!.Value;
-
-            // If this purchase was already FINAL and is being amended, remove previous postings
-            var prior = await _db.StockEntries
-                .Where(se => se.RefType == "Purchase" && se.RefId == model.Id)
-                .ToListAsync(ct);
-            if (prior.Count > 0)
-            {
-                _db.StockEntries.RemoveRange(prior);
-                await _db.SaveChangesAsync(ct);
-            }
-
-            var now = DateTime.UtcNow;
-
-            foreach (var l in lines)
-            {
-                _db.StockEntries.Add(new StockEntry
-                {
-                    Ts = now,
-                    ItemId = l.ItemId,
-                    LocationType = locType,
-                    LocationId = locId,
-                    QtyChange = l.Qty,        // Purchase FINAL = IN
-                    UnitCost = l.UnitCost,   // keep for costing/audit
-                    RefType = "Purchase",
-                    RefId = model.Id,
-                    Note = model.VendorInvoiceNo
-                });
-            }
-
-            await _db.SaveChangesAsync(ct);
-        }
-
-        private async Task PostPurchaseReturnStockAsync(Purchase model, IEnumerable<PurchaseLine> lines, string user, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            // ---- Resolve where to post OUT (debit) ----
-            InventoryLocationType locType;
-            int locId;
-
-            if (model.RefPurchaseId is int rid && rid > 0)
-            {
-                // WITH-INVOICE: reduce where the original purchase was received
-                var orig = await _db.Purchases.AsNoTracking().FirstAsync(p => p.Id == rid, ct);
-
-                if (orig.TargetType == StockTargetType.Warehouse)
-                {
-                    locType = InventoryLocationType.Warehouse;
-                    locId = orig.WarehouseId!.Value;
-                }
-                else
-                {
-                    locType = InventoryLocationType.Outlet;
-                    locId = orig.OutletId!.Value;
-                }
-            }
-            else
-            {
-                // WITHOUT-INVOICE: reduce at the user-selected header source
-                if (model.TargetType == StockTargetType.Warehouse)
-                {
-                    locType = InventoryLocationType.Warehouse;
-                    locId = model.WarehouseId!.Value;
-                }
-                else
-                {
-                    locType = InventoryLocationType.Outlet;
-                    locId = model.OutletId!.Value;
-                }
-            }
-
-            // --- keep the rest of your method as-is (remove prior, add rows, SaveChanges) ---
-            var prior = await _db.StockEntries
-                .Where(se => se.RefType == "PurchaseReturn" && se.RefId == model.Id)
-                .ToListAsync();
-            if (prior.Count > 0)
-            {
-                _db.StockEntries.RemoveRange(prior);
-                await _db.SaveChangesAsync(ct);
-            }
-
-            var now = DateTime.UtcNow;
-            foreach (var l in lines)
-            {
-                _db.StockEntries.Add(new StockEntry
-                {
-                    Ts = now,
-                    ItemId = l.ItemId,
-                    LocationType = locType,
-                    LocationId = locId,
-                    QtyChange = l.Qty,      // negative → OUT
-                    UnitCost = l.UnitCost,
-                    RefType = "PurchaseReturn",
-                    RefId = model.Id,
-                    Note = model.VendorInvoiceNo
-                });
-            }
-            await _db.SaveChangesAsync(ct);
-        }
-
-
-        public async Task VoidPurchaseAsync(int purchaseId, string reason, string? user = null, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            // Load the purchase (non-return)
-            var p = await _db.Purchases
-                .AsNoTracking()
-                .FirstAsync(x => x.Id == purchaseId && !x.IsReturn, ct);
-
-            if (p.Status == PurchaseStatus.Voided) return;
-
-            // Resolve the exact ledger location used by postings
-            var locType = p.TargetType == StockTargetType.Warehouse
-                ? InventoryLocationType.Warehouse
-                : InventoryLocationType.Outlet;
-            var locId = p.TargetType == StockTargetType.Warehouse
-                ? p.WarehouseId!.Value
-                : p.OutletId!.Value;
-
-            // All postings tied to this purchase that must be removed
-            // IMPORTANT: include both "Purchase" and "PurchaseAmend"
-            var postings = await _db.StockEntries
-                .Where(se => se.RefId == p.Id &&
-                      (se.RefType == "Purchase" || se.RefType == "PurchaseAmend" || se.RefType == "PurchaseMove"))
-                .ToListAsync(ct);
-
-            // Nothing posted? Just mark void and exit.
-            if (postings.Count == 0)
-            {
-                var entity = await _db.Purchases.FirstAsync(x => x.Id == p.Id);
-                entity.Status = PurchaseStatus.Voided;
-                entity.UpdatedAtUtc = DateTime.UtcNow;
-                entity.UpdatedBy = user;
-                await _db.SaveChangesAsync(ct);
-
-                // === SYNC: voided purchase
-                await _outbox.EnqueueUpsertAsync(_db, entity, default);
-                await _db.SaveChangesAsync(ct);
-                return;
-            }
-
-
-            // Compute the net qty that will be REMOVED by voiding
-            // (removing postings changes on-hand by: Δ = - Σ(post.QtyChange))
-            var netByItem = postings
-                .GroupBy(se => se.ItemId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Sum(se => se.QtyChange)    // sum of (+purchase +amend deltas)
-                );
-
-            // Check current on-hand at the same location for these items
-            var itemIds = netByItem.Keys.ToArray();
-
-            var onhandByItem = await _inv.GetOnHandBulkAsync(itemIds, locType, locId, DateTime.UtcNow, ct);
-
-            // Validate no item would go below zero after removal
-            var violations = new List<string>();
-            foreach (var kv in netByItem)
-            {
-                var itemId = kv.Key;
-                var sumPosted = kv.Value;               // can be + or − overall
-                var cur = onhandByItem.TryGetValue(itemId, out var oh) ? oh : 0m;
-                var after = cur - sumPosted;            // because removal = -sumPosted
-
-                if (after < 0m)
-                    violations.Add($"Item {itemId}: on-hand {cur:0.##} → after void {after:0.##}");
-            }
-
-            if (violations.Count > 0)
-            {
-                var msg = "Cannot void purchase — it would make stock negative:\n" +
-                          string.Join("\n", violations);
-                throw new InvalidOperationException(msg);
-            }
-
-            // Safe to void: remove all purchase-linked postings atomically and mark void
-            using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-            _db.StockEntries.RemoveRange(postings);
-
-            var entity2 = await _db.Purchases.FirstAsync(x => x.Id == p.Id);
-            entity2.Status = PurchaseStatus.Voided;
-            entity2.UpdatedAtUtc = DateTime.UtcNow;
-            entity2.UpdatedBy = user;
-            // (Optional) record audit row if you keep one
-            //_db.AuditLogs.Add(new AuditLog { ... });
-            await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-            // === SYNC: voided purchase
-            var voided = await _db.Purchases.AsNoTracking().FirstAsync(x => x.Id == p.Id, ct);
-            await _outbox.EnqueueUpsertAsync(_db, voided, default);
-            await _db.SaveChangesAsync(ct);
-
-        }
-
-
-        public async Task VoidReturnAsync(int returnId, string reason, string? user = null, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var r = await _db.Purchases.Include(x => x.Lines)
-                                       .FirstAsync(x => x.Id == returnId && x.IsReturn, ct);
-            if (r.Status == PurchaseStatus.Voided) return;
-            var postings = await _db.StockEntries
-                .Where(se => se.RefType == "PurchaseReturn" && se.RefId == r.Id)
-                .ToListAsync(ct);
-            if (postings.Count > 0) _db.StockEntries.RemoveRange(postings);
-
-            r.Status = PurchaseStatus.Voided;
-            r.UpdatedAtUtc = DateTime.UtcNow;
-            r.UpdatedBy = user;
-            await _db.SaveChangesAsync(ct);
-            // === SYNC: voided return
-            await _outbox.EnqueueUpsertAsync(_db, r, default);
-            await _db.SaveChangesAsync(ct);
-
-        }
-
-        //public sealed class PurchaseLineEffective
-        //{
-        //    public int ItemId { get; set; }
-        //    public string? Sku { get; set; }
-        //    public string? Name { get; set; }
-        //    public decimal Qty { get; set; }
-        //    public decimal UnitCost { get; set; }  // display-only; keep simple (avg of base lines)
-        //    public decimal Discount { get; set; }  // display-only (sum of base discounts)
-        //    public decimal TaxRate { get; set; }   // display-only (avg of base tax rates)
-        //}
 
         public async Task<List<PurchaseLineEffective>> GetEffectiveLinesAsync(int purchaseId, CancellationToken ct = default)
         {
@@ -1840,127 +1039,5 @@ namespace Pos.Persistence.Services
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
-
-        public async Task<decimal> GetRemainingReturnableQtyAsync(int purchaseLineId, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            // original line qty (may be negative)
-            var orig = await _db.PurchaseLines
-                .AsNoTracking()
-                .Where(x => x.Id == purchaseLineId)
-                .Select(x => (decimal?)x.Qty)
-                .FirstOrDefaultAsync(ct);
-
-            if (orig is null) return 0m;
-            // SUM of positive magnitudes for all returns that reference this line
-            // Use ternary to emulate ABS() and nullable SUM to handle empty set => 0
-            var returned = await _db.PurchaseLines
-                .AsNoTracking()
-                .Where(x => x.RefPurchaseLineId == purchaseLineId)
-                .Select(x => (decimal?)(x.Qty < 0 ? -x.Qty : x.Qty))
-                .SumAsync(ct) ?? 0m;
-
-            var origAbs = orig.Value < 0 ? -orig.Value : orig.Value;
-            var remaining = Math.Max(0m, origAbs - returned);
-            return remaining;
-        }
-
-        // --- Bank configuration & pickers (outlet-scoped) ---
-        public async Task<bool> IsPurchaseBankConfiguredAsync(int outletId, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var s = await _db.InvoiceSettings.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.OutletId == outletId, ct);
-            return s?.PurchaseBankAccountId != null;
-        }
-
-        public async Task<List<Account>> ListBankAccountsForOutletAsync(int outletId, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            return await _db.Accounts.AsNoTracking()
-                .Where(a => a.OutletId == outletId
-                         && a.AllowPosting
-                         && !a.IsHeader
-                         && (a.Name.Contains("Bank") || a.Code.StartsWith("101")))
-                .OrderBy(a => a.Name)
-                .ToListAsync(ct);
-        }
-
-        public async Task<int?> GetConfiguredPurchaseBankAccountIdAsync(int outletId, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var s = await _db.InvoiceSettings.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.OutletId == outletId, ct);
-            return s?.PurchaseBankAccountId;
-        }
-
-        // --- Lightweight lookups the view needed previously via _db.Set<T> ---
-        public async Task<string?> GetPartyNameAsync(int partyId, CancellationToken ct = default)
-        {
-            await using var db = await _dbf.CreateDbContextAsync(ct);
-            return await db.Set<Party>().AsNoTracking()
-                .Where(x => x.Id == partyId)
-                .Select(x => x.Name)
-                .FirstOrDefaultAsync(ct);
-        }
-
-
-        public async Task<Dictionary<int, (string sku, string name)>> GetItemsMetaAsync(IEnumerable<int> itemIds, CancellationToken ct = default)
-        {
-            await using var db = await _dbf.CreateDbContextAsync(ct);
-            var ids = itemIds.Distinct().ToArray();
-            var list = await db.Items.AsNoTracking()
-                .Where(i => ids.Contains(i.Id))
-                .Select(i => new { i.Id, i.Sku, i.Name })
-                .ToListAsync(ct);
-
-            return list.ToDictionary(x => x.Id, x => (x.Sku ?? "", x.Name ?? $"Item #{x.Id}"));
-        }
-
-        // --- Draft loader used by Resume (status-guarded) ---
-        public async Task<Purchase?> LoadDraftWithLinesAsync(int id, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            return await _db.Purchases
-                .Include(p => p.Lines)
-                .FirstOrDefaultAsync(p => p.Id == id && p.Status == PurchaseStatus.Draft, ct);
-        }
-
-        // --- Payment edits (moved out of the View) ---
-        public async Task UpdatePaymentAsync(int paymentId, decimal newAmount, TenderMethod newMethod, string? newNote, string user, CancellationToken ct=default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var pay = await _db.PurchasePayments.FirstOrDefaultAsync(p => p.Id == paymentId, ct);
-            if (pay is null) throw new InvalidOperationException($"Payment #{paymentId} not found.");
-
-            if (newAmount <= 0) throw new InvalidOperationException("Amount must be > 0.");
-            pay.Amount = Math.Round(newAmount, 2);
-            pay.Method = newMethod;
-            pay.Note = string.IsNullOrWhiteSpace(newNote) ? null : newNote.Trim();
-            pay.UpdatedAtUtc = DateTime.UtcNow;
-            pay.UpdatedBy = user;
-            await _db.SaveChangesAsync(ct);
-        }
-
-        public async Task RemovePaymentAsync(int paymentId, string user, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            var pay = await _db.PurchasePayments.FirstOrDefaultAsync(p => p.Id == paymentId, ct);
-            if (pay is null) return;
-            _db.PurchasePayments.Remove(pay);
-            await _db.SaveChangesAsync(ct);
-        }
-
-        public async Task<Purchase?> LoadReturnWithLinesAsync(int returnId, CancellationToken ct = default)
-        {
-            await using var _db = await _dbf.CreateDbContextAsync(ct);
-            return await _db.Purchases
-                .Include(p => p.Lines)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == returnId && p.IsReturn, ct);
-        }
-
     }
-    // ---------- Simple DTOs for Return Draft ----------
-    
 }

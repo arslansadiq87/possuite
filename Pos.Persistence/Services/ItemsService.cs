@@ -107,7 +107,6 @@ namespace Pos.Persistence.Services
             text = (text ?? "").Trim();
             if (text.Length == 0) return Task.FromResult<ItemIndexDto?>(null)!;
 
-            // Single query with projection to ItemIndexDto
             return
             (from i in _db.Items.AsNoTracking()
              join p in _db.Products.AsNoTracking() on i.ProductId equals p.Id into gp
@@ -121,11 +120,18 @@ namespace Pos.Persistence.Services
                  (p != null && EF.Functions.Like(EF.Functions.Collate(p.Name, "NOCASE"), text + "%"))
              orderby i.Name
              select new ItemIndexDto(
-                 i.Id, i.Name, i.Sku,
-                 _db.ItemBarcodes.Where(b => b.ItemId == i.Id && b.IsPrimary).Select(b => b.Code).FirstOrDefault()
-                 ?? _db.ItemBarcodes.Where(b => b.ItemId == i.Id).Select(b => b.Code).FirstOrDefault(),
-                 i.Price, i.TaxCode, i.DefaultTaxRatePct, i.TaxInclusive,
-                 i.DefaultDiscountPct, i.DefaultDiscountAmt,
+                 i.Id,
+                 i.Name,
+                 i.Sku ?? "", // if Sku can be null in the model
+                 (_db.ItemBarcodes.Where(b => b.ItemId == i.Id && b.IsPrimary).Select(b => b.Code).FirstOrDefault()
+                  ?? _db.ItemBarcodes.Where(b => b.ItemId == i.Id).Select(b => b.Code).FirstOrDefault()
+                  ?? ""), // <- ensure non-null
+                 i.Price,
+                 i.TaxCode,
+                 i.DefaultTaxRatePct,
+                 i.TaxInclusive,
+                 i.DefaultDiscountPct,
+                 i.DefaultDiscountAmt,
                  p != null ? p.Name : null,
                  i.Variant1Name, i.Variant1Value, i.Variant2Name, i.Variant2Value
              )).FirstOrDefaultAsync();

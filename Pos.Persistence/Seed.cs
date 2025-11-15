@@ -514,33 +514,102 @@ namespace Pos.Persistence
         }
 
 
+        //private static void EnsureSuppliers(PosClientDbContext db)
+        //{
+        //    // Do we already have any supplier party?
+        //    if (db.PartyRoles.Any(r => r.Role == RoleType.Supplier))
+        //        return;
+
+        //    // Create the Party row
+        //    var party = new Party
+        //    {
+        //        Name = "Default Supplier",
+        //        IsActive = true,
+        //        IsSharedAcrossOutlets = true,     // shared supplier; no PartyOutlet rows required
+        //        CreatedAtUtc = DateTime.UtcNow
+        //    };
+        //    db.Parties.Add(party);
+        //    db.SaveChanges();
+
+        //    // Attach the Supplier role
+        //    db.PartyRoles.Add(new PartyRole
+        //    {
+        //        PartyId = party.Id,
+        //        Role = RoleType.Supplier,
+        //        CreatedAtUtc = DateTime.UtcNow
+        //    });
+
+        //    db.SaveChanges();
+        //}
+
         private static void EnsureSuppliers(PosClientDbContext db)
         {
-            // Do we already have any supplier party?
+            // Skip if any supplier already exists
             if (db.PartyRoles.Any(r => r.Role == RoleType.Supplier))
                 return;
 
-            // Create the Party row
+            // ---- Create Party ----
             var party = new Party
             {
                 Name = "Default Supplier",
                 IsActive = true,
-                IsSharedAcrossOutlets = true,     // shared supplier; no PartyOutlet rows required
+                IsSharedAcrossOutlets = true,
                 CreatedAtUtc = DateTime.UtcNow
             };
             db.Parties.Add(party);
             db.SaveChanges();
 
-            // Attach the Supplier role
+            // ---- Attach Supplier Role ----
             db.PartyRoles.Add(new PartyRole
             {
                 PartyId = party.Id,
                 Role = RoleType.Supplier,
                 CreatedAtUtc = DateTime.UtcNow
             });
+            db.SaveChanges();
 
+            // ---- Ensure COA Account under Supplier Header ----
+            var supplierHeader = db.Accounts.AsNoTracking()
+                .FirstOrDefault(a => a.Code == "61");
+
+            if (supplierHeader == null)
+                throw new InvalidOperationException("Missing Chart-of-Accounts header '61' for Suppliers.");
+
+            // Generate next subcode safely
+            var siblingCodes = db.Accounts
+                .Where(a => a.ParentId == supplierHeader.Id)
+                .Select(a => a.Code)
+                .ToList();
+
+            int max = 0;
+            foreach (var c in siblingCodes)
+            {
+                var last = c?.Split('-').LastOrDefault();
+                if (int.TryParse(last, out var n) && n > max) max = n;
+            }
+            var next = max + 1;
+            var newCode = $"{supplierHeader.Code}-{next:D3}";  // ✅ renamed from 'code' to 'newCode'
+
+            var acc = new Account
+            {
+                Code = newCode,
+                Name = party.Name,
+                Type = AccountType.Parties,
+                NormalSide = NormalSide.Credit,
+                IsHeader = false,
+                AllowPosting = true,
+                ParentId = supplierHeader.Id
+            };
+
+            db.Accounts.Add(acc);
+            db.SaveChanges();
+
+            // Link account back to party
+            party.AccountId = acc.Id;
             db.SaveChanges();
         }
+
+
 
         public static void EnsureWarehouse(PosClientDbContext db)
         {

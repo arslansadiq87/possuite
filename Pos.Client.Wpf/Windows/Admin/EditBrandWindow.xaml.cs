@@ -47,11 +47,6 @@ namespace Pos.Client.Wpf.Windows.Admin
                 MessageBox.Show(ex.Message, "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
-
-        private void Cancel_Click(object s, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
-        }
+        
     }
 }

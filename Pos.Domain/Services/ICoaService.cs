@@ -32,5 +32,10 @@ namespace Pos.Domain.Services
         // Convenience creators used by the VM toolbar
         Task AddCashForOutletAsync(CancellationToken ct = default);
         Task AddStaffAccountAsync(CancellationToken ct = default);
+
+        Task<int> EnsureInventoryAccountIdAsync(CancellationToken ct = default);
+        Task<int> EnsureSupplierAccountIdAsync(int partyId, CancellationToken ct = default);
+
+       
     }
 }

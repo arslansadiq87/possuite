@@ -7,25 +7,18 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.DTO;
-
-//using Pos.Persistence.Services;
 using Pos.Domain.Services;
 using System.Threading.Tasks;
 
-
-
 namespace Pos.Client.Wpf.Controls
 { 
-
     public partial class ItemSearchBox : UserControl
     {
-        
         // Routed event: fires when user confirms a pick (Enter/dbl-click)
         public static readonly RoutedEvent ItemPickedEvent =
             EventManager.RegisterRoutedEvent(nameof(ItemPicked), RoutingStrategy.Bubble,
                 typeof(RoutedEventHandler), typeof(ItemSearchBox));
         public event RoutedEventHandler ItemPicked { add => AddHandler(ItemPickedEvent, value); remove => RemoveHandler(ItemPickedEvent, value); }
-
         // The selected item (read-only bindable)
         public ItemIndexDto? SelectedItem
         {
@@ -35,7 +28,6 @@ namespace Pos.Client.Wpf.Controls
         private static readonly DependencyPropertyKey SelectedItemPropertyKey =
             DependencyProperty.RegisterReadOnly(nameof(SelectedItem), typeof(ItemIndexDto), typeof(ItemSearchBox), new PropertyMetadata(null));
         public static readonly DependencyProperty SelectedItemProperty = SelectedItemPropertyKey.DependencyProperty;
-
         // Optional: expose the raw query text
         public string Query
         {
@@ -45,11 +37,9 @@ namespace Pos.Client.Wpf.Controls
         public static readonly DependencyProperty QueryProperty =
             DependencyProperty.Register(nameof(Query), typeof(string), typeof(ItemSearchBox),
                 new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
-
         private IItemsReadService _lookup;
         private readonly ObservableCollection<ItemIndexDto> _index = new();
         private ICollectionView? _view;
-
         // Scanner-burst handling
         private DateTime _lastAt = DateTime.MinValue;
         private int _burstCount = 0;
@@ -59,34 +49,23 @@ namespace Pos.Client.Wpf.Controls
         public ItemSearchBox()
         {
             InitializeComponent();
-
-            // Resolve service from App.Services
             _lookup = App.Services.GetRequiredService<IItemsReadService>();
-
-            // async load index
-            // do the rest as-is
             Loaded += OnLoaded;            // ✅ new method below
             _burstReset.Tick += (_, __) => { _suppressDropdown = false; _burstCount = 0; _burstReset.Stop(); };
         }
 
         private async void OnLoaded(object? sender, RoutedEventArgs e)
         {
-            // Don’t do anything in designer
             if (DesignerProperties.GetIsInDesignMode(this)) return;
-
-            // Resolve lazily/safely
             if (_lookup is null)
             {
                 var sp = App.Services;
                 if (sp is null) return; // still not ready (e.g., designer) — just bail quietly
-                _lookup = sp.GetService<IItemsReadService>();
+                _lookup = sp.GetRequiredService<IItemsReadService>(); // throws if missing
                 if (_lookup is null) return;
             }
-
-            // async load index
             var list = await _lookup.BuildIndexAsync();
             _index.Clear(); foreach (var it in list) _index.Add(it);
-
             _view = CollectionViewSource.GetDefaultView(_index);
             _view.Filter = o =>
             {
@@ -123,7 +102,6 @@ namespace Pos.Client.Wpf.Controls
             _burstCount = (now - _lastAt).TotalMilliseconds <= 40 ? _burstCount + 1 : 1;
             _lastAt = now;
             if (_burstCount >= 4) { _suppressDropdown = true; _burstReset.Stop(); _burstReset.Start(); }
-
             _view?.Refresh();
             var has = _view != null && _view.Cast<object>().Any();
             Popup.IsOpen = !_suppressDropdown && Query.Length > 0 && has;
@@ -134,16 +112,10 @@ namespace Pos.Client.Wpf.Controls
         private async Task ConfirmPickAsync()
         {
             ItemIndexDto? pick = null;
-
-            // prefer dropdown selection
             if (Popup.IsOpen && List.SelectedItem is ItemIndexDto sel) pick = sel;
-
-            // exact DB lookups (barcode/SKU/name starts-with)
             if (pick is null && !string.IsNullOrWhiteSpace(Query))
                 pick = await _lookup.FindOneAsync(Query.Trim());
-
             if (pick is null) return;
-
             SelectedItem = pick;
             RaiseEvent(new RoutedEventArgs(ItemPickedEvent, this));
             Clear();
@@ -152,7 +124,6 @@ namespace Pos.Client.Wpf.Controls
         private async void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter) { e.Handled = true; await ConfirmPickAsync(); return; }
-
             if (e.Key == Key.Down)
             {
                 if (!Popup.IsOpen)

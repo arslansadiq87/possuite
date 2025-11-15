@@ -5,12 +5,15 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls"
         mc:Ignorable="d"
-        Title="Purchase Return" Height="720" Width="1100"
+        Title="Purchase Return"
+        Height="720"
+        Width="1100"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize">
+
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-       
+
         <Style TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -27,35 +30,37 @@
 
     <Grid Margin="16">
         <Grid.RowDefinitions>
+            <!-- 0: Toolbar -->
             <RowDefinition Height="Auto"/>
-            <!-- NEW: Toolbar -->
+            <!-- 1: Header -->
             <RowDefinition Height="Auto"/>
-            <!-- Header -->
+            <!-- 2: Item search + Source pickers -->
             <RowDefinition Height="Auto"/>
-            <!-- Item Search -->
+            <!-- 3: Lines -->
             <RowDefinition Height="*"/>
-            <!-- Lines -->
+            <!-- 4: Totals / Refunds -->
             <RowDefinition Height="Auto"/>
-            <!-- Totals -->
         </Grid.RowDefinitions>
 
+        <!-- ===== TOOLBAR ===== -->
         <ToolBar Grid.Row="0" Padding="6" Background="#F7F7F7">
             <Button Content="Cancel"
-          Width="110"
-          Margin="0,0,6,0"
-          Click="BtnCancel_Click" />
-
+                    Width="110"
+                    Margin="0,0,6,0"
+                    Click="BtnCancel_Click" />
             <Separator/>
-
             <Button Content="Save Return"
-          Width="150"
-          Click="BtnSave_Click"
-          ToolTip="Save this purchase return (Ctrl+S)"/>
+                    Width="150"
+                    Click="BtnSave_Click"
+                    ToolTip="Save this purchase return (Ctrl+S)"/>
         </ToolBar>
 
-        
         <!-- ===== HEADER ===== -->
-        <Border Grid.Row="1" Padding="12" BorderBrush="#DDD" BorderThickness="1" CornerRadius="8">
+        <Border Grid.Row="1"
+                Padding="12"
+                BorderBrush="#DDD"
+                BorderThickness="1"
+                CornerRadius="8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*"/>
@@ -66,240 +71,352 @@
 
                 <!-- Supplier (editable only for Return-Without) -->
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Supplier:" FontWeight="SemiBold" Margin="0,0,6,0"/>
-
-                    <Grid>
-                        <TextBox x:Name="SupplierText" Width="260" Height="28"
-                             IsReadOnly="{Binding IsSupplierReadonly}"
-                             Text="{Binding SupplierDisplay, UpdateSourceTrigger=PropertyChanged}"
-                             TextChanged="SupplierText_TextChanged"
-                             PreviewKeyDown="SupplierText_PreviewKeyDown"
-                             LostKeyboardFocus="SupplierText_LostKeyboardFocus"/>
-
-                        <!-- Autocomplete popup -->
-                        <Popup x:Name="SupplierPopup"
-                           Placement="Bottom"
-                           PlacementTarget="{Binding ElementName=SupplierText}"
-                           StaysOpen="False"
-                           AllowsTransparency="True"
-                           Focusable="False">
-                            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="4" Width="{Binding ElementName=SupplierText, Path=ActualWidth}">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
-                                    <ListBox x:Name="SupplierList" MouseDoubleClick="SupplierList_MouseDoubleClick" PreviewKeyDown="SupplierList_PreviewKeyDown" IsTextSearchEnabled="False">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel Orientation="Vertical" Margin="4,3">
-                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                                                    <TextBlock Text="{Binding Phone}" Foreground="#777" FontSize="12"/>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
-                                </ScrollViewer>
-                            </Border>
-                        </Popup>
-                    </Grid>
-
-                    
+                    <TextBlock Text="Supplier:" FontWeight="SemiBold" Margin="6,0,6,0"/>
+                    <Controls:CustomerSearchBox
+         x:Name="SupplierSearch"
+         Width="260"
+         Mode="Suppliers"
+         CustomerPicked="SupplierSearch_CustomerPicked" />
+                    <!-- show VM.SupplierDisplay so WITH-INVOICE is not blank -->
+                    <TextBlock Text="{Binding SupplierDisplay}"
+               Margin="6,0,0,0"
+               VerticalAlignment="Center"/>
                 </StackPanel>
 
 
-                <!-- Target (Outlet / Warehouse) -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left">
-                    <TextBlock Text="Target:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                <!-- Target (Outlet / Warehouse) display -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Left">
+                    <TextBlock Text="Target:"
+                               FontWeight="SemiBold"
+                               Margin="0,0,6,0"/>
                     <TextBlock Text="{Binding TargetDisplay}"/>
                 </StackPanel>
 
                 <!-- Base document -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Left">
-                    <TextBlock Text="Base Purchase:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Left">
+                    <TextBlock Text="Base Purchase:"
+                               FontWeight="SemiBold"
+                               Margin="0,0,6,0"/>
                     <TextBlock Text="{Binding BasePurchaseDisplay}"/>
                 </StackPanel>
 
                 <!-- Return No + Date -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <TextBlock Text="Return No:" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                <StackPanel Grid.Column="3"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <TextBlock Text="Return No:"
+                               FontWeight="SemiBold"
+                               Margin="0,0,6,0"/>
                     <TextBlock Text="{Binding ReturnNoDisplay}"/>
-                    <TextBlock Text=" | " Foreground="#AAA" Margin="6,0"/>
+                    <TextBlock Text=" | "
+                               Foreground="#AAA"
+                               Margin="6,0"/>
                     <TextBlock Text="{Binding DateDisplay}"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- ===== ITEM SEARCH (free-form only) ===== -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,12" HorizontalAlignment="Left"
-            Visibility="{Binding CanAddItems, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="Item Search:" FontWeight="SemiBold" Margin="0,0,6,0"/>
-            <!-- New shared search control -->
-            <Controls:ItemSearchBox x:Name="ItemSearch"
-                        Margin="0,4,0,8"
-                        ItemPicked="ItemSearch_ItemPicked"
-                        TabIndex="30" />
+        <!-- ===== ITEM SEARCH + SOURCE (free-form only for search; source pickers use VM flags) ===== -->
+        <Grid Grid.Row="2" Margin="0,12,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="3*"/>
+            </Grid.ColumnDefinitions>
 
-            <!--<Grid>
-                <TextBox x:Name="ItemText" Width="360" Height="32"
-                     TextChanged="ItemText_TextChanged"
-                     PreviewKeyDown="ItemText_PreviewKeyDown"
-                     LostKeyboardFocus="ItemText_LostKeyboardFocus"/>
+            <!-- LEFT: Item search (visible only when free-form / CanAddItems) -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        Visibility="{Binding CanAddItems, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="Item Search:"
+                           FontWeight="SemiBold"
+                           Margin="0,0,6,0"/>
+                <Controls:ItemSearchBox
+                    x:Name="ItemSearch"
+                    Margin="0,4,0,8"
+                    ItemPicked="ItemSearch_ItemPicked"
+                    TabIndex="30" />
 
-                <Popup x:Name="ItemPopup"
-                   Placement="Bottom"
-                   PlacementTarget="{Binding ElementName=ItemText}"
-                   StaysOpen="False"
-                   AllowsTransparency="True"
-                   Focusable="False">
-                    <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="4"
-              Width="{Binding ElementName=ItemText, Path=ActualWidth}">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="260">
-                            <ListBox x:Name="ItemList"
-                   MouseDoubleClick="ItemList_MouseDoubleClick"
-                   PreviewKeyDown="ItemList_PreviewKeyDown"
-                   IsTextSearchEnabled="False">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="4,3">
-                                            <TextBlock Text="{Binding Display}" FontWeight="SemiBold"/>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Sku}" Foreground="#777" FontSize="12"/>
-                                                <TextBlock Text="{Binding LastCostDisplay}" Foreground="#777" FontSize="12"/>
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </ScrollViewer>
-                    </Border>
-                </Popup>
-            </Grid>-->
-
-            <!-- Return Source: only visible for WITHOUT-INVOICE returns --><!--
-            <StackPanel Orientation="Horizontal" Grid.ColumnSpan="2" Margin="0,6,0,0">
-                --><!-- On-hand label --><!--
-                <Border Margin="8,0,0,0" Padding="6,2" Background="#FFF9F9F9" BorderBrush="#FFDDDDDD" BorderThickness="1" CornerRadius="4">
-                    <TextBlock>
-                        <Run Text="On hand: "/>
-                        <Run Text="{Binding CurrentItemOnHandQty, StringFormat={}{0:0.##}}"/>
-                    </TextBlock>
+                <!-- Available on-hand chip -->
+                <Border x:Name="AvailablePanel"
+                        Margin="8,4,0,0"
+                        Padding="6,2"
+                        Background="#FFF9F9F9"
+                        BorderBrush="#FFDDDDDD"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Visibility="Collapsed"
+                        VerticalAlignment="Center"
+                        ToolTip="On-hand at the selected source for the current line item.">
+                    <TextBlock x:Name="AvailableChipText"
+                               FontWeight="SemiBold"
+                               Foreground="#333"
+                               Text="Available: 0" />
                 </Border>
-            </StackPanel>-->
-            <!-- Return Source: only visible for WITHOUT-INVOICE returns -->
-            <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
-            Visibility="{Binding IsWithoutInvoice, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="Source:" VerticalAlignment="Center" Margin="0,0,16,0"/>
+            </StackPanel>
 
-                <!-- Radios -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <RadioButton Content="Outlet"
-                     IsChecked="{Binding IsOutletSelected, Mode=TwoWay}"
-                     Margin="0,0,8,0"
-                     IsEnabled="{Binding IsSourceEditable}" />
-                    <RadioButton Content="Warehouse"
-                     IsChecked="{Binding IsWarehouseSelected, Mode=TwoWay}"
-                     IsEnabled="{Binding IsSourceEditable}" />
-                </StackPanel>
+            <!-- RIGHT: Source pickers (Outlet / Warehouse) -->
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <TextBlock Text="Return Source:"
+                           FontWeight="SemiBold"
+                           Margin="0,0,6,0"/>
 
                 <!-- Outlet picker -->
-                <ComboBox Width="220" Margin="10,0,0,0"
-              ItemsSource="{Binding OutletList}"
-              DisplayMemberPath="Name"
-              SelectedValuePath="Id"
-              SelectedValue="{Binding OutletId, Mode=TwoWay}"
-              Visibility="{Binding ShowOutletPicker, Converter={StaticResource BoolToVis}}"
-              IsEnabled="{Binding IsSourceEditable}" />
+                <ComboBox Width="220"
+                          Margin="0,0,8,0"
+                          ItemsSource="{Binding OutletList}"
+                          DisplayMemberPath="Name"
+                          SelectedValuePath="Id"
+                          SelectedValue="{Binding OutletId, Mode=TwoWay}"
+                          Visibility="{Binding ShowOutletPicker, Converter={StaticResource BoolToVis}}"
+                          IsEnabled="{Binding IsSourceEditable}" />
 
                 <!-- Warehouse picker -->
-                <ComboBox Width="220" Margin="10,0,0,0"
-              ItemsSource="{Binding WarehouseList}"
-              DisplayMemberPath="Name"
-              SelectedValuePath="Id"
-              SelectedValue="{Binding WarehouseId, Mode=TwoWay}"
-              Visibility="{Binding ShowWarehousePicker, Converter={StaticResource BoolToVis}}"
-              IsEnabled="{Binding IsSourceEditable}" />
+                <ComboBox Width="220"
+                          ItemsSource="{Binding WarehouseList}"
+                          DisplayMemberPath="Name"
+                          SelectedValuePath="Id"
+                          SelectedValue="{Binding WarehouseId, Mode=TwoWay}"
+                          Visibility="{Binding ShowWarehousePicker, Converter={StaticResource BoolToVis}}"
+                          IsEnabled="{Binding IsSourceEditable}" />
             </StackPanel>
-
-            <!-- ===== ITEM SEARCH (free-form only) ===== -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,0" HorizontalAlignment="Left"
-            Visibility="{Binding CanAddItems, Converter={StaticResource BoolToVis}}">
-                <!-- Existing "On hand" chip you already have -->
-                <StackPanel Orientation="Horizontal" Grid.ColumnSpan="2" Margin="0,6,0,0">
-                    <!-- NEW: Available chip (auto show/hide like in Stock Transfer) -->
-                    <Border x:Name="AvailablePanel"
-        Margin="8,0,0,0"
-        Padding="6,2"
-        Background="#FFF9F9F9"
-        BorderBrush="#FFDDDDDD"
-        BorderThickness="1"
-        CornerRadius="4"
-        Visibility="Collapsed"
-        VerticalAlignment="Center"
-        ToolTip="On-hand at the selected source for the current line item.">
-                        <TextBlock x:Name="AvailableChipText"
-               FontWeight="SemiBold"
-               Foreground="#333"
-               Text="Available: 0" />
-                    </Border>
-                </StackPanel>
-            </StackPanel>
-        </StackPanel>
-
+        </Grid>
 
         <!-- ===== LINES ===== -->
-        <DataGrid Grid.Row="3" x:Name="GridLines" Margin="0,12,0,12" Style="{StaticResource ModernDataGrid}"
+        <DataGrid Grid.Row="3"
+                  x:Name="GridLines"
+                  Margin="0,12,0,12"
+                  Style="{StaticResource ModernDataGrid}"
                   ItemsSource="{Binding Lines}"
                   RowHeaderWidth="0"
                   CellEditEnding="GridLines_CellEditEnding"
-                      PreviewKeyDown="GridLines_PreviewKeyDown">
+                  PreviewKeyDown="GridLines_PreviewKeyDown">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Item ID" Binding="{Binding ItemId}" IsReadOnly="True" Width="80"/>
-                <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" IsReadOnly="True" Width="120"/>
-                <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*"/>
-                <DataGridTextColumn Header="Unit Cost" Binding="{Binding UnitCost, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" Width="100" />
-                <DataGridTextColumn Header="Disc" Binding="{Binding Discount, StringFormat={}{0:N2}}" Width="90"/>
-                <DataGridTextColumn Header="Tax %" Binding="{Binding TaxRate, StringFormat={}{0:N2}}" Width="90"/>
-                <DataGridTextColumn Header="Max" Binding="{Binding MaxReturnQty, StringFormat={}{0:N2}}" IsReadOnly="True" Width="80"/>
-                <DataGridTextColumn Header="Return Qty" Binding="{Binding ReturnQty, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" Width="100"/>
-                <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" IsReadOnly="True" Width="120"/>
+                <DataGridTextColumn Header="Item ID"
+                                    Binding="{Binding ItemId}"
+                                    IsReadOnly="True"
+                                    Width="80"/>
+                <DataGridTextColumn Header="SKU"
+                                    Binding="{Binding Sku}"
+                                    IsReadOnly="True"
+                                    Width="120"/>
+                <DataGridTextColumn Header="Item"
+                                    Binding="{Binding DisplayName}"
+                                    IsReadOnly="True"
+                                    Width="*"/>
+                <DataGridTextColumn Header="Unit Cost"
+                                    Binding="{Binding UnitCost, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
+                                    Width="100" />
+                <DataGridTextColumn Header="Disc"
+                                    Binding="{Binding Discount, StringFormat={}{0:N2}}"
+                                    Width="90"/>
+                <DataGridTextColumn Header="Tax %"
+                                    Binding="{Binding TaxRate, StringFormat={}{0:N2}}"
+                                    Width="90"/>
+                <DataGridTextColumn Header="Max"
+                                    Binding="{Binding MaxReturnQty, StringFormat={}{0:N2}}"
+                                    IsReadOnly="True"
+                                    Width="80"/>
+                <DataGridTextColumn Header="Return Qty"
+                                    Binding="{Binding ReturnQty, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
+                                    Width="100"/>
+                <DataGridTextColumn Header="Line Total"
+                                    Binding="{Binding LineTotal, StringFormat={}{0:N2}}"
+                                    IsReadOnly="True"
+                                    Width="120"/>
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- ===== TOTALS / ACTIONS ===== -->
-        <DockPanel Grid.Row="4" LastChildFill="False">
-            
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+        <!-- ===== TOTALS / REFUNDS ===== -->
+        <Border Grid.Row="4"
+                Margin="0,0,0,0"
+                Padding="12"
+                BorderBrush="#DDD"
+                BorderThickness="1"
+                CornerRadius="8"
+                Background="#FAFAFA">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-                <!-- REFUND PANEL (new) -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Refund:" FontWeight="SemiBold"/>
-                    <ComboBox Width="120" SelectedItem="{Binding RefundMethod}"
-                              ItemsSource="{Binding RefundMethods}"/>
-                    <TextBox Width="100" HorizontalContentAlignment="Right"
-                             Text="{Binding RefundAmount, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}"/>
-                </StackPanel>
+                <!-- LEFT: Refunds -->
+                <Grid Grid.Column="0">
+                    <StackPanel Margin="0,0,0,0" VerticalAlignment="Bottom">
+                        <GroupBox Header="Refunds">
+                            <StackPanel>
 
-                <!-- Totals -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Subtotal:" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding Subtotal, StringFormat={}{0:N2}}"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Discount:" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding Discount, StringFormat={}{0:N2}}"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Tax:" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding Tax, StringFormat={}{0:N2}}"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Other:" FontWeight="SemiBold"/>
-                    <TextBox Width="90" HorizontalContentAlignment="Right"
-                             Text="{Binding OtherCharges, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Grand:" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding GrandTotal, StringFormat={}{0:N2}}" FontWeight="Bold"/>
-                </StackPanel>
-                
-            </StackPanel>
-        </DockPanel>
+                                <!-- Refund entry row -->
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Amount:" Margin="0,0,6,0"/>
+                                    <TextBox x:Name="AdvanceAmtBox" Width="80"/>
+
+                                    <!-- Methods: ONLY Cash + Bank -->
+                                    <ComboBox x:Name="RefundMethodBox"
+                                              Width="100"
+                                              Margin="6,0,0,0"
+                                              SelectedIndex="0"
+                                              SelectionChanged="RefundMethodBox_SelectionChanged">
+                                        <ComboBoxItem x:Name="RefundMethodCashItem" Content="Cash"/>
+                                        <ComboBoxItem x:Name="RefundMethodBankItem" Content="Bank"/>
+                                    </ComboBox>
+
+                                    <!-- Bank picker: visible only when Method==Bank -->
+                                    <StackPanel x:Name="BankPickerPanel"
+                                                Orientation="Horizontal"
+                                                Margin="8,0,0,0"
+                                                Visibility="Collapsed">
+                                        <TextBlock Text="Bank:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <ComboBox x:Name="BankAccountBox"
+                                                  Width="260"
+                                                  DisplayMemberPath="Name"
+                                                  SelectedValuePath="Id"/>
+                                    </StackPanel>
+
+                                    <Button Content="Add Refund"
+                                            Margin="6,0,0,0"
+                                            Width="100"
+                                            Click="BtnAddRefund_Click"/>
+                                </StackPanel>
+
+                                <!-- Refunds grid -->
+                                <DataGrid x:Name="RefundGrid"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False"
+                                          CanUserDeleteRows="False"
+                                          IsReadOnly="False"
+                                          ItemsSource="{Binding Payments}"
+                                          RowEditEnding="RefundGrid_RowEditEnding"
+                                          SelectionMode="Single"
+                                          SelectionUnit="FullRow"
+                                          Height="95">
+                                    <DataGrid.Columns>
+                                        <!-- Method -->
+                                        <!-- Method (read-only text) -->
+                                        <DataGridTextColumn Header="Method"
+                    Binding="{Binding Method}"
+                    IsReadOnly="True"
+                    Width="120"/>
+
+
+                                        <!-- Amount -->
+                                        <DataGridTextColumn Header="Amount"
+                                                            Binding="{Binding Amount, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
+                                                            IsReadOnly="{Binding Id, Converter={StaticResource PersistedToReadOnlyConverter}}"/>
+
+                                        <!-- Note -->
+                                        <DataGridTextColumn Header="Note"
+                                                            Binding="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                                                            IsReadOnly="{Binding Id, Converter={StaticResource PersistedToReadOnlyConverter}}"/>
+
+                                        <!-- Delete button -->
+                                        <DataGridTemplateColumn Header="">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Content="Delete"
+                                                            Padding="6,2"
+                                                            Click="BtnDeleteRefund_Click"
+                                                            Tag="{Binding}"
+                                                            ToolTip="Delete Refund (staged rows delete locally; saved rows delete from DB)"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Delete"
+                                                      Click="BtnDeleteRefund_Click"
+                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                </DataGrid>
+
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </Grid>
+
+                <!-- RIGHT: Totals -->
+                <Grid Grid.Column="1" Margin="0,2,0,0">
+                    <GroupBox Header="Totals"
+                              FontSize="16"
+                              Padding="8"
+                              Margin="0,0,0,8"
+                              HorizontalAlignment="Right"
+                              Width="430">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Row 0 -->
+                            <TextBlock Grid.Row="0"
+                                       Grid.Column="0"
+                                       Text="Subtotal:"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Grid.Row="0"
+                                       Grid.Column="1"
+                                       x:Name="SubtotalText"/>
+                            <TextBlock Grid.Row="0"
+                                       Grid.Column="2"
+                                       Text="Discount:"
+                                       FontWeight="SemiBold"
+                                       Margin="12,0,8,0"/>
+                            <TextBlock Grid.Row="0"
+                                       Grid.Column="3"
+                                       x:Name="DiscountText"/>
+
+                            <!-- Row 1 -->
+                            <TextBlock Grid.Row="1"
+                                       Grid.Column="0"
+                                       Text="Tax:"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Grid.Row="1"
+                                       Grid.Column="1"
+                                       x:Name="TaxText"/>
+                            <TextBlock Grid.Row="1"
+                                       Grid.Column="2"
+                                       Text="Other:"
+                                       FontWeight="SemiBold"
+                                       Margin="12,0,8,0"/>
+                            <TextBox Grid.Row="1"
+                                     Grid.Column="3"
+                                     x:Name="OtherChargesBox"
+                                     TextChanged="OtherChargesBox_TextChanged"
+                                     Margin="0,0,0,16"/>
+
+                            <!-- Row 2 -->
+                            <TextBlock Grid.Row="2"
+                                       Grid.Column="0"
+                                       Text="Grand Total:"
+                                       FontWeight="Bold"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Grid.Row="2"
+                                       Grid.Column="1"
+                                       x:Name="GrandTotalText"
+                                       FontWeight="Bold"/>
+                        </Grid>
+                    </GroupBox>
+                </Grid>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

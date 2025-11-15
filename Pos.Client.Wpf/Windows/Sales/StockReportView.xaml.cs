@@ -10,6 +10,7 @@ using Pos.Domain.Services;
 using Pos.Domain.Models.Reports;
 using Pos.Client.Wpf.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Security;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -23,18 +24,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private bool _suppressScopeEvents = false;  // don't react while we set up UI
         private bool _scopeUiReady = false;         // only reload after first init
 
-        private bool IsAdmin()
-        {
-            var u = AppState.Current?.CurrentUser;
-            if (u != null && (u.Role == UserRole.Admin)) return true;
-
-            var roles = (AppState.Current?.CurrentUserRole ?? "")
-                        .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(r => r.Trim());
-            return roles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase)
-                               || r.Equals("Administrator", StringComparison.OrdinalIgnoreCase)
-                               || r.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase));
-        }
+        
 
         private ViewMode _mode = ViewMode.ByItem;
         private List<ItemRow> _itemRows = new();
@@ -68,7 +58,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             ModeByItemBtn.IsChecked = true;     // default mode
             ScopeOutletBtn.IsChecked = true;    // default scope
 
-            ScopePanel.Visibility = IsAdmin() ? Visibility.Visible : Visibility.Collapsed;
+            ScopePanel.Visibility = AuthZ.IsAdminCached() ? Visibility.Visible : Visibility.Collapsed;
 
             OutletBox.DisplayMemberPath = "Name";
             OutletBox.SelectedValuePath = "Id";
@@ -91,7 +81,7 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async Task InitScopeAsync()
         {
-            var isAdmin = IsAdmin();
+            var isAdmin = AuthZ.IsAdminCached();
             var uid = AppState.Current.CurrentUserId;
 
             // Outlets

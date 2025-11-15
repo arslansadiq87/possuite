@@ -1,12 +1,13 @@
 ﻿using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using Pos.Client.Wpf.Windows.Accounting;
 
 namespace Pos.Client.Wpf.Windows.Accounting
 {
-    public partial class CashBookWindow : Window
+    public partial class CashBookView : UserControl
     {
-        public CashBookWindow(CashBookVm vm)
+        public CashBookView(CashBookVm vm)
         {
             InitializeComponent();
             DataContext = vm;

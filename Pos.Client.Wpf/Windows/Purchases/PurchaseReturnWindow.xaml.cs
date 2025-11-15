@@ -21,6 +21,8 @@ using Pos.Domain.DTO;                   // ItemIndexDto
 using Microsoft.Extensions.DependencyInjection;         // for GetRequiredService
 using Pos.Domain.Services;          // for IGlPostingService, IItemsReadService
 using Pos.Domain.Models.Purchases;
+using Pos.Client.Wpf.Security;
+using Pos.Domain.Models;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -29,14 +31,25 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly int? _refPurchaseId;   // Return With
         private readonly int? _returnId;        // Amend existing return
         private readonly bool _freeForm;        // Return Without
-        private readonly IPurchasesService _svc;
+        private readonly IPurchaseReturnsService _svc;
+   
         private readonly IPartyLookupService _partySvc;
         private readonly ILookupService _lookup;       // outlets/warehouses
         private readonly IGlPostingService _gl;        // GL posting
         private readonly IPartyService _party;
         private readonly IItemsReadService _itemsRead;   // ✅ add
         private readonly IInventoryReadService _invRead;
+        private readonly IPurchasesService _purSvc;
 
+        private bool _uiReady;
+        private readonly ObservableCollection<Account> _bankAccounts = new();
+        private bool _bankPaymentsAllowed; // true only if InvoiceSettings.PurchaseBankAccountId is set for the outlet
+        private readonly List<(TenderMethod method, decimal amount, string? note)> _stagedPayments = new();
+        private readonly ObservableCollection<RefundRow> _refunds = new();
+
+
+        private ObservableCollection<Outlet> _outletResults = new();
+        private ObservableCollection<Warehouse> _warehouseResults = new();
 
         private readonly System.Timers.Timer _supplierDebounce = new(250) { AutoReset = false };
         private List<Party> _supplierResults = new();
@@ -47,18 +60,35 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private int? _colReturnQtyIndex;
         private System.Threading.CancellationTokenSource? _availCts;
         public ReturnVM VM { get; } = new();
+
+        // expose for XAML combo (cash + bank)
+        public IReadOnlyList<TenderMethod> RefundMethodItems { get; } = new[]
+        {
+            TenderMethod.Cash,
+            TenderMethod.Bank,
+        };
+
         public PurchaseReturnWindow() // Return Without (free-form)
         {
             InitializeComponent();
             _freeForm = true;
-            _svc = App.Services.GetRequiredService<IPurchasesService>();
+            _svc = App.Services.GetRequiredService<IPurchaseReturnsService>();
+            _purSvc = App.Services.GetRequiredService<IPurchasesService>();
             _invRead = App.Services.GetRequiredService<IInventoryReadService>();
             _partySvc = App.Services.GetRequiredService<IPartyLookupService>();
             _lookup = App.Services.GetRequiredService<ILookupService>();
             _gl = App.Services.GetRequiredService<IGlPostingService>();
             _party = App.Services.GetRequiredService<IPartyService>();
             _itemsRead = App.Services.GetRequiredService<IItemsReadService>();
-            _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
+            VM.IsSupplierReadonly = false;
+            VM.BasePurchaseDisplay = "—";
+
+            VM.TargetType = InventoryLocationType.Outlet;
+            VM.OutletId = AppState.Current?.CurrentOutletId > 0
+                ? AppState.Current.CurrentOutletId
+                : (int?)null;
+            VM.WarehouseId = null;
+
             GridLines.BeginningEdit += GridLines_BeginningEdit;
             GridLines.CurrentCellChanged += GridLines_CurrentCellChanged;
             DataContext = VM;
@@ -78,7 +108,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 await InitFreeFormAsync();
                 await LoadSourcesAsync();                 // now via _lookup
-                await Dispatcher.InvokeAsync(() => SupplierText.Focus());
+                //await Dispatcher.InvokeAsync(() => SupplierText.Focus());
+                await Dispatcher.BeginInvoke(() => SupplierSearch.Focus());
             };
         }
 
@@ -86,14 +117,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             InitializeComponent();
             _refPurchaseId = refPurchaseId;
-            _svc = App.Services.GetRequiredService<IPurchasesService>();
+            _svc = App.Services.GetRequiredService<IPurchaseReturnsService>();
             _invRead = App.Services.GetRequiredService<IInventoryReadService>();
             _partySvc = App.Services.GetRequiredService<IPartyLookupService>();
             _lookup = App.Services.GetRequiredService<ILookupService>();
             _gl = App.Services.GetRequiredService<IGlPostingService>();
             _party = App.Services.GetRequiredService<IPartyService>();
             _itemsRead = App.Services.GetRequiredService<IItemsReadService>();
-            _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
+            _purSvc = App.Services.GetRequiredService<IPurchasesService>();
             DataContext = VM;
             VM.PropertyChanged += async (_, args) =>
             {
@@ -108,23 +139,25 @@ namespace Pos.Client.Wpf.Windows.Purchases
             };
             Loaded += async (_, __) =>
             {
-                await InitFromBaseAsync(refPurchaseId);   // now fully service-backed
-                await Dispatcher.InvokeAsync(() => SupplierText.Focus());
+                await LoadSourcesAsync();                 // fill OutletList/WarehouseList
+                await InitFromBaseAsync(refPurchaseId);   // set supplier + source + lines
+                await Dispatcher.BeginInvoke(() => SupplierSearch.Focus());
             };
+
         }
 
         public PurchaseReturnWindow(int returnId, bool isAmend = true) // Amend
         {
             InitializeComponent();
             _returnId = returnId;
-         _svc = App.Services.GetRequiredService<IPurchasesService>();
+            _svc = App.Services.GetRequiredService<IPurchaseReturnsService>();
             _invRead = App.Services.GetRequiredService<IInventoryReadService>();
             _partySvc = App.Services.GetRequiredService<IPartyLookupService>();
             _lookup = App.Services.GetRequiredService<ILookupService>();
             _gl = App.Services.GetRequiredService<IGlPostingService>();
             _party = App.Services.GetRequiredService<IPartyService>();
             _itemsRead = App.Services.GetRequiredService<IItemsReadService>();
-            _supplierDebounce.Elapsed += SupplierDebounce_Elapsed;
+            _purSvc = App.Services.GetRequiredService<IPurchasesService>();
             DataContext = VM;
             VM.PropertyChanged += async (_, args) =>
             {
@@ -140,7 +173,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             Loaded += async (_, __) =>
             {
                 await InitFromExistingReturnAsync(returnId);  // now via services
-                await Dispatcher.InvokeAsync(() => SupplierText.Focus());
+                //await Dispatcher.InvokeAsync(() => SupplierText.Focus());
+                await Dispatcher.BeginInvoke(() => SupplierSearch.Focus());
             };
         }
 
@@ -151,10 +185,71 @@ namespace Pos.Client.Wpf.Windows.Purchases
             VM.SupplierId = p.Id;
             VM.SupplierDisplay = p.Name ?? $"Supplier #{p.Id}";
             _suppressSupplierSearch = false;
-            SupplierPopup.IsOpen = false;
-            SupplierText.CaretIndex = SupplierText.Text.Length;
+            //SupplierPopup.IsOpen = false;
+            //SupplierText.CaretIndex = SupplierText.Text.Length;
             MoveFocusToItemSearch();
         }
+        private void SupplierSearch_CustomerPicked(object sender, RoutedEventArgs e)
+        {
+            // Defer until after the popup closes and internal TextBox regains focus.
+            var pick = ((Pos.Client.Wpf.Controls.CustomerSearchBox)sender).SelectedCustomer;
+            if (pick is null) return;
+            VM.SupplierId = pick.Id;
+            VM.SupplierDisplay = pick.Name ?? $"Supplier #{pick.Id}";
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // Prefer VendorInvBox if usable, otherwise jump to items.
+                    FocusItemSearchBox();                    // your existing helper
+            }), System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+        private async Task LoadBanksForCurrentOutletAsync()
+        {
+            BankAccountBox.ItemsSource = null;
+            _bankAccounts.Clear();
+            //var outletId = GetCurrentOutletIdForHeader() ?? 0;
+            //if (outletId == 0) { _bankPaymentsAllowed = false; return; }
+            //_bankPaymentsAllowed = await _purSvc.IsPurchaseBankConfiguredAsync(outletId);
+            //var banks = await _purSvc.ListBankAccountsForOutletAsync(outletId);
+            //foreach (var b in banks) _bankAccounts.Add(b);
+            //BankAccountBox.ItemsSource = _bankAccounts;
+            //var defId = await _purSvc.GetConfiguredPurchaseBankAccountIdAsync(outletId);
+            //if (defId is int id)
+            //{
+            //    var match = _bankAccounts.FirstOrDefault(x => x.Id == id);
+            //    if (match != null) BankAccountBox.SelectedItem = match;
+            //}
+        }
+        private void ApplyBankConfigToUi()
+        {
+            if (!_bankPaymentsAllowed)
+            {
+                try
+                {
+                    RefundMethodBankItem.IsEnabled = false;
+                    BankPickerPanel.Visibility = Visibility.Collapsed;
+                    var sel = (RefundMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Cash";
+                    if (!string.Equals(sel, "Cash", StringComparison.OrdinalIgnoreCase))
+                        RefundMethodBox.SelectedItem = RefundMethodCashItem;
+                }
+                catch { }
+            }
+            else
+            {
+                try { RefundMethodBankItem.IsEnabled = true; } catch { }
+            }
+        }
+                
+       
+        private async Task<bool> IsPurchaseBankConfiguredAsync(int outletId)
+  => await _purSvc.IsPurchaseBankConfiguredAsync(outletId);
+
+        
+        
+                
+
+    
+     
 
         private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
         {
@@ -206,6 +301,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 existing.ReturnQty = existing.ReturnQty + 1m;
                 existing.ClampQty();
                 existing.RecomputeLineTotal();
+                UpdateTotalsUI();
                 VM.RecomputeTotals();
                 await SetLineMaxFromOnHandAsync(existing);
 
@@ -235,6 +331,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             await SetLineMaxFromOnHandAsync(line);
             VM.RecomputeTotals();
+            UpdateTotalsUI();
             if (wasEmpty && _freeForm) VM.IsSourceReadonly = true;
 
             await Dispatcher.InvokeAsync(() => FocusUnitCost(line)); // << fix CS4014
@@ -290,84 +387,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void FocusUnitCost(LineVM vm) => FocusCell(vm, nameof(LineVM.UnitCost), beginEdit: true);
         private void FocusReturnQty(LineVM vm) => FocusCell(vm, nameof(LineVM.ReturnQty), beginEdit: true);
-        private async void SupplierDebounce_Elapsed(object? sender, ElapsedEventArgs e)
-        {
-            await Dispatcher.InvokeAsync(async () =>
-            {
-                if (VM.IsSupplierReadonly) { SupplierPopup.IsOpen = false; return; }
-                var term = (SupplierText.Text ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(term))
-                {
-                    SupplierList.ItemsSource = null;
-                    SupplierPopup.IsOpen = false;
-                    return;
-                }
-                var outletId = AppState.Current?.CurrentOutletId ?? 0;
-                var list = await _partySvc.SearchSuppliersAsync(term, outletId);
-                _supplierResults = list ?? new List<Party>();
-                SupplierList.ItemsSource = _supplierResults;
-                SupplierPopup.IsOpen = _supplierResults.Count > 0;
-                if (SupplierPopup.IsOpen)
-                    SupplierList.SelectedIndex = 0;
-            });
-        }
-
-        private void SupplierText_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (VM.IsSupplierReadonly || _suppressSupplierSearch) return;
-            _supplierDebounce.Stop();
-            _supplierDebounce.Start();
-        }
-
-        private void SupplierText_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (VM.IsSupplierReadonly) return;
-            if (e.Key == Key.Down && SupplierPopup.IsOpen && SupplierList.Items.Count > 0)
-            {
-                SupplierList.Focus();
-                SupplierList.SelectedIndex = Math.Max(0, SupplierList.SelectedIndex);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.Enter && SupplierPopup.IsOpen)
-            {
-                var pick = SupplierList.SelectedItem as Party ?? _supplierResults.FirstOrDefault();
-                if (pick != null) ApplySupplier(pick);
-                e.Handled = true;
-            }
-
-            if (e.Key == Key.Escape && SupplierPopup.IsOpen)
-            {
-                SupplierPopup.IsOpen = false;
-                e.Handled = true;
-            }
-        }
-
-        private void SupplierText_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-        {
-        }
-
-        private void SupplierList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            if (SupplierList.SelectedItem is Party p) ApplySupplier(p);
-        }
-
-        private void SupplierList_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter && SupplierList.SelectedItem is Party p)
-            {
-                ApplySupplier(p);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Escape)
-            {
-                SupplierPopup.IsOpen = false;
-                SupplierText.Focus();
-                e.Handled = true;
-            }
-        }
-
+                      
+        
         private sealed class ItemPick
         {
             public int ItemId { get; set; }
@@ -407,17 +428,21 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task InitFromBaseAsync(int refPurchaseId)
         {
-            var draft = await _svc.BuildReturnDraftAsync(refPurchaseId);
+            var draft = await _svc.BuildReturnDraftFromInvoiceAsync(refPurchaseId);
             if (draft == null) throw new InvalidOperationException($"Base purchase #{refPurchaseId} not found.");
             var partyName = await _party.GetPartyNameAsync(draft.PartyId) ?? $"Supplier #{draft.PartyId}";
+
             VM.IsSupplierReadonly = true;
             VM.SupplierId = draft.PartyId;
             VM.SupplierDisplay = partyName;
-            VM.TargetType = draft.TargetType;
+            SupplierSearch.IsEnabled = false;                 // 🔒 lock search for WITH-INVOICE
+
+            VM.TargetType = draft.LocationType;
             VM.OutletId = draft.OutletId;
             VM.WarehouseId = draft.WarehouseId;
             VM.RefPurchaseId = draft.RefPurchaseId;
             VM.BasePurchaseDisplay = draft.RefPurchaseId is int rid ? $"#{rid}" : $"#{refPurchaseId}";
+            VM.IsSourceReadonly = true;                       // 🔒 lock source for WITH-INVOICE
 
             var itemIds = draft.Lines.Select(l => l.ItemId).Distinct().ToList();
             var meta = await _itemsRead.GetDisplayMetaAsync(itemIds);
@@ -440,14 +465,24 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 });
             }
             VM.RecomputeTotals();
+            UpdateTotalsUI();                                 // ✅ fill totals text
             await CapReturnWithAgainstOnHandAsync();
         }
+
+        private void UpdateTotalsUI()
+        {
+            SubtotalText.Text = VM.Subtotal.ToString("N2");
+            DiscountText.Text = VM.Discount.ToString("N2");
+            TaxText.Text = VM.Tax.ToString("N2");
+            GrandTotalText.Text = VM.GrandTotal.ToString("N2");
+        }
+
 
         private Task InitFreeFormAsync()
         {
             VM.IsSupplierReadonly = false;
             VM.BasePurchaseDisplay = "—";
-            VM.TargetType = StockTargetType.Outlet;
+            VM.TargetType = InventoryLocationType.Outlet;
             VM.OutletId = AppState.Current?.CurrentOutletId > 0 ? AppState.Current.CurrentOutletId : (int?)null;
             VM.WarehouseId = null;
             VM.Lines.Clear();
@@ -456,56 +491,47 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task InitFromExistingReturnAsync(int returnId)
         {
-            var ret = await _svc.LoadReturnWithLinesAsync(returnId);
+            var (ret, lines) = await _svc.LoadReturnForAmendAsync(returnId);
             if (ret == null || !ret.IsReturn)
                 throw new InvalidOperationException($"Return #{returnId} not found.");
+
             var partyName = await _party.GetPartyNameAsync(ret.PartyId) ?? $"Supplier #{ret.PartyId}";
-            VM.IsSupplierReadonly = true;
+
+            // Rules: supplier can be changed, source always locked
+            VM.IsSupplierReadonly = false;
             VM.SupplierId = ret.PartyId;
             VM.SupplierDisplay = partyName;
-            VM.TargetType = ret.TargetType;
+
+            VM.TargetType = ret.LocationType;
             VM.OutletId = ret.OutletId;
             VM.WarehouseId = ret.WarehouseId;
             VM.RefPurchaseId = ret.RefPurchaseId;
             VM.ReturnNoDisplay = string.IsNullOrWhiteSpace(ret.DocNo) ? $"#{ret.Id}" : ret.DocNo;
             VM.BasePurchaseDisplay = ret.RefPurchaseId is int rid ? $"#{rid}" : "—";
-            var itemIds = (ret.Lines ?? new List<PurchaseLine>()).Select(l => l.ItemId).Distinct().ToList();
+            VM.IsSourceReadonly = true;
+
+            var itemIds = lines.Select(l => l.ItemId).Distinct().ToList();
             var meta = await _itemsRead.GetDisplayMetaAsync(itemIds);
+
             VM.Lines.Clear();
-            foreach (var l in ret.Lines ?? Enumerable.Empty<PurchaseLine>())
+
+            // We cap MaxReturnQty by on-hand (UI side), but real guard is in service
+            var lt = ret.LocationType;
+            int locId = lt == InventoryLocationType.Outlet ? ret.OutletId ?? 0 : ret.WarehouseId ?? 0;
+            var onHandMap = await _invRead.GetOnHandBulkAsync(itemIds, lt, locId, CutoffUtc());
+
+            foreach (var l in lines)
             {
                 meta.TryGetValue(l.ItemId, out var m);
                 var currentQty = Math.Abs(l.Qty);
-                decimal max;
-
-                if (ret.RefPurchaseId is int && l.RefPurchaseLineId is int refLineId)
-                {
-                    var remaining = await _svc.GetRemainingReturnableQtyAsync(refLineId);
-                    max = remaining + currentQty;
-                }
-                else
-                {
-                    if (!TryResolveInvLocation(out var lt, out var locId))
-                    {
-                        // No valid source picked yet → cap to currentQty only
-                        max = currentQty;
-                    }
-                    else
-                    {
-                        var onHand = await _invRead.GetOnHandAtLocationAsync(
-                            l.ItemId,
-                            lt,
-                            locId,
-                            CutoffUtc());
-                        max = onHand + currentQty;
-                    }
-                }
+                var onHand = onHandMap.TryGetValue(l.ItemId, out var v) ? v : 0m;
+                var max = currentQty + onHand;
 
                 VM.Lines.Add(new LineVM
                 {
                     OriginalLineId = l.RefPurchaseLineId,
                     ItemId = l.ItemId,
-                    DisplayName = (m.display ?? $"Item #{l.ItemId}"),
+                    DisplayName = m.display ?? $"Item #{l.ItemId}",
                     Sku = m.sku ?? "",
                     UnitCost = l.UnitCost,
                     OriginalUnitCost = l.UnitCost,
@@ -515,10 +541,35 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     MaxReturnQty = Math.Max(0, max)
                 });
             }
+
             VM.OtherCharges = ret.OtherCharges;
             VM.RecomputeTotals();
-            if (ret.RefPurchaseId is int) await CapReturnWithAgainstOnHandAsync();
+            UpdateTotalsUI();
+
+            VM.Payments.Clear();
+
+            // Only effective refunds belong in the editable grid
+            var refunds = (ret.Payments ?? Enumerable.Empty<PurchasePayment>())
+                .Where(p => p.IsEffective)                         // keep only live rows
+                .OrderBy(p => p.Id)
+                .Select(p => new RefundRow
+                {
+                    Method = p.Method,                             // TenderMethod.Cash/Bank
+                    Amount = Math.Round(p.Amount, 2),
+                    Note = p.Note
+                })
+                .ToList();
+
+            foreach (var r in refunds)
+                VM.Payments.Add(r);
+
+
+
+            if (ret.RefPurchaseId is int)
+                await CapReturnWithAgainstOnHandAsync();
+
         }
+
 
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
@@ -531,7 +582,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             if (_freeForm)
             {
-                if (VM.TargetType == StockTargetType.Outlet)
+                if (VM.TargetType == InventoryLocationType.Outlet)
                 {
                     if (VM.OutletId is null || VM.OutletId <= 0)
                     { MessageBox.Show("Select the Outlet to return from."); return; }
@@ -555,107 +606,121 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     MessageBox.Show("Add at least one line with Return Qty > 0.");
                     return;
                 }
-                var model = new Purchase
+
+                var user = AppState.Current?.CurrentUserName ?? "system";
+                var nowUtc = DateTime.UtcNow;
+
+                var header = new Purchase
                 {
-                    Id = _returnId ?? 0,                     // 0 for new
+                    Id = _returnId ?? 0,
                     IsReturn = true,
                     RefPurchaseId = _refPurchaseId ?? VM.RefPurchaseId,
                     PartyId = VM.SupplierId,
-                    TargetType = VM.TargetType,
-                    OutletId = VM.TargetType == StockTargetType.Outlet ? VM.OutletId : null,
-                    WarehouseId = VM.TargetType == StockTargetType.Warehouse ? VM.WarehouseId : null,
-                    PurchaseDate = DateTime.UtcNow,
-                    ReceivedAtUtc = DateTime.UtcNow,
+                    LocationType = VM.TargetType,
+                    OutletId = VM.TargetType == InventoryLocationType.Outlet ? VM.OutletId : null,
+                    WarehouseId = VM.TargetType == InventoryLocationType.Warehouse ? VM.WarehouseId : null,
+                    PurchaseDate = nowUtc,
+                    ReceivedAtUtc = nowUtc,
                     OtherCharges = Math.Round(VM.OtherCharges, 2),
                     Subtotal = VM.Subtotal,
                     Discount = VM.Discount,
                     Tax = VM.Tax,
                     GrandTotal = VM.GrandTotal
                 };
-                var lines = VM.Lines
+
+                // refunds
+                var refunds = (VM.Payments ?? Enumerable.Empty<RefundRow>())
+                 .Where(p => p.Amount > 0m)
+                 .Select(p => (p.Method, p.Amount, p.Note))
+                 .ToList();
+
+
+                var hasBaseInvoice = (_refPurchaseId ?? VM.RefPurchaseId).HasValue;
+                var isAmend = _returnId.HasValue;
+
+                // lines
+                var uiLines = VM.Lines
                     .Where(l => l.ReturnQty > 0.0001m)
-                    .Select(l =>
+                    .ToList();
+
+                if (uiLines.Count == 0)
+                {
+                    MessageBox.Show("Add at least one line with Return Qty > 0.");
+                    return;
+                }
+
+                Purchase result;
+
+                if (isAmend)
+                {
+                    // AMEND (with or without invoice)
+                    var lines = uiLines.Select(l =>
                     {
                         var unitCost = l.OriginalLineId.HasValue
-                            ? Math.Max(0, l.OriginalUnitCost ?? l.UnitCost)  // locked price path
-                            : Math.Max(0, l.UnitCost);                       // free-form path
+                            ? Math.Max(0, l.OriginalUnitCost ?? l.UnitCost)
+                            : Math.Max(0, l.UnitCost);
+
                         return new PurchaseLine
                         {
                             ItemId = l.ItemId,
-                            Qty = -Math.Abs(l.ReturnQty),          // returns are negative
+                            Qty = -Math.Abs(l.ReturnQty),
                             UnitCost = unitCost,
                             Discount = Math.Max(0, l.Discount),
                             TaxRate = Math.Max(0, l.TaxRate),
                             RefPurchaseLineId = l.OriginalLineId
                         };
-                    })
-                    .ToList();
+                    }).ToList();
+
+                    result = await _svc.FinalizeReturnAmendAsync(
+                        header,
+                        lines,
+                        refunds,
+                        user);
+                }
+                else if (hasBaseInvoice)
                 {
-                    var grouped = lines
-                        .GroupBy(x => x.ItemId)
-                        .Select(g => new { ItemId = g.Key, QtyOut = Math.Abs(g.Sum(x => x.Qty)) }) // x.Qty is negative for returns
-                        .ToList();
-                    foreach (var g in grouped)
-                    {
-                        if (!TryResolveInvLocation(out var lt, out var id)) { MessageBox.Show("Select a valid source location."); return; }
-                        var onHand = await _invRead.GetOnHandAtLocationAsync(g.ItemId, lt, id, CutoffUtc());
-                        if (onHand < g.QtyOut - 0.0001m)
+                    // NEW return WITH invoice
+                    var drafts = uiLines.Select(l =>
+                        new PurchaseReturnDraftLine
                         {
-                            MessageBox.Show(
-                                $"Insufficient stock at {VM.TargetDisplay}.\n" +
-                                $"Item #{g.ItemId}: On hand {onHand:0.##}, trying to return {g.QtyOut:0.##}.");
-                            return;
-                        }
-                    }
+                            OriginalLineId = l.OriginalLineId,
+                            ItemId = l.ItemId,
+                            ItemName = l.DisplayName,
+                            UnitCost = l.OriginalUnitCost ?? l.UnitCost,
+                            MaxReturnQty = l.MaxReturnQty,
+                            ReturnQty = l.ReturnQty
+                        }).ToList();
+
+                    result = await _svc.FinalizeReturnFromInvoiceAsync(
+                        header,
+                        drafts,
+                        refunds,
+                        user);
                 }
-                if ((_refPurchaseId ?? VM.RefPurchaseId).HasValue)
+                else
                 {
-                    foreach (var l in lines.Where(x => x.RefPurchaseLineId.HasValue))
+                    // NEW return WITHOUT invoice (free-form)
+                    var lines = uiLines.Select(l =>
                     {
-                        var remaining = await _svc.GetRemainingReturnableQtyAsync(l.RefPurchaseLineId!.Value);
-                        var req = Math.Abs(l.Qty); // l.Qty is negative for returns
-                        if (req > remaining + 0.0001m)
+                        var unitCost = Math.Max(0, l.UnitCost);
+                        return new PurchaseLine
                         {
-                            MessageBox.Show(
-                                $"Return exceeds remaining against invoice line #{l.RefPurchaseLineId}.\n" +
-                                $"Remaining {remaining:0.##}, trying to return {req:0.##}.");
-                            return;
-                        }
-                    }
+                            ItemId = l.ItemId,
+                            Qty = -Math.Abs(l.ReturnQty),
+                            UnitCost = unitCost,
+                            Discount = Math.Max(0, l.Discount),
+                            TaxRate = Math.Max(0, l.TaxRate),
+                            RefPurchaseLineId = null
+                        };
+                    }).ToList();
+
+                    result = await _svc.FinalizeReturnWithoutInvoiceAsync(
+                        header,
+                        lines,
+                        refunds,
+                        user);
                 }
-                var hasRefPurchase = (_refPurchaseId ?? VM.RefPurchaseId).HasValue;
-                var anyLineReferencesOriginal = lines.Any(l => l.RefPurchaseLineId.HasValue);
-                if (!hasRefPurchase && anyLineReferencesOriginal)
-                {
-                    MessageBox.Show("This return has lines referencing an original purchase but no base invoice is selected.");
-                    return;
-                }
-                if (VM.RefundAmount <= 0m && VM.GrandTotal > 0m)
-                {
-                    VM.RefundAmount = VM.GrandTotal;
-                }
-                var refunds = new System.Collections.Generic.List<SupplierRefundSpec>();
-                if (VM.RefundAmount > 0m)
-                {
-                    refunds.Add(new SupplierRefundSpec(VM.RefundMethod, VM.RefundAmount, "Refund on return"));
-                }
-                var user = AppState.Current?.CurrentUserName ?? "system";
-                await _svc.SaveReturnAsync(
-                    model,
-                    lines,
-                    user,
-                    refunds,
-                    tillSessionId: AppState.Current?.CurrentTillSessionId,
-                    counterId: AppState.Current?.CurrentCounterId
-                );
-                try
-                {
-                    await _gl.PostPurchaseReturnAsync(model);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine("GL post (PurchaseReturn) failed: " + ex);
-                }
+
                 MessageBox.Show("Purchase Return saved.");
                 this.DialogResult = true;
                 Close();
@@ -666,10 +731,39 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
+
         public class IdName
         {
             public int Id { get; set; }
             public string Name { get; set; } = "";
+        }
+
+        public sealed class RefundRow : INotifyPropertyChanged
+        {
+            private TenderMethod _method;
+            public TenderMethod Method
+            {
+                get => _method;
+                set { _method = value; OnPropertyChanged(nameof(Method)); }
+            }
+
+            private decimal _amount;
+            public decimal Amount
+            {
+                get => _amount;
+                set { _amount = value; OnPropertyChanged(nameof(Amount)); }
+            }
+
+            private string? _note;
+            public string? Note
+            {
+                get => _note;
+                set { _note = value; OnPropertyChanged(nameof(Note)); }
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+            private void OnPropertyChanged(string name)
+                => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
         public class ReturnVM : INotifyPropertyChanged
@@ -677,7 +771,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             // Header
             private int _supplierId;
             private string _supplierDisplay = "";
-            private StockTargetType _targetType = StockTargetType.Outlet;
+            private InventoryLocationType _targetType = InventoryLocationType.Outlet;
             private int? _outletId;
             private int? _warehouseId;
             private int? _refPurchaseId;
@@ -699,6 +793,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             private decimal _tax;
             private decimal _other = 0m;
             private decimal _grand;
+
+
             public ObservableCollection<TenderMethod> RefundMethods { get; } =
                 new ObservableCollection<TenderMethod>(Enum.GetValues(typeof(TenderMethod)).Cast<TenderMethod>());
             private TenderMethod _refundMethod = TenderMethod.Cash;
@@ -711,12 +807,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             public bool IsOutletSelected
             {
-                get => TargetType == StockTargetType.Outlet;
+                get => TargetType == InventoryLocationType.Outlet;
                 set
                 {
                     if (value)
                     {
-                        TargetType = StockTargetType.Outlet;
+                        TargetType = InventoryLocationType.Outlet;
                         OnChanged();               // for this property
                         OnChanged(nameof(IsWarehouseSelected)); // keep pair consistent
                         OnChanged(nameof(ShowOutletPicker));
@@ -726,12 +822,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             public bool IsWarehouseSelected
             {
-                get => TargetType == StockTargetType.Warehouse;
+                get => TargetType == InventoryLocationType.Warehouse;
                 set
                 {
                     if (value)
                     {
-                        TargetType = StockTargetType.Warehouse;
+                        TargetType = InventoryLocationType.Warehouse;
                         OnChanged();
                         OnChanged(nameof(IsOutletSelected));
                         OnChanged(nameof(ShowOutletPicker));
@@ -741,11 +837,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
 
             public ObservableCollection<LineVM> Lines { get; } = new();
+            public ObservableCollection<RefundRow> Payments { get; } = new();
             public int SupplierId { get => _supplierId; set { _supplierId = value; OnChanged(); } }
             public string SupplierDisplay { get => _supplierDisplay; set { _supplierDisplay = value; OnChanged(); } }
             public bool IsSupplierReadonly { get => _isSupplierReadonly; set { _isSupplierReadonly = value; OnChanged(); OnChanged(nameof(CanAddItems)); } }
             public int? RefPurchaseId { get => _refPurchaseId; set { _refPurchaseId = value; OnChanged(); OnChanged(nameof(CanAddItems)); } }
-            public StockTargetType TargetType
+            public InventoryLocationType TargetType
             {
                 get => _targetType;
                 set
@@ -765,7 +862,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public bool CanAddItems => !IsSupplierReadonly && RefPurchaseId is null;
 
             public string TargetDisplay =>
-                TargetType == StockTargetType.Outlet
+                TargetType == InventoryLocationType.Outlet
                     ? (OutletId is int o ? $"Outlet #{o}" : "Outlet —")
                     : (WarehouseId is int w ? $"Warehouse #{w}" : "Warehouse —");
 
@@ -797,9 +894,104 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
             public ObservableCollection<IdName> OutletList { get; } = new();
             public ObservableCollection<IdName> WarehouseList { get; } = new();
-            public bool ShowOutletPicker => TargetType == StockTargetType.Outlet;
-            public bool ShowWarehousePicker => TargetType == StockTargetType.Warehouse;
+            public bool ShowOutletPicker => TargetType == InventoryLocationType.Outlet;
+            public bool ShowWarehousePicker => TargetType == InventoryLocationType.Warehouse;
         }
+
+        private void RefundMethodBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // During InitializeComponent this can fire before all named controls are wired.
+            if (!IsLoaded)
+                return;
+
+            var sel =
+                (RefundMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString()
+                ?? RefundMethodBox.SelectedValue?.ToString()
+                ?? RefundMethodBox.Text
+                ?? "Cash";
+
+            var isBank = string.Equals(sel, "Bank", StringComparison.OrdinalIgnoreCase);
+
+            if (!_bankPaymentsAllowed && isBank)
+            {
+                MessageBox.Show("Bank payments are disabled. Configure a Purchase Bank Account in Invoice Settings for this outlet.");
+                try { RefundMethodBox.SelectedItem = RefundMethodCashItem; } catch { }
+                isBank = false;
+            }
+
+            // Guard against BankPickerPanel being null
+            if (BankPickerPanel != null)
+            {
+                BankPickerPanel.Visibility = isBank ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+
+        // Totals -> push OtherCharges into VM and refresh UI
+        private void OtherChargesBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!IsLoaded) return; // ignore designer / early events
+
+            decimal other = 0m;
+            if (!decimal.TryParse(OtherChargesBox.Text, out other))
+                other = 0m;
+
+            VM.OtherCharges = other;
+            VM.RecomputeTotals();
+            UpdateTotalsUI();
+        }
+
+
+
+        private void BtnAddRefund_Click(object sender, RoutedEventArgs e)
+        {
+            if (!decimal.TryParse(AdvanceAmtBox.Text, out var amt) || amt <= 0m)
+            {
+                MessageBox.Show("Enter amount > 0");
+                return;
+            }
+
+            // get method from the top combo
+            var sel = (RefundMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Cash";
+            var method = string.Equals(sel, "Bank", StringComparison.OrdinalIgnoreCase)
+                ? TenderMethod.Bank
+                : TenderMethod.Cash;
+
+            VM.Payments.Add(new RefundRow
+            {
+                Method = method,
+                Amount = Math.Round(amt, 2),
+                Note = null
+            });
+
+            AdvanceAmtBox.Clear();
+            RefundMethodBox.SelectedItem = RefundMethodCashItem;
+            if (BankPickerPanel != null) BankPickerPanel.Visibility = Visibility.Collapsed;
+        }
+
+     
+        private void RefundGrid_RowEditEnding(object sender, DataGridRowEditEndingEventArgs e)
+        {
+            if (e.EditAction != DataGridEditAction.Commit) return;
+            if (e.Row?.Item is not RefundRow row) return;
+
+            if (row.Amount <= 0m)
+            {
+                MessageBox.Show("Amount must be > 0");
+                row.Amount = 1m;
+            }
+        }
+
+        private void BtnDeleteRefund_Click(object sender, RoutedEventArgs e)
+        {
+            var row = (sender as FrameworkElement)?.DataContext as RefundRow
+                      ?? (RefundGrid.SelectedItem as RefundRow);
+            if (row == null) return;
+
+            VM.Payments.Remove(row);
+        }
+
+
 
         public class LineVM : INotifyPropertyChanged
         {
@@ -847,13 +1039,13 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private bool TryResolveInvLocation(out InventoryLocationType locType, out int locId)
         {
-            if (VM.TargetType == StockTargetType.Outlet && VM.OutletId is int o && o > 0)
+            if (VM.TargetType == InventoryLocationType.Outlet && VM.OutletId is int o && o > 0)
             {
                 locType = InventoryLocationType.Outlet;
                 locId = o;
                 return true;
             }
-            if (VM.TargetType == StockTargetType.Warehouse && VM.WarehouseId is int w && w > 0)
+            if (VM.TargetType == InventoryLocationType.Warehouse && VM.WarehouseId is int w && w > 0)
             {
                 locType = InventoryLocationType.Warehouse;
                 locId = w;
@@ -872,9 +1064,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (!_freeForm) { _previewOnHand = 0; UpdateOnHandBadge(); return; }
             if (!VM.CanAddItems) { _previewOnHand = 0; UpdateOnHandBadge(); return; }
             if (_previewItemId is null || _previewItemId <= 0) { _previewOnHand = 0; UpdateOnHandBadge(); return; }
-            if (VM.TargetType == StockTargetType.Outlet && (VM.OutletId is null || VM.OutletId <= 0))
+            if (VM.TargetType == InventoryLocationType.Outlet && (VM.OutletId is null || VM.OutletId <= 0))
             { _previewOnHand = 0; UpdateOnHandBadge(); return; }
-            if (VM.TargetType == StockTargetType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0))
+            if (VM.TargetType == InventoryLocationType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0))
             { _previewOnHand = 0; UpdateOnHandBadge(); return; }
             if (TryResolveInvLocation(out var lt, out var id))
                 _previewOnHand = await _invRead.GetOnHandAtLocationAsync(_previewItemId!.Value, lt, id, CutoffUtc());
@@ -888,17 +1080,17 @@ namespace Pos.Client.Wpf.Windows.Purchases
             ItemSearch.Tag = $"On hand: {_previewOnHand:0.##}";
         }
 
-        private bool IsAdmin()
-        {
-            var u = AppState.Current?.CurrentUser;
-            if (u != null && (u.Role == UserRole.Admin)) return true;
-            var roles = (AppState.Current?.CurrentUserRole ?? "")
-                        .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(r => r.Trim());
-            return roles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase)
-                               || r.Equals("Administrator", StringComparison.OrdinalIgnoreCase)
-                               || r.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase));
-        }
+        //private bool IsAdmin()
+        //{
+        //    var u = AppState.Current?.CurrentUser;
+        //    if (u != null && (u.Role == UserRole.Admin)) return true;
+        //    var roles = (AppState.Current?.CurrentUserRole ?? "")
+        //                .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+        //                .Select(r => r.Trim());
+        //    return roles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase)
+        //                       || r.Equals("Administrator", StringComparison.OrdinalIgnoreCase)
+        //                       || r.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase));
+        //}
 
         private int? LinkedOutletId()
         {
@@ -917,28 +1109,28 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 VM.WarehouseList.Add(w);
             if (_freeForm)
             {
-                var admin = IsAdmin();
+                var admin = AuthZ.IsAdminCached();
                 var linked = LinkedOutletId();
                 if (admin)
                 {
                     VM.IsSourceReadonly = false;
-                    if (VM.TargetType == StockTargetType.Outlet && (VM.OutletId is null || VM.OutletId <= 0))
+                    if (VM.TargetType == InventoryLocationType.Outlet && (VM.OutletId is null || VM.OutletId <= 0))
                         VM.OutletId = linked ?? VM.OutletList.FirstOrDefault()?.Id;
-                    if (VM.TargetType == StockTargetType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0))
+                    if (VM.TargetType == InventoryLocationType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0))
                         VM.WarehouseId = VM.WarehouseList.FirstOrDefault()?.Id;
                 }
                 else
                 {
                     if (linked is int lo && lo > 0)
                     {
-                        VM.TargetType = StockTargetType.Outlet;
+                        VM.TargetType = InventoryLocationType.Outlet;
                         VM.OutletId = lo;
                         VM.WarehouseId = null;
                         VM.IsSourceReadonly = true;
                     }
                     else
                     {
-                        VM.TargetType = StockTargetType.Outlet;
+                        VM.TargetType = InventoryLocationType.Outlet;
                         VM.OutletId = VM.OutletList.FirstOrDefault()?.Id;
                         VM.WarehouseId = null;
                         VM.IsSourceReadonly = true;
@@ -955,10 +1147,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 return;
             }
             int? outletId = null, warehouseId = null;
-            if (VM.TargetType == StockTargetType.Outlet) outletId = VM.OutletId;
-            else if (VM.TargetType == StockTargetType.Warehouse) warehouseId = VM.WarehouseId;
-            if (forceHideIfNoSource && ((VM.TargetType == StockTargetType.Outlet && (outletId is null || outletId <= 0)) ||
-                                        (VM.TargetType == StockTargetType.Warehouse && (warehouseId is null || warehouseId <= 0))))
+            if (VM.TargetType == InventoryLocationType.Outlet) outletId = VM.OutletId;
+            else if (VM.TargetType == InventoryLocationType.Warehouse) warehouseId = VM.WarehouseId;
+            if (forceHideIfNoSource && ((VM.TargetType == InventoryLocationType.Outlet && (outletId is null || outletId <= 0)) ||
+                                        (VM.TargetType == InventoryLocationType.Warehouse && (warehouseId is null || warehouseId <= 0))))
             {
                 AvailablePanel.Visibility = Visibility.Collapsed;
                 return;
@@ -1023,6 +1215,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 vm.RecomputeLineTotal();
                 VM.RecomputeTotals();
             }
+            UpdateTotalsUI();
             AvailablePanel.Visibility = Visibility.Collapsed;
         }
 
@@ -1030,35 +1223,67 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             if (!_freeForm) return; // only for Return-Without
             if (line == null) return;
-            if (VM.TargetType == StockTargetType.Outlet && (VM.OutletId is null || VM.OutletId <= 0)) return;
-            if (VM.TargetType == StockTargetType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0)) return;
+            if (VM.TargetType == InventoryLocationType.Outlet && (VM.OutletId is null || VM.OutletId <= 0)) return;
+            if (VM.TargetType == InventoryLocationType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0)) return;
             if (!TryResolveInvLocation(out var lt, out var id)) return;
             var onHand = await _invRead.GetOnHandAtLocationAsync(line.ItemId, lt, id, CutoffUtc());
             line.MaxReturnQty = Math.Max(0, onHand);
             line.ClampQty();
             line.RecomputeLineTotal();
             VM.RecomputeTotals();
+            UpdateTotalsUI();
+
         }
 
         private async Task CapReturnWithAgainstOnHandAsync()
         {
+            // Applies only when we’re working against an original invoice.
             var hasBase = _refPurchaseId.HasValue || VM.RefPurchaseId.HasValue;
             if (!hasBase) return;
-            if (VM.TargetType == StockTargetType.Outlet && (VM.OutletId is null || VM.OutletId <= 0)) return;
-            if (VM.TargetType == StockTargetType.Warehouse && (VM.WarehouseId is null || VM.WarehouseId <= 0)) return;
-            var itemIds = VM.Lines.Select(l => l.ItemId).Distinct().ToList();
+
+            // If we’re amending an existing return, we must allow “current returned qty + on-hand”.
+            var isAmend = _returnId.HasValue;
+
             if (!TryResolveInvLocation(out var lt, out var locId)) return;
+
+            var itemIds = VM.Lines.Select(l => l.ItemId).Distinct().ToList();
             var onHandMap = await _invRead.GetOnHandBulkAsync(itemIds, lt, locId, CutoffUtc());
+
             foreach (var l in VM.Lines)
             {
-                var invoiceCap = Math.Max(0, l.MaxReturnQty);
                 var onHand = onHandMap.TryGetValue(l.ItemId, out var v) ? v : 0m;
-                var hardCap = Math.Min(invoiceCap, onHand);
-                l.MaxReturnQty = hardCap;
+
+                if (isAmend)
+                {
+                    // For Amend: cap = already-returned-on-this-doc + current on-hand
+                    var currentQty = Math.Abs(l.ReturnQty);
+                    l.MaxReturnQty = Math.Max(0, currentQty + onHand);
+                }
+                else
+                {
+                    // For NEW “Return With”: cap = min(invoice remaining, on-hand)
+                    var invoiceCap = Math.Max(0, l.MaxReturnQty);
+                    l.MaxReturnQty = Math.Min(invoiceCap, onHand);
+                }
+
                 l.ClampQty();
                 l.RecomputeLineTotal();
             }
+
             VM.RecomputeTotals();
+            UpdateTotalsUI();
         }
+
+
+
+
+
+
+
+
+
+
+
+
     }
 }

@@ -167,10 +167,7 @@ namespace Pos.Persistence.Seeding
                 // 6 Parties
                 new("6",    "Parties",              AccountType.Parties, null,  true,  false, NormalSide.Debit),
                 new("61",   "Suppliers",              AccountType.Parties, "6",   true,  false, NormalSide.Credit),
-                new("6100", "Suppliers (control)",   AccountType.Parties,   "61",  false, true,  NormalSide.Credit),
                 new("62",   "Customers",            AccountType.Parties, "6",   true,  false, NormalSide.Debit),
-                new("6200", "Customers (control)",   AccountType.Parties,   "62",  false, true,  NormalSide.Debit),
-
                 new("63",   "Staff",               AccountType.Parties, "6",   true,  false, NormalSide.Debit),
                 new("64",   "Others",               AccountType.Parties, "6",   true,  false, NormalSide.Debit),
                 

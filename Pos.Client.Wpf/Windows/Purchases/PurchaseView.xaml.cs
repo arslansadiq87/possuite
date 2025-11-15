@@ -24,6 +24,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private bool _uiReady;
         private readonly ObservableCollection<Account> _bankAccounts = new();
         private bool _bankPaymentsAllowed; // true only if InvoiceSettings.PurchaseBankAccountId is set for the outlet
+        private readonly List<(TenderMethod method, decimal amount, string? note)> _stagedPayments = new();
+        private readonly ObservableCollection<PurchasePayment> _payments = new();
+        
+
+        // expose for XAML combo
+        public IReadOnlyList<TenderMethod> PaymentMethodItems { get; } = new[]
+        {
+            TenderMethod.Cash,
+            TenderMethod.Bank,
+        };
         public enum PurchaseEditorMode { Auto, Draft, Amend }
         public static readonly DependencyProperty ModeProperty =
            DependencyProperty.Register(
@@ -88,8 +98,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             private int _purchaseId;
             public int SupplierId { get => _supplierId; set { _supplierId = value; OnChanged(); } }
             private int _supplierId;
-            public StockTargetType TargetType { get => _targetType; set { _targetType = value; OnChanged(); } }
-            private StockTargetType _targetType;
+            public InventoryLocationType TargetType { get => _targetType; set { _targetType = value; OnChanged(); } }
+            private InventoryLocationType _targetType;
             public int? OutletId { get => _outletId; set { _outletId = value; OnChanged(); } }
             private int? _outletId;
             public int? WarehouseId { get => _warehouseId; set { _warehouseId = value; OnChanged(); } }
@@ -121,6 +131,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         }
 
         private readonly IPurchasesService _purchaseSvc;
+        private readonly IInvoiceSettingsService _invSettingSvc;
         private readonly IPartyLookupService _partySvc;
         private readonly ILookupService _lookup;  // ← interface
         private readonly IItemsReadService _itemsSvc;
@@ -136,6 +147,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             InitializeComponent();
             _purchaseSvc = App.Services.GetRequiredService<IPurchasesService>();  // ✅
+            _invSettingSvc = App.Services.GetRequiredService<IInvoiceSettingsService>();  // ✅
             _partySvc = App.Services.GetRequiredService<IPartyLookupService>();
             _itemsSvc = App.Services.GetRequiredService<IItemsReadService>();
             _gl = App.Services.GetRequiredService<IGlPostingService>();
@@ -336,11 +348,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             return false; // default: no permission
         }
-        private void EnforceDestinationPolicy(ref StockTargetType target, ref int? outletId, ref int? warehouseId)
+        private void EnforceDestinationPolicy(ref InventoryLocationType target, ref int? outletId, ref int? warehouseId)
         {
             if (!CanSelectDestination())
             {
-                target = StockTargetType.Outlet;
+                target = InventoryLocationType.Outlet;
                 outletId = AppState.Current.CurrentOutletId;
                 warehouseId = null;
             }
@@ -363,6 +375,28 @@ namespace Pos.Client.Wpf.Windows.Purchases
             if (pick is null) return;
             AddItemToLines(pick);                 // everything else is handled inside
         }
+
+        private void SupplierSearch_CustomerPicked(object sender, RoutedEventArgs e)
+        {
+            // Defer until after the popup closes and internal TextBox regains focus.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // Prefer VendorInvBox if usable, otherwise jump to items.
+                if (VendorInvBox != null && VendorInvBox.IsEnabled && VendorInvBox.IsVisible)
+                {
+                    VendorInvBox.IsTabStop = true;           // belt & suspenders
+                    VendorInvBox.Focusable = true;
+                    VendorInvBox.Focus();
+                    VendorInvBox.SelectAll();
+                }
+                else
+                {
+                    FocusItemSearchBox();                    // your existing helper
+                }
+            }), System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+
 
         private void LinesGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -558,7 +592,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             int? outletId = null;
             int? warehouseId = null;
-            StockTargetType target;
+            InventoryLocationType target;
             try
             {
                 if (DestWarehouseRadio.IsChecked == true)
@@ -569,7 +603,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         return;
                     }
                     warehouseId = wh.Id;
-                    target = StockTargetType.Warehouse;
+                    target = InventoryLocationType.Warehouse;
                 }
                 else if (DestOutletRadio.IsChecked == true)
                 {
@@ -579,20 +613,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         return;
                     }
                     outletId = ot.Id;
-                    target = StockTargetType.Outlet;
+                    target = InventoryLocationType.Outlet;
                 }
                 else
                 {
-                    target = StockTargetType.Outlet; // will be set via legacy box below
+                    target = InventoryLocationType.Outlet; // will be set via legacy box below
                 }
             }
             catch
             {
-                target = StockTargetType.Outlet; // UI not present
+                target = InventoryLocationType.Outlet; // UI not present
             }
 
             _model.PartyId = SupplierId.Value;
-            _model.TargetType = target;
+            _model.LocationType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
             _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
@@ -615,17 +649,32 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private async void BtnSaveFinal_Click(object sender, RoutedEventArgs e)
         {
             try { ((FrameworkElement)sender).IsEnabled = false; } catch { }
+
             try
             {
+                // --- validations ---
                 RecomputeAndUpdateTotals();
-                if (_lines.Count == 0) { MessageBox.Show("Add at least one item."); return; }
+
+                if (_lines.Count == 0)
+                {
+                    MessageBox.Show("Add at least one item.");
+                    return;
+                }
+
                 if (_lines.Any(l => l.Qty <= 0 || l.UnitCost < 0 || l.Discount < 0))
-                { MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative."); return; }
+                {
+                    MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative.");
+                    return;
+                }
+
                 foreach (var l in _lines)
                 {
                     var baseAmt = l.Qty * l.UnitCost;
                     if (l.Discount > baseAmt)
-                    { MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'."); return; }
+                    {
+                        MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'.");
+                        return;
+                    }
                 }
 
                 if (SupplierId is null)
@@ -635,33 +684,37 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
                 _model.PartyId = SupplierId.Value;
 
-
+                // --- destination selection ---
                 int? outletId = null, warehouseId = null;
-                StockTargetType target;
+                InventoryLocationType target;
                 try
                 {
                     if (DestWarehouseRadio.IsChecked == true)
                     {
                         if (WarehouseBox.SelectedItem is not Warehouse wh) { MessageBox.Show("Please pick a warehouse."); return; }
-                        warehouseId = wh.Id; target = StockTargetType.Warehouse;
+                        warehouseId = wh.Id; target = InventoryLocationType.Warehouse;
                     }
                     else if (DestOutletRadio.IsChecked == true)
                     {
                         if (OutletBox.SelectedItem is not Outlet ot) { MessageBox.Show("Please pick an outlet."); return; }
-                        outletId = ot.Id; target = StockTargetType.Outlet;
+                        outletId = ot.Id; target = InventoryLocationType.Outlet;
                     }
-                    else { target = StockTargetType.Outlet; }
+                    else { target = InventoryLocationType.Outlet; }
                 }
-                catch { target = StockTargetType.Outlet; }
+                catch { target =       InventoryLocationType.Outlet; }
+
                 EnforceDestinationPolicy(ref target, ref outletId, ref warehouseId);
-                _model.PartyId = SupplierId.Value;
-                _model.TargetType = target;
+
+                // --- header fields ---
+                _model.LocationType = target;
                 _model.OutletId = outletId;
                 _model.WarehouseId = warehouseId;
                 _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
                 _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now;
                 _model.Status = PurchaseStatus.Final;
-                var lines = _lines.Select(l => new PurchaseLine
+
+                // --- line payload (detached) ---
+                var linePayload = _lines.Select(l => new PurchaseLine
                 {
                     ItemId = l.ItemId,
                     Qty = l.Qty,
@@ -669,111 +722,289 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     Discount = l.Discount,
                     TaxRate = l.TaxRate,
                     Notes = l.Notes
-                });
-                var user = AppState.Current?.CurrentUserName ?? "admin";
-                try
-                {
-                    _model = await _purchaseSvc.ReceiveAsync(_model, lines, user);
+                }).ToList();
 
-                    //try
-                    //{
-                    //    await _gl.PostPurchaseAsync(_model);
-                    //}
-                    //catch (Exception ex)
-                    //{
-                    //    System.Diagnostics.Debug.WriteLine("GL post (Purchase) failed: " + ex);
-                    //    // Non-fatal
-                    //}
-                    MessageBox.Show(
-                        $"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}",
-                        "Saved (Final)", MessageBoxButton.OK, MessageBoxImage.Information);
-                    await ResetFormAsync(keepDestination: true);
-                }
-                catch (InvalidOperationException ex)
+                // --- optional "pay on save" list ---
+                var onReceive = new List<(TenderMethod method, decimal amount, string? note)>(_stagedPayments);
+                // UI guard: prevent overpay before calling the service
+                if (onReceive.Count > 0)
                 {
-                    MessageBox.Show(ex.Message, "Amendment blocked",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    // make sure totals are up-to-date
+                    RecomputeAndUpdateTotals();
+
+                    if (!ValidateStagedPayments(onReceive))
+                        return; // stop; user saw a message already
                 }
-                catch (DbUpdateException ex)
+
+                // 🔍 LOG payments to Output window
+                // ✅ Correct tuple logging
+                System.Diagnostics.Debug.WriteLine($"[UI] onReceive.Count={onReceive.Count}");
+                System.Diagnostics.Debug.WriteLine($"[UI] onReceive.Sum={onReceive.Sum(x => x.amount)}");
+
+                foreach (var (method, amount, note) in onReceive)
                 {
-                    MessageBox.Show("Save failed:\n" + ex.GetBaseException().Message,
-                        "Database error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
+                    System.Diagnostics.Debug.WriteLine($"[UI] Payment -> Method={method}, Amount={amount}, Note='{note}'");
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("Unexpected error:\n" + ex.Message,
-                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
+
+                // resolve current username once
+                var user = AppState.Current?.CurrentUserName
+                           ?? System.Environment.UserName
+                           ?? "system";
+
+                System.Diagnostics.Debug.WriteLine($"[UI] FinalizeReceiveAsync called with user={user}, outlet={_model.OutletId}, supplier={_model.PartyId}");
+
+                // --- service call ---
+                _model = await _purchaseSvc.FinalizeReceiveAsync(
+                    purchase: _model,
+                    lines: linePayload,
+                    onReceivePayments: onReceive,
+                    outletId: _model.OutletId ?? (GetCurrentOutletIdForHeader() ?? 0),
+                    supplierId: _model.PartyId,
+                    tillSessionId: null,
+                    counterId: null,
+                    user: user,
+                    ct: default
+                );
+
+                System.Diagnostics.Debug.WriteLine($"[UI] FinalizeReceiveAsync returned Id={_model.Id} DocNo={_model.DocNo} Grand={_model.GrandTotal}");
+
+                MessageBox.Show(
+                    $"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}",
+                    "Saved (Final)", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                await ResetFormAsync(keepDestination: true);
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Amendment blocked",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            {
+                MessageBox.Show("Save failed:\n" + ex.GetBaseException().Message,
+                    "Database error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Unexpected error:\n" + ex.Message,
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
                 try { ((FrameworkElement)sender).IsEnabled = true; } catch { }
             }
         }
-                
-        private ObservableCollection<PurchasePayment> _payments = new();
+
+        private decimal RemainingDueBeforeStaging()
+        {
+            // only persisted + effective rows (Id > 0)
+            var paidPersisted = _payments.Where(p => p.Id > 0 && p.IsEffective)
+                                         .Sum(p => p.Amount);
+            var due = decimal.Round(_model.GrandTotal - paidPersisted, 2, MidpointRounding.AwayFromZero);
+            return Math.Max(0m, due);
+        }
+
+            
+        // validate the whole staged list (applies each in sequence and reduces the remaining)
+        private bool ValidateStagedPayments(IReadOnlyList<(TenderMethod method, decimal amount, string? note)> staged)
+        {
+            var remaining = RemainingDueBeforeStaging();
+            for (int i = 0; i < staged.Count; i++)
+            {
+                var (method, amount, note) = staged[i];
+                var label = $"Payment #{i + 1} ({method})";
+
+                if (amount <= 0m)
+                {
+                    MessageBox.Show($"{label} must be greater than 0.", "Invalid payment",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+                if (amount > remaining + 0.0001m)
+                {
+                    MessageBox.Show($"{label} exceeds remaining due ({remaining:N2}).",
+                        "Overpay blocked", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+
+                // subtract using same rounding mode as server
+                remaining = Math.Max(0m, decimal.Round(remaining - amount, 2, MidpointRounding.AwayFromZero));
+            }
+            return true;
+        }
+
+
+
+
         private async Task RefreshPaymentsAsync()
         {
-            if (_model.Id <= 0) { PaymentsGrid.ItemsSource = null; return; }
-            var tuple = await _purchaseSvc.GetWithPaymentsAsync(_model.Id);
             _payments.Clear();
-            foreach (var p in tuple.payments) _payments.Add(p);
+
+            if (_model.Id > 0)
+            {
+                var pays = await _purchaseSvc.GetPaymentsAsync(_model.Id, CancellationToken.None);
+                foreach (var p in pays) _payments.Add(p);
+            }
+
+
+            // append staged (if any)
+            foreach (var sp in _stagedPayments)
+            {
+                _payments.Add(new PurchasePayment
+                {
+                    Id = 0,
+                    PurchaseId = _model.Id,
+                    TsUtc = DateTime.UtcNow,
+                    Kind = (_model.Status == PurchaseStatus.Draft) ? PurchasePaymentKind.Advance : PurchasePaymentKind.OnReceive,
+                    Method = sp.method,
+                    Amount = sp.amount,
+                    Note = "(staged — will post on Save)"
+                });
+            }
+
             PaymentsGrid.ItemsSource = _payments;
         }
 
-        private async void BtnAddAdvance_Click(object sender, RoutedEventArgs e)
+
+        private void BtnAddAdvance_Click(object sender, RoutedEventArgs e)
         {
-            if (!await EnsurePurchasePersistedAsync()) return;
             if (!decimal.TryParse(AdvanceAmtBox.Text, out var amt) || amt <= 0m)
             { MessageBox.Show("Enter amount > 0"); return; }
+
             var sel = (AdvanceMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Cash";
             var method = Enum.TryParse<TenderMethod>(sel, out var m) ? m : TenderMethod.Cash;
-            var outletId = _model.OutletId ?? GetCurrentOutletIdForHeader() ?? 0;
-            if (outletId <= 0) { MessageBox.Show("Pick an outlet/destination first."); return; }
-            if (method != TenderMethod.Cash && method != TenderMethod.Bank)
+
+            // (Optional) if you want to allow only Cash during editing, enforce here.
+            // Bank can still work if we resolve bank account during final save (see service patch below).
+
+            // Stage locally
+            _stagedPayments.Add((method, Math.Round(amt, 2), note: null));
+
+            // Show it in the grid without hitting DB
+            _payments.Add(new PurchasePayment
             {
-                MessageBox.Show("Only Cash or Bank are allowed for purchase payments.");
-                return;
-            }
-            int? bankAccountId = null;
-            if (method == TenderMethod.Bank)
-            {
-                if (!_bankPaymentsAllowed)
-                {
-                    MessageBox.Show("Bank payments are disabled. Configure a Purchase Bank Account in Invoice Settings for this outlet.");
-                    return;
-                }
-                if (BankAccountBox.SelectedItem is not Account bank)
-                {
-                    MessageBox.Show("Select a bank account for this payment.");
-                    return;
-                }
-                bankAccountId = bank.Id;
-            }
-            var kind = _model.Status == PurchaseStatus.Draft
-                ? PurchasePaymentKind.Advance
-                : PurchasePaymentKind.OnReceive;
-            await _purchaseSvc.AddPaymentAsync(
-                _model.Id,
-                kind,
-                method,
-                amt,
-                note: null,
-                outletId: outletId,
-                supplierId: _model.PartyId,
-                tillSessionId: null,
-                counterId: null,
-                user: "admin",
-                bankAccountId: bankAccountId   // NEW: pass selected bank (or null for Cash)
-            );
-            await RefreshPaymentsAsync();
+                Id = 0, // staged marker
+                PurchaseId = _model.Id,
+                TsUtc = DateTime.UtcNow,
+                Kind = (_model.Status == PurchaseStatus.Draft) ? PurchasePaymentKind.Advance : PurchasePaymentKind.OnReceive,
+                Method = method,
+                Amount = amt,
+                Note = "(staged — will post on Save)"
+            });
+            PaymentsGrid.ItemsSource = _payments;
+
             AdvanceAmtBox.Clear();
             AdvanceMethodBox.SelectedItem = AdvanceMethodCashItem;
             BankPickerPanel.Visibility = Visibility.Collapsed;
         }
+
+        private void PaymentsGrid_RowEditEnding(object sender, DataGridRowEditEndingEventArgs e)
+        {
+            if (e.EditAction != DataGridEditAction.Commit) return;
+            if (e.Row?.Item is not PurchasePayment row) return;
+
+            if (row.Id == 0)
+            {
+                // update staged list to match the edited grid row
+                var idx = _payments.IndexOf(row);
+                if (idx >= 0)
+                {
+                    // find corresponding staged entry by position among staged items
+                    var stagedIdx = 0;
+                    for (int i = 0, s = 0; i < _payments.Count; i++)
+                    {
+                        if (_payments[i].Id == 0)
+                        {
+                            if (i == idx)
+                            {
+                                var amt = Math.Round(row.Amount, 2);
+                                if (amt <= 0m) { MessageBox.Show("Amount must be > 0"); row.Amount = 1m; }
+                                // update staged entry
+                                _stagedPayments[s] = (row.Method, Math.Round(row.Amount, 2), null);
+                                break;
+                            }
+                            s++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // persisted row: push changes to service
+                _ = UpdatePersistedPaymentAsync(row);
+            }
+        }
+
+        private async Task UpdatePersistedPaymentAsync(PurchasePayment row)
+        {
+            try
+            {
+                await _purchaseSvc.UpdatePaymentAsync(row.Id, Math.Round(row.Amount, 2), row.Method, row.Note, AppState.Current?.CurrentUser?.DisplayName ?? "system");
+                // no exception → row already reflects latest values
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Update payment failed");
+                await RefreshPaymentsAsync(); // revert view
+            }
+        }
+
+
+        private async void BtnDeletePayment_Click(object? sender, RoutedEventArgs e)
+        {
+            var row = (sender as FrameworkElement)?.DataContext as PurchasePayment
+                      ?? (PaymentsGrid.SelectedItem as PurchasePayment);
+            if (row == null) return;
+
+            if (row.Id == 0)
+            {
+                // staged: remove from both staged list and grid
+                // find staged index by position among staged items
+                var idx = _payments.IndexOf(row);
+                if (idx >= 0)
+                {
+                    int stagedIdx = -1;
+                    for (int i = 0, s = 0; i < _payments.Count; i++)
+                    {
+                        if (_payments[i].Id == 0)
+                        {
+                            if (i == idx) { stagedIdx = s; break; }
+                            s++;
+                        }
+                    }
+                    if (stagedIdx >= 0) _stagedPayments.RemoveAt(stagedIdx);
+                    _payments.RemoveAt(idx);
+                }
+            }
+            else
+            {
+                try
+                {
+                    var user = AppState.Current?.CurrentUserName
+                               ?? AppState.Current?.CurrentUser?.DisplayName
+                               ?? "system";
+
+                    await _purchaseSvc.RemovePaymentAsync(row.Id, user);
+
+                    // IMPORTANT: do not _payments.Remove(row);
+                    await ReloadPaymentsAsync();            // refresh from DB so you see the reversal row
+                    RecomputeAndUpdateTotals();             // refresh header CashPaid/CreditDue on screen
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Delete payment failed");
+                }
+            }
+
+        }
+
+        private async Task ReloadPaymentsAsync()
+        {
+            var list = await _purchaseSvc.GetPaymentsAsync(_model.Id, CancellationToken.None);
+            _payments.Clear();
+            foreach (var p in list) _payments.Add(p);
+        }
+
 
         private async Task<bool> EnsurePurchasePersistedAsync()
         {
@@ -790,18 +1021,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
 
             int? outletId = null, warehouseId = null;
-            var target = StockTargetType.Outlet;
+            var target = InventoryLocationType.Outlet;
             try
             {
                 if (DestWarehouseRadio.IsChecked == true && WarehouseBox.SelectedItem is Warehouse wh)
-                { warehouseId = wh.Id; target = StockTargetType.Warehouse; }
+                { warehouseId = wh.Id; target = InventoryLocationType.Warehouse; }
                 else if (DestOutletRadio.IsChecked == true && OutletBox.SelectedItem is Outlet ot)
-                { outletId = ot.Id; target = StockTargetType.Outlet; }
+                { outletId = ot.Id; target = InventoryLocationType.Outlet; }
             }
             catch { /* ignore if controls not present */ }
             EnforceDestinationPolicy(ref target, ref outletId, ref warehouseId);
             _model.PartyId = SupplierId.Value;
-            _model.TargetType = target;
+            _model.LocationType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
             _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
@@ -958,7 +1189,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             int? outletId = null;
             int? warehouseId = null;
-            StockTargetType target;
+            InventoryLocationType target;
             try
             {
                 if (DestWarehouseRadio.IsChecked == true)
@@ -968,7 +1199,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         MessageBox.Show("Please pick a warehouse."); return;
                     }
                     warehouseId = wh.Id;
-                    target = StockTargetType.Warehouse;
+                    target = InventoryLocationType.Warehouse;
                 }
                 else if (DestOutletRadio.IsChecked == true)
                 {
@@ -977,20 +1208,20 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         MessageBox.Show("Please pick an outlet."); return;
                     }
                     outletId = ot.Id;
-                    target = StockTargetType.Outlet;
+                    target = InventoryLocationType.Outlet;
                 }
                 else
                 {
-                    target = StockTargetType.Outlet; // legacy fallback
+                    target = InventoryLocationType.Outlet; // legacy fallback
                 }
             }
             catch
             {
-                target = StockTargetType.Outlet; // UI not present
+                target = InventoryLocationType.Outlet; // UI not present
             }
             EnforceDestinationPolicy(ref target, ref outletId, ref warehouseId);
             _model.PartyId = SupplierId.Value;
-            _model.TargetType = target;
+            _model.LocationType = target;
             _model.OutletId = outletId;
             _model.WarehouseId = warehouseId;
             _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
@@ -1034,7 +1265,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             try { OtherChargesBox.Text = draft.OtherCharges.ToString("0.00"); } catch { }
             try
             {
-                var partyName = await _purchaseSvc.GetPartyNameAsync(draft.PartyId);
+                var partyName = await _partySvc.GetPartyNameAsync(draft.PartyId);
                 SupplierSearch.SelectedCustomerId = draft.PartyId;
                 SupplierSearch.Query = partyName ?? $"Supplier #{draft.PartyId}";
 
@@ -1045,7 +1276,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             try
             {
-                if (draft.TargetType == StockTargetType.Warehouse && draft.WarehouseId.HasValue)
+                if (draft.LocationType == InventoryLocationType.Warehouse && draft.WarehouseId.HasValue)
                 {
                     DestWarehouseRadio.IsChecked = true;
                     WarehouseBox.IsEnabled = true; OutletBox.IsEnabled = false;
@@ -1102,7 +1333,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             GrandTotalText.Text = draft.GrandTotal.ToString("0.00");
             VM.PurchaseId = draft.Id;
             VM.SupplierId = draft.PartyId;
-            VM.TargetType = draft.TargetType;
+            VM.TargetType = draft.LocationType;
             VM.OutletId = draft.OutletId;
             VM.WarehouseId = draft.WarehouseId;
             VM.PurchaseDate = draft.PurchaseDate;
@@ -1270,7 +1501,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 Id = p.Id,
                 PartyId = p.PartyId,
-                TargetType = p.TargetType,
+                LocationType = p.LocationType,
                 OutletId = p.OutletId,
                 WarehouseId = p.WarehouseId,
                 VendorInvoiceNo = p.VendorInvoiceNo,
@@ -1286,7 +1517,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             try { DatePicker.SelectedDate = _model.PurchaseDate; } catch { }
             await InitDestinationsAsync();
             await SetDestinationSelectionAsync();
-            var partyName = await _purchaseSvc.GetPartyNameAsync(p.PartyId);
+            var partyName = await _partySvc.GetPartyNameAsync(p.PartyId);
             SupplierSearch.SelectedCustomerId = p.PartyId;
             SupplierSearch.Query = partyName ?? $"Supplier #{p.PartyId}";
             _lines.Clear();
@@ -1345,7 +1576,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Loaded);
             try
             {
-                if (_model.TargetType == StockTargetType.Outlet && _model.OutletId.HasValue)
+                if (_model.LocationType == InventoryLocationType.Outlet && _model.OutletId.HasValue)
                 {
                     DestOutletRadio.IsChecked = true;
                     OutletBox.IsEnabled = true;
@@ -1357,7 +1588,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                         if (ot != null) OutletBox.SelectedItem = ot;
                     }
                 }
-                else if (_model.TargetType == StockTargetType.Warehouse && _model.WarehouseId.HasValue)
+                else if (_model.LocationType == InventoryLocationType.Warehouse && _model.WarehouseId.HasValue)
                 {
                     DestWarehouseRadio.IsChecked = true;
                     WarehouseBox.IsEnabled = true;
@@ -1380,9 +1611,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 Id = VM.PurchaseId,           // 0 for new, >0 for amend
                 PartyId = VM.SupplierId,
-                TargetType = VM.TargetType,
-                OutletId = VM.TargetType == StockTargetType.Outlet ? VM.OutletId : null,
-                WarehouseId = VM.TargetType == StockTargetType.Warehouse ? VM.WarehouseId : null,
+                LocationType = VM.TargetType,
+                OutletId = VM.TargetType == InventoryLocationType.Outlet ? VM.OutletId : null,
+                WarehouseId = VM.TargetType == InventoryLocationType.Warehouse ? VM.WarehouseId : null,
                 PurchaseDate = VM.PurchaseDate,
                 VendorInvoiceNo = VM.VendorInvoiceNo,
                 IsReturn = false

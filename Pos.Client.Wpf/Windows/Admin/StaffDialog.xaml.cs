@@ -78,7 +78,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     Id = _id ?? 0,
                     Code = string.IsNullOrWhiteSpace(CodeBox.Text)
-                        ? null
+                        ? string.Empty
                         : CodeBox.Text.Trim(),
                     FullName = name,
                     JoinedOnUtc = jdUtc,

@@ -24,8 +24,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         private EditSaleLoadDto _orig = null!;
         private decimal _origSubtotal, _origTax, _origGrand;
         private readonly ObservableCollection<CartLine> _cart = new();
-        //public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
-        //private readonly Dictionary<string, ItemIndexDto> _barcodeIndex = new(StringComparer.OrdinalIgnoreCase);
         public ObservableCollection<Pos.Domain.Models.Sales.ItemIndexDto> DataContextItemIndex { get; } = new();
         private readonly Dictionary<string, Pos.Domain.Models.Sales.ItemIndexDto> _barcodeIndex = new(StringComparer.OrdinalIgnoreCase);
 
@@ -51,7 +49,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if (e.Key == Key.F9) { SaveRevision_Click(s, e); e.Handled = true; }
                 if (e.Key == Key.F5) { Revert_Click(s, e); e.Handled = true; }
             };
-
             Loaded += async (_, __) =>
             {
                 await LoadSaleAsync();
@@ -63,28 +60,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 ItemSearch.FocusSearch();
             };
         }
-
-        //public record ItemIndexDto(
-        //    int Id,
-        //    string Name,
-        //    string Sku,
-        //    string Barcode,
-        //    decimal Price,
-        //    string? TaxCode,
-        //    decimal DefaultTaxRatePct,
-        //    bool TaxInclusive,
-        //    decimal? DefaultDiscountPct,
-        //    decimal? DefaultDiscountAmt,
-        //    string? ProductName,
-        //    string? Variant1Name,
-        //    string? Variant1Value,
-        //    string? Variant2Name,
-        //    string? Variant2Value
-        //)
-        //{
-        //    public string DisplayName =>
-        //        ProductNameComposer.Compose(ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
-        //}
+    
 
         private async Task LoadSaleAsync()
         {
@@ -239,21 +215,29 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
         }
 
+        // Pos.Client.Wpf/Windows/Sales/EditSaleWindow.xaml.cs
+        // locate:
         private static void RecalcLineShared(CartLine l)
         {
-            var a = PricingMath.CalcLine(new LineInput(
-                Qty: l.Qty,
-                UnitPrice: l.UnitPrice,
-                DiscountPct: l.DiscountPct,
-                DiscountAmt: l.DiscountAmt,
-                TaxRatePct: l.TaxRatePct,
-                TaxInclusive: l.TaxInclusive));
+            var t = Pos.Domain.Formatting.LinePricing.Recalc(
+                qty: l.Qty,
+                unitPrice: l.UnitPrice,
+                discountPct: l.DiscountPct ?? 0m,
+                discountAmt: l.DiscountAmt ?? 0m,
+                taxInclusive: l.TaxInclusive,
+                taxRatePct: l.TaxRatePct
+            );
 
-            l.UnitNet = a.UnitNet;
-            l.LineNet = a.LineNet;
-            l.LineTax = a.LineTax;
-            l.LineTotal = a.LineTotal;
+            // Map back to your line fields
+            // (UnitNet = per-unit net excl. tax; keep your existing rounding helper)
+            l.LineNet = t.Net;
+            l.LineTax = t.Tax;
+            l.LineTotal = t.Total;
+            l.UnitNet = (l.Qty > 0)
+                          ? Pos.Domain.Pricing.PricingMath.RoundMoney(t.Net / l.Qty)
+                          : t.Net;
         }
+
 
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
         {

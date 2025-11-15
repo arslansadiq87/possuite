@@ -15,6 +15,7 @@ using Pos.Client.Wpf.Infrastructure;
 using Pos.Persistence.Sync; // for IOutboxWriter
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Intrinsics.Arm;
+using Pos.Domain.Services;
 
 namespace Pos.Client.Wpf.Windows.Purchases
 {
@@ -24,6 +25,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         public int? SelectedHeldPurchaseId { get; private set; }  // bubble selection back to caller
         private readonly IPurchaseCenterReadService _read;
         private readonly IPurchasesServiceFactory _svcFactory;
+
         public Style? CurrentButtonStyle { get; set; }
         public class UiPurchaseRow
         {
@@ -37,6 +39,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public int Revision { get; set; }
             public bool HasRevisions => Revision > 1;
             public bool IsReturnWithInvoice { get; set; }
+
+            public bool HasActiveReturn { get; set; }       // for ORIGINAL purchases
 
         }
         public class UiLineRow
@@ -134,9 +138,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 UpdateActions(null);
                 return;
             }
+
             var kind = sel.IsReturn ? "Return" : "Purchase";
             var revPart = sel.HasRevisions ? $"  Rev {sel.Revision}  " : "  ";
             HeaderText.Text = $"{kind} {sel.DocNoOrId}{revPart}Status: {sel.Status}  Grand: {sel.GrandTotal:0.00}";
+
             var rows = await _read.GetPreviewLinesAsync(sel.PurchaseId);
             foreach (var r in rows)
                 _lines.Add(new UiLineRow
@@ -148,7 +154,13 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     UnitCost = r.UnitCost,
                     LineTotal = r.LineTotal
                 });
-            UpdateActions(sel);
+
+            // NEW: fetch and store guard flags on the selected row
+            var (hasActive, isReturnWith) = await _read.GetPreviewActionGuardsAsync(sel.PurchaseId);
+            sel.HasActiveReturn = hasActive;
+            sel.IsReturnWithInvoice = isReturnWith;
+
+            UpdateActions(sel); // keep your existing signature
         }
 
         private void UpdateActions(UiPurchaseRow? sel)
@@ -170,9 +182,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
             if (!sel.IsReturn && sel.Status == nameof(PurchaseStatus.Final))
             {
-                BtnAmend.Visibility = Visibility.Visible;
-                BtnReturnWith.Visibility = Visibility.Visible;
-                BtnVoidPurchase.Visibility = Visibility.Visible;
+                BtnAmend.Visibility = sel.HasActiveReturn ? Visibility.Collapsed : Visibility.Visible;
+                BtnReturnWith.Visibility = sel.HasActiveReturn ? Visibility.Collapsed : Visibility.Visible;
+                BtnVoidPurchase.Visibility = sel.HasActiveReturn ? Visibility.Collapsed : Visibility.Visible;
+                BtnVoidPurchase.ToolTip = sel.HasActiveReturn
+           ? "Void blocked: this purchase has non-voided returns. Void those returns first."
+           : null;
+                BtnReturnWith.ToolTip = sel.HasActiveReturn
+           ? "Return with Invoice blocked: this purchase has non-voided returns. You cannot add more returns against this invoice."
+           : null;
+
                 return;
             }
             if (sel.IsReturn && sel.Status == nameof(PurchaseStatus.Final))
@@ -279,19 +298,27 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 var reason = Microsoft.VisualBasic.Interaction.InputBox(
                     $"Void return {sel.DocNoOrId}\nEnter reason:", "Void Return", "Wrong return");
                 if (string.IsNullOrWhiteSpace(reason)) return;
+
                 try
                 {
-                    var svc = _svcFactory.Create();
-                    await svc.VoidReturnAsync(sel.PurchaseId, reason, user);
-                    MessageBox.Show("Return voided.");
+                    var retSvc = App.Services.GetRequiredService<IPurchaseReturnsService>();
+                    await retSvc.VoidReturnAsync(sel.PurchaseId, reason, user);
+                    MessageBox.Show("Return voided.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     LoadPurchases();
+                    _lines.Clear();
+                    UpdateActions(null);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    MessageBox.Show(ex.Message, "Void blocked", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Failed to void return: " + ex.Message);
+                    MessageBox.Show("Failed to void return: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
                 return;
             }
+
             var reason2 = Microsoft.VisualBasic.Interaction.InputBox(
                 $"Void purchase {sel.DocNoOrId}\nEnter reason:", "Void Purchase", "Wrong purchase");
             if (string.IsNullOrWhiteSpace(reason2)) return;

@@ -16,6 +16,7 @@ using System.Windows.Media;
 //using Pos.Persistence.Services;
 using Pos.Domain.Services;
 using Pos.Client.Wpf.Security;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Pos.Client.Wpf.Windows.Inventory
 {
@@ -47,38 +48,54 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            var u = await AuthZ.CurrentUserAsync();
-            bool canPickSource = u?.IsGlobalAdmin == true || await AuthZ.IsManagerOrAboveAsync();
+            var u = await AuthZ.CurrentUserAsync(); // u may be null; keep it as nullable
+            bool canPickSource = (u?.IsGlobalAdmin ?? false) || await AuthZ.IsManagerOrAboveAsync();
+
             _whs = (await _lookups.GetWarehousesAsync()).ToList();
             _outs = (await _lookups.GetOutletsAsync()).ToList();
+
             FromTypeBox.SelectedIndex = 0; // Warehouse
-            ToTypeBox.SelectedIndex = 1; // Outlet
+            ToTypeBox.SelectedIndex = 1;   // Outlet
+
             FromPicker.DisplayMemberPath = "Name";
             FromPicker.SelectedValuePath = "Id";
             ToPicker.DisplayMemberPath = "Name";
             ToPicker.SelectedValuePath = "Id";
+
             ItemSearch.GotFocus += (_, __) => HideAvailableBadge();
+
             RebindPickerForType(FromTypeBox, FromPicker);
             RebindPickerForType(ToTypeBox, ToPicker);
+
             if (!canPickSource)
             {
                 FromTypeBox.SelectedIndex = 1; // force Outlet for outlet user
                 RebindPickerForType(FromTypeBox, FromPicker);
-                var myOutId = (await _lookups.GetUserOutletIdsAsync(u.Id)).FirstOrDefault();
+
+                var myOutId = (u is not null)
+                    ? (await _lookups.GetUserOutletIdsAsync(u.Id)).FirstOrDefault()
+                    : 0;
+
                 if (myOutId > 0) FromPicker.SelectedValue = myOutId;
+
                 FromTypeBox.IsEnabled = false;
                 FromPicker.IsEnabled = false;
             }
+
             FromTypeBox.SelectionChanged += FromTypeBox_SelectionChanged;
             ToTypeBox.SelectionChanged += ToTypeBox_SelectionChanged;
             FromPicker.SelectionChanged += AnyPicker_SelectionChanged;
             ToPicker.SelectionChanged += AnyPicker_SelectionChanged;
+
             _lookupsReady = true;
             EffectiveDate.SelectedDate = DateTime.Today;
+
             LinesGrid.ItemsSource = _lines;
             LinesCountText.Text = "0";
+
             ItemSearch.Focus();
         }
+
 
         private void RebindPickerForType(ComboBox typeBox, ComboBox picker)
         {
@@ -169,9 +186,14 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private async Task EnsureDraftAsync()
         {
             if (_doc != null && _doc.Id > 0) return;
+
             var (ft, fid, tt, tid) = GetHeader();
             var effUtc = DateTime.SpecifyKind((EffectiveDate.SelectedDate ?? DateTime.Today), DateTimeKind.Local).ToUniversalTime();
-            _doc = await _svc.CreateDraftAsync(ft, fid, tt, tid, effUtc, _state.CurrentUser.Id);
+
+            var userId = _state.CurrentUser?.Id
+                ?? throw new InvalidOperationException("No current user is set. Please sign in again.");
+
+            _doc = await _svc.CreateDraftAsync(ft, fid, tt, tid, effUtc, userId);
             FromTypeBox.IsEnabled = false;
             FromPicker.IsEnabled = false;
         }
@@ -205,12 +227,19 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     .Select(l => new TransferLineDto { ItemId = l.ItemId, QtyExpected = l.QtyExpected, Remarks = l.Remarks })
                     .ToList();
                 _doc = await _svc.UpsertLinesAsync(_doc!.Id, dtos, replaceAll: true);
+
                 var dateLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).Date;
                 var effUtc = DateTime.SpecifyKind(dateLocal, DateTimeKind.Local).ToUniversalTime();
                 bool autoReceive = AutoReceiveCheck.IsChecked == true;
-                _doc = await _svc.DispatchAsync(_doc.Id, effUtc, _state.CurrentUser.Id, autoReceive);
+
+                var userId = _state.CurrentUser?.Id
+                    ?? throw new InvalidOperationException("No current user is set. Please sign in again.");
+
+                _doc = await _svc.DispatchAsync(_doc.Id, effUtc, userId, autoReceive);
+
                 MessageBox.Show(autoReceive ? "Transfer dispatched & received." : "Transfer dispatched.",
                                 "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+
                 _doc = null;
                 _lines.Clear();
                 LinesGrid.Items.Refresh();
@@ -256,8 +285,14 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     QtyReceived = l.QtyReceived ?? l.QtyExpected,
                     VarianceNote = l.VarianceNote
                 }).ToList();
+
                 var whenUtc = DateTime.UtcNow;
-                _doc = await _svc.ReceiveAsync(_doc.Id, whenUtc, lines, _state.CurrentUser.Id);
+
+                var userId = _state.CurrentUser?.Id
+                    ?? throw new InvalidOperationException("No current user is set. Please sign in again.");
+
+                _doc = await _svc.ReceiveAsync(_doc.Id, whenUtc, lines, userId);
+
                 MessageBox.Show("Received.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 _doc = null;
                 _lines.Clear();
@@ -348,11 +383,12 @@ namespace Pos.Client.Wpf.Windows.Inventory
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
-        private bool TryGetCurrentCellEditor(out TextBox editor)
+        private bool TryGetCurrentCellEditor([NotNullWhen(true)] out TextBox? editor)
         {
             editor = Keyboard.FocusedElement as TextBox;
-            return editor != null;
+            return editor is not null;
         }
+
 
         private async void LinesGrid_PreparingCellForEdit(object sender, DataGridPreparingCellForEditEventArgs e)
         {

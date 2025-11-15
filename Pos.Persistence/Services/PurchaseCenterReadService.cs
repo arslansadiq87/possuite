@@ -19,6 +19,11 @@ namespace Pos.Client.Wpf.Services
         Task<IReadOnlyList<LineRowDto>> GetPreviewLinesAsync(int purchaseId);
 
         Task<bool> AnyHeldDraftAsync();
+        Task<(bool HasActiveReturns, bool IsReturnWithInvoice)> GetPreviewActionGuardsAsync(
+    int purchaseId, CancellationToken ct = default);
+        // IPurchasesReadService (or your read service interface)
+     
+
     }
 
     public sealed class PurchaseRowDto
@@ -109,6 +114,31 @@ namespace Pos.Client.Wpf.Services
 
             return filtered;
         }
+
+        // Implementation alongside GetPreviewLinesAsync
+        public async Task<(bool HasActiveReturns, bool IsReturnWithInvoice)> GetPreviewActionGuardsAsync(
+            int purchaseId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            var p = await db.Purchases.AsNoTracking()
+                .Select(x => new { x.Id, x.IsReturn, x.RefPurchaseId, x.Status })
+                .FirstAsync(x => x.Id == purchaseId, ct);
+
+            bool hasActiveReturns = false;
+            if (!p.IsReturn)
+            {
+                hasActiveReturns = await db.Purchases.AsNoTracking()
+                    .AnyAsync(r => r.IsReturn
+                                && r.RefPurchaseId == p.Id
+                                && r.Status != PurchaseStatus.Voided, ct);
+            }
+
+            bool isReturnWithInvoice = p.IsReturn && p.RefPurchaseId != null;
+            return (hasActiveReturns, isReturnWithInvoice);
+        }
+
+
 
         public async Task<IReadOnlyList<LineRowDto>> GetPreviewLinesAsync(int purchaseId)
         {

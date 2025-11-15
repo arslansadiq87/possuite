@@ -51,12 +51,6 @@ namespace Pos.Client.Wpf.Windows.Till
             Close();
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
-        }
-
         /* ---------- Helpers ---------- */
 
         private void AppendDigit(char c)

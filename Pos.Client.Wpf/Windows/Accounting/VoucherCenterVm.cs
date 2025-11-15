@@ -79,7 +79,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
             var statuses = (StatusMulti?.Count ?? 0) > 0 ? StatusMulti : null;
 
             var list = await _svc.SearchAsync(
-                StartDate, EndDate, SearchText, outletFilter,
+                StartDate, EndDate, SearchText, OutletFilter,
                 types, statuses);
 
             foreach (var x in list)

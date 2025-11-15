@@ -133,16 +133,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
             Close();
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
-        }
-
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter) { OpenSelected(); e.Handled = true; }
-            if (e.Key == Key.Escape) { Cancel_Click(sender, e); }
         }
     }
 }

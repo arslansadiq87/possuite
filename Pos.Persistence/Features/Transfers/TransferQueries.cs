@@ -141,33 +141,34 @@ namespace Pos.Persistence.Features.Transfers
                 foreach (var r in rows)
                 {
                     // From
-                    string fromName;
                     if (r.FromType == InventoryLocationType.Warehouse)
                     {
-                        if (!warehouses.TryGetValue(r.FromId, out fromName))
-                            fromName = $"Warehouse #{r.FromId}";
+                        string? wName;
+                        _ = warehouses.TryGetValue(r.FromId, out wName);
+                        r.FromDisplay = wName ?? $"Warehouse #{r.FromId}";
                     }
                     else
                     {
-                        if (!outlets.TryGetValue(r.FromId, out fromName))
-                            fromName = $"Outlet #{r.FromId}";
+                        string? oName;
+                        _ = outlets.TryGetValue(r.FromId, out oName);
+                        r.FromDisplay = oName ?? $"Outlet #{r.FromId}";
                     }
-                    r.FromDisplay = fromName;
 
                     // To
-                    string toName;
                     if (r.ToType == InventoryLocationType.Warehouse)
                     {
-                        if (!warehouses.TryGetValue(r.ToId, out toName))
-                            toName = $"Warehouse #{r.ToId}";
+                        string? wName;
+                        _ = warehouses.TryGetValue(r.ToId, out wName);
+                        r.ToDisplay = wName ?? $"Warehouse #{r.ToId}";
                     }
                     else
                     {
-                        if (!outlets.TryGetValue(r.ToId, out toName))
-                            toName = $"Outlet #{r.ToId}";
+                        string? oName;
+                        _ = outlets.TryGetValue(r.ToId, out oName);
+                        r.ToDisplay = oName ?? $"Outlet #{r.ToId}";
                     }
-                    r.ToDisplay = toName;
                 }
+
 
             }
 

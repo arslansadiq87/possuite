@@ -89,7 +89,6 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
             try
             {
-                // Use a temp variable instead of tuple deconstruction to avoid CS8130
                 var result = await _ledger.GetCashBookAsync(
                     SelectedOutlet.Id,
                     FromDate,
@@ -99,6 +98,19 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
                 Opening = result.opening;
                 Closing = result.closing;
+
+                // ⬇️ Add Opening Balance row before transactions
+                Rows.Add(new CashBookRowVm
+                {
+                    TsUtc = FromDate,
+                    Memo = "Opening Balance",
+                    Debit = Opening > 0 ? Opening : 0m,
+                    Credit = Opening < 0 ? Math.Abs(Opening) : 0m,
+                    Running = Opening,
+                    SourceRef = null,
+                    IsVoided = false,
+                    TillId = null
+                });
 
                 foreach (var r in result.rows)
                 {

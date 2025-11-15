@@ -28,18 +28,25 @@ namespace Pos.Persistence.Services
         // ✅ NEW method required by ILookupService
         public async Task<IReadOnlyList<Account>> GetAccountsAsync(int? outletId, CancellationToken ct = default)
         {
-            var q = _db.Accounts.AsNoTracking();
+            var q = _db.Accounts.AsNoTracking()
+                .Where(a => a.AllowPosting && a.IsActive);   // only selectable/postable accounts
 
-            // Scope by outlet (null = global accounts)
             if (outletId is null)
+            {
+                // When no outlet context, show only global posting accounts
                 q = q.Where(a => a.OutletId == null);
+            }
             else
-                q = q.Where(a => a.OutletId == outletId);
+            {
+                // In an outlet context, show BOTH outlet-specific and global (null) posting accounts
+                q = q.Where(a => a.OutletId == outletId || a.OutletId == null);
+            }
 
             return await q
                 .OrderBy(a => a.Code)
                 .ThenBy(a => a.Name)
                 .ToListAsync(ct);
         }
+
     }
 }

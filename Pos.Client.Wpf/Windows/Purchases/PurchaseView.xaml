@@ -90,13 +90,15 @@
                                 <Controls:CustomerSearchBox
                                     x:Name="SupplierSearch"
                                     Width="260"
-                                    Mode="Suppliers"/>
+                                    Mode="Suppliers"
+                                    CustomerPicked="SupplierSearch_CustomerPicked" />
                             </StackPanel>
 
 
                             <StackPanel Margin="0,0,12,0">
                                 <TextBlock Text="Vendor Invoice #" FontWeight="SemiBold"/>
-                                <TextBox x:Name="VendorInvBox" Width="160" Height="28"
+                                <TextBox x:Name="VendorInvBox" Width="160" Height="28" IsTabStop="True"
+         Focusable="True"
     KeyDown="VendorInvBox_KeyDown" />
                                 <!-- NEW -->
 
@@ -319,27 +321,54 @@
 
                                     <!-- keep the payments grid unchanged -->
                                     <DataGrid x:Name="PaymentsGrid"
-                  AutoGenerateColumns="False"
-                  Height="120"
-                  Margin="0,6,0,0"
-                  CanUserAddRows="False"
-                  IsReadOnly="True"
-                  MouseDoubleClick="PaymentsGrid_MouseDoubleClick"
-                  ContextMenuOpening="PaymentsGrid_ContextMenuOpening">
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False"
+                                          CanUserDeleteRows="False"
+                                          IsReadOnly="False"
+                                          ItemsSource="{Binding Payments}"  
+                                          RowEditEnding="PaymentsGrid_RowEditEnding"
+                                          SelectionMode="Single"
+                                          SelectionUnit="FullRow" Height="95">
+
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Method"
+                                                Binding="{Binding Method}"
+                                                IsReadOnly="True"
+                                                Width="120"/>
+
+
+                                            <!-- Amount -->
+                                            <DataGridTextColumn Header="Amount"
+                            Binding="{Binding Amount, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}"
+                            IsReadOnly="{Binding Id, Converter={StaticResource PersistedToReadOnlyConverter}}"/>
+
+                                            <!-- Note -->
+                                            <DataGridTextColumn Header="Note" 
+                            Binding="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+                            IsReadOnly="{Binding Id, Converter={StaticResource PersistedToReadOnlyConverter}}"/>
+
+                                            <!-- Delete button -->
+                                            <DataGridTemplateColumn Header="">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Button Content="Delete"
+                            Padding="6,2"
+                            Click="BtnDeletePayment_Click"
+                            Tag="{Binding}"
+                            ToolTip="Delete payment (staged rows delete locally; saved rows delete from DB)"/>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+
+                                        <!-- Optional context menu -->
                                         <DataGrid.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Edit…" Click="EditPayment_Click"/>
-                                                <Separator />
-                                                <MenuItem Header="Delete" Click="DeletePayment_Click"/>
+                                                <MenuItem Header="Delete" Click="BtnDeletePayment_Click" CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                             </ContextMenu>
                                         </DataGrid.ContextMenu>
-                                        <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Kind" Binding="{Binding Kind}"/>
-                                            <DataGridTextColumn Header="Method" Binding="{Binding Method}"/>
-                                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat=N2}"/>
-                                            <DataGridTextColumn Header="When (UTC)" Binding="{Binding TsUtc}"/>
-                                        </DataGrid.Columns>
                                     </DataGrid>
+
                                 </StackPanel>
                             </GroupBox>
 

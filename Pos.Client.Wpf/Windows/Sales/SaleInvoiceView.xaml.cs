@@ -27,21 +27,15 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly ISalesService _sales;
         private readonly ITerminalContext _ctx;
         private readonly IOutletReadService _outletRead;
-        //private readonly IInvoiceSettingsService _invSettings;
         private readonly IPartyLookupService _partyLookup;
         private readonly IInventoryReadService _invRead;
         private Pos.Domain.Models.Settings.InvoiceSettingsDto? _settings; // cache
-
-        //private readonly DbContextOptions<PosClientDbContext> _dbOptions;
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
-        
         private int? _selectedCustomerId;
-        
         private bool _printOnSave;
         private bool _askBeforePrintOnSave;
-        // --- NEW: card enable/disable flag based on invoice settings ---
-     
+    
         public static readonly DependencyProperty IsCardEnabledProperty =
             DependencyProperty.Register(nameof(IsCardEnabled), typeof(bool), typeof(SaleInvoiceView), new PropertyMetadata(false));
 
@@ -55,11 +49,9 @@ namespace Pos.Client.Wpf.Windows.Sales
         private int CounterId => AppState.Current?.CurrentCounterId ?? 1;
         private decimal _invDiscPct = 0m;
         private decimal _invDiscAmt = 0m;
-
         #pragma warning disable CS0649
         private string? _enteredCustomerName;
         #pragma warning restore CS0649
-
         private int cashierId => AppState.Current?.CurrentUser?.Id ?? 1;
         private string cashierDisplay => AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
         private int? _selectedSalesmanId = null;
@@ -79,7 +71,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             _sales = sales;
             _invRead = invRead;                     // if present
             _partyLookup = partyLookup;             // <-- store it
-            //_invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>();
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
             CartGrid.ItemsSource = _cart;
             UpdateTotal();
@@ -94,15 +85,12 @@ namespace Pos.Client.Wpf.Windows.Sales
                 _printOnSave = _settings.PrintOnSave;
                 _askBeforePrintOnSave = _settings.AskToPrintOnSave;
                 IsCardEnabled = (_settings.SalesCardClearingAccountId != null);
-
                 UpdateInvoicePreview();
                 UpdateInvoiceDateNow();
                 UpdateLocationUi();
                 WalkInCheck_Changed(WalkInCheck!, new RoutedEventArgs());
-
                 if (Window.GetWindow(this) is Window w)
                     w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
-
                 FocusScan();
             };
         }
@@ -119,9 +107,7 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             try
             {
-                // _settings was loaded in Loaded handler
                 var s = _settings ?? await _sales.GetInvoiceSettingsAsync(_ctx.OutletId, "en");
-
                 await ReceiptPrinter.PrintSaleAsync(
                     sale: sale,
                     cart: _cart,
@@ -173,18 +159,15 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show($"Unsupported SelectedItem type: {selected.GetType().FullName}");
                 return;
             }
-
             // ---- proceed with your existing logic using 'pick' ----
             var itemId = pick.Id;
             var existing = _cart.FirstOrDefault(c => c.ItemId == itemId);
             var proposedTotal = (existing?.Qty ?? 0) + 1;
-
             if (!await GuardSaleQtyAsync(itemId, proposedTotal))
             {
                 try { ItemSearch?.FocusSearch(); } catch { }
                 return;
             }
-
             if (existing != null)
             {
                 existing.Qty += 1;
@@ -194,7 +177,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 AddItemToCart(pick);
             }
-
             UpdateTotal();
             try { ItemSearch?.FocusSearch(); } catch { }
         }
@@ -248,7 +230,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                     if (ok != DialogResult.OK) return;
                 }
             }
-
             _cart.Clear();
             _invDiscPct = 0m; _invDiscAmt = 0m;
             InvDiscPctBox.Text = ""; InvDiscAmtBox.Text = "";
@@ -312,7 +293,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             var (subtotal, invDiscValue, tax, grand, items, qty) = ComputeTotalsSnapshot();
             if (grand <= 0m) throw new InvalidOperationException("Total must be > 0.");
-
             var req = new SaleHoldRequest
             {
                 OutletId = OutletId,
@@ -333,7 +313,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 HoldTag = holdTag,
                 Footer = string.IsNullOrWhiteSpace(FooterBox?.Text) ? null : FooterBox!.Text
             };
-
             foreach (var l in _cart)
             {
                 req.Lines.Add(new SaleHoldRequest.SaleLineInput(
@@ -341,17 +320,14 @@ namespace Pos.Client.Wpf.Windows.Sales
                     l.TaxCode, l.TaxRatePct, l.TaxInclusive,
                     l.UnitNet, l.LineNet, l.LineTax, l.LineTotal));
             }
-
             await _sales.HoldAsync(req);
         }
-
 
         private async void UpdateInvoicePreview()
         {
             var prev = await _sales.GetInvoicePreviewAsync(CounterId);
             InvoicePreviewText.Text = prev.Human;
         }
-
 
         private void UpdateInvoiceDateNow()
         {
@@ -425,7 +401,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             _invoiceFooter = FooterBox.Text ?? "";
         }
-
       
         public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
 
@@ -435,11 +410,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             DataContextItemIndex.Clear();
             foreach (var it in list) DataContextItemIndex.Add(it);
         }
-
-        //private TillSession? GetOpenTill(PosClientDbContext db)
-        //        => db.TillSessions.OrderByDescending(t => t.Id)
-        //               .FirstOrDefault(t => t.OutletId == OutletId && t.CounterId == CounterId && t.CloseTs == null);
-              
+           
         private void InvoiceDiscountChanged(object sender, TextChangedEventArgs e)
         {
             decimal.TryParse(InvDiscPctBox.Text, out _invDiscPct);
@@ -478,8 +449,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         private void UpdateLocationUi()
         {
             if (_ctx == null) return;
-
-            //InventoryLocationText.Text = $"Outlet: {_ctx.OutletName}";
             _ = RefreshInventoryLocationAsync();   // fire-and-forget async populate
         }
 
@@ -489,17 +458,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 var outletName = await _outletRead.GetOutletNameAsync(_ctx.OutletId, ct);
                 var counterName = await _outletRead.GetCounterNameAsync(_ctx.CounterId, ct);
-
-                // If these are WPF TextBlocks you referenced by x:Name
                 InventoryLocationText.Text = $"Outlet: {outletName}";
-                // If you also show counter somewhere:
-                // CounterText.Text = $"Counter: {counterName}";
             }
             catch (Exception)
             {
-                // Keep UI resilient; show fallback instead of crashing
                 InventoryLocationText.Text = $"Outlet: #{_ctx.OutletId}";
-                // optionally log ex via your logger/dialogs
             }
         }
 
@@ -536,7 +499,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             DiscountText.Text = discountSigned.ToString("N2", CultureInfo.CurrentCulture);
             TaxText.Text = taxtotal.ToString("N2", CultureInfo.CurrentCulture);
             TotalText.Text = grand.ToString("N2", CultureInfo.CurrentCulture);
-            //RecomputeDueChange();
             var itemsCount = _cart.Count;
             var qtySum = _cart.Sum(l => l.Qty);
             ItemsCountText.Text = itemsCount.ToString();
@@ -547,7 +509,6 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             // 0) basic guards
             if (!_cart.Any()) { MessageBox.Show("Cart is empty."); return; }
-
             // 1) ensure open till (via service)
             var open = await _sales.GetOpenTillAsync(OutletId, CounterId);
             if (open == null)
@@ -555,7 +516,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show("Till is CLOSED. Please open till before taking payment.", "Till Closed");
                 return;
             }
-
             // 2) recompute current cart math (fresh per-line totals)
             foreach (var cl in _cart) RecalcLineShared(cl);
             var lineNetSum = _cart.Sum(l => l.LineNet);
@@ -580,7 +540,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 adjNetSum += adjNet;
                 adjTaxSum += adjTax;
             }
-
             var subtotal = adjNetSum;               // after invoice-level discount
             var taxtotal = adjTaxSum;
             var grand = subtotal + taxtotal;
@@ -781,18 +740,21 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private static void RecalcLineShared(CartLine l)
         {
-            var a = PricingMath.CalcLine(new LineInput(
-                Qty: l.Qty,
-                UnitPrice: l.UnitPrice,
-                DiscountPct: l.DiscountPct,
-                DiscountAmt: l.DiscountAmt,
-                TaxRatePct: l.TaxRatePct,
-                TaxInclusive: l.TaxInclusive));
-            l.UnitNet = a.UnitNet;
-            l.LineNet = a.LineNet;
-            l.LineTax = a.LineTax;
-            l.LineTotal = a.LineTotal;
+            var t = LinePricing.Recalc(
+                qty: l.Qty,
+                unitPrice: l.UnitPrice,
+                discountPct: l.DiscountPct ?? 0m,
+                discountAmt: l.DiscountAmt ?? 0m,
+                taxInclusive: l.TaxInclusive,
+                taxRatePct: l.TaxRatePct
+            );
+
+            l.LineNet = t.Net;    // ex-tax net for the line
+            l.LineTax = t.Tax;    // tax for the line
+            l.LineTotal = t.Total;  // final line total
+            l.UnitNet = (l.Qty > 0) ? PricingMath.RoundMoney(t.Net / l.Qty) : 0m;
         }
+
 
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
         {
@@ -934,6 +896,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             // Fill for receipt; still editable
             if (CustNameBox != null) CustNameBox.Text = picked.Name;
             if (CustPhoneBox != null) CustPhoneBox.Text = picked.Phone;
+            FocusScan(); // focuses ItemSearch’s TextBox for instant scanning
         }
 
         private void CustomerClearBtn_Click(object sender, RoutedEventArgs e)

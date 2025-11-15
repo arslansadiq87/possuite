@@ -29,7 +29,7 @@ using Pos.Domain.Services.Security;
 using Pos.Domain.Services.Admin;
 using Pos.Persistence.Services.Admin;
 using Pos.Domain.Services.System;
-using Pos.Persistence.Services.System;
+using Pos.Persistence.Services.Systems;
 using Pos.Domain.Services.Accounting;
 using Pos.Persistence.Services.Accounting;
 using Pos.Persistence.Services.Hr;
@@ -41,6 +41,7 @@ namespace Pos.Client.Wpf
 
         public App()
         {
+
             // If your file has InitializeComponent(), keep it first.
             try { InitializeComponent(); } catch { /* ok if not generated */ }
             CrashReporter.Install(this);
@@ -67,10 +68,25 @@ namespace Pos.Client.Wpf
         {
             base.OnStartup(e);
 
+
             ThemeManager.Current.ChangeTheme(Application.Current, "Light.Blue");
 
             // ----- BUILD DI FIRST (moved up) -----
             var sc = new ServiceCollection();
+            sc.AddLogging(b =>
+            {
+                b.ClearProviders();          // stop Console/Debug spam providers if you added them
+                                             // b.AddDebug();             // OPTIONAL: re-enable later if you want *your* ILogger logs
+
+                b.SetMinimumLevel(LogLevel.None); // everything below Warning is dropped
+
+                // Hard filters:
+                b.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
+                b.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+                b.AddFilter("System.Net.Http", LogLevel.Error);     // drop Http info/diagnostics
+                b.AddFilter("Microsoft", LogLevel.Warning);
+                b.AddFilter("System", LogLevel.None);
+            });
             // 1) Connection string
             var cs = DbPath.ConnectionString;
             var dbFile = DbPath.Get();
@@ -141,8 +157,8 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchView>(); // UserControl; may be hosted in a window
             
-            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AccountLedgerWindow>();
-            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.CashBookWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AccountLedgerView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.CashBookView>();
             // VMs
             sc.AddTransient<AccountLedgerVm>();
             sc.AddTransient<CashBookVm>();   // (for the other window as well)
@@ -156,18 +172,24 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
             sc.AddScoped<IPurchaseCenterReadService, PurchaseCenterReadService>();
             sc.AddScoped<IPurchasesServiceFactory, PurchasesServiceFactory>();
-            sc.AddScoped<IGlPostingService, GlPostingService>();
+            
             sc.AddScoped<ICoaService, CoaService>();
             sc.AddScoped<IOutletService, OutletService>();
             sc.AddTransient<VoucherCenterVm>();
             sc.AddTransient<VoucherCenterView>();
-            sc.AddTransient<GlPostingService>();
+            
             sc.AddScoped<ISalesService, SalesService>();
             sc.AddScoped<IInvoiceService, InvoiceService>();
             //Manged services
+            sc.AddScoped<IPurchaseReturnsService, PurchaseReturnsService>();
+            sc.AddScoped<IProductMediaService, ProductMediaService>();
             sc.AddScoped<IPartyPostingService, PartyPostingService>();
             sc.AddScoped<IPayrollService, PayrollService>();
             sc.AddScoped<IStaffReadService, StaffReadService>();
+            sc.AddScoped<IGlPostingService, GlPostingService>();
+            sc.AddScoped<IGlPostingServiceDb, GlPostingService>();  // db-aware, used by persistence services
+            sc.AddScoped<IGlReadService, GlReadService>();
+
 
             sc.AddSingleton<Pos.Domain.Services.Security.IAuthService, Pos.Persistence.Services.Security.AuthService>();
             sc.AddSingleton<Pos.Domain.Services.Security.IAuthorizationService, Pos.Persistence.Services.Security.AuthorizationService>();
@@ -415,7 +437,7 @@ namespace Pos.Client.Wpf
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine("[SYNC] Error in loop: " + ex.Message);
+                    //Debug.WriteLine("[SYNC] Error in loop: " + ex.Message);
                     // keep going
                 }
 

@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Pos.Domain.Services.System;
 
-namespace Pos.Persistence.Services.System
+namespace Pos.Persistence.Services.Systems
 {
     /// <summary>
     /// Machine identity provider backed by a file in %ProgramData%\PosSuite (Windows) or the OS common app-data dir.

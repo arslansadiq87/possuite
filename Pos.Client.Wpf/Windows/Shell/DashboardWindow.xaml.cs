@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Controls;
 using Pos.Client.Wpf.Debugging;
 using Pos.Client.Wpf.Windows.Settings;
+using Pos.Persistence.Services;
 
 
 namespace Pos.Client.Wpf.Windows.Shell
@@ -22,7 +23,7 @@ namespace Pos.Client.Wpf.Windows.Shell
         {
             InitializeComponent();
             #if DEBUG
-            FocusTracer.Attach(this, "SHELL");
+            //FocusTracer.Attach(this, "SHELL");
             #endif
 
 

@@ -243,20 +243,25 @@ namespace Pos.Client.Wpf.Windows.Sales
             UpdateTotal();
         }
 
-     
+
         private static void RecalcLineShared(ReturnLine l)
         {
-            var a = PricingMath.CalcLine(new LineInput(
-                Qty: l.Qty,
-                UnitPrice: l.UnitPrice,
-                DiscountPct: l.DiscountPct,
-                DiscountAmt: l.DiscountAmt,
-                TaxRatePct: l.TaxRatePct,
-                TaxInclusive: l.TaxInclusive));
-            l.UnitNet = a.UnitNet;
-            l.LineNet = a.LineNet;
-            l.LineTax = a.LineTax;
-            l.LineTotal = a.LineTotal;
+            var t = LinePricing.Recalc(
+                qty: l.Qty,
+                unitPrice: l.UnitPrice,
+                discountPct: l.DiscountPct ?? 0m,
+                discountAmt: l.DiscountAmt ?? 0m,
+                taxInclusive: l.TaxInclusive,
+                taxRatePct: l.TaxRatePct
+            );
+
+            // Map to your existing properties
+            l.LineNet = t.Net;
+            l.LineTax = t.Tax;
+            l.LineTotal = t.Total;
+
+            // Keep per-unit net consistent with your current rounding policy
+            l.UnitNet = (l.Qty > 0) ? Pos.Domain.Pricing.PricingMath.RoundMoney(t.Net / l.Qty) : 0m;
         }
 
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
@@ -515,15 +520,15 @@ namespace Pos.Client.Wpf.Windows.Sales
 
                 Lines = _cart.Select(l =>
                 {
-                    var a = PricingMath.CalcLine(new LineInput(
-                        Qty: l.Qty,
-                        UnitPrice: l.UnitPrice,
-                        DiscountPct: l.DiscountPct,
-                        DiscountAmt: l.DiscountAmt,
-                        TaxRatePct: l.TaxRatePct,
-                        TaxInclusive: l.TaxInclusive));
+                    var t = LinePricing.Recalc(
+                        qty: l.Qty,
+                        unitPrice: l.UnitPrice,
+                        discountPct: l.DiscountPct ?? 0m,
+                        discountAmt: l.DiscountAmt ?? 0m,
+                        taxInclusive: l.TaxInclusive,
+                        taxRatePct: l.TaxRatePct
+                    );
 
-                    // IMPORTANT: qty stays positive; service treats IsReturn as stock IN
                     return new SaleFinalizeRequest.SaleLineInput(
                         ItemId: l.ItemId,
                         Qty: l.Qty,
@@ -533,12 +538,13 @@ namespace Pos.Client.Wpf.Windows.Sales
                         TaxCode: l.TaxCode,
                         TaxRatePct: l.TaxRatePct,
                         TaxInclusive: l.TaxInclusive,
-                        UnitNet: a.UnitNet,
-                        LineNet: a.LineNet,
-                        LineTax: a.LineTax,
-                        LineTotal: a.LineTotal
+                        UnitNet: (l.Qty > 0) ? Pos.Domain.Pricing.PricingMath.RoundMoney(t.Net / l.Qty) : 0m,
+                        LineNet: t.Net,
+                        LineTax: t.Tax,
+                        LineTotal: t.Total
                     );
                 }).ToList()
+
             };
 
             try
@@ -556,7 +562,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 if (WalkInCheck != null) WalkInCheck.IsChecked = true;
                 if (CustNameBox != null) CustNameBox.Text = "";
                 if (CustPhoneBox != null) CustPhoneBox.Text = "";
-                ReasonBox.Text = "";
+                if (ReasonBox != null) ReasonBox.Text = "";
                 UpdateTotal();
                 await UpdateInvoicePreviewAsync();
                 UpdateInvoiceDateNow();

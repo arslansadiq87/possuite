@@ -73,14 +73,25 @@ namespace Pos.Client.Wpf.Windows.Accounting
             if (SelectedAccount == null) return;
 
             var (op, rows, cl) = await _ledger.GetAccountLedgerAsync(
-                SelectedAccount.Id,
-                FromDate,
-                ToDate.AddDays(1).AddTicks(-1)
-            );
+    SelectedAccount.Id,
+    FromDate,
+    ToDate.AddDays(1).AddTicks(-1)
+);
 
             Opening = op;
             Closing = cl;
 
+            // ⬇️ Add this block
+            Rows.Add(new CashBookRowVm
+            {
+                TsUtc = FromDate,
+                Memo = "Opening Balance",
+                Debit = op > 0 ? op : 0m,
+                Credit = op < 0 ? Math.Abs(op) : 0m,
+                Running = op
+            });
+
+            // Existing transaction rows
             foreach (var r in rows)
                 Rows.Add(new CashBookRowVm
                 {
@@ -90,6 +101,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     Credit = r.Credit,
                     Running = r.Running
                 });
+
         }
     }
 }

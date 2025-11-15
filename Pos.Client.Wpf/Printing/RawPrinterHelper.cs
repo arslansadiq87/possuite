@@ -12,7 +12,7 @@ namespace Pos.Client.Wpf.Printing
         private class DOC_INFO_1
         {
             public string pDocName = "ESC/POS Document";
-            public string pOutputFile;
+            public string? pOutputFile;
             public string pDatatype = "RAW";
         }
 

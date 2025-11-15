@@ -27,24 +27,31 @@ namespace Pos.Persistence.Services
             => await _coa.EnsureOutletCashAccountAsync(outletId, ct);
 
         public async Task<(decimal opening, List<LedgerRow> rows, decimal closing)>
-            GetAccountLedgerAsync(int accountId, DateTime fromUtc, DateTime toUtc, CancellationToken ct = default)
+    GetAccountLedgerAsync(int accountId, DateTime fromUtc, DateTime toUtc, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             var acct = await db.Accounts.AsNoTracking().FirstAsync(a => a.Id == accountId, ct);
             var openingBase = acct.OpeningDebit - acct.OpeningCredit;
 
+            // Opening balance uses EFFECTIVE rows strictly before range start
             var prior = await db.GlEntries.AsNoTracking()
-                .Where(g => g.AccountId == accountId && g.TsUtc < fromUtc)
+                .Where(g => g.AccountId == accountId
+                         && g.IsEffective
+                         && g.EffectiveDate < fromUtc)
                 .Select(g => new { g.Debit, g.Credit })
                 .ToListAsync(ct);
 
             var opening = openingBase + prior.Sum(x => x.Debit - x.Credit);
 
+            // In-range uses EFFECTIVE rows and EffectiveDate within [from, to)
             var inRange = await db.GlEntries.AsNoTracking()
-                .Where(g => g.AccountId == accountId && g.TsUtc >= fromUtc && g.TsUtc <= toUtc)
-                .OrderBy(g => g.TsUtc).ThenBy(g => g.Id)
-                .Select(g => new { g.TsUtc, g.Memo, g.Debit, g.Credit })
+                .Where(g => g.AccountId == accountId
+                         && g.IsEffective
+                         && g.EffectiveDate >= fromUtc
+                         && g.EffectiveDate < toUtc)
+                .OrderBy(g => g.EffectiveDate).ThenBy(g => g.Id)
+                .Select(g => new { g.EffectiveDate, g.Memo, g.DocNo, g.Debit, g.Credit })
                 .ToListAsync(ct);
 
             var rows = new List<LedgerRow>(inRange.Count);
@@ -53,41 +60,42 @@ namespace Pos.Persistence.Services
             foreach (var r in inRange)
             {
                 running += (r.Debit - r.Credit);
-                rows.Add(new LedgerRow(r.TsUtc, r.Memo, r.Debit, r.Credit, running));
+                rows.Add(new LedgerRow(r.EffectiveDate, r.Memo + (r.DocNo), r.Debit, r.Credit, running));
             }
 
             return (opening, rows, running);
         }
+
 
         public Task<(decimal opening, List<CashBookRowDto> rows, decimal closing)>
             GetCashBookAsync(int outletId, DateTime fromUtc, DateTime toUtc, bool includeVoided, CancellationToken ct = default)
             => GetCashBookAsync(outletId, fromUtc, toUtc, includeVoided, CashBookScope.HandOnly, ct);
 
         public async Task<(decimal opening, List<CashBookRowDto> rows, decimal closing)>
-            GetCashBookAsync(int outletId, DateTime fromUtc, DateTime toUtc, bool includeVoided, CashBookScope scope, CancellationToken ct = default)
+    GetCashBookAsync(int outletId, DateTime fromUtc, DateTime toUtc, bool includeVoided, CashBookScope scope, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
-            // Resolve per-outlet accounts via CoA helpers
-            var cashAccountId = await _coa.EnsureOutletCashAccountAsync(outletId, ct); // 11101-OUT
-            var tillAccountId = await _coa.EnsureOutletTillAccountAsync(outletId, ct); // 11102-OUT
-
+            // Resolve per-outlet accounts via CoA (OK to "ensure" here since this is read-only flow outside transactions)
+            var cashAccountId = await _coa.EnsureOutletCashAccountAsync(outletId, ct);
             var accountIds = scope switch
             {
                 CashBookScope.HandOnly => new[] { cashAccountId },
-                CashBookScope.TillOnly => new[] { tillAccountId },
-                CashBookScope.Both => new[] { cashAccountId, tillAccountId },
+                CashBookScope.TillOnly => new[] { await _coa.EnsureOutletTillAccountAsync(outletId, ct) },
+                CashBookScope.Both => new[] { cashAccountId, await _coa.EnsureOutletTillAccountAsync(outletId, ct) },
                 _ => new[] { cashAccountId }
             };
 
-            // Opening across selected accounts
+            // Opening across selected accounts (EffectiveDate & IsEffective)
             async Task<decimal> OpeningForAsync(int accountId)
             {
                 var acct = await db.Accounts.AsNoTracking().FirstAsync(a => a.Id == accountId, ct);
                 var openingBase = acct.OpeningDebit - acct.OpeningCredit;
 
                 var prior = await db.GlEntries.AsNoTracking()
-                    .Where(g => g.AccountId == accountId && g.TsUtc < fromUtc)
+                    .Where(g => g.AccountId == accountId
+                             && g.EffectiveDate < fromUtc
+                             && g.IsEffective)
                     .Select(g => new { g.Debit, g.Credit })
                     .ToListAsync(ct);
 
@@ -98,72 +106,33 @@ namespace Pos.Persistence.Services
             foreach (var id in accountIds)
                 opening += await OpeningForAsync(id);
 
-            // In-range GL for all selected accounts merged & ordered
+            // In-range GL for all selected accounts merged & ordered (EffectiveDate, IsEffective)
             var gls = await db.GlEntries.AsNoTracking()
-                .Where(g => accountIds.Contains(g.AccountId) && g.TsUtc >= fromUtc && g.TsUtc <= toUtc)
-                .OrderBy(g => g.TsUtc).ThenBy(g => g.Id)
-                .Select(g => new
-                {
+                .Where(g => accountIds.Contains(g.AccountId)
+                         && g.EffectiveDate >= fromUtc
+                         && g.EffectiveDate <= toUtc
+                         && (includeVoided || g.IsEffective))
+                .OrderBy(g => g.EffectiveDate).ThenBy(g => g.Id)
+                .Select(g => new {
                     g.AccountId,
-                    g.TsUtc,
+                    g.EffectiveDate,
+                    g.DocType,
+                    g.DocSubType,
+                    g.DocNo,
                     g.Memo,
                     g.Debit,
-                    g.Credit
+                    g.Credit,
+                    g.IsEffective
                 })
                 .ToListAsync(ct);
 
-            // Memo parsers
-            var rxVoucherTag = new Regex(@"\b(Voucher|PMT|RCV|JRN|GEN)[\s\-:]*#?\s*([A-Za-z0-9\-_/]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            var rxVoucherPlain = new Regex(@"\bVoucher\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            var rxPo = new Regex(@"\b(PO|Purchase\s*Invoice|Purchase)\s*#?\s*([A-Za-z0-9\-_/]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            var rxSale = new Regex(@"\b(Sale|Invoice|SI)\s*#?\s*([A-Za-z0-9\-_/]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            var rxSaleRet = new Regex(@"\b(Sale\s*Return|SR)\s*#?\s*([A-Za-z0-9\-_/]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            var rxPurRet = new Regex(@"\b(Purchase\s*Return|PR)\s*#?\s*([A-Za-z0-9\-_/]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            var rxTillClose = new Regex(@"\b(Till\s*Close|Z\s*Close|Z\-Close)\b(?:\s*#?\s*([A-Za-z0-9\-_/]+))?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-            string? BuildSourceFromMemo(string? memoRaw)
+            string BuildSource(string? memoRaw, string docType, string subType, string? docNo)
             {
-                var memo = memoRaw ?? string.Empty;
-                var m = rxVoucherTag.Match(memo);
-                if (m.Success)
-                {
-                    var tag = m.Groups[1].Value.Trim();
-                    var no = m.Groups[2].Value.Trim();
-                    if (tag.Equals("Voucher", StringComparison.OrdinalIgnoreCase)) return $"Voucher {no}";
-                    return $"Voucher {tag.ToUpperInvariant()}-{no}";
-                }
-                if (rxVoucherPlain.IsMatch(memo)) return "Voucher";
-                m = rxPo.Match(memo);
-                if (m.Success) return (m.Groups[1].Value.StartsWith("PO", StringComparison.OrdinalIgnoreCase) ? "PO" : "Purchase") + $" #{m.Groups[2].Value}";
-                m = rxSale.Match(memo);
-                if (m.Success) return "Sale #" + m.Groups[2].Value;
-                m = rxSaleRet.Match(memo);
-                if (m.Success) return "Sale Return #" + m.Groups[2].Value;
-                m = rxPurRet.Match(memo);
-                if (m.Success) return "Purchase Return #" + m.Groups[2].Value;
-                m = rxTillClose.Match(memo);
-                if (m.Success)
-                {
-                    var no = m.Groups.Count >= 3 ? m.Groups[2].Value : "";
-                    return string.IsNullOrWhiteSpace(no) ? "Till Close" : $"Till Close {no}";
-                }
-                if (memo.IndexOf("till close", StringComparison.OrdinalIgnoreCase) >= 0) return "Till Close";
-                if (memo.IndexOf("till", StringComparison.OrdinalIgnoreCase) >= 0) return "Till";
-                if (memo.IndexOf("supplier payment", StringComparison.OrdinalIgnoreCase) >= 0) return "Supplier Payment";
-                if (memo.IndexOf("customer receipt", StringComparison.OrdinalIgnoreCase) >= 0) return "Customer Receipt";
-                if (memo.IndexOf("sale cash", StringComparison.OrdinalIgnoreCase) >= 0) return "Sale (Cash)";
-                if (memo.IndexOf("card", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                    memo.IndexOf("sale", StringComparison.OrdinalIgnoreCase) >= 0) return "Sale (Card)";
-                return string.IsNullOrWhiteSpace(memo) ? "—" : memo;
-            }
-
-            static bool IsMemoVoided(string? memoRaw)
-            {
-                if (string.IsNullOrWhiteSpace(memoRaw)) return false;
-                var memo = memoRaw.Trim();
-                return memo.StartsWith("VOID", StringComparison.OrdinalIgnoreCase)
-                    || memo.IndexOf("voided", StringComparison.OrdinalIgnoreCase) >= 0
-                    || memo.IndexOf("VOID of voucher", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!string.IsNullOrWhiteSpace(docNo))
+                    return $"{docType} {subType} #{docNo}";
+                if (!string.IsNullOrWhiteSpace(memoRaw))
+                    return memoRaw!;
+                return $"{docType} {subType}";
             }
 
             var rows = new List<CashBookRowDto>(gls.Count);
@@ -171,26 +140,26 @@ namespace Pos.Persistence.Services
 
             foreach (var e in gls)
             {
-                var isVoided = IsMemoVoided(e.Memo);
-                if (!includeVoided && isVoided) continue;
+                if (!includeVoided && !e.IsEffective) continue;
 
                 running += (e.Debit - e.Credit);
 
                 rows.Add(new CashBookRowDto
                 {
-                    TsUtc = e.TsUtc,
+                    TsUtc = e.EffectiveDate, // show accounting date
                     Memo = e.Memo,
                     Debit = e.Debit,
                     Credit = e.Credit,
                     Running = running,
-                    IsVoided = isVoided,
-                    TillId = (scope == CashBookScope.TillOnly || (scope == CashBookScope.Both && e.AccountId == tillAccountId))
-                                ? tillAccountId : (int?)null,
-                    SourceRef = BuildSourceFromMemo(e.Memo)
+                    IsVoided = !e.IsEffective,
+                    TillId = (scope == CashBookScope.TillOnly || (scope == CashBookScope.Both && e.AccountId != cashAccountId))
+                                ? e.AccountId : (int?)null,
+                    SourceRef = BuildSource(e.Memo, e.DocType.ToString(), e.DocSubType.ToString(), e.DocNo)
                 });
             }
 
             return (opening, rows, running);
         }
+
     }
 }

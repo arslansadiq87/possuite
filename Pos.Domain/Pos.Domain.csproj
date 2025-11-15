@@ -15,6 +15,7 @@
     <Compile Remove="Entities\Supplier.cs" />
     <Compile Remove="Services\IPartyReadService.cs" />
     <Compile Remove="Services\IPartyWriteService.cs" />
+    <Compile Remove="Services\IPurchasesService_old.cs" />
   </ItemGroup>
 
 </Project>
