@@ -74,6 +74,7 @@ public sealed class DashboardVm : ObservableObject
         OpenPurchaseCmd = new RelayCommand(OpenPurchaseTab);
         OpenPurchaseInvoiceCenterCmd = new RelayCommand(OpenInvoiceCenterPurchaseTab);
         OpenTransferCmd = new RelayCommand(OpenTransferTab);
+        OpenTransferCenterCmd = new RelayCommand(OpenTransferCenterTab);
         OpenProductsCmd = new RelayCommand(OpenProductsTab);
         OpenPartiesCmd = new RelayCommand(OpenPartiesTab);
         OpenStaffCmd = new RelayCommand(OpenStaffTab);
@@ -195,6 +196,7 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand OpenPurchaseCmd { get; }
     public IRelayCommand OpenPurchaseInvoiceCenterCmd { get; }
     public IRelayCommand OpenTransferCmd { get; }
+    public IRelayCommand OpenTransferCenterCmd { get; }
     public IRelayCommand OpenProductsCmd { get; }
     public IRelayCommand OpenPartiesCmd { get; }
     public IRelayCommand OpenOutletsCountersCmd { get; }
@@ -250,7 +252,14 @@ public sealed class DashboardVm : ObservableObject
         if (TryActivateTab<Pos.Client.Wpf.Windows.Inventory.TransferEditorView>()) return;
         _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.TransferEditorView>("Stock Transfer", "Transfer");
     }
-        
+
+    void OpenTransferCenterTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Inventory.TransferCenterView>())
+            return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.TransferCenterView>("Transfer Center", "Transfer Center");
+    }
+
 
     private void OpenSalesTab()
         => _views.OpenTab<Pos.Client.Wpf.Windows.Sales.SaleInvoiceView>("Sales", "Sales");
@@ -348,6 +357,7 @@ public sealed class DashboardVm : ObservableObject
         if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.AccountLedgerView>()) return;
         _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.AccountLedgerView>("Account Ledger", "Account Ledger");
     }
+
 
     // ---------- Bulk tab ops ----------a
     private async void CloseAllTabs()

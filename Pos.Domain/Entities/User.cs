@@ -15,6 +15,12 @@ namespace Pos.Domain.Entities
         public bool IsActive { get; set; } = true;
         public string PasswordHash { get; set; } = null!;       // string, not byte[]
 
+        // NEW: optional per-user PIN (hashed with BCrypt)
+        /// <summary>
+        /// Hashed PIN for privileged actions (unlocking invoices, etc.). Null = no PIN set.
+        /// </summary>
+        public string? PinHash { get; set; }
+
         // --- new fields for outlet-scoped RBAC ---
         /// <summary>
         /// If true, this user bypasses outlet filters and can operate on any outlet.

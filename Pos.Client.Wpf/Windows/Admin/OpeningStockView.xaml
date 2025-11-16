@@ -70,6 +70,7 @@
                 <Separator/>
 
                 <Button Content="Open Draft…" Click="OpenDraft_Click" Width="120"/>
+                <Button Content="Open Posted…" Click="OpenPosted_Click" Margin="4,0"/>
 
                 <Separator/>
                 <Button Content="Close" Click="CloseTab_Click" Width="70"/>

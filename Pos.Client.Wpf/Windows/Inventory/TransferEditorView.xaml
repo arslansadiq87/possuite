@@ -5,56 +5,70 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls" x:Class="Pos.Client.Wpf.Windows.Inventory.TransferEditorView"
+             xmlns:nav="clr-namespace:System.Windows.Navigation;assembly=PresentationFramework"
+             nav:JournalEntry.KeepAlive="True"
              mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="760">
 
     <DockPanel>
         <!-- Header -->
         <ToolBar DockPanel.Dock="Top">
-            <TextBlock Text="Source:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="FromTypeBox" Width="120" Margin="0,0,6,0">
-                <ComboBoxItem Content="Warehouse"/>
-                <ComboBoxItem Content="Outlet"/>
-            </ComboBox>
-            <ComboBox x:Name="FromPicker" Width="220" DisplayMemberPath="Name" SelectedValuePath="Id" Margin="0,0,12,0"/>
+            <!-- Only these three actions on the editor -->
+            <Button Content="Save Draft" Width="110" Margin="8,0,0,0" Click="BtnSaveDraft_Click"/>
+            <Button Content="Post" Width="100" Margin="8,0,0,0" Click="BtnDispatch_Click"/>
 
-            <TextBlock Text="Destination:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="ToTypeBox" Width="120" Margin="0,0,6,0">
-                <ComboBoxItem Content="Warehouse"/>
-                <ComboBoxItem Content="Outlet"/>
-            </ComboBox>
-            <ComboBox x:Name="ToPicker" Width="220" DisplayMemberPath="Name" SelectedValuePath="Id" Margin="0,0,12,0"/>
+            <Button x:Name="BtnClear" Content="Clear" Width="90" Margin="8,0,0,0" Click="BtnClear_Click"/>
 
-            <TextBlock Text="Date:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <DatePicker x:Name="EffectiveDate" Width="140"/>
-
-            <CheckBox x:Name="AutoReceiveCheck" Content="Delivered stock at destination" Margin="16,0,0,0"/>
         </ToolBar>
-
-        <!-- Search/Add -->
         <Border DockPanel.Dock="Top" Padding="10" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+            <StackPanel Orientation="Horizontal">
+
+                
+                <TextBlock Text="Source:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="FromTypeBox" Width="100"/>
+
+                <ComboBox x:Name="FromPicker"                    
+                    SelectedValuePath="Id"
+                    DisplayMemberPath="Name"
+                    Width="150"/>
+
+                    <TextBlock Text="Destination:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="ToTypeBox" Width="100"/>
+
+                <ComboBox x:Name="ToPicker"
+                    SelectedValuePath="Id"
+                    DisplayMemberPath="Name"
+                    Width="150"/>
+
+                <TextBlock Text="Date:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <DatePicker x:Name="EffectiveDate" Width="140"/>
+
+                <CheckBox x:Name="AutoReceiveCheck"
+                    Content="Post + deliver (auto receive at destination)"
+                    VerticalAlignment="Center" Margin="10,0,0,0"/>
+
+
+
+            </StackPanel>
+        </Border>
+        <!-- Search/Add -->
+        <Border DockPanel.Dock="Top" Padding="2" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Search Item:" VerticalAlignment="Center" Margin="0,0,6,0"/>
 
-                <Controls:ItemSearchBox x:Name="ItemSearch" GotFocus="ItemSearch_GotFocus" ItemPicked="ItemSearch_ItemPicked" Width="360" Margin="0,0,8,0"/>
-                <!--<TextBox x:Name="SearchBox" Width="360" Height="28" VerticalContentAlignment="Center" PreviewKeyDown="SearchBox_PreviewKeyDown"/>-->
-                <Button Content="Add" Width="90" Margin="8,0,0,0" Click="BtnAddLine_Click"/>
-                <Button Content="Save Draft" Width="110" Margin="8,0,0,0" Click="BtnSaveDraft_Click"/>
-                <Button Content="Dispatch" Width="100" Margin="8,0,0,0" Click="BtnDispatch_Click"/>
-                <Separator/>
-                <Button Content="Open Pending Receipts" Width="160" Click="BtnOpenReceipts_Click"/>
-                <Button Content="Receive" Width="100" Margin="8,0,0,0" Click="BtnReceive_Click"/>
-                <Separator/>
-                <Button x:Name="BtnClear" Content="Clear" Width="90" Margin="8,0,0,0" Click="BtnClear_Click"/>
-                <!-- Available badge (hidden by default) -->
-                <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
-                    <Border x:Name="AvailableBadge" Visibility="Collapsed"
-            Background="#FFE8F0FF" BorderBrush="#FF3B82F6" BorderThickness="1"
-            CornerRadius="10" Padding="8,2" >
-                        <TextBlock x:Name="AvailableText" FontWeight="SemiBold"/>
-                    </Border>
-                </StackPanel>
+                <Controls:ItemSearchBox x:Name="ItemSearch" ItemPicked="ItemSearch_ItemPicked"
+                                Width="360" Margin="0,0,8,0"/>
+                
+               
+
+                <!-- Available badge (unchanged) -->
+                <!-- Available badge (reusable control) -->
+                <Controls:StockAvailableBadge x:Name="AvailBadge"
+                              Visibility="Collapsed" 
+                                Mode="AvailableForIssue"/>
+
             </StackPanel>
         </Border>
+
 
         <Grid Margin="10">
             <Grid.RowDefinitions>

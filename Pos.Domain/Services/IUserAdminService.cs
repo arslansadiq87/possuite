@@ -30,5 +30,28 @@ namespace Pos.Domain.Services
         /// Reconcile assignments for a user: create/update/remove, with outbox sync.
         /// </summary>
         Task SaveAssignmentsAsync(int userId, IEnumerable<UserOutletAssignDto> desired, CancellationToken ct = default);
+
+        // Self-service security for logged-in user
+        Task ChangeOwnPasswordAsync(
+            int userId,
+            string currentPassword,
+            string newPassword,
+            CancellationToken ct = default);
+
+        Task ChangeOwnPinAsync(
+            int userId,
+            string currentPassword,
+            string? newPin,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Verifies that the given PIN is valid for the given user.
+        /// Throws InvalidOperationException if PIN not set, incorrect, or user missing.
+        /// </summary>
+        Task VerifyPinAsync(
+            int userId,
+            string pin,
+            CancellationToken ct = default);
+
     }
 }

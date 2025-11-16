@@ -6,6 +6,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Identity.Client;
+using Microsoft.VisualBasic;
 using Pos.Domain.Abstractions;
 using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
@@ -211,8 +213,19 @@ namespace Pos.Persistence.Services
             return await RequireAccountByCodeAsync(db, "6100", ct); // AP root
         }
 
-     
-     
+        public async Task PostOpeningStockAsync(StockDoc doc, IEnumerable<StockEntry> openingEntries, int offsetAccountId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await PostOpeningStockAsync(db, doc, openingEntries, offsetAccountId, ct);
+
+        }
+
+        public async Task UnlockOpeningStockAsync(StockDoc doc, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await UnlockOpeningStockAsync(db, doc, ct);
+        }
+        
         public async Task PostPurchaseReturnAsync(Purchase p, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
@@ -785,6 +798,109 @@ namespace Pos.Persistence.Services
             await db.SaveChangesAsync(ct);
         }
 
+        // -------------------- Opening Stock --------------------
+        public async Task PostOpeningStockAsync(
+            PosClientDbContext db,
+            StockDoc doc,
+            IEnumerable<StockEntry> openingEntries,
+            int offsetAccountId,
+            CancellationToken ct = default)
+        {
+            if (doc.DocType != StockDocType.Opening)
+                throw new InvalidOperationException("PostOpeningStockAsync called with non-Opening stock document.");
+
+            var tsUtc = DateTime.UtcNow;
+            var eff = doc.EffectiveDateUtc;
+
+            // For GL, OutletId column is meaningful only for outlet-based locations.
+            int? outletId = doc.LocationType == InventoryLocationType.Outlet
+                ? doc.LocationId
+                : (int?)null;
+
+            // Compute total opening value = Σ (net qty per item * last unit cost)
+            var totalValue = openingEntries
+                .GroupBy(e => e.ItemId)
+                .Select(g =>
+                {
+                    var netQty = g.Sum(x => x.QtyChange);
+                    if (netQty == 0m) return 0m;
+
+                    // last snapshot cost for this item
+                    var last = g
+                        .OrderBy(x => x.Id)   // Id is monotonic
+                        .Last();
+
+                    return netQty * last.UnitCost;
+                })
+                .Sum();
+
+            // Clear any previous GL snapshot for this Opening chain
+            await InactivateEffectiveAsync(db, doc.PublicId, GlDocType.StockAdjust, GlDocSubType.Other, ct);
+
+            if (totalValue == 0m)
+            {
+                // Nothing to post; GL is effectively removed for this doc.
+                await db.SaveChangesAsync(ct);
+                return;
+            }
+
+            // Inventory account (same 1140 used for purchases)
+            var inventoryAccId = await db.Accounts.AsNoTracking()
+                .Where(a => a.Code == "1140" && !a.IsHeader && a.AllowPosting)
+                .Select(a => a.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (inventoryAccId == 0)
+                throw new InvalidOperationException(
+                    "Inventory account '1140' not found. Create it before posting Opening Stock.");
+
+            var chainId = doc.PublicId;
+            var docId = doc.Id;
+            string? docNo = null; // Opening Stock currently has no human-readable number; you can wire one later.
+
+            var rows = new[]
+            {
+                // DR Inventory (1140)
+                Row(tsUtc, eff, outletId, inventoryAccId,
+                    debit: totalValue,
+                    credit: 0m,
+                    GlDocType.StockAdjust,
+                    GlDocSubType.Other,
+                    docId,
+                    docNo,
+                    chainId,
+                    partyId: null,
+                    memo: "Opening stock value"),
+
+                // CR Opening Stock (location-specific child under 11411 / 11412)
+                Row(tsUtc, eff, outletId, offsetAccountId,
+                    debit: 0m,
+                    credit: totalValue,
+                    GlDocType.StockAdjust,
+                    GlDocSubType.Other,
+                    docId,
+                    docNo,
+                    chainId,
+                    partyId: null,
+                    memo: "Opening stock offset")
+            };
+
+            await db.GlEntries.AddRangeAsync(rows, ct);
+            await db.SaveChangesAsync(ct);
+        }
+
+        public async Task UnlockOpeningStockAsync(
+            PosClientDbContext db,
+            StockDoc doc,
+            CancellationToken ct = default)
+        {
+            if (doc.DocType != StockDocType.Opening)
+                throw new InvalidOperationException("UnlockOpeningStockAsync called with non-Opening stock document.");
+
+            // Mark all Opening Stock GL rows for this chain as non-effective.
+            await InactivateEffectiveAsync(db, doc.PublicId, GlDocType.StockAdjust, GlDocSubType.Other, ct);
+            await db.SaveChangesAsync(ct);
+        }
 
     }
 }

@@ -17,11 +17,19 @@ using System.Windows.Media;
 using Pos.Domain.Services;
 using Pos.Client.Wpf.Security;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.DependencyInjection;
+using static System.Windows.Forms.AxHost;
+using Pos.Domain.Utils;
+
 
 namespace Pos.Client.Wpf.Windows.Inventory
 {
     public partial class TransferEditorView : UserControl
     {
+        private bool _initializedOnce;
+        private bool _canPickSource;
+        private int _myOutletId;
+
         private List<Warehouse> _whs = new();
         private List<Outlet> _outs = new();
         private bool _lookupsReady = false;
@@ -35,53 +43,59 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private readonly AppState _state;
         private StockDoc? _doc;
         private ObservableCollection<StockDocLine> _lines = new();
-        public TransferEditorView(ITransferService svc, ITransferQueries queries, ILookupService lookups, IInventoryReadService invRead, AppState state)
+        
+        public TransferEditorView()
         {
             InitializeComponent();
-            _svc = svc;
-            _queries = queries;
-            _lookups = lookups;
-            _invRead = invRead;
-            _state = state;
+
+            var sp = App.Services;
+            _svc = sp.GetRequiredService<ITransferService>();
+            _queries = sp.GetRequiredService<ITransferQueries>();
+            _lookups = sp.GetRequiredService<ILookupService>();
+            _invRead = sp.GetRequiredService<IInventoryReadService>();
+            _state = sp.GetRequiredService<AppState>();
+            IsVisibleChanged += TransferEditorView_IsVisibleChanged;
+
             Loaded += OnLoaded;
+            
+
         }
+
+        private static readonly string[] _typeChoices = { "Warehouse", "Outlet" };
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            var u = await AuthZ.CurrentUserAsync(); // u may be null; keep it as nullable
-            bool canPickSource = (u?.IsGlobalAdmin ?? false) || await AuthZ.IsManagerOrAboveAsync();
+            if (_initializedOnce) return;
 
+            // populate type boxes once
+            FromTypeBox.ItemsSource = _typeChoices;
+            ToTypeBox.ItemsSource = _typeChoices;
+
+            // defaults (only if not chosen)
+            if (FromTypeBox.SelectedIndex < 0) FromTypeBox.SelectedIndex = 0; // Warehouse
+            if (ToTypeBox.SelectedIndex < 0) ToTypeBox.SelectedIndex = 1; // Outlet
+
+            // load lookups
+            var u = await AuthZ.CurrentUserAsync();
+            _canPickSource = (u?.IsGlobalAdmin ?? false) || await AuthZ.IsManagerOrAboveAsync();
+            _myOutletId = (u is not null) ? (await _lookups.GetUserOutletIdsAsync(u.Id)).FirstOrDefault() : 0;
             _whs = (await _lookups.GetWarehousesAsync()).ToList();
             _outs = (await _lookups.GetOutletsAsync()).ToList();
 
-            FromTypeBox.SelectedIndex = 0; // Warehouse
-            ToTypeBox.SelectedIndex = 1;   // Outlet
+            // pickers initial bind
+            RebindPickerForType(FromTypeBox, FromPicker, true);
+            RebindPickerForType(ToTypeBox, ToPicker, true);
 
-            FromPicker.DisplayMemberPath = "Name";
-            FromPicker.SelectedValuePath = "Id";
-            ToPicker.DisplayMemberPath = "Name";
-            ToPicker.SelectedValuePath = "Id";
-
-            ItemSearch.GotFocus += (_, __) => HideAvailableBadge();
-
-            RebindPickerForType(FromTypeBox, FromPicker);
-            RebindPickerForType(ToTypeBox, ToPicker);
-
-            if (!canPickSource)
+            if (!_canPickSource)
             {
-                FromTypeBox.SelectedIndex = 1; // force Outlet for outlet user
-                RebindPickerForType(FromTypeBox, FromPicker);
-
-                var myOutId = (u is not null)
-                    ? (await _lookups.GetUserOutletIdsAsync(u.Id)).FirstOrDefault()
-                    : 0;
-
-                if (myOutId > 0) FromPicker.SelectedValue = myOutId;
-
+                FromTypeBox.SelectedIndex = 1; // Outlet
+                RebindPickerForType(FromTypeBox, FromPicker, true);
+                if (_myOutletId > 0) FromPicker.SelectedValue = _myOutletId;
                 FromTypeBox.IsEnabled = false;
                 FromPicker.IsEnabled = false;
             }
 
+            // rest of your existing OnLoaded...
             FromTypeBox.SelectionChanged += FromTypeBox_SelectionChanged;
             ToTypeBox.SelectionChanged += ToTypeBox_SelectionChanged;
             FromPicker.SelectionChanged += AnyPicker_SelectionChanged;
@@ -92,77 +106,203 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
             LinesGrid.ItemsSource = _lines;
             LinesCountText.Text = "0";
+            if (_doc == null)
+            {
+                AutoReceiveCheck.IsChecked = true;
+                AutoReceiveCheck.IsEnabled = true;
+            }
+            _initializedOnce = true;
 
             ItemSearch.Focus();
         }
 
 
-        private void RebindPickerForType(ComboBox typeBox, ComboBox picker)
+        private static void EnsureTypeBoxItems(ComboBox box)
+        {
+            if (box.Items.Count > 0) return; // already populated
+
+            box.Items.Add(new ComboBoxItem { Content = "Warehouse" });
+            box.Items.Add(new ComboBoxItem { Content = "Outlet" });
+        }
+
+
+        private void TransferEditorView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (IsVisible != true) return;
+
+            // Ensure type lists are still attached (prevents blanks)
+            if (FromTypeBox.ItemsSource == null || FromTypeBox.Items.Count == 0)
+                FromTypeBox.ItemsSource = _typeChoices;
+            if (ToTypeBox.ItemsSource == null || ToTypeBox.Items.Count == 0)
+                ToTypeBox.ItemsSource = _typeChoices;
+
+            // Do NOT call RebindPickerForType here (we don't want to reset locations).
+            // Only refresh the badge if needed:
+            if (LinesGrid.CurrentItem is StockDocLine row)
+            {
+                SetAvailBadgeFor(row.ItemId);
+                ShowAvailableBadge();
+            }
+            else
+            {
+                HideAvailableBadge();
+            }
+        }
+
+
+
+
+
+        public async Task LoadTransferAsync(int stockDocId)
+        {
+            try
+            {
+                var payload = await _queries.GetWithLinesAsync(stockDocId);
+                if (payload is null)
+                    throw new InvalidOperationException("Transfer not found.");
+
+                _doc = payload.Value.Doc;
+                _lines = new ObservableCollection<StockDocLine>(payload.Value.Lines);
+                LinesGrid.ItemsSource = _lines;
+                LinesGrid.Items.Refresh();
+                LinesCountText.Text = _lines.Count.ToString();
+
+                // lock source when editing existing transfer
+                FromTypeBox.IsEnabled = false;
+                FromPicker.IsEnabled = false;
+
+                _sourceLocked = true;
+                // reflect/editability based on status; default to checked for draft
+                if (_doc.TransferStatus == TransferStatus.Draft)
+                {
+                    // For new/ongoing drafts, default ON (or use the saved flag if you prefer)
+                    AutoReceiveCheck.IsChecked = true;            // <- was: _doc.AutoReceiveOnDispatch ?? true
+                    AutoReceiveCheck.IsEnabled = true;
+                }
+                else
+                {
+                    // Once dispatched/received, user shouldn't toggle this
+                    AutoReceiveCheck.IsChecked = _doc.AutoReceiveOnDispatch; // <- was: _doc.AutoReceiveOnDispatch ?? false
+                    AutoReceiveCheck.IsEnabled = false;
+                }
+
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Load transfer failed",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
+
+
+
+
+        private void RebindPickerForType(ComboBox typeBox, ComboBox picker, bool allowDefaultSelect)
         {
             if (!_whs.Any() && !_outs.Any()) return;
-            var isWarehouse = string.Equals(
-                (typeBox.SelectedItem as ComboBoxItem)?.Content?.ToString(),
-                "Warehouse", StringComparison.OrdinalIgnoreCase);
-            var prevId = (int)(picker.SelectedValue ?? 0);
+
+            var prevId = (picker.SelectedValue is int v && v > 0) ? v : 0;
+            bool isWarehouse = IsWarehouseSelected(typeBox);
+
             if (isWarehouse)
             {
                 picker.ItemsSource = _whs;
                 if (_whs.Count == 0) { picker.SelectedIndex = -1; return; }
-                if (!_whs.Any(w => w.Id == prevId)) picker.SelectedIndex = 0;
+
+                if (prevId > 0 && _whs.Any(w => w.Id == prevId))
+                    picker.SelectedValue = prevId;
+                else if (allowDefaultSelect && picker.SelectedIndex < 0)
+                    picker.SelectedIndex = 0;
             }
             else
             {
                 picker.ItemsSource = _outs;
                 if (_outs.Count == 0) { picker.SelectedIndex = -1; return; }
-                if (!_outs.Any(o => o.Id == prevId)) picker.SelectedIndex = 0;
+
+                if (prevId > 0 && _outs.Any(o => o.Id == prevId))
+                    picker.SelectedValue = prevId;
+                else if (allowDefaultSelect && picker.SelectedIndex < 0)
+                    picker.SelectedIndex = 0;
             }
         }
+
+
+        private static bool IsWarehouseSelected(ComboBox typeBox)
+        {
+            var sel = typeBox.SelectedItem;
+            if (sel is string s)
+                return s.Equals("Warehouse", StringComparison.OrdinalIgnoreCase);
+
+            if (sel is ComboBoxItem cbi)
+                return string.Equals(cbi.Content?.ToString(), "Warehouse", StringComparison.OrdinalIgnoreCase);
+
+            // Fallback: treat index 0 as Warehouse if nothing else is known
+            return typeBox.SelectedIndex == 0;
+        }
+
+
 
         private void EnforceNotSameLocation()
         {
             if (!_lookupsReady || _suppressSameCheck) return;
-            var fromIsWh = string.Equals(
-                (FromTypeBox.SelectedItem as ComboBoxItem)?.Content?.ToString(),
-                "Warehouse", StringComparison.OrdinalIgnoreCase);
-            var toIsWh = string.Equals(
-                (ToTypeBox.SelectedItem as ComboBoxItem)?.Content?.ToString(),
-                "Warehouse", StringComparison.OrdinalIgnoreCase);
+
+            var fromIsWh = IsWarehouseSelected(FromTypeBox);
+            var toIsWh = IsWarehouseSelected(ToTypeBox);
+
             var fromType = fromIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
             var toType = toIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
+
             var fromId = (int)(FromPicker.SelectedValue ?? 0);
             var toId = (int)(ToPicker.SelectedValue ?? 0);
+
+            // nothing to enforce if either side not chosen yet
             if (fromId <= 0 || toId <= 0) return;
-            if (fromType == toType && fromId == toId)
+
+            // Only enforce when types are actually the same AND ids are the same
+            if (fromType != toType || fromId != toId) return;
+
+            _suppressSameCheck = true;
+            try
             {
-                _suppressSameCheck = true;
-                try
+                if (toIsWh)
                 {
-                    if (toIsWh)
-                    {
-                        var next = _whs.FirstOrDefault(w => w.Id != fromId);
-                        if (next != null) ToPicker.SelectedValue = next.Id;
-                    }
-                    else
-                    {
-                        var next = _outs.FirstOrDefault(o => o.Id != fromId);
-                        if (next != null) ToPicker.SelectedValue = next.Id;
-                    }
+                    // Try to pick a different warehouse if at least two exist
+                    var alt = _whs.FirstOrDefault(w => w.Id != fromId);
+                    if (alt != null)
+                        ToPicker.SelectedValue = alt.Id;
+                    // else: leave as-is (don’t blank out)
                 }
-                finally { _suppressSameCheck = false; }
+                else
+                {
+                    // Try to pick a different outlet if at least two exist
+                    var alt = _outs.FirstOrDefault(o => o.Id != fromId);
+                    if (alt != null)
+                        ToPicker.SelectedValue = alt.Id;
+                    // else: leave as-is (don’t blank out)
+                }
+            }
+            finally
+            {
+                _suppressSameCheck = false;
             }
         }
 
+
         private void FromTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            RebindPickerForType(FromTypeBox, FromPicker);
+            RebindPickerForType(FromTypeBox, FromPicker, true);
             EnforceNotSameLocation();
         }
 
         private void ToTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            RebindPickerForType(ToTypeBox, ToPicker);
+            RebindPickerForType(ToTypeBox, ToPicker, true);
             EnforceNotSameLocation();
         }
+
 
         private void AnyPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -172,8 +312,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private (InventoryLocationType fromType, int fromId, InventoryLocationType toType, int toId) GetHeader()
         {
-            var fromIsWh = ((ComboBoxItem)FromTypeBox.SelectedItem)?.Content?.ToString() == "Warehouse";
-            var toIsWh = ((ComboBoxItem)ToTypeBox.SelectedItem)?.Content?.ToString() == "Warehouse";
+            var fromIsWh = IsWarehouseSelected(FromTypeBox);
+            var toIsWh = IsWarehouseSelected(ToTypeBox);
             var fromType = fromIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
             var toType = toIsWh ? InventoryLocationType.Warehouse : InventoryLocationType.Outlet;
             var fromId = (int)(FromPicker.SelectedValue ?? 0);
@@ -183,20 +323,35 @@ namespace Pos.Client.Wpf.Windows.Inventory
             return (fromType, fromId, toType, toId);
         }
 
+
         private async Task EnsureDraftAsync()
         {
             if (_doc != null && _doc.Id > 0) return;
 
             var (ft, fid, tt, tid) = GetHeader();
-            var effUtc = DateTime.SpecifyKind((EffectiveDate.SelectedDate ?? DateTime.Today), DateTimeKind.Local).ToUniversalTime();
 
-            var userId = _state.CurrentUser?.Id
-                ?? throw new InvalidOperationException("No current user is set. Please sign in again.");
+            // date -> local -> UTC
+            // Combine the picked day with *current* local time (HH:mm:ss)
+            //var d = (EffectiveDate.SelectedDate ?? DateTime.Today);
+            //var now = DateTime.Now; // local
+            //var effLocal = new DateTime(d.Year, d.Month, d.Day, now.Hour, now.Minute, now.Second, DateTimeKind.Local);
+            var effUtc = EffectiveTime.ComposeUtcFromDateAndNowTime(EffectiveDate.SelectedDate ?? DateTime.Today);
+
+
+
+            // IMPORTANT: CurrentUser may be null; fall back to CurrentUserId
+            var userId = (_state.CurrentUser?.Id > 0)
+                ? _state.CurrentUser.Id
+                : _state.CurrentUserId;
+
+            if (userId <= 0)
+                throw new InvalidOperationException("No current user is set. Please sign in again.");
 
             _doc = await _svc.CreateDraftAsync(ft, fid, tt, tid, effUtc, userId);
             FromTypeBox.IsEnabled = false;
             FromPicker.IsEnabled = false;
         }
+
 
         private void BtnAddLine_Click(object sender, RoutedEventArgs e)
         {
@@ -217,6 +372,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             catch (Exception ex) { MessageBox.Show(ex.Message, "Save failed", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
+
         private async void BtnDispatch_Click(object sender, RoutedEventArgs e)
         {
             if (_lines.Count == 0) { MessageBox.Show("No lines."); return; }
@@ -228,17 +384,27 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     .ToList();
                 _doc = await _svc.UpsertLinesAsync(_doc!.Id, dtos, replaceAll: true);
 
-                var dateLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).Date;
-                var effUtc = DateTime.SpecifyKind(dateLocal, DateTimeKind.Local).ToUniversalTime();
+                // Combine the picked day with *current* local time (HH:mm:ss)
+               
+                var effUtc = EffectiveTime.ComposeUtcFromDateAndNowTime(EffectiveDate.SelectedDate ?? DateTime.Today);
+
                 bool autoReceive = AutoReceiveCheck.IsChecked == true;
 
-                var userId = _state.CurrentUser?.Id
-                    ?? throw new InvalidOperationException("No current user is set. Please sign in again.");
+                // FIX: use CurrentUserId fallback
+                var userId = (_state.CurrentUser?.Id > 0)
+                    ? _state.CurrentUser.Id
+                    : _state.CurrentUserId;
+
+                if (userId <= 0)
+                    throw new InvalidOperationException("No current user is set. Please sign in again.");
 
                 _doc = await _svc.DispatchAsync(_doc.Id, effUtc, userId, autoReceive);
 
-                MessageBox.Show(autoReceive ? "Transfer dispatched & received." : "Transfer dispatched.",
-                                "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                var msg = autoReceive
+                    ? "Transfer posted and delivered (auto-received at destination)."
+                    : "Transfer posted. Destination can receive it from Transfer Center.";
+
+                MessageBox.Show(msg, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 _doc = null;
                 _lines.Clear();
@@ -249,7 +415,10 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 ItemSearch.Clear();
                 ItemSearch.Focus();
             }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "Dispatch failed", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Post failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async void BtnOpenReceipts_Click(object sender, RoutedEventArgs e)
@@ -288,8 +457,13 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
                 var whenUtc = DateTime.UtcNow;
 
-                var userId = _state.CurrentUser?.Id
-                    ?? throw new InvalidOperationException("No current user is set. Please sign in again.");
+                var userId = (_state.CurrentUser?.Id > 0)
+                    ? _state.CurrentUser.Id
+                    : _state.CurrentUserId;
+
+                if (userId <= 0)
+                    throw new InvalidOperationException("No current user is set. Please sign in again.");
+
 
                 _doc = await _svc.ReceiveAsync(_doc.Id, whenUtc, lines, userId);
 
@@ -348,7 +522,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     FromPicker.IsEnabled = false;
                     _sourceLocked = true;
                 }
-                await UpdateAvailableBadgeAsync(added.ItemId);
+                SetAvailBadgeFor(added.ItemId);
                 ShowAvailableBadge();
                 BeginEditOn(added, QtyColumn);
             }
@@ -356,7 +530,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             {
                 existing.QtyExpected += 1m;
                 LinesGrid.Items.Refresh();
-                await UpdateAvailableBadgeAsync(existing.ItemId);
+                SetAvailBadgeFor(existing.ItemId);
                 ShowAvailableBadge();
                 BeginEditOn(existing, QtyColumn);
             }
@@ -377,7 +551,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 {
                     tb.SelectAll();
                     tb.Focus();
-                    await UpdateAvailableBadgeAsync(line.ItemId);
+                    SetAvailBadgeFor(line.ItemId);
                     ShowAvailableBadge();
                 }
             }), System.Windows.Threading.DispatcherPriority.Background);
@@ -390,11 +564,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
 
-        private async void LinesGrid_PreparingCellForEdit(object sender, DataGridPreparingCellForEditEventArgs e)
+        private void LinesGrid_PreparingCellForEdit(object sender, DataGridPreparingCellForEditEventArgs e)
         {
             if (e.Row?.Item is StockDocLine row)
             {
-                await UpdateAvailableBadgeAsync(row.ItemId);
+                SetAvailBadgeFor(row.ItemId);
                 ShowAvailableBadge();
             }
             if (e.EditingElement is TextBox tb)
@@ -409,11 +583,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
             }
         }
 
-        private async void QtyEditor_GotKeyboardFocus(object? sender, KeyboardFocusChangedEventArgs e)
+        private void QtyEditor_GotKeyboardFocus(object? sender, KeyboardFocusChangedEventArgs e)
         {
             if (LinesGrid.CurrentItem is StockDocLine row)
             {
-                await UpdateAvailableBadgeAsync(row.ItemId);
+                SetAvailBadgeFor(row.ItemId);
                 ShowAvailableBadge();
             }
         }
@@ -464,11 +638,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
             e.Handled = false;
         }
 
-        private async void LinesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void LinesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (LinesGrid.CurrentItem is StockDocLine row)
             {
-                await UpdateAvailableBadgeAsync(row.ItemId);
+                SetAvailBadgeFor(row.ItemId);
                 ShowAvailableBadge();
             }
             else
@@ -488,42 +662,65 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
         }
 
-        private void ShowAvailableBadge()
-        {
-            AvailableBadge.Visibility = Visibility.Visible;
-        }
+        private void ShowAvailBadge() => AvailBadge.Visibility = Visibility.Visible;
+        private void HideAvailBadge() => AvailBadge.Visibility = Visibility.Collapsed;
 
-        private void HideAvailableBadge()
-        {
-            AvailableBadge.Visibility = Visibility.Collapsed;
-            AvailableText.Text = "";
-        }
+        // How much of THIS item is staged in the grid (for "AvailableForIssue" mode)
+        private decimal GetStagedQtyFor(int itemId) =>
+            _lines.Where(x => x.ItemId == itemId).Sum(x => x.QtyExpected);
 
-        private async Task UpdateAvailableBadgeAsync(int itemId)
+        // Set all inputs the badge needs; it will auto-refresh itself
+        private void SetAvailBadgeFor(int itemId)
         {
+            // Guard: header must be valid (both source & destination selected)
             try
             {
                 var (fromType, fromId, _, _) = GetHeader();
 
-                // keep the same “effective day end” display rule
-                var cutoffLocal = (EffectiveDate.SelectedDate ?? DateTime.Today).AddDays(1);
-                var cutoffUtc = DateTime.SpecifyKind(cutoffLocal, DateTimeKind.Local).ToUniversalTime();
-
-                // how much of THIS item is staged in the grid (purely for showing available)
-                var staged = _lines
-                    .Where(x => x.ItemId == itemId)
-                    .Sum(x => x.QtyExpected);
-
-                // Centralized availability (read-only)
-                var available = await _invRead.GetAvailableForIssueAsync(itemId, fromType, fromId, cutoffUtc, staged);
-
-                AvailableText.Text = $"Available: {available:0.####}";
+                AvailBadge.ItemId = itemId;
+                AvailBadge.LocationType = fromType;
+                AvailBadge.LocationId = fromId;
+                AvailBadge.EffectiveDate = EffectiveDate.SelectedDate ?? DateTime.Today;
+                AvailBadge.StagedQty = GetStagedQtyFor(itemId);   // optional; 0 is fine too
             }
             catch
             {
-                AvailableText.Text = "Available: —";
+                // If header isn't complete yet, just hide/reset
+                HideAvailBadge();
             }
         }
+
+
+        private void ShowAvailableBadge() => ShowAvailBadge();
+        private void HideAvailableBadge() => HideAvailBadge();
+
+
+        //private async Task UpdateAvailableBadgeAsync(int itemId)
+        //{
+        //    try
+        //    {
+        //        var (fromType, fromId, _, _) = GetHeader();
+
+        //        var cutoffUtc = EffectiveTime.ComposeUtcFromDateAndNowTime(EffectiveDate.SelectedDate ?? DateTime.Today);
+
+        //        // how much of THIS item is staged in the grid (purely for showing available)
+        //        var staged = _lines
+        //            .Where(x => x.ItemId == itemId)
+        //            .Sum(x => x.QtyExpected);
+
+        //        // Centralized availability (read-only)
+        //        var available = await _invRead.GetAvailableForIssueAsync(itemId, fromType, fromId, cutoffUtc, staged);
+
+        //        // push the numeric value into the universal badge
+        //        AvailableBadge.Quantity = available;
+        //    }
+        //    catch
+        //    {
+        //        // null => badge shows "Available: —"
+        //        AvailableBadge.Quantity = null;
+        //    }
+        //}
+
 
 
 
@@ -543,7 +740,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             {
                 if (LinesGrid.CurrentItem is StockDocLine cur)
                 {
-                    await UpdateAvailableBadgeAsync(cur.ItemId);
+                    SetAvailBadgeFor(cur.ItemId);
                     ShowAvailableBadge();
                 }
             }, System.Windows.Threading.DispatcherPriority.Background);
@@ -558,22 +755,54 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private void ClearFormToNew()
         {
             _doc = null;
+
             _lines.Clear();
-            LinesGrid.ItemsSource = _lines;
-            LinesGrid.Items.Refresh();
             LinesCountText.Text = "0";
-            FromTypeBox.IsEnabled = true;
-            FromPicker.IsEnabled = true;
+            // ItemsSource is already set once in OnLoaded; no need to reassign each time.
+            LinesGrid.Items.Refresh();
+
             _sourceLocked = false;
-            if (FromTypeBox.SelectedIndex != 0) FromTypeBox.SelectedIndex = 0;
-            RebindPickerForType(FromTypeBox, FromPicker);
-            if (ToTypeBox.SelectedIndex != 1) ToTypeBox.SelectedIndex = 1;
-            RebindPickerForType(ToTypeBox, ToPicker);
+
+            // Reset header to “new” respecting permission
+            if (_canPickSource)
+            {
+                // Admin/manager: let them pick source; default Warehouse
+                FromTypeBox.IsEnabled = true;
+                FromPicker.IsEnabled = true;
+
+                // Clear any previous selection explicitly, then rebind with default allowed
+                FromPicker.SelectedValue = null;
+                FromTypeBox.SelectedIndex = 0; // Warehouse
+                RebindPickerForType(FromTypeBox, FromPicker, true);
+            }
+            else
+            {
+                // Outlet user: force Outlet and the user's outlet id; keep locked
+                FromTypeBox.SelectedIndex = 1; // Outlet
+                FromPicker.SelectedValue = null;
+                RebindPickerForType(FromTypeBox, FromPicker, true);
+
+                if (_myOutletId > 0)
+                    FromPicker.SelectedValue = _myOutletId;
+
+                FromTypeBox.IsEnabled = false;
+                FromPicker.IsEnabled = false;
+            }
+
+            // Destination defaults to Outlet (index 1). Clear value before rebind so we don't “restore” old id
+            ToPicker.SelectedValue = null;
+            ToTypeBox.SelectedIndex = 1; // Outlet
+            RebindPickerForType(ToTypeBox, ToPicker, true);
+
             EffectiveDate.SelectedDate = DateTime.Today;
+            AutoReceiveCheck.IsChecked = true;
+            AutoReceiveCheck.IsEnabled = true;
+
             HideAvailableBadge();
-            try { ItemSearch.Clear(); } catch { }
+            try { ItemSearch.Clear(); } catch { /* ignore */ }
             ItemSearch.Focus();
         }
+
 
         private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
         {

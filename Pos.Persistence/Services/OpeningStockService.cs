@@ -13,6 +13,7 @@ using Pos.Domain.Models.OpeningStock;     // DTOs (moved)
  // if you still reference helpers here, otherwise remove
 using Pos.Persistence.Sync;               // IOutboxWriter
 
+
 namespace Pos.Persistence.Services
 {
     public sealed class OpeningStockService : IOpeningStockService
@@ -20,15 +21,18 @@ namespace Pos.Persistence.Services
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly ILogger<OpeningStockService> _log;
         private readonly IOutboxWriter _outbox;
+        private readonly IGlPostingService _gl;
 
         public OpeningStockService(
             IDbContextFactory<PosClientDbContext> dbf,
             ILogger<OpeningStockService> log,
-            IOutboxWriter outbox)
+            IOutboxWriter outbox,
+            IGlPostingService gl)
         {
             _dbf = dbf;
             _log = log;
             _outbox = outbox;
+            _gl = gl;
         }
 
         private static string ComposeDisplayName(Item i)
@@ -453,22 +457,65 @@ namespace Pos.Persistence.Services
             if (draftLines.Count == 0)
                 throw new InvalidOperationException("No lines to post.");
 
-            foreach (var l in draftLines)
+            // Existing opening entries for this document
+            var existingEntries = await db.StockEntries
+                .Where(e => e.RefType == "Opening" && e.RefId == doc.Id)
+                .ToListAsync(ct);
+
+            // Aggregate existing qty per item
+            var existingByItem = existingEntries
+                .GroupBy(e => e.ItemId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new
+                    {
+                        Qty = g.Sum(x => x.QtyChange),
+                        // last unit cost snapshot – used only for reference
+                        UnitCost = g.OrderByDescending(x => x.Id).First().UnitCost
+                    });
+
+            // Aggregate desired qty per item from draft lines
+            var targetByItem = draftLines
+                .GroupBy(l => l.ItemId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new
+                    {
+                        Qty = g.Sum(x => x.Qty),
+                        // we’ll just use the last unit cost from draft lines
+                        UnitCost = g.OrderByDescending(x => x.Id).First().UnitCost
+                    });
+
+            // Union of all item ids
+            var allItemIds = existingByItem.Keys.Union(targetByItem.Keys).Distinct();
+
+            foreach (var itemId in allItemIds)
             {
+                var oldQty = existingByItem.TryGetValue(itemId, out var old)
+                    ? old.Qty
+                    : 0m;
+                var newInfo = targetByItem.TryGetValue(itemId, out var @new)
+                    ? @new
+                    : new { Qty = 0m, UnitCost = 0m };
+
+                var deltaQty = newInfo.Qty - oldQty;
+                if (deltaQty == 0m) continue; // no change for this item
+
                 db.StockEntries.Add(new StockEntry
                 {
                     StockDocId = doc.Id,
-                    ItemId = l.ItemId,
-                    QtyChange = l.Qty,
-                    UnitCost = l.UnitCost,
+                    ItemId = itemId,
+                    QtyChange = deltaQty,
+                    UnitCost = newInfo.UnitCost,
                     LocationType = doc.LocationType,
                     LocationId = doc.LocationId,
                     RefType = "Opening",
                     RefId = doc.Id,
                     Ts = doc.EffectiveDateUtc,
-                    Note = l.Note ?? ""
+                    Note = "Opening stock adjustment"
                 });
             }
+
 
             doc.Status = StockDocStatus.Posted;
             doc.PostedByUserId = postedByUserId;
@@ -500,6 +547,17 @@ namespace Pos.Persistence.Services
             if (!hasPostedEntries)
                 throw new InvalidOperationException("Document must be posted before locking.");
 
+            // Load all opening stock entries for this doc
+            var entries = await db.StockEntries
+                .Where(e => e.RefType == "Opening" && e.RefId == doc.Id)
+                .ToListAsync(ct);
+
+            // TODO: resolve the "Opening Stock Offset" account id from settings/coA
+            var offsetAccountId = await ResolveOpeningOffsetAccountIdAsync(db, doc, ct);
+
+            // Let GL posting service do delta-based posting (similar to purchases)
+            await _gl.PostOpeningStockAsync(doc, entries, offsetAccountId, ct);
+
             doc.Status = StockDocStatus.Locked;
             doc.LockedByUserId = adminUserId;
             doc.LockedAtUtc = DateTime.UtcNow;
@@ -509,6 +567,7 @@ namespace Pos.Persistence.Services
             await _outbox.EnqueueUpsertAsync(db, doc, ct);
             await db.SaveChangesAsync(ct);
         }
+
 
         public async Task UnlockAsync(int stockDocId, int adminUserId, CancellationToken ct = default)
         {
@@ -522,6 +581,9 @@ namespace Pos.Persistence.Services
             if (doc.DocType != StockDocType.Opening) throw new InvalidOperationException("Invalid document type.");
             if (doc.Status != StockDocStatus.Locked) return;
 
+            // <<< NEW: inactivate GL rows for this Opening chain >>>
+            await _gl.UnlockOpeningStockAsync(doc, ct);
+
             doc.Status = StockDocStatus.Posted;
             doc.LockedByUserId = null;
             doc.LockedAtUtc = null;
@@ -531,6 +593,7 @@ namespace Pos.Persistence.Services
             await _outbox.EnqueueUpsertAsync(db, doc, ct);
             await db.SaveChangesAsync(ct);
         }
+
 
         public async Task VoidAsync(int stockDocId, int userId, string? reason, CancellationToken ct = default)
         {
@@ -618,5 +681,99 @@ namespace Pos.Persistence.Services
                     return await db.StockDocs.Include(d => d.Lines).FirstOrDefaultAsync(d => d.Id == stockDocId, ct);
                 }, ct).Unwrap();
         }
+
+        private static async Task<int> ResolveOpeningOffsetAccountIdAsync(
+    PosClientDbContext db,
+    StockDoc doc,
+    CancellationToken ct)
+        {
+            // Decide which header to use based on location type
+            // Outlet  -> 11411 "Opening stock"
+            // Warehouse -> 11412 "Opening Warehouse stock"
+            var isWarehouse = doc.LocationType == InventoryLocationType.Warehouse;
+            var headerCode = isWarehouse ? "11412" : "11411";
+
+            var header = await db.Accounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Code == headerCode, ct);
+
+            if (header == null)
+                throw new InvalidOperationException(
+                    $"Opening stock header account '{headerCode}' not found in Chart of Accounts.");
+
+            // Child account code pattern:
+            //   11411 + LocationId (2 digits)  => e.g. outlet 1 => 1141101
+            //   11412 + LocationId (2 digits)  => e.g. warehouse 3 => 1141203
+            var suffix = doc.LocationId.ToString("D2");
+            var childCode = header.Code + suffix;
+
+            // If already exists, just return it
+            var existing = await db.Accounts
+                .FirstOrDefaultAsync(a => a.Code == childCode, ct);
+
+            if (existing != null)
+                return existing.Id;
+
+            // Need a friendly name with outlet/warehouse name
+            string locName;
+            if (isWarehouse)
+            {
+                var wh = await db.Warehouses
+                    .AsNoTracking()
+                    .Where(w => w.Id == doc.LocationId)
+                    .Select(w => new { w.Name })
+                    .FirstOrDefaultAsync(ct);
+
+                if (wh == null)
+                    throw new InvalidOperationException("Warehouse not found for Opening Stock document.");
+
+                locName = wh.Name;
+            }
+            else
+            {
+                var outlet = await db.Outlets
+                    .AsNoTracking()
+                    .Where(o => o.Id == doc.LocationId)
+                    .Select(o => new { o.Name })
+                    .FirstOrDefaultAsync(ct);
+
+                if (outlet == null)
+                    throw new InvalidOperationException("Outlet not found for Opening Stock document.");
+
+                locName = outlet.Name;
+            }
+
+            // Auto-create a posting account under the header
+            var acc = new Account
+            {
+                Code = childCode,
+                Name = $"{header.Name} - {locName}",
+
+                Type = header.Type,
+                NormalSide = header.NormalSide,
+
+                IsHeader = false,
+                AllowPosting = true,
+
+                ParentId = header.Id,
+
+                // Scope to outlet for outlet-opening accounts; warehouse-level stays company scope
+                OutletId = isWarehouse ? (int?)null : doc.LocationId,
+
+                OpeningDebit = 0m,
+                OpeningCredit = 0m,
+                IsOpeningLocked = false,
+
+                IsActive = true,
+                IsSystem = false
+            };
+
+            db.Accounts.Add(acc);
+            await db.SaveChangesAsync(ct);
+
+            return acc.Id;
+        }
+
+
     }
 }

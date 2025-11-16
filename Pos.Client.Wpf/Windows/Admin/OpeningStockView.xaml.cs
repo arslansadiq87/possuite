@@ -21,6 +21,9 @@ using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Pos.Domain.Models.OpeningStock;
+using Pos.Client.Wpf.Security;
+using Pos.Client.Wpf.Windows.Till;   // PinDialog
+using BCrypt.Net;                    // for BCrypt.Verify
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -28,6 +31,7 @@ namespace Pos.Client.Wpf.Windows.Admin
     {
         private readonly IOpeningStockService _svc;
         private readonly IInventoryReadService _invRead; // ← NEW (read-only)
+        private readonly IUserAdminService _userAdmin;
 
         public event EventHandler? CloseRequested;
         private bool _dirty;
@@ -267,6 +271,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             _svc = App.Services.GetRequiredService<IOpeningStockService>();
             _invRead = App.Services.GetRequiredService<IInventoryReadService>(); // ← NEW
             _state = App.Services.GetRequiredService<AppState>();
+            _userAdmin = App.Services.GetRequiredService<IUserAdminService>();   // ← NEW
 
             Grid.PreviewKeyDown += Grid_PreviewKeyDown;
             LocationType = locationType;
@@ -590,8 +595,11 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
                 await _svc.UpsertLinesAsync(req);
                 MarkClean();
+                RaiseLocksAndActions();   // <-- refresh Post/Lock/Unlock/Void buttons
+
                 MessageBox.Show("Draft saved.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 Raise(nameof(FooterSummary));
+
             }
             catch (Exception ex)
             {
@@ -639,10 +647,9 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private static bool IsCurrentUserAdmin()
         {
-            var s = AppState.Current;
-            if (s.CurrentUser != null) return s.CurrentUser.Role == UserRole.Admin;
-            return string.Equals(s.CurrentUserRole, "Admin", StringComparison.OrdinalIgnoreCase);
+            return AuthZ.IsAdminCached();
         }
+
 
         public sealed class RowVM : INotifyPropertyChanged, IDataErrorInfo
         {
@@ -988,6 +995,28 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
+        private async void OpenPosted_Click(object sender, RoutedEventArgs e)
+        {
+            var owner = Window.GetWindow(this);
+            var svc = App.Services.GetRequiredService<IOpeningStockService>();
+
+            // Use Mode.Locked to show posted/locked opening stocks for this location
+            var dlg = new OpeningStockPickDialog(
+                svc,
+                LocationType,
+                LocationId,
+                OpeningStockPickDialog.Mode.Locked)
+            {
+                Owner = owner
+            };
+
+            if (dlg.ShowDialog() == true && dlg.SelectedDocId is int id)
+            {
+                await LoadSpecificDocAsync(id);
+            }
+        }
+
+
         private async Task LoadSpecificDocAsync(int docId)
         {
             var(doc, lines) = await _svc.ReadDocumentForUiAsync(docId);
@@ -1014,27 +1043,88 @@ namespace Pos.Client.Wpf.Windows.Admin
 
         private async void Unlock_Click(object sender, RoutedEventArgs e)
         {
-            if (StockDocId == 0) { MessageBox.Show("No document to unlock."); return; }
-            if (!IsCurrentUserAdmin()) { MessageBox.Show("Only Admin can unlock Opening Stock."); return; }
-            var ok = MessageBox.Show("Unlock this Opening Stock? It will be excluded from reports until re-locked.",
-                                    "Confirm Unlock", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (ok != MessageBoxResult.Yes) return;
+            if (StockDocId == 0)
+            {
+                MessageBox.Show("No document to unlock.");
+                return;
+            }
+
+            if (!IsCurrentUserAdmin())
+            {
+                MessageBox.Show("Only Admin can unlock Opening Stock.", "Not allowed",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var owner = Window.GetWindow(this);
+            var pinDlg = new PinDialog
+            {
+                Owner = owner
+            };
+
+            if (pinDlg.ShowDialog() != true || string.IsNullOrEmpty(pinDlg.EnteredPin))
+                return; // cancelled
+
+            var state = AppState.Current;
+            var userId = (state.CurrentUser?.Id > 0) ? state.CurrentUser.Id : state.CurrentUserId;
+
+            if (userId <= 0)
+            {
+                MessageBox.Show("No logged-in user.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // Centralized PIN verification via service (DB-backed)
             try
             {
-                var s = AppState.Current;
-                var adminId = (s.CurrentUser?.Id > 0) ? s.CurrentUser.Id : s.CurrentUserId;
-                await _svc.UnlockAsync(StockDocId, adminId);
-                await LoadSpecificDocAsync(StockDocId);
-                _docStatus = StockDocStatus.Draft;    // ⬅️ new (explicit; also true after reload)
-                RaiseLockUnlock();                    // ⬅️ new
-                MarkClean();
-                MessageBox.Show("Unlocked. You can edit and re-lock.");
+                await _userAdmin.VerifyPinAsync(userId, pinDlg.EnteredPin);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // These are our friendly messages from the service
+                MessageBox.Show(ex.Message, "PIN check failed",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Unlock failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "Unexpected error verifying PIN",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // Optional extra confirmation
+            var ok = MessageBox.Show(
+                "Unlock this Opening Stock? It will be editable and excluded from final reports until re-locked.",
+                "Confirm Unlock",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (ok != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                var adminId = userId;
+                await _svc.UnlockAsync(StockDocId, adminId);
+
+                await LoadSpecificDocAsync(StockDocId);
+                _docStatus = StockDocStatus.Draft;    // unlocked -> editable
+                RaiseLockUnlock();
+                MarkClean();
+
+                MessageBox.Show("Unlocked. You can edit and re-lock.",
+                    "Unlocked", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Unlock failed",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+
 
         private async void Post_Click(object sender, RoutedEventArgs e)
         {

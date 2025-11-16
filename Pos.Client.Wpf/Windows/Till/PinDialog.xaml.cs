@@ -16,10 +16,10 @@ namespace Pos.Client.Wpf.Windows.Till
         public PinDialog()
         {
             InitializeComponent();
-            // Focus a button so Enter triggers OK (IsDefault) and not the window
-            this.Loaded += (_, __) =>
+
+            Loaded += (_, __) =>
             {
-                // No keyboard typing into PinBox (we use keypad), but allow physical digits:
+                // Focus the window so Enter triggers OK (IsDefault)
                 this.Focus();
             };
         }
@@ -29,29 +29,42 @@ namespace Pos.Client.Wpf.Windows.Till
         private void Digit_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button b && b.Content is string d && d.All(char.IsDigit))
+            {
                 AppendDigit(d[0]);
+            }
         }
 
         private void Backspace_Click(object sender, RoutedEventArgs e) => Backspace();
 
-        private void Clear_Click(object sender, RoutedEventArgs e) => SetPin("");
+        private void Clear_Click(object sender, RoutedEventArgs e) => SetPin(string.Empty);
 
         /* ---------- OK / Cancel ---------- */
 
         private void Ok_Click(object sender, RoutedEventArgs e)
         {
             var pin = PinBox.Password;
-            if (pin.Length < MinLen)
+            if (pin.Length < MinLen || pin.Length > MaxLen)
             {
-                MessageBox.Show($"PIN must be at least {MinLen} digits.", "PIN", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(
+                    $"PIN must be {MinLen}-{MaxLen} digits.",
+                    "Invalid PIN",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
                 return;
             }
+
             EnteredPin = pin;
             DialogResult = true;
             Close();
         }
 
-        /* ---------- Helpers ---------- */
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            DialogResult = false;
+            Close();
+        }
+
+        /* ---------- Internal helpers ---------- */
 
         private void AppendDigit(char c)
         {
@@ -64,34 +77,30 @@ namespace Pos.Client.Wpf.Windows.Till
         {
             var p = PinBox.Password;
             if (p.Length == 0) return;
-            SetPin(p.Substring(0, p.Length - 1));
+            SetPin(p[..^1]); // everything except last char
         }
 
         private void SetPin(string v)
         {
-            if (v.Length > MaxLen) v = v.Substring(0, MaxLen);
+            if (v.Length > MaxLen)
+                v = v.Substring(0, MaxLen);
+
             PinBox.Password = v;
         }
 
-        /* ---------- Allow physical keyboard digits (optional), block others ---------- */
+        /* ---------- Keyboard guards ---------- */
 
         private void PinBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
-            // We keep PinBox disabled for typing, but if you enable it later, this keeps digits only.
-            e.Handled = !e.Text.All(char.IsDigit) || (PinBox.Password.Length >= MaxLen);
-            if (!e.Handled)
-            {
-                // Manually append to keep consistent
-                AppendDigit(e.Text[0]);
-                e.Handled = true;
-            }
+            // We drive the box via keypad only; block manual typing.
+            e.Handled = true;
         }
 
         private void PinBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Back)
+            if (e.Key == Key.Escape)
             {
-                Backspace();
+                Cancel_Click(sender!, e);
                 e.Handled = true;
             }
             else if (e.Key == Key.Enter)
@@ -101,7 +110,7 @@ namespace Pos.Client.Wpf.Windows.Till
             }
             else
             {
-                // Block all typing into the box (we drive it ourselves)
+                // Block all direct keyboard typing into the PasswordBox
                 e.Handled = true;
             }
         }

@@ -9,7 +9,8 @@ namespace Pos.Domain.Entities
     {
         Draft = 0,
         Dispatched = 1,
-        Received = 2
+        Received = 2,
+        Voided = 3
     }
 
     public enum StockDocType

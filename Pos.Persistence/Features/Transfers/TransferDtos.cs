@@ -60,6 +60,18 @@ namespace Pos.Persistence.Features.Transfers
 
         System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc?> GetAsync(int stockDocId);
 
+        // Void a draft transfer (no stock ledger entries yet)
+        // NEW: Void in any state (Draft/Dispatched/Received) with proper reversals
+        System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> VoidAsync(
+            int stockDocId,
+            int actedByUserId,
+            string? reason = null);
+
+        // BACK-COMPAT: redirect to VoidAsync
+        System.Threading.Tasks.Task<Pos.Domain.Entities.StockDoc> VoidDraftAsync(
+            int stockDocId,
+            int actedByUserId,
+            string? reason = null);
 
     }
 }

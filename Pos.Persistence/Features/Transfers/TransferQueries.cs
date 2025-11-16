@@ -12,6 +12,8 @@ namespace Pos.Persistence.Features.Transfers
     public sealed class TransferSearchFilter
     {
         public TransferStatus? Status { get; set; }            // null => Any
+        public TransferStatus[]? Statuses { get; set; }
+
         public InventoryLocationType? FromType { get; set; }   // null => Any
         public int? FromId { get; set; }                       // null => Any
         public InventoryLocationType? ToType { get; set; }     // null => Any
@@ -61,8 +63,18 @@ namespace Pos.Persistence.Features.Transfers
             var q = db.StockDocs.AsNoTracking()
                 .Where(d => d.DocType == StockDocType.Transfer);
 
-            if (f.Status.HasValue)
+            // Multi-status first if provided
+            if (f.Statuses != null && f.Statuses.Length > 0)
+            {
+                q = q.Where(d => d.TransferStatus.HasValue && f.Statuses.Contains(d.TransferStatus.Value));
+            }
+            else if (f.Status.HasValue) // back-compat
+            {
                 q = q.Where(d => d.TransferStatus == f.Status.Value);
+            }
+
+            //if (f.Status.HasValue)
+            //    q = q.Where(d => d.TransferStatus == f.Status.Value);
 
             if (f.FromType.HasValue) q = q.Where(d => d.LocationType == f.FromType.Value);
             if (f.FromId.HasValue) q = q.Where(d => d.LocationId == f.FromId.Value);

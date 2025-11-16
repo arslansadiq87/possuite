@@ -28,6 +28,22 @@ namespace Pos.Persistence.Services
         Task PostPurchasePaymentAddedAsync(PosClientDbContext db, Purchase p, PurchasePayment pay, CancellationToken ct);
         Task PostPurchasePaymentReversalAsync(PosClientDbContext db, Purchase p, PurchasePayment oldPay, CancellationToken ct);
 
+        /// <summary>
+        /// Post or adjust GL for an Opening Stock document.
+        /// This should be called when locking, and again on re-lock after edits (delta-based).
+        /// </summary>
+                // ----- Opening Stock -----
+        Task PostOpeningStockAsync(
+            PosClientDbContext db,
+            StockDoc doc,
+            IEnumerable<StockEntry> openingEntries,
+            int offsetAccountId,
+            CancellationToken ct = default);
+
+        Task UnlockOpeningStockAsync(
+            PosClientDbContext db,
+            StockDoc doc,
+            CancellationToken ct = default);
 
     }
 }

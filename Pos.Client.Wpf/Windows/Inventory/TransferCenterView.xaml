@@ -1,0 +1,302 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Inventory.TransferCenterView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Pos.Client.Wpf.Converters">
+
+    <UserControl.Resources>
+        <conv:TransferStatusToBrushConverter x:Key="TransferStatusToBrush"/>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Padding" Value="8,2"/>
+        </Style>
+
+        <!-- Badge colors (same as PurchaseCenter) -->
+        <SolidColorBrush x:Key="BadgeBorder"  Color="#D0D0D0"/>
+        <SolidColorBrush x:Key="BadgeDraft"   Color="#FFF9C4"/>
+        <SolidColorBrush x:Key="BadgeSale"    Color="#C8E6C9"/>
+        <SolidColorBrush x:Key="BadgeVoided"  Color="#E0E0E0"/>
+    </UserControl.Resources>
+
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- toolbar -->
+            <RowDefinition Height="Auto"/>
+            <!-- filters -->
+            <RowDefinition Height="*"/>
+            <!-- grids -->
+        </Grid.RowDefinitions>
+
+        <!-- Row 0: Actions toolbar -->
+        <ToolBarTray Grid.Row="0" Margin="0,0,0,8">
+            <ToolBar>
+                <Button Content="Refresh" Click="Refresh_Click"/>
+                <Separator/>
+                <Button x:Name="BtnOpen" Content="Open / Amend" Click="Open_Click"/>
+                <Button x:Name="BtnReceive" Content="Receive" Click="Receive_Click"/>
+                <Button x:Name="BtnVoid" Content="Void Transfer" Click="Void_Click"/>
+                <Separator/>
+                <TextBlock x:Name="TotalText" Margin="8,0,0,0" VerticalAlignment="Center"/>
+            </ToolBar>
+        </ToolBarTray>
+
+        <!-- Row 1: Filters -->
+        <Border Grid.Row="1" Padding="10" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- From / To filters -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="From:" Margin="0,0,4,0"/>
+                    <ComboBox x:Name="FromTypeBox" Width="90" Margin="0,0,4,0">
+                        <ComboBoxItem Content="Any"/>
+                        <ComboBoxItem Content="Warehouse"/>
+                        <ComboBoxItem Content="Outlet"/>
+                    </ComboBox>
+                    <ComboBox x:Name="FromPicker" Width="150"
+                              DisplayMemberPath="Name" SelectedValuePath="Id"/>
+
+                    <TextBlock Text="  To:" Margin="12,0,4,0"/>
+                    <ComboBox x:Name="ToTypeBox" Width="90" Margin="0,0,4,0">
+                        <ComboBoxItem Content="Any"/>
+                        <ComboBoxItem Content="Warehouse"/>
+                        <ComboBoxItem Content="Outlet"/>
+                    </ComboBox>
+                    <ComboBox x:Name="ToPicker" Width="150"
+                              DisplayMemberPath="Name" SelectedValuePath="Id"/>
+                </StackPanel>
+
+                <!-- Date + status -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <TextBlock Text="From date:" Margin="0,0,4,0"/>
+                    <DatePicker x:Name="FromDate" Width="120"/>
+                    <TextBlock Text="  To:" Margin="8,0,4,0"/>
+                    <DatePicker x:Name="ToDate" Width="120"/>
+                    
+                    <!-- Filter dropdown (same idea as PurchaseCenter) -->
+                    <Grid Margin="12,0,0,0" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <ToggleButton x:Name="BtnFilter"
+                  Grid.Column="0"
+                  Height="24"
+                  Padding="10,0"
+                  Content="Filter ▾"
+                  IsChecked="{Binding IsOpen, ElementName=PopupFilter, Mode=TwoWay}"
+                  ToolTip="Open status filter"/>
+
+                        <Popup x:Name="PopupFilter"
+           Placement="Bottom"
+           PlacementTarget="{Binding ElementName=BtnFilter}"
+           StaysOpen="False"
+           AllowsTransparency="True"
+           Focusable="False">
+                            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="6" Padding="10">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25"/>
+                                </Border.Effect>
+                                <StackPanel MinWidth="260">
+                                    <TextBlock Text="Filter transfers" FontWeight="Bold" Margin="0,0,0,8"/>
+
+                                    <!-- Status checkboxes -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Text="Status:" Width="70" VerticalAlignment="Center"/>
+                                        <CheckBox x:Name="ChkDraft" Content="Draft" IsChecked="True" Margin="0,0,8,0"/>
+                                        <CheckBox x:Name="ChkDispatched" Content="Dispatched" IsChecked="True" Margin="0,0,8,0"/>
+                                        <CheckBox x:Name="ChkReceived" Content="Received" IsChecked="True"/>
+                                        <CheckBox x:Name="ChkVoided" Content="Voided" IsChecked="True"/>
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Content="Clear" Width="80" Margin="0,0,8,0" Click="ClearStatusFilter_Click"/>
+                                        <Button Content="Apply" Width="80" Click="ApplyStatusFilter_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Search -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBox x:Name="SearchBox" Width="160" Margin="0,0,4,0"
+                             VerticalContentAlignment="Center"
+                             ToolTip="Search by transfer no, item, or notes"/>
+                    <Button x:Name="BtnSearch" Content="Search" Click="Search_Click"/>
+                    <Button Content="Clear" Click="ClearFilter_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Row 2: main grids -->
+        <Grid Grid.Row="2" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <!-- left transfers list -->
+                <ColumnDefinition Width="Auto" />
+                <!-- separator -->
+                <ColumnDefinition Width="1.75*" />
+                <!-- right details/lines -->
+            </Grid.ColumnDefinitions>
+
+            <!-- Left list: transfers -->
+            <!-- Left list: transfers (styled like PurchaseCenter) -->
+            <DataGrid x:Name="TransfersGrid"
+                  Grid.Column="0"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  IsReadOnly="True"
+                  SelectionChanged="TransfersGrid_SelectionChanged"
+                  RowHeaderWidth="0"
+                  HeadersVisibility="Column"
+                  HorizontalScrollBarVisibility="Disabled">
+                <!-- Same selection + badge styling pattern as PurchaseCenter -->
+                <DataGrid.Resources>
+                    <!-- 1) Override the system selection text colors just for this grid -->
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"                 Color="#111111"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#111111"/>
+                    <!-- 2) Pin selected cell foreground -->
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Foreground" Value="#111111"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+
+                    <!-- 3) Status badge, mapped to TransferStatus -->
+                    <Style x:Key="StatusBadge" TargetType="Border">
+                        <Setter Property="CornerRadius" Value="4"/>
+                        <Setter Property="Padding" Value="2,0"/>
+                        <Setter Property="Margin" Value="8,0,0,0"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BadgeBorder}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="Background" Value="#F3F3F3"/>
+
+                        <Style.Triggers>
+                            <!-- Received -> green -->
+                            <DataTrigger Binding="{Binding Status}" Value="Received">
+                                <Setter Property="Background" Value="{StaticResource BadgeSale}"/>
+                            </DataTrigger>
+
+                            <!-- Draft -> pale yellow -->
+                            <DataTrigger Binding="{Binding Status}" Value="Draft">
+                                <Setter Property="Background" Value="{StaticResource BadgeDraft}"/>
+                            </DataTrigger>
+
+                            <!-- Dispatched -> grey -->
+                            <DataTrigger Binding="{Binding Status}" Value="Dispatched">
+                                <Setter Property="Background" Value="{StaticResource BadgeVoided}"/>
+                                <Setter Property="Opacity" Value="0.9"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.Resources>
+
+                <DataGrid.Columns>
+                    <!-- Compact “Transfer” column, similar style to PurchaseCenter -->
+                    <DataGridTemplateColumn Header="Transfer" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2,3">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Row 1 (types) -->
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding RouteType}" FontWeight="SemiBold"/>
+                                    </StackPanel>
+
+                                    <!-- Status badge on Row 1 right -->
+                                    <Border Grid.Row="0" Grid.Column="1"
+                Padding="6,2"
+                CornerRadius="10"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                Background="{Binding Status, Converter={StaticResource TransferStatusToBrush}}">
+                                        <TextBlock Text="{Binding Status}" Foreground="White" FontWeight="SemiBold"/>
+                                    </Border>
+
+                                    <!-- Row 2 (names) -->
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,2,0,0">
+                                        <TextBlock Text="{Binding RouteNames}" />
+                                    </StackPanel>
+
+                                    <!-- Date-time on Row 2 right -->
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="8,2,0,0"
+                   Text="{Binding EffectiveLocal}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+
+                    <!-- Narrow numeric columns, right-aligned like GrandTotal in purchases -->
+                    <DataGridTextColumn Header="Lines"
+                            Binding="{Binding LineCount}"
+                            Width="60">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+
+            <!-- Center separator -->
+            <Separator Grid.Column="1" Margin="8,0" Width="1" Background="#DDD"/>
+
+            <!-- Right: header + lines preview -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="HeaderText"
+                           Grid.Row="0"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           Margin="0,0,0,8"/>
+
+                <DataGrid x:Name="LinesGrid"
+                          Grid.Row="1"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          IsReadOnly="True"
+                          RowHeaderWidth="0"
+                          FontSize="13">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="1.2*"/>
+                        <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" Width="3*"/>
+                        <DataGridTextColumn Header="Qty" Binding="{Binding QtyExpected}" Width="0.9*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

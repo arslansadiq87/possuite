@@ -1,0 +1,10 @@
+﻿<Window x:Class="Pos.Client.Wpf.Windows.Inventory.EditTransferWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:inv="clr-namespace:Pos.Client.Wpf.Windows.Inventory"
+        Title="Edit Transfer" Height="720" Width="1100"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="12">
+        <inv:TransferEditorView x:Name="Editor"/>
+    </Grid>
+</Window>

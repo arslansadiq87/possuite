@@ -1,0 +1,124 @@
+﻿<UserControl x:Class="Pos.Client.Wpf.Windows.Settings.SecurityPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignWidth="920"
+             d:DesignHeight="600">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="20">
+            <TextBlock Text="Security"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,16"/>
+
+            <!-- PIN setup -->
+            <GroupBox Header="PIN Code" Margin="0,0,0,16">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="190"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0"
+                               Text="Current password:"
+                               VerticalAlignment="Center"/>
+                    <PasswordBox x:Name="PinCurrentPasswordBox"
+                                 Grid.Row="0"
+                                 Grid.Column="1"
+                                 Width="220"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0"
+                               Text="New PIN (4–6 digits):"
+                               VerticalAlignment="Center"/>
+                    <PasswordBox x:Name="NewPinBox"
+                                 Grid.Row="2"
+                                 Grid.Column="1"
+                                 Width="120"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0"
+                               Text="Confirm PIN:"
+                               VerticalAlignment="Center"/>
+                    <PasswordBox x:Name="ConfirmPinBox"
+                                 Grid.Row="4"
+                                 Grid.Column="1"
+                                 Width="120"/>
+
+                    <StackPanel Grid.Row="6" Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Left">
+                        <Button Content="Save PIN"
+                                Padding="14,6"
+                                Click="SavePin_Click"/>
+                        <TextBlock Text="  (leave blank in code-behind to clear PIN if needed)"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="Gray"
+                                   Visibility="Collapsed"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- Password change -->
+            <GroupBox Header="Password">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="190"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0"
+                               Text="Current password:"
+                               VerticalAlignment="Center"/>
+                    <PasswordBox x:Name="CurrentPasswordBox"
+                                 Grid.Row="0"
+                                 Grid.Column="1"
+                                 Width="220"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0"
+                               Text="New password:"
+                               VerticalAlignment="Center"/>
+                    <PasswordBox x:Name="NewPasswordBox"
+                                 Grid.Row="2"
+                                 Grid.Column="1"
+                                 Width="220"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0"
+                               Text="Confirm password:"
+                               VerticalAlignment="Center"/>
+                    <PasswordBox x:Name="ConfirmPasswordBox"
+                                 Grid.Row="4"
+                                 Grid.Column="1"
+                                 Width="220"/>
+
+                    <StackPanel Grid.Row="6" Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Left">
+                        <Button Content="Save Password"
+                                Padding="14,6"
+                                Click="SavePassword_Click"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

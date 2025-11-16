@@ -34,7 +34,6 @@ namespace Pos.Persistence.Seeding
                 new("1140", "Inventory on hand",     AccountType.Asset,     "114", false, true,  NormalSide.Debit),
                 new("1141", "Stock openings",        AccountType.Asset,  "114",  true,  false, NormalSide.Debit),
                 new("11411","Opening stock",         AccountType.Asset,  "1141", false, true,  NormalSide.Debit),
-                // your VB had "11131" here—correcting to "1131" (same parent)
                 new("11412","Opening Warehouse stock",        AccountType.Asset, "1141", false, true,  NormalSide.Debit),
                 new("1142", "Stock purchased",             AccountType.Asset, "114",  true,  false, NormalSide.Debit),
                 new("11421","Purchase stock value",        AccountType.Asset, "1142", false, true,  NormalSide.Debit),

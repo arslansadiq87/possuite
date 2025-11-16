@@ -200,5 +200,116 @@ namespace Pos.Persistence.Services
 
             await tx.CommitAsync(ct);
         }
+
+        public async Task ChangeOwnPasswordAsync(
+    int userId,
+    string currentPassword,
+    string newPassword,
+    CancellationToken ct = default)
+        {
+            if (userId <= 0)
+                throw new InvalidOperationException("User is not logged in.");
+
+            if (string.IsNullOrWhiteSpace(currentPassword))
+                throw new InvalidOperationException("Current password is required.");
+
+            if (string.IsNullOrWhiteSpace(newPassword))
+                throw new InvalidOperationException("New password is required.");
+
+            if (newPassword.Length < 4)
+                throw new InvalidOperationException("New password must be at least 4 characters.");
+
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
+                       ?? throw new InvalidOperationException("User not found.");
+
+            if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+                throw new InvalidOperationException("Current password is incorrect.");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            user.UpdatedAtUtc = DateTime.UtcNow;
+
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, user, ct);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        public async Task ChangeOwnPinAsync(
+    int userId,
+    string currentPassword,
+    string? newPin,
+    CancellationToken ct = default)
+        {
+            if (userId <= 0)
+                throw new InvalidOperationException("User is not logged in.");
+
+            if (string.IsNullOrWhiteSpace(currentPassword))
+                throw new InvalidOperationException("Current password is required.");
+
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
+                       ?? throw new InvalidOperationException("User not found.");
+
+            // Verify current password against PasswordHash
+            if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+                throw new InvalidOperationException("Current password is incorrect.");
+
+            if (string.IsNullOrWhiteSpace(newPin))
+            {
+                // Clear PIN
+                user.PinHash = null;
+            }
+            else
+            {
+                var pin = newPin.Trim();
+                if (pin.Length < 4 || pin.Length > 6 || !pin.All(char.IsDigit))
+                    throw new InvalidOperationException("PIN must be 4–6 digits.");
+
+                // IMPORTANT: store in PinHash (not PasswordHash)
+                user.PinHash = BCrypt.Net.BCrypt.HashPassword(pin);
+            }
+
+            user.UpdatedAtUtc = DateTime.UtcNow;
+
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, user, ct);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+
+        public async Task VerifyPinAsync(
+    int userId,
+    string pin,
+    CancellationToken ct = default)
+        {
+            if (userId <= 0)
+                throw new InvalidOperationException("User is not logged in.");
+
+            if (string.IsNullOrWhiteSpace(pin))
+                throw new InvalidOperationException("PIN is required.");
+
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+
+            var user = await db.Users
+                .FirstOrDefaultAsync(u => u.Id == userId, ct)
+                ?? throw new InvalidOperationException("User not found.");
+
+            if (string.IsNullOrWhiteSpace(user.PinHash))
+                throw new InvalidOperationException(
+                    "No PIN configured for the current user. Set a PIN in settings first.");
+
+            // IMPORTANT: verify against PinHash, not PasswordHash
+            if (!BCrypt.Net.BCrypt.Verify(pin, user.PinHash))
+                throw new InvalidOperationException("Incorrect PIN.");
+        }
+
+
+
     }
 }

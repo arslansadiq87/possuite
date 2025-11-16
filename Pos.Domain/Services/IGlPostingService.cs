@@ -54,5 +54,18 @@ namespace Pos.Domain.Services
             TenderMethod method,
             CancellationToken ct = default);
 
+        /// <summary>
+        /// Post or adjust GL for an Opening Stock document.
+        /// This should be called when locking, and again on re-lock after edits (delta-based).
+        /// </summary>
+        Task PostOpeningStockAsync(
+          StockDoc doc,
+          IEnumerable<StockEntry> openingEntries,
+          int offsetAccountId,
+          CancellationToken ct = default);
+
+        Task UnlockOpeningStockAsync(
+            StockDoc doc,
+            CancellationToken ct = default);
     }
 }

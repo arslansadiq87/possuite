@@ -227,6 +227,155 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
         </DrawingImage.Drawing>
     </DrawingImage>
 
+    <!-- Outline variant -->
+    <DrawingImage x:Key="Icon.TransferCenter">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <!-- Normalize 60×60 → 100×100 -->
+                <DrawingGroup.Transform>
+                    <ScaleTransform ScaleX="1.666667" ScaleY="1.666667" />
+                </DrawingGroup.Transform>
+
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
+                         Thickness="{DynamicResource Icon.OutlineThickness}"
+                         LineJoin="Round"
+                         StartLineCap="Round"
+                         EndLineCap="Round" />
+                    </GeometryDrawing.Pen>
+
+                    <GeometryDrawing.Geometry>
+                        <GeometryGroup>
+
+                            <!-- Left device / frame -->
+                            <PathGeometry Figures="M14,38 H2 V2 h12 v6 H7 v2 h8 h25 v14 h2 V9 c0,-0.6 -0.4,-1 -1,-1 H16 V1 c0,-0.6 -0.4,-1 -1,-1 H1 C0.4,0 0,0.4 0,1 v38 c0,0.6 0.4,1 1,1 h13 V38 z" />
+
+                            <!-- Right device / frame -->
+                            <PathGeometry Figures="M59,28 H34 v-7 c0,-0.6 -0.4,-1 -1,-1 H19 c-0.6,0 -1,0.4 -1,1 v38 c0,0.6 0.4,1 1,1 h40 c0.6,0 1,-0.4 1,-1 V29 C60,28.4 59.6,28 59,28 z
+                                              M58,58 H20 V22 h12 v6 h-7 v2 h8 h25 V58 z" />
+
+                            <!-- Top-right arrow -->
+                            <PathGeometry Figures="M48.3,15.7 l1.4,-1.4 L48.4,13 H56 v11 h2 V12 c0,-0.6 -0.4,-1 -1,-1 h-8.6 l1.3,-1.3 l-1.4,-1.4 l-3,3 c-0.4,0.4 -0.4,1 0,1.4 L48.3,15.7 z" />
+
+                            <!-- Bottom-left arrow -->
+                            <PathGeometry Figures="M11.7,52.3 l-1.4,1.4 l1.3,1.3 H4 V44 H2 v12 c0,0.6 0.4,1 1,1 h8.6 l-1.3,1.3 l1.4,1.4 l3,-3 c0.4,-0.4 0.4,-1 0,-1.4 L11.7,52.3 z" />
+
+                            <!-- Dots / small rectangles -->
+
+                            <!-- Row: y = 33 (right) -->
+                            <RectangleGeometry Rect="24,33,2,2" />
+                            <RectangleGeometry Rect="28,33,2,2" />
+                            <RectangleGeometry Rect="32,33,2,2" />
+                            <RectangleGeometry Rect="36,33,2,2" />
+                            <RectangleGeometry Rect="40,33,2,2" />
+                            <RectangleGeometry Rect="44,33,2,2" />
+                            <RectangleGeometry Rect="48,33,2,2" />
+                            <RectangleGeometry Rect="52,33,2,2" />
+
+                            <!-- Row: y = 13 (top) -->
+                            <RectangleGeometry Rect="6,13,2,2" />
+                            <RectangleGeometry Rect="10,13,2,2" />
+                            <RectangleGeometry Rect="14,13,2,2" />
+                            <RectangleGeometry Rect="18,13,2,2" />
+                            <RectangleGeometry Rect="22,13,2,2" />
+                            <RectangleGeometry Rect="26,13,2,2" />
+                            <RectangleGeometry Rect="30,13,2,2" />
+                            <RectangleGeometry Rect="34,13,2,2" />
+
+                            <!-- Row: y = 33 (left) -->
+                            <RectangleGeometry Rect="6,33,2,2" />
+                            <RectangleGeometry Rect="10,33,2,2" />
+                            <RectangleGeometry Rect="14,33,2,2" />
+
+                            <!-- Row: y = 53 (bottom) -->
+                            <RectangleGeometry Rect="24,53,2,2" />
+                            <RectangleGeometry Rect="28,53,2,2" />
+                            <RectangleGeometry Rect="32,53,2,2" />
+                            <RectangleGeometry Rect="36,53,2,2" />
+                            <RectangleGeometry Rect="40,53,2,2" />
+                            <RectangleGeometry Rect="44,53,2,2" />
+                            <RectangleGeometry Rect="48,53,2,2" />
+                            <RectangleGeometry Rect="52,53,2,2" />
+
+                        </GeometryGroup>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Filled variant -->
+    <DrawingImage x:Key="Icon.Transfer.Filled">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <!-- Normalize 60×60 → 100×100 -->
+                <DrawingGroup.Transform>
+                    <ScaleTransform ScaleX="1.666667" ScaleY="1.666667" />
+                </DrawingGroup.Transform>
+
+                <GeometryDrawing Brush="{DynamicResource Icon.FillBrush}">
+                    <GeometryDrawing.Geometry>
+                        <GeometryGroup>
+
+                            <!-- Left device / frame -->
+                            <PathGeometry Figures="M14,38 H2 V2 h12 v6 H7 v2 h8 h25 v14 h2 V9 c0,-0.6 -0.4,-1 -1,-1 H16 V1 c0,-0.6 -0.4,-1 -1,-1 H1 C0.4,0 0,0.4 0,1 v38 c0,0.6 0.4,1 1,1 h13 V38 z" />
+
+                            <!-- Right device / frame -->
+                            <PathGeometry Figures="M59,28 H34 v-7 c0,-0.6 -0.4,-1 -1,-1 H19 c-0.6,0 -1,0.4 -1,1 v38 c0,0.6 0.4,1 1,1 h40 c0.6,0 1,-0.4 1,-1 V29 C60,28.4 59.6,28 59,28 z
+                                              M58,58 H20 V22 h12 v6 h-7 v2 h8 h25 V58 z" />
+
+                            <!-- Top-right arrow -->
+                            <PathGeometry Figures="M48.3,15.7 l1.4,-1.4 L48.4,13 H56 v11 h2 V12 c0,-0.6 -0.4,-1 -1,-1 h-8.6 l1.3,-1.3 l-1.4,-1.4 l-3,3 c-0.4,0.4 -0.4,1 0,1.4 L48.3,15.7 z" />
+
+                            <!-- Bottom-left arrow -->
+                            <PathGeometry Figures="M11.7,52.3 l-1.4,1.4 l1.3,1.3 H4 V44 H2 v12 c0,0.6 0.4,1 1,1 h8.6 l-1.3,1.3 l1.4,1.4 l3,-3 c0.4,-0.4 0.4,-1 0,-1.4 L11.7,52.3 z" />
+
+                            <!-- Dots / small rectangles -->
+
+                            <!-- Row: y = 33 (right) -->
+                            <RectangleGeometry Rect="24,33,2,2" />
+                            <RectangleGeometry Rect="28,33,2,2" />
+                            <RectangleGeometry Rect="32,33,2,2" />
+                            <RectangleGeometry Rect="36,33,2,2" />
+                            <RectangleGeometry Rect="40,33,2,2" />
+                            <RectangleGeometry Rect="44,33,2,2" />
+                            <RectangleGeometry Rect="48,33,2,2" />
+                            <RectangleGeometry Rect="52,33,2,2" />
+
+                            <!-- Row: y = 13 (top) -->
+                            <RectangleGeometry Rect="6,13,2,2" />
+                            <RectangleGeometry Rect="10,13,2,2" />
+                            <RectangleGeometry Rect="14,13,2,2" />
+                            <RectangleGeometry Rect="18,13,2,2" />
+                            <RectangleGeometry Rect="22,13,2,2" />
+                            <RectangleGeometry Rect="26,13,2,2" />
+                            <RectangleGeometry Rect="30,13,2,2" />
+                            <RectangleGeometry Rect="34,13,2,2" />
+
+                            <!-- Row: y = 33 (left) -->
+                            <RectangleGeometry Rect="6,33,2,2" />
+                            <RectangleGeometry Rect="10,33,2,2" />
+                            <RectangleGeometry Rect="14,33,2,2" />
+
+                            <!-- Row: y = 53 (bottom) -->
+                            <RectangleGeometry Rect="24,53,2,2" />
+                            <RectangleGeometry Rect="28,53,2,2" />
+                            <RectangleGeometry Rect="32,53,2,2" />
+                            <RectangleGeometry Rect="36,53,2,2" />
+                            <RectangleGeometry Rect="40,53,2,2" />
+                            <RectangleGeometry Rect="44,53,2,2" />
+                            <RectangleGeometry Rect="48,53,2,2" />
+                            <RectangleGeometry Rect="52,53,2,2" />
+
+                        </GeometryGroup>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+
     <DrawingImage x:Key="Icon.Inventory">
         <DrawingImage.Drawing>
             <DrawingGroup>

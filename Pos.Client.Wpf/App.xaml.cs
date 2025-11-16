@@ -103,6 +103,7 @@ namespace Pos.Client.Wpf
             // Features & services (your existing registrations, unchanged)
             sc.AddScoped<Pos.Persistence.Features.Transfers.ITransferService, Pos.Persistence.Features.Transfers.TransferService>();
             sc.AddScoped<ITransferQueries, TransferQueries>();
+            sc.AddTransient<TransferCenterView>();
             // Read-only helpers (no EF in UI)
             sc.AddScoped<ILookupService, LookupService>();
             sc.AddScoped<IInventoryReadService, InventoryReadService>();
