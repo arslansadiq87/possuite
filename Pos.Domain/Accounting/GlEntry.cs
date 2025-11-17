@@ -26,6 +26,10 @@ namespace Pos.Domain.Accounting
         Sale_AmendDelta = 21,
         Sale_Return = 22,
         Sale_Receipt = 23,
+        // NEW:
+        Sale_COGS = 24,          // DR COGS / CR Inventory on sale
+        Sale_Return_COGS = 25,   // DR Inventory / CR COGS on sale return
+
 
         Journal = 90,
         Other = 99

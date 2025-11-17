@@ -112,6 +112,7 @@ namespace Pos.Persistence.Services.Admin
 
             // Enqueue sync (Upsert)
             await _outbox.EnqueueUpsertAsync(
+                db,
                 "counter_bindings",
                 binding.Id,
                 new
@@ -159,7 +160,7 @@ namespace Pos.Persistence.Services.Admin
             await db.SaveChangesAsync(ct);
 
             // Enqueue sync (Delete)
-            await _outbox.EnqueueDeleteAsync("counter_bindings", row.Id, ct);
+            await _outbox.EnqueueDeleteAsync(db, "counter_bindings", row.Id, ct);
         }
     }
 }

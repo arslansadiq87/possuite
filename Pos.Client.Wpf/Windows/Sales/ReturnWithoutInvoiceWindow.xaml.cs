@@ -14,6 +14,7 @@ using Pos.Domain.Formatting;
 using Pos.Domain.Pricing;
 using Pos.Domain.Models.Sales;        // SaleFinalizeRequest, InvoicePreviewDto
 using Pos.Domain.Services;            // ISalesService
+using Pos.Domain.Entities;         // TillSession
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -23,6 +24,8 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly ISalesService _sales;
         private readonly IInventoryReadService _invRead;
         private readonly IItemsReadService _items;
+        private readonly IInvoiceSettingsService _invSettings; // NEW
+        private bool _useTill; // NEW
 
         private readonly AppState _state;
         private readonly IPaymentDialogService _pay;
@@ -53,6 +56,8 @@ namespace Pos.Client.Wpf.Windows.Sales
             _pay = App.Services.GetRequiredService<IPaymentDialogService>();
             _invRead = App.Services.GetRequiredService<IInventoryReadService>();
             _items = App.Services.GetRequiredService<IItemsReadService>();
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>(); // NEW
+
             this.PreviewKeyDown += (s, e) =>
             {
                 if (e.Key == Key.F9) { RefundButton_Click(s, e); e.Handled = true; return; }
@@ -71,6 +76,9 @@ namespace Pos.Client.Wpf.Windows.Sales
                 await UpdateInvoicePreviewAsync();
                 UpdateInvoiceDateNow();
                 await LoadSalesmenAsync();
+                var (settings, _) = await _invSettings.GetAsync(_outletId, "en");
+                _useTill = settings.UseTill;
+                await UpdateTillStatusUiAsync();
                 ItemSearch?.FocusSearch();
                 UpdateTotal();
             };
@@ -80,11 +88,17 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async System.Threading.Tasks.Task UpdateTillStatusUiAsync()
         {
+            if (!_useTill)
+            {
+                TillStatusText.Text = "Cash route: Cash-in-Hand";
+                return;
+            }
             var open = await _sales.GetOpenTillAsync(_outletId, _counterId);
             TillStatusText.Text = open == null
-                ? "Closed"
+                ? "Till: Closed"
                 : $"OPEN (Id={open.Id}, Opened {open.OpenTs:HH:mm})";
         }
+
 
         private async System.Threading.Tasks.Task UpdateInvoicePreviewAsync()
         {
@@ -405,8 +419,15 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             if (!_cart.Any()) { MessageBox.Show("Nothing to return — cart is empty."); return; }
 
-            var open = await _sales.GetOpenTillAsync(_outletId, _counterId);
-            if (open == null) { MessageBox.Show("Till is CLOSED. Please open till before refund.", "Till Closed"); return; }
+            //var open = await _sales.GetOpenTillAsync(_outletId, _counterId);
+            //if (open == null) { MessageBox.Show("Till is CLOSED. Please open till before refund.", "Till Closed"); return; }
+            TillSession? open = null;
+            if (_useTill)
+            {
+                open = await _sales.GetOpenTillAsync(_outletId, _counterId);
+                if (open == null) { MessageBox.Show("Till is CLOSED. Please open till before refund.", "Till Closed"); return; }
+            }
+
 
             foreach (var l in _cart) RecalcLineShared(l);
 
@@ -487,7 +508,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 OutletId = _outletId,
                 CounterId = _counterId,
-                TillSessionId = open.Id,
+                TillSessionId = _useTill ? open!.Id : (int?)null,
                 IsReturn = true,
                 OriginalSaleId = null,
 

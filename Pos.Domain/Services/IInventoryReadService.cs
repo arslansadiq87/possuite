@@ -58,5 +58,12 @@ namespace Pos.Domain.Services
             int locId,
             DateTime cutoffUtc,
             CancellationToken ct = default);
+
+        Task<decimal> GetMovingAverageCostAsync(
+            int itemId,
+            InventoryLocationType locType,
+            int locId,
+            DateTime cutoffUtc,
+            CancellationToken ct = default);
     }
 }

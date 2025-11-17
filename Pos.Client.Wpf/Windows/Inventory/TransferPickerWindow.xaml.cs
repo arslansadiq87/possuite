@@ -58,7 +58,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 {
                     try
                     {
-                        _allowedToOutletIds = (await _lookups.GetUserOutletIdsAsync(_state.CurrentUser!.Id)).ToList();
+                        _allowedToOutletIds = (await _lookups.GetUserOutletIdsAsync(_state.CurrentUserId)).ToList();
                         if (_allowedToOutletIds.Count > 0)
                         {
                             ToTypeBox.SelectedIndex = 2; // "Outlet"

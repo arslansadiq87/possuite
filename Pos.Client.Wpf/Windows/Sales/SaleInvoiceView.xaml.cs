@@ -20,6 +20,7 @@ using System.Threading.Tasks;
 using Pos.Domain.Accounting;
 using Pos.Domain.Services.Accounting;
 
+
 namespace Pos.Client.Wpf.Windows.Sales
 {
     public partial class SaleInvoiceView : UserControl
@@ -29,6 +30,11 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly IOutletReadService _outletRead;
         private readonly IPartyLookupService _partyLookup;
         private readonly IInventoryReadService _invRead;
+        private readonly IInvoiceSettingsService _invSettings; // NEW
+        private bool _useTill; // NEW
+                               // ✦ Add these private fields in your window class (if not present)
+        private readonly IItemsReadService _items;
+        
         private Pos.Domain.Models.Settings.InvoiceSettingsDto? _settings; // cache
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
@@ -71,10 +77,13 @@ namespace Pos.Client.Wpf.Windows.Sales
             _sales = sales;
             _invRead = invRead;                     // if present
             _partyLookup = partyLookup;             // <-- store it
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>(); // NEW
+            _items = App.Services.GetRequiredService<IItemsReadService>();
+
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
             CartGrid.ItemsSource = _cart;
             UpdateTotal();
-            LoadItemIndex();
+            //LoadItemIndex();
             CashierNameText.Text = cashierDisplay;
             LoadSalesmen();
             AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), /*handledEventsToo:*/ true);
@@ -82,6 +91,11 @@ namespace Pos.Client.Wpf.Windows.Sales
             Loaded += async (_, __) =>
             {
                 _settings = await _sales.GetInvoiceSettingsAsync(_ctx.OutletId, "en");
+                var (settings, _) = await _invSettings.GetAsync(OutletId, "en");
+                _useTill = settings.UseTill;
+                //await UpdateTillStatusUiAsync(); // make sure the label matches the mode
+
+
                 _printOnSave = _settings.PrintOnSave;
                 _askBeforePrintOnSave = _settings.AskToPrintOnSave;
                 IsCardEnabled = (_settings.SalesCardClearingAccountId != null);
@@ -93,6 +107,29 @@ namespace Pos.Client.Wpf.Windows.Sales
                     w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
                 FocusScan();
             };
+        }
+
+        // ✦ Add this local view-model to carry defaults from Items table
+        private record ItemIndexDto(
+            int Id,
+            string Name,
+            string Sku,
+            string Barcode,
+            decimal Price,
+            string? TaxCode,
+            decimal DefaultTaxRatePct,
+            bool TaxInclusive,
+            decimal? DefaultDiscountPct,
+            decimal? DefaultDiscountAmt,
+            string? ProductName,
+            string? Variant1Name,
+            string? Variant1Value,
+            string? Variant2Name,
+            string? Variant2Value
+        )
+        {
+            public string DisplayName =>
+                ProductNameComposer.Compose(ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
         }
 
         private async Task MaybePrintReceiptAsync(Sale sale, TillSession? open)
@@ -123,63 +160,142 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
+        private async Task<bool> TryAddOrIncrementWithGuardAsync(ItemIndexDto item, string displayName)
+        {
+            // If the item already exists in cart → propose +1; else → 1
+            var existing = _cart.FirstOrDefault(c => c.ItemId == item.Id);
+            var proposedTotal = (existing?.Qty ?? 0) + 1;
+
+            // ✦ Guard against negative/insufficient stock at outlet
+            if (!await GuardSaleQtyAsync(item.Id, proposedTotal))
+                return false;
+
+            if (existing != null)
+            {
+                existing.Qty = proposedTotal;
+                RecalcLineShared(existing);
+                UpdateTotal();
+                return true;
+            }
+
+            // New line (with defaults for tax/discount)
+            var line = new CartLine
+            {
+                ItemId = item.Id,
+                Sku = item.Sku,
+                DisplayName = string.IsNullOrWhiteSpace(displayName) ? item.DisplayName : displayName,
+                UnitPrice = item.Price,
+                Qty = 1,
+
+                // tax defaults
+                TaxCode = item.TaxCode,
+                TaxRatePct = item.DefaultTaxRatePct,
+                TaxInclusive = item.TaxInclusive,
+
+                // discount defaults (mutually exclusive)
+                DiscountPct = item.DefaultDiscountAmt.HasValue ? null : (item.DefaultDiscountPct ?? 0m),
+                DiscountAmt = item.DefaultDiscountAmt.HasValue ? item.DefaultDiscountAmt : null
+            };
+
+            RecalcLineShared(line);
+            _cart.Add(line);
+            UpdateTotal();
+            return true;
+        }
+
+
+        //private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        //{
+        //    var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
+        //    object? selected = box.SelectedItem;
+        //    if (selected is null) return;
+        //    Pos.Domain.Models.Sales.ItemIndexDto? pick = null;
+        //    if (selected is Pos.Domain.Models.Sales.ItemIndexDto d1)
+        //    {
+        //        pick = d1;
+        //    }
+        //    // Case 2: legacy/other DTO the control might still be producing
+        //    else if (selected is Pos.Domain.DTO.ItemIndexDto legacy)
+        //    {
+        //        // adapt legacy -> domain
+        //        pick = new Pos.Domain.Models.Sales.ItemIndexDto(
+        //            Id: legacy.Id,
+        //            Name: legacy.Name ?? legacy.DisplayName ?? "",
+        //            Sku: legacy.Sku ?? "",
+        //            Barcode: legacy.Barcode ?? "",
+        //            Price: legacy.Price,
+        //            TaxCode: null,
+        //            DefaultTaxRatePct: 0m,
+        //            TaxInclusive: false,
+        //            DefaultDiscountPct: null,
+        //            DefaultDiscountAmt: null,
+        //            ProductName: null,
+        //            Variant1Name: null, Variant1Value: null,
+        //            Variant2Name: null, Variant2Value: null
+        //        );
+        //    }
+        //    else
+        //    {
+        //        MessageBox.Show($"Unsupported SelectedItem type: {selected.GetType().FullName}");
+        //        return;
+        //    }
+        //    // ---- proceed with your existing logic using 'pick' ----
+        //    var itemId = pick.Id;
+        //    var existing = _cart.FirstOrDefault(c => c.ItemId == itemId);
+        //    var proposedTotal = (existing?.Qty ?? 0) + 1;
+        //    if (!await GuardSaleQtyAsync(itemId, proposedTotal))
+        //    {
+        //        try { ItemSearch?.FocusSearch(); } catch { }
+        //        return;
+        //    }
+        //    if (existing != null)
+        //    {
+        //        existing.Qty += 1;
+        //        RecalcLineShared(existing);
+        //    }
+        //    else
+        //    {
+        //        AddItemToCart(pick);
+        //    }
+        //    UpdateTotal();
+        //    try { ItemSearch?.FocusSearch(); } catch { }
+        //}
 
         private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
-            object? selected = box.SelectedItem;
-            if (selected is null) return;
-            Pos.Domain.Models.Sales.ItemIndexDto? pick = null;
-            if (selected is Pos.Domain.Models.Sales.ItemIndexDto d1)
-            {
-                pick = d1;
-            }
-            // Case 2: legacy/other DTO the control might still be producing
-            else if (selected is Pos.Domain.DTO.ItemIndexDto legacy)
-            {
-                // adapt legacy -> domain
-                pick = new Pos.Domain.Models.Sales.ItemIndexDto(
-                    Id: legacy.Id,
-                    Name: legacy.Name ?? legacy.DisplayName ?? "",
-                    Sku: legacy.Sku ?? "",
-                    Barcode: legacy.Barcode ?? "",
-                    Price: legacy.Price,
-                    TaxCode: null,
-                    DefaultTaxRatePct: 0m,
-                    TaxInclusive: false,
-                    DefaultDiscountPct: null,
-                    DefaultDiscountAmt: null,
-                    ProductName: null,
-                    Variant1Name: null, Variant1Value: null,
-                    Variant2Name: null, Variant2Value: null
-                );
-            }
-            else
-            {
-                MessageBox.Show($"Unsupported SelectedItem type: {selected.GetType().FullName}");
-                return;
-            }
-            // ---- proceed with your existing logic using 'pick' ----
-            var itemId = pick.Id;
-            var existing = _cart.FirstOrDefault(c => c.ItemId == itemId);
-            var proposedTotal = (existing?.Qty ?? 0) + 1;
-            if (!await GuardSaleQtyAsync(itemId, proposedTotal))
-            {
-                try { ItemSearch?.FocusSearch(); } catch { }
-                return;
-            }
-            if (existing != null)
-            {
-                existing.Qty += 1;
-                RecalcLineShared(existing);
-            }
-            else
-            {
-                AddItemToCart(pick);
-            }
-            UpdateTotal();
-            try { ItemSearch?.FocusSearch(); } catch { }
+            var pick = box.SelectedItem;                        // usually Pos.Domain.DTO.ItemIndexDto
+            if (pick is null) return;
+
+            // optional: if your ItemSearchBox already returns everything you need, you can skip meta
+            var meta = await _items.GetItemMetaForReturnAsync(pick.Id); // (sku/display helper)
+            var display = meta?.display
+                ?? ProductNameComposer.Compose(pick.ProductName, pick.Name ?? pick.DisplayName ?? "",
+                                               pick.Variant1Name, pick.Variant1Value, pick.Variant2Name, pick.Variant2Value);
+            var sku = meta?.sku ?? (pick.Sku ?? "");
+
+            // normalize into our local ItemIndexDto (so we carry defaults)
+            var item = new ItemIndexDto(
+                Id: pick.Id,
+                Name: pick.Name ?? pick.DisplayName ?? "",
+                Sku: sku,
+                Barcode: pick.Barcode ?? "",
+                Price: pick.Price,
+                TaxCode: pick.TaxCode,
+                DefaultTaxRatePct: pick.DefaultTaxRatePct,
+                TaxInclusive: pick.TaxInclusive,
+                DefaultDiscountPct: pick.DefaultDiscountPct,
+                DefaultDiscountAmt: pick.DefaultDiscountAmt,
+                ProductName: pick.ProductName,
+                Variant1Name: pick.Variant1Name, Variant1Value: pick.Variant1Value,
+                Variant2Name: pick.Variant2Name, Variant2Value: pick.Variant2Value
+            );
+
+            var ok = await TryAddOrIncrementWithGuardAsync(item, display);
+            try { box.FocusSearch(); } catch { }
+            if (!ok) return;
         }
+
 
         private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
         {
@@ -402,14 +518,14 @@ namespace Pos.Client.Wpf.Windows.Sales
             _invoiceFooter = FooterBox.Text ?? "";
         }
       
-        public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
+        //public ObservableCollection<ItemIndexDto> DataContextItemIndex { get; } = new();
 
-        private async void LoadItemIndex()
-        {
-            var list = await _sales.GetItemIndexAsync();
-            DataContextItemIndex.Clear();
-            foreach (var it in list) DataContextItemIndex.Add(it);
-        }
+        //private async void LoadItemIndex()
+        //{
+        //    var list = await _sales.GetItemIndexAsync();
+        //    DataContextItemIndex.Clear();
+        //    foreach (var it in list) DataContextItemIndex.Add(it);
+        //}
            
         private void InvoiceDiscountChanged(object sender, TextChangedEventArgs e)
         {
@@ -417,8 +533,37 @@ namespace Pos.Client.Wpf.Windows.Sales
             decimal.TryParse(InvDiscAmtBox.Text, out _invDiscAmt);
             UpdateTotal(); // recompute overall total shown
         }
-        private void AddItemToCart(Pos.Domain.Models.Sales.ItemIndexDto item)
+        //private void AddItemToCart(Pos.Domain.Models.Sales.ItemIndexDto item)
+        //{
+        //    var existing = _cart.FirstOrDefault(c => c.ItemId == item.Id);
+        //    if (existing != null)
+        //    {
+        //        existing.Qty += 1;
+        //        RecalcLineShared(existing);
+        //        UpdateTotal();
+        //        return;
+        //    }
+        //    var cl = new CartLine
+        //    {
+        //        ItemId = item.Id,
+        //        Sku = item.Sku,
+        //        DisplayName = ProductNameComposer.Compose(item.ProductName, item.Name, item.Variant1Name, item.Variant1Value, item.Variant2Name, item.Variant2Value),
+        //        UnitPrice = item.Price,
+        //        Qty = 1,
+        //        TaxCode = item.TaxCode,
+        //        TaxRatePct = item.DefaultTaxRatePct,
+        //        TaxInclusive = item.TaxInclusive,
+        //        DiscountPct = item.DefaultDiscountPct ?? 0m,
+        //        DiscountAmt = item.DefaultDiscountAmt ?? 0m
+        //    };
+        //    if ((cl.DiscountAmt ?? 0) > 0) cl.DiscountPct = null;
+        //    RecalcLineShared(cl);
+        //    _cart.Add(cl);
+        //    UpdateTotal();
+        //}
+        private void AddItemToCart(ItemIndexDto item, string displayNameOverride)
         {
+            // If you merge quantities for same item, keep your merge logic
             var existing = _cart.FirstOrDefault(c => c.ItemId == item.Id);
             if (existing != null)
             {
@@ -427,22 +572,27 @@ namespace Pos.Client.Wpf.Windows.Sales
                 UpdateTotal();
                 return;
             }
-            var cl = new CartLine
+
+            var line = new CartLine
             {
                 ItemId = item.Id,
                 Sku = item.Sku,
-                DisplayName = ProductNameComposer.Compose(item.ProductName, item.Name, item.Variant1Name, item.Variant1Value, item.Variant2Name, item.Variant2Value),
+                DisplayName = displayNameOverride ?? item.DisplayName,
                 UnitPrice = item.Price,
                 Qty = 1,
+
+                // ✦ Auto-pick tax defaults
                 TaxCode = item.TaxCode,
                 TaxRatePct = item.DefaultTaxRatePct,
                 TaxInclusive = item.TaxInclusive,
-                DiscountPct = item.DefaultDiscountPct ?? 0m,
-                DiscountAmt = item.DefaultDiscountAmt ?? 0m
+
+                // ✦ Auto-pick discount defaults (mutually exclusive)
+                DiscountPct = item.DefaultDiscountAmt.HasValue ? null : (item.DefaultDiscountPct ?? 0m),
+                DiscountAmt = item.DefaultDiscountAmt.HasValue ? item.DefaultDiscountAmt : null
             };
-            if ((cl.DiscountAmt ?? 0) > 0) cl.DiscountPct = null;
-            RecalcLineShared(cl);
-            _cart.Add(cl);
+
+            RecalcLineShared(line);
+            _cart.Add(line);
             UpdateTotal();
         }
 
@@ -510,12 +660,22 @@ namespace Pos.Client.Wpf.Windows.Sales
             // 0) basic guards
             if (!_cart.Any()) { MessageBox.Show("Cart is empty."); return; }
             // 1) ensure open till (via service)
-            var open = await _sales.GetOpenTillAsync(OutletId, CounterId);
-            if (open == null)
+            // OLD
+            // var open = await _sales.GetOpenTillAsync(OutletId, CounterId);
+            // if (open == null) { MessageBox.Show(...); return; }
+
+            // NEW
+            TillSession? open = null;
+            if (_useTill)
             {
-                MessageBox.Show("Till is CLOSED. Please open till before taking payment.", "Till Closed");
-                return;
+                open = await _sales.GetOpenTillAsync(OutletId, CounterId);
+                if (open == null)
+                {
+                    MessageBox.Show("Till is CLOSED. Please open till before taking payment.", "Till Closed");
+                    return;
+                }
             }
+
             // 2) recompute current cart math (fresh per-line totals)
             foreach (var cl in _cart) RecalcLineShared(cl);
             var lineNetSum = _cart.Sum(l => l.LineNet);
@@ -613,7 +773,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 OutletId = OutletId,
                 CounterId = CounterId,
-                TillSessionId = open.Id,
+                TillSessionId = _useTill ? open!.Id : (int?)null,  // <--- key line
                 IsReturn = (ReturnCheck?.IsChecked == true),
                 CashierId = cashierId,
                 SalesmanId = salesmanIdLocal,
@@ -738,6 +898,22 @@ namespace Pos.Client.Wpf.Windows.Sales
             }
         }
 
+        //private static void RecalcLineShared(CartLine l)
+        //{
+        //    var t = LinePricing.Recalc(
+        //        qty: l.Qty,
+        //        unitPrice: l.UnitPrice,
+        //        discountPct: l.DiscountPct ?? 0m,
+        //        discountAmt: l.DiscountAmt ?? 0m,
+        //        taxInclusive: l.TaxInclusive,
+        //        taxRatePct: l.TaxRatePct
+        //    );
+
+        //    l.LineNet = t.Net;    // ex-tax net for the line
+        //    l.LineTax = t.Tax;    // tax for the line
+        //    l.LineTotal = t.Total;  // final line total
+        //    l.UnitNet = (l.Qty > 0) ? PricingMath.RoundMoney(t.Net / l.Qty) : 0m;
+        //}
         private static void RecalcLineShared(CartLine l)
         {
             var t = LinePricing.Recalc(
@@ -749,46 +925,84 @@ namespace Pos.Client.Wpf.Windows.Sales
                 taxRatePct: l.TaxRatePct
             );
 
-            l.LineNet = t.Net;    // ex-tax net for the line
-            l.LineTax = t.Tax;    // tax for the line
-            l.LineTotal = t.Total;  // final line total
+            l.LineNet = t.Net;
+            l.LineTax = t.Tax;
+            l.LineTotal = t.Total;
             l.UnitNet = (l.Qty > 0) ? PricingMath.RoundMoney(t.Net / l.Qty) : 0m;
         }
-
 
         private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
         {
             if (e.EditAction != DataGridEditAction.Commit) return;
-            // Defer until edit box value is applied to the bound object
+
+            // Defer until the binding pushes new value
             Dispatcher.BeginInvoke(new Action(async () =>
             {
-                if (e.Row?.Item is CartLine l)
+                if (e.Row?.Item is not CartLine l) return;
+
+                var header = (e.Column.Header as string) ?? string.Empty;
+
+                // ✦ Guard Qty increases typed by the user
+                if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
                 {
-                    var header = (e.Column.Header as string) ?? string.Empty;
-                    if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
+                    if (l.Qty < 1) l.Qty = 1; // normalize
+                    var ok = await GuardSaleQtyAsync(l.ItemId, l.Qty);
+                    if (!ok)
                     {
-                        if (l.Qty <= 0) { l.Qty = 1; }
-                        var ok = await GuardSaleQtyAsync(l.ItemId, l.Qty);
-                        if (!ok)
-                        {
-                            l.Qty -= 1;
-                            if (l.Qty < 1) l.Qty = 1;
-                        }
+                        // roll back 1 step (minimum 1)
+                        l.Qty = Math.Max(1, l.Qty - 1);
                     }
-                    // Preserve your existing discount/price recompute logic
-                    if (header.Contains("Disc %"))
-                    {
-                        if ((l.DiscountPct ?? 0) > 0) l.DiscountAmt = null;
-                    }
-                    else if (header.Contains("Disc Amt"))
-                    {
-                        if ((l.DiscountAmt ?? 0) > 0) l.DiscountPct = null;
-                    }
-                    RecalcLineShared(l);
-                    UpdateTotal();
                 }
+
+                // Enforce “either % or Amt” for discounts, then recalc
+                if (header.Contains("Disc %"))
+                {
+                    if ((l.DiscountPct ?? 0) > 0) l.DiscountAmt = null;
+                }
+                else if (header.Contains("Disc Amt"))
+                {
+                    if ((l.DiscountAmt ?? 0) > 0) l.DiscountPct = null;
+                }
+
+                RecalcLineShared(l);
+                UpdateTotal();
             }), DispatcherPriority.Background);
         }
+
+
+        //private void CartGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
+        //{
+        //    if (e.EditAction != DataGridEditAction.Commit) return;
+        //    // Defer until edit box value is applied to the bound object
+        //    Dispatcher.BeginInvoke(new Action(async () =>
+        //    {
+        //        if (e.Row?.Item is CartLine l)
+        //        {
+        //            var header = (e.Column.Header as string) ?? string.Empty;
+        //            if (header.Contains("Qty", StringComparison.OrdinalIgnoreCase))
+        //            {
+        //                if (l.Qty <= 0) { l.Qty = 1; }
+        //                var ok = await GuardSaleQtyAsync(l.ItemId, l.Qty);
+        //                if (!ok)
+        //                {
+        //                    l.Qty -= 1;
+        //                    if (l.Qty < 1) l.Qty = 1;
+        //                }
+        //            }
+        //            // Preserve your existing discount/price recompute logic
+        //            if (header.Contains("Disc %"))
+        //            {
+        //                if ((l.DiscountPct ?? 0) > 0) l.DiscountAmt = null;
+        //            }
+        //            else if (header.Contains("Disc Amt"))
+        //            {
+        //                if ((l.DiscountAmt ?? 0) > 0) l.DiscountPct = null;
+        //            }
+        //            RecalcLineShared(l);
+        //            UpdateTotal();
+        //        }
+        //    }), DispatcherPriority.Background);
+        //}
 
         private async void ResumeHeld(int saleId)
         {

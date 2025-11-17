@@ -122,5 +122,34 @@ namespace Pos.Persistence.Services
             foreach (var id in ids) if (!result.ContainsKey(id)) result[id] = 0m;
             return result;
         }
+
+        // Add near the other public methods
+        public async Task<decimal> GetMovingAverageCostAsync(
+            int itemId,
+            InventoryLocationType locType,
+            int locId,
+            DateTime cutoffUtc,
+            CancellationToken ct = default)
+        {
+            // value = sum(qty * cost), qty = sum(qty)
+            // We include all entries up to cutoff (opening, purchase, transfers, sales etc.).
+            // If historical sale entries had UnitCost=0, they won’t distort value (ok on first run).
+            var rows = await _db.Set<StockEntry>()
+                .AsNoTracking()
+                .Where(e => e.ItemId == itemId
+                         && e.LocationType == locType
+                         && e.LocationId == locId
+                         && e.Ts <= cutoffUtc)
+                .Select(e => new { e.QtyChange, e.UnitCost })
+                .ToListAsync(ct);
+
+            var qty = rows.Sum(r => r.QtyChange);
+            if (qty <= 0m) return 0m; // no stock yet → cost unknown; caller can decide fallback
+
+            var value = rows.Sum(r => r.QtyChange * r.UnitCost);
+            var avg = value / qty;
+            return Math.Round(avg, 4);
+        }
+
     }
 }

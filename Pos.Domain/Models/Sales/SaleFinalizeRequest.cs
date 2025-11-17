@@ -7,7 +7,7 @@ namespace Pos.Domain.Models.Sales
         // Header
         public int OutletId { get; init; }
         public int CounterId { get; init; }
-        public int TillSessionId { get; init; } // required open till
+        public int? TillSessionId { get; init; } // null when outlet does NOT use till
         public bool IsReturn { get; init; }
         public int? OriginalSaleId { get; init; }   // NEW: link when this is a return-from-invoice
 

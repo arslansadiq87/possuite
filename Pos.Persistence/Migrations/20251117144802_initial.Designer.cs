@@ -11,8 +11,8 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    [Migration("20251107200433_init")]
-    partial class init1
+    [Migration("20251117144802_initial")]
+    partial class initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -163,6 +163,9 @@ namespace Pos.Persistence.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("UseTill")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OutletId");
@@ -179,6 +182,9 @@ namespace Pos.Persistence.Migrations
                     b.Property<int>("AccountId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("ChainId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -194,13 +200,31 @@ namespace Pos.Persistence.Migrations
                     b.Property<int>("DocId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("DocNo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<short>("DocSubType")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("DocType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("EffectiveDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEffective")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("LinkedPaymentId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Memo")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("OutletId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PartyId")
                         .HasColumnType("INTEGER");
 
                     b.Property<Guid>("PublicId")
@@ -223,7 +247,13 @@ namespace Pos.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AccountId");
+                    b.HasIndex("PartyId");
+
+                    b.HasIndex("AccountId", "EffectiveDate");
+
+                    b.HasIndex("ChainId", "IsEffective");
+
+                    b.HasIndex("DocType", "DocId");
 
                     b.ToTable("GlEntries");
                 });
@@ -1813,6 +1843,9 @@ namespace Pos.Persistence.Migrations
                     b.Property<bool>("IsReturn")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("LocationType")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("OtherCharges")
                         .HasColumnType("decimal(18,2)");
 
@@ -1861,9 +1894,6 @@ namespace Pos.Persistence.Migrations
                     b.Property<decimal>("Subtotal")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<int>("TargetType")
-                        .HasColumnType("INTEGER");
-
                     b.Property<decimal>("Tax")
                         .HasColumnType("decimal(18,2)");
 
@@ -1875,6 +1905,9 @@ namespace Pos.Persistence.Migrations
 
                     b.Property<string>("VendorInvoiceNo")
                         .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VoidReason")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("WarehouseId")
@@ -1909,7 +1942,7 @@ namespace Pos.Persistence.Migrations
 
                     b.ToTable("Purchases", t =>
                         {
-                            t.HasCheckConstraint("CK_Purchase_Target", "(TargetType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (TargetType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
+                            t.HasCheckConstraint("CK_Purchase_Target", "(LocationType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (LocationType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
                         });
                 });
 
@@ -1946,9 +1979,6 @@ namespace Pos.Persistence.Migrations
                     b.Property<int>("PurchaseId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("PurchaseId1")
-                        .HasColumnType("INTEGER");
-
                     b.Property<decimal>("Qty")
                         .HasColumnType("decimal(18,3)");
 
@@ -1981,8 +2011,6 @@ namespace Pos.Persistence.Migrations
 
                     b.HasIndex("PurchaseId");
 
-                    b.HasIndex("PurchaseId1");
-
                     b.HasIndex("RefPurchaseLineId");
 
                     b.ToTable("PurchaseLines");
@@ -2006,6 +2034,9 @@ namespace Pos.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsEffective")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Kind")
                         .HasColumnType("INTEGER");
 
@@ -2015,7 +2046,7 @@ namespace Pos.Persistence.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("OutletId")
+                    b.Property<int?>("OutletId")
                         .HasColumnType("INTEGER");
 
                     b.Property<Guid>("PublicId")
@@ -2041,6 +2072,9 @@ namespace Pos.Persistence.Migrations
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("WarehouseId")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2645,6 +2679,9 @@ namespace Pos.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("PinHash")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("PublicId")
                         .HasColumnType("TEXT");
 
@@ -2982,6 +3019,9 @@ namespace Pos.Persistence.Migrations
 
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("PeriodEndUtc")
                         .HasColumnType("TEXT");
@@ -3645,15 +3685,11 @@ namespace Pos.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ItemId1");
 
-                    b.HasOne("Pos.Domain.Entities.Purchase", null)
+                    b.HasOne("Pos.Domain.Entities.Purchase", "Purchase")
                         .WithMany("Lines")
                         .HasForeignKey("PurchaseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("Pos.Domain.Entities.Purchase", "Purchase")
-                        .WithMany()
-                        .HasForeignKey("PurchaseId1");
 
                     b.HasOne("Pos.Domain.Entities.PurchaseLine", null)
                         .WithMany()

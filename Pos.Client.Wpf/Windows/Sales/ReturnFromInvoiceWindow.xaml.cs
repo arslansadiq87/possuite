@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Services;            // IPaymentDialogService
 using Pos.Domain;
+using Pos.Domain.Entities;
 using Pos.Domain.Models.Sales;
 using Pos.Domain.Pricing;                 // PricingMath
 using Pos.Domain.Services;                // ISalesService
@@ -19,6 +20,9 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly int _origSaleId;
         private readonly ISalesService _sales;
         private readonly AppState _state;
+        private readonly IInvoiceSettingsService _invSettings; // NEW
+        private bool _useTill; // NEW
+
         public bool Confirmed { get; private set; }
         public decimal RefundMagnitude { get; private set; } // absolute amount
 
@@ -68,6 +72,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             InitializeComponent();
             _origSaleId = saleId;
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>(); // NEW
 
             _sales = App.Services.GetRequiredService<ISalesService>();
             _state = App.Services.GetRequiredService<AppState>();
@@ -77,6 +82,9 @@ namespace Pos.Client.Wpf.Windows.Sales
             Loaded += async (_, __) =>
             {
                 var dto = await _sales.GetReturnFromInvoiceAsync(_origSaleId);
+                var (settings, _) = await _invSettings.GetAsync(_state.CurrentOutletId, "en");
+                _useTill = settings.UseTill;
+
                 HeaderText.Text = dto.HeaderHuman;
                 _rows.Clear();
                 foreach (var x in dto.Lines)
@@ -127,6 +135,14 @@ namespace Pos.Client.Wpf.Windows.Sales
 
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
+
+            TillSession? openTill = null;
+            if (_useTill)
+            {
+                openTill = await _sales.GetOpenTillAsync(_state.CurrentOutletId, _state.CurrentCounterId);
+                if (openTill == null) { MessageBox.Show("Till is closed."); return; }
+            }
+
             var reason = ReasonBox.Text?.Trim();
             if (string.IsNullOrWhiteSpace(reason))
             {
@@ -137,6 +153,8 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 MessageBox.Show("No quantities entered to return."); return;
             }
+
+
 
             // Totals
             RecalcTotals();
@@ -169,21 +187,20 @@ namespace Pos.Client.Wpf.Windows.Sales
             if (!payResult.Confirmed) return;
 
             // Get open till (defensive)
-            var openTill = await _sales.GetOpenTillAsync(_state.CurrentOutletId, _state.CurrentCounterId);
-            if (openTill == null)
-            {
-                MessageBox.Show("Till is closed."); return;
-            }
+            // Use current till if any; service will enforce UseTill preference
+            //var tillId = _state.CurrentTillSessionId ?? 0;
+
 
             // Build finalize request for a RETURN
             var req = new SaleFinalizeRequest
             {
                 OutletId = _state.CurrentOutletId,
                 CounterId = _state.CurrentCounterId,
-                TillSessionId = openTill.Id,
+                TillSessionId = _useTill ? openTill!.Id : (int?)null,
+
                 IsReturn = true,
                 OriginalSaleId = _origSaleId,
-                CashierId = _state.CurrentUser!.Id,
+                CashierId = _state.CurrentUserId,
                 SalesmanId = null,
                 CustomerKind = CustomerKind.WalkIn,
                 CustomerId = null,

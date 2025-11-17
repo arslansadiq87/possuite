@@ -186,11 +186,13 @@ namespace Pos.Persistence.Services
             DumpChangeTracker(db, $"{trace}.BEFORE_SAVE_PHASE1");
             await db.SaveChangesAsync(ct);
             Debug.WriteLine($"{trace} Header+Lines saved (Id={header.Id})");
-
+            
             // ---- STOCK OUT for return
             var stockDeltas = BuildReturnStockDeltas(db, header).ToList();
             Debug.WriteLine($"{trace} StockDeltas count={stockDeltas.Count} sum={stockDeltas.Sum(d => d.Delta)}");
-            await ApplyReturnStockAsync(db, header, stockDeltas, nowUtc, user, ct);
+            var unitCostByItem = BuildPerItemUnitCostMapForReturn(header);
+            await ApplyReturnStockAsync(db, header, stockDeltas, nowUtc, user, ct, unitCostByItem);
+            
             Debug.WriteLine($"{trace} StockEntries applied");
 
             // ---- GL (gross + refunds)
@@ -307,7 +309,15 @@ namespace Pos.Persistence.Services
             // ---- STOCK OUT for return
             var stockDeltas = BuildReturnStockDeltas(db, header).ToList();
             Debug.WriteLine($"{trace} StockDeltas count={stockDeltas.Count} sum={stockDeltas.Sum(d => d.Delta)}");
-            await ApplyReturnStockAsync(db, header, stockDeltas, nowUtc, user, ct);
+            var (srcType, srcId) = ResolveSource(header);
+            var unitCostByItem = new Dictionary<int, decimal>();
+            foreach (var id in stockDeltas.Select(d => d.ItemId).Distinct())
+            {
+                var avg = await _invRead.GetMovingAverageCostAsync(id, srcType, srcId, nowUtc, ct);
+                unitCostByItem[id] = Math.Round(avg, 4);
+            }
+            await ApplyReturnStockAsync(db, header, stockDeltas, nowUtc, user, ct, unitCostByItem);
+            //await ApplyReturnStockAsync(db, header, stockDeltas, nowUtc, user, ct);
             Debug.WriteLine($"{trace} StockEntries applied");
 
             // ---- GL (gross + refunds)
@@ -417,8 +427,9 @@ namespace Pos.Persistence.Services
 
             // ▶▶ ADD THIS: recompute and apply stock deltas for the amendment
             var stockDeltas = BuildReturnStockDeltas(db, existing).ToList();
+            var unitCostByItem = BuildPerItemUnitCostMapForReturn(header);
             Debug.WriteLine($"{trace} StockDeltas(AMEND) count={stockDeltas.Count} sum={stockDeltas.Sum(d => d.Delta)}");
-            await ApplyReturnStockAsync(db, existing, stockDeltas, nowUtc, user, ct);
+            await ApplyReturnStockAsync(db, existing, stockDeltas, nowUtc, user, ct, unitCostByItem);
             Debug.WriteLine($"{trace} StockEntries(AMEND) applied");
 
             // Re-post full GL snapshot for this return (invalidates old rows for this chain)
@@ -503,28 +514,32 @@ namespace Pos.Persistence.Services
 
         // ===== APPLY STOCK (RETURN) =====
         // Same shape as PurchasesService.ApplyStockAsync but RefType = "PurchaseReturn"
+        // change signature:
         private async Task ApplyReturnStockAsync(
             PosClientDbContext db, Purchase p,
             IEnumerable<Pos.Domain.Models.Inventory.StockDeltaDto> deltas,
-            DateTime nowUtc, string user, CancellationToken ct)
+            DateTime nowUtc, string user, CancellationToken ct,
+            Dictionary<int, decimal>? unitCostByItem = null)
         {
             foreach (var d in deltas)
             {
                 if (d.Delta == 0) continue;
+                var cost = 0m;
+                if (unitCostByItem != null && unitCostByItem.TryGetValue(d.ItemId, out var c))
+                    cost = c;
 
                 db.StockEntries.Add(new StockEntry
                 {
                     OutletId = p.OutletId ?? 0,
                     ItemId = d.ItemId,
-                    QtyChange = d.Delta, // will be negative for stock-out
-                    UnitCost = 0m,
+                    QtyChange = d.Delta, // negative for stock-out
+                    UnitCost = cost,     // <-- write cost
                     LocationType = d.LocType,
                     LocationId = d.LocId,
                     RefType = "PurchaseReturn",
-                    RefId = p.Id,        // requires header.Id to be assigned (save header first)
+                    RefId = p.Id,
                     Ts = nowUtc,
                     Note = p.DocNo,
-                    // ✅ audit
                     CreatedAtUtc = nowUtc,
                     CreatedBy = user,
                     UpdatedAtUtc = null,
@@ -1047,6 +1062,28 @@ namespace Pos.Persistence.Services
                 .AnyAsync(x => x.IsReturn
                             && x.RefPurchaseId == purchaseId
                             && x.Status != PurchaseStatus.Voided, ct);
+        }
+
+        private static Dictionary<int, decimal> BuildPerItemUnitCostMapForReturn(Purchase p)
+        {
+            // lines are negative qty for returns; use ABS for weighting
+            var groups = p.Lines
+                .GroupBy(l => l.ItemId)
+                .Select(g => new
+                {
+                    ItemId = g.Key,
+                    QtyAbs = g.Sum(x => Math.Abs(x.Qty)),
+                    AmountAbs = g.Sum(x => Math.Abs(x.Qty) * x.UnitCost)
+                })
+                .ToList();
+
+            var map = new Dictionary<int, decimal>(groups.Count);
+            foreach (var g in groups)
+            {
+                if (g.QtyAbs == 0m) { map[g.ItemId] = 0m; continue; }
+                map[g.ItemId] = Math.Round(g.AmountAbs / g.QtyAbs, 4);
+            }
+            return map;
         }
 
 

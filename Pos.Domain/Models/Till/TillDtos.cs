@@ -12,6 +12,22 @@ namespace Pos.Domain.Models.Till
             : "Till: Closed";
     }
 
+    public enum CashCollectionMode
+    {
+        Till,
+        CashInHand
+    }
+
+    public sealed class CashCollectionStatusDto
+    {
+        public CashCollectionMode Mode { get; init; }
+        public TillStatusDto? Till { get; init; } // only when Mode == Till
+        public string Text =>
+            Mode == CashCollectionMode.Till
+                ? (Till?.Text ?? "Till: Closed")
+                : "Cash route: Cash-in-Hand";
+    }
+
     public sealed class TillOpenResultDto
     {
         public int TillSessionId { get; init; }

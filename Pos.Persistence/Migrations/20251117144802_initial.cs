@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Pos.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class init1 : Migration
+    public partial class initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -269,6 +269,7 @@ namespace Pos.Persistence.Migrations
                     TotalGross = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     TotalDeductions = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     TotalNet = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    PaidAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
@@ -530,6 +531,7 @@ namespace Pos.Persistence.Migrations
                     Role = table.Column<int>(type: "INTEGER", nullable: false),
                     IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
                     PasswordHash = table.Column<string>(type: "TEXT", nullable: false),
+                    PinHash = table.Column<string>(type: "TEXT", nullable: true),
                     IsGlobalAdmin = table.Column<bool>(type: "INTEGER", nullable: false),
                     PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
@@ -781,7 +783,8 @@ namespace Pos.Persistence.Migrations
                     PrintBarcodeOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
                     PurchaseBankAccountId = table.Column<int>(type: "INTEGER", nullable: true),
-                    SalesCardClearingAccountId = table.Column<int>(type: "INTEGER", nullable: true)
+                    SalesCardClearingAccountId = table.Column<int>(type: "INTEGER", nullable: true),
+                    UseTill = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1237,13 +1240,20 @@ namespace Pos.Persistence.Migrations
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     TsUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    EffectiveDate = table.Column<DateTime>(type: "TEXT", nullable: false),
                     OutletId = table.Column<int>(type: "INTEGER", nullable: true),
                     AccountId = table.Column<int>(type: "INTEGER", nullable: false),
                     Debit = table.Column<decimal>(type: "TEXT", nullable: false),
                     Credit = table.Column<decimal>(type: "TEXT", nullable: false),
                     DocType = table.Column<int>(type: "INTEGER", nullable: false),
                     DocId = table.Column<int>(type: "INTEGER", nullable: false),
+                    DocNo = table.Column<string>(type: "TEXT", nullable: true),
+                    DocSubType = table.Column<short>(type: "INTEGER", nullable: false),
+                    ChainId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    IsEffective = table.Column<bool>(type: "INTEGER", nullable: false),
+                    PartyId = table.Column<int>(type: "INTEGER", nullable: true),
                     Memo = table.Column<string>(type: "TEXT", nullable: true),
+                    LinkedPaymentId = table.Column<int>(type: "INTEGER", nullable: true),
                     PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
@@ -1564,7 +1574,7 @@ namespace Pos.Persistence.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     PartyId = table.Column<int>(type: "INTEGER", nullable: false),
                     PartyId1 = table.Column<int>(type: "INTEGER", nullable: true),
-                    TargetType = table.Column<int>(type: "INTEGER", nullable: false),
+                    LocationType = table.Column<int>(type: "INTEGER", nullable: false),
                     OutletId = table.Column<int>(type: "INTEGER", nullable: true),
                     OutletId1 = table.Column<int>(type: "INTEGER", nullable: true),
                     WarehouseId = table.Column<int>(type: "INTEGER", nullable: true),
@@ -1586,6 +1596,7 @@ namespace Pos.Persistence.Migrations
                     RefPurchaseId = table.Column<int>(type: "INTEGER", nullable: true),
                     RevisedFromPurchaseId = table.Column<int>(type: "INTEGER", nullable: true),
                     RevisedToPurchaseId = table.Column<int>(type: "INTEGER", nullable: true),
+                    VoidReason = table.Column<string>(type: "TEXT", nullable: true),
                     PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
@@ -1596,7 +1607,7 @@ namespace Pos.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Purchases", x => x.Id);
-                    table.CheckConstraint("CK_Purchase_Target", "(TargetType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (TargetType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
+                    table.CheckConstraint("CK_Purchase_Target", "(LocationType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (LocationType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
                     table.ForeignKey(
                         name: "FK_Purchases_Outlets_OutletId",
                         column: x => x.OutletId,
@@ -1658,7 +1669,6 @@ namespace Pos.Persistence.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     PurchaseId = table.Column<int>(type: "INTEGER", nullable: false),
                     RefPurchaseLineId = table.Column<int>(type: "INTEGER", nullable: true),
-                    PurchaseId1 = table.Column<int>(type: "INTEGER", nullable: true),
                     ItemId = table.Column<int>(type: "INTEGER", nullable: false),
                     ItemId1 = table.Column<int>(type: "INTEGER", nullable: true),
                     Qty = table.Column<decimal>(type: "decimal(18,3)", nullable: false),
@@ -1700,11 +1710,6 @@ namespace Pos.Persistence.Migrations
                         principalTable: "Purchases",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_PurchaseLines_Purchases_PurchaseId1",
-                        column: x => x.PurchaseId1,
-                        principalTable: "Purchases",
-                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -1715,13 +1720,15 @@ namespace Pos.Persistence.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     PurchaseId = table.Column<int>(type: "INTEGER", nullable: false),
                     SupplierId = table.Column<int>(type: "INTEGER", nullable: false),
-                    OutletId = table.Column<int>(type: "INTEGER", nullable: false),
+                    OutletId = table.Column<int>(type: "INTEGER", nullable: true),
+                    WarehouseId = table.Column<int>(type: "INTEGER", nullable: true),
                     TsUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
                     Kind = table.Column<int>(type: "INTEGER", nullable: false),
                     Method = table.Column<int>(type: "INTEGER", nullable: false),
                     BankAccountId = table.Column<int>(type: "INTEGER", nullable: true),
                     Amount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     Note = table.Column<string>(type: "TEXT", nullable: true),
+                    IsEffective = table.Column<bool>(type: "INTEGER", nullable: false),
                     PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
                     CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
@@ -1819,9 +1826,24 @@ namespace Pos.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_GlEntries_AccountId",
+                name: "IX_GlEntries_AccountId_EffectiveDate",
                 table: "GlEntries",
-                column: "AccountId");
+                columns: new[] { "AccountId", "EffectiveDate" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_GlEntries_ChainId_IsEffective",
+                table: "GlEntries",
+                columns: new[] { "ChainId", "IsEffective" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_GlEntries_DocType_DocId",
+                table: "GlEntries",
+                columns: new[] { "DocType", "DocId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_GlEntries_PartyId",
+                table: "GlEntries",
+                column: "PartyId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InvoiceLocalizations_InvoiceSettingsId_Lang",
@@ -1996,11 +2018,6 @@ namespace Pos.Persistence.Migrations
                 name: "IX_PurchaseLines_PurchaseId",
                 table: "PurchaseLines",
                 column: "PurchaseId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PurchaseLines_PurchaseId1",
-                table: "PurchaseLines",
-                column: "PurchaseId1");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PurchaseLines_RefPurchaseLineId",

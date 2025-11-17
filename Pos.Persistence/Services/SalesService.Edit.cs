@@ -74,7 +74,7 @@ namespace Pos.Persistence.Services
 
         public async Task<EditSaleSaveResult> SaveAmendmentAsync(EditSaleSaveRequest req, CancellationToken ct = default)
         {
-            // Validate original
+            // 1) Validate original
             var orig = await _db.Sales.FirstAsync(s => s.Id == req.OriginalSaleId, ct);
             if (orig.IsReturn) throw new InvalidOperationException("Returns cannot be amended here.");
             if (orig.Status != SaleStatus.Final) throw new InvalidOperationException("Only FINAL invoices can be amended.");
@@ -83,21 +83,20 @@ namespace Pos.Persistence.Services
             if (await HasActiveReturnAsync(req.OriginalSaleId, ct))
                 throw new InvalidOperationException("This invoice has a posted return; you cannot amend the original. Amend the return instead.");
 
-
-            // Totals deltas
+            // 2) Totals deltas
             var deltaSub = req.Subtotal - orig.Subtotal;
             var deltaTax = req.TaxTotal - orig.TaxTotal;
             var deltaGrand = req.Total - orig.Total;
             if (deltaGrand < -0.005m)
                 throw new InvalidOperationException("The amended total is LOWER than the original. Use 'Return (with invoice)'.");
 
-            // Build qty maps for stock deltas
+            // 3) Build qty maps for stock deltas
             var origLines = await _db.SaleLines.Where(l => l.SaleId == orig.Id).ToListAsync(ct);
             var origQtyByItem = origLines.GroupBy(x => x.ItemId).ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
             var newQtyByItem = req.Lines.GroupBy(x => x.ItemId).ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
             var allItemIds = origQtyByItem.Keys.Union(newQtyByItem.Keys).Distinct().ToList();
 
-            // Collect OUT deltas for guard and entries
+            // 4) Prepare stock deltas for guard and for SaleRev entries
             var pendingOutDeltas = new List<StockDeltaDto>();
             var pendingEntries = new List<StockEntry>();
 
@@ -109,6 +108,7 @@ namespace Pos.Persistence.Services
 
                 if (deltaQty > 0m)
                 {
+                    // Guard OUT
                     pendingOutDeltas.Add(new StockDeltaDto(
                         ItemId: itemId,
                         OutletId: req.OutletId,
@@ -116,6 +116,7 @@ namespace Pos.Persistence.Services
                         LocId: req.OutletId,
                         Delta: -deltaQty));
 
+                    // Prepare OUT entry (UnitCost set later)
                     pendingEntries.Add(new StockEntry
                     {
                         LocationType = InventoryLocationType.Outlet,
@@ -131,13 +132,14 @@ namespace Pos.Persistence.Services
                 else if (deltaQty < 0m)
                 {
                     var qtyIn = Math.Abs(deltaQty);
+                    // Prepare IN entry (UnitCost set later)
                     pendingEntries.Add(new StockEntry
                     {
                         LocationType = InventoryLocationType.Outlet,
                         LocationId = req.OutletId,
                         OutletId = req.OutletId,
                         ItemId = itemId,
-                        QtyChange = qtyIn,     // IN
+                        QtyChange = qtyIn,    // IN
                         RefType = "SaleRev",
                         RefId = 0,         // backfilled later
                         Ts = DateTime.UtcNow
@@ -145,13 +147,11 @@ namespace Pos.Persistence.Services
                 }
             }
 
-            // Guard once for all positive OUT
+            // 5) Guard once for all positive OUT
             if (pendingOutDeltas.Count > 0)
-            {
                 await _guard.EnsureNoNegativeAtLocationAsync(pendingOutDeltas, atUtc: null, ct);
-            }
 
-            // Save new revision (+ lines + stock) inside a TX
+            // 6) Start TX: save revised sale, lines, and SaleRev stock entries
             await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
             var newSale = new Sale
@@ -183,6 +183,7 @@ namespace Pos.Persistence.Services
                 CustomerName = req.CustomerName,
                 CustomerPhone = req.CustomerPhone,
 
+                // NOTE: keep these as DELTAS for the GL delta poster
                 CashAmount = req.CollectedCash,
                 CardAmount = req.CollectedCard,
                 PaymentMethod = (deltaGrand > 0.005m) ? req.PaymentMethod : orig.PaymentMethod,
@@ -192,7 +193,7 @@ namespace Pos.Persistence.Services
             _db.Sales.Add(newSale);
             await _db.SaveChangesAsync(ct);
 
-            // Lines (⚠ ensure Qty type matches entity; your other methods cast to int)
+            // Lines (⚠ ensure Qty int)
             foreach (var l in req.Lines)
             {
                 _db.SaleLines.Add(new SaleLine
@@ -214,25 +215,59 @@ namespace Pos.Persistence.Services
             }
             await _db.SaveChangesAsync(ct);
 
-            // Stock entries RefId backfilled
-            foreach (var se in pendingEntries) se.RefId = newSale.Id;
+            // 7) Build original issue cost per item (weighted) from the original sale's OUT entries
+            var origIssueCostByItem = await _db.StockEntries.AsNoTracking()
+                .Where(e => e.RefType == "Sale" && e.RefId == orig.Id && e.QtyChange < 0) // OUT
+                .GroupBy(e => e.ItemId)
+                .Select(g => new
+                {
+                    ItemId = g.Key,
+                    UnitCost = g.Sum(x => (-x.QtyChange) * x.UnitCost) / g.Sum(x => -x.QtyChange)
+                })
+                .ToDictionaryAsync(x => x.ItemId, x => x.UnitCost, ct);
+
+            // 8) Backfill RefId & set UnitCost for SaleRev entries
+            var nowUtc = DateTime.UtcNow;
+            foreach (var se in pendingEntries)
+            {
+                se.RefId = newSale.Id;
+                se.Ts = nowUtc;
+
+                if (se.QtyChange < 0) // OUT (extra sold in amendment): use current moving-average cost
+                {
+                    se.UnitCost = await _in.GetMovingAverageCostAsync(
+                        se.ItemId, InventoryLocationType.Outlet, req.OutletId, nowUtc, ct);
+
+                    if (se.UnitCost <= 0m)
+                        throw new InvalidOperationException($"No cost available for ItemId={se.ItemId} (amend OUT).");
+                }
+                else // IN (returned in amendment): use original sale's issue cost; fallback to moving-average
+                {
+                    if (!origIssueCostByItem.TryGetValue(se.ItemId, out var origCost) || origCost <= 0m)
+                    {
+                        origCost = await _in.GetMovingAverageCostAsync(
+                            se.ItemId, InventoryLocationType.Outlet, req.OutletId, nowUtc, ct);
+                    }
+                    se.UnitCost = origCost;
+                }
+            }
             _db.StockEntries.AddRange(pendingEntries);
 
-            // link original → revised
+            // 9) Link original → revised
             var origTracked = await _db.Sales.FirstAsync(s => s.Id == orig.Id, ct);
             origTracked.RevisedToSaleId = newSale.Id;
 
-            // Outbox BEFORE final save + commit (house rule)
+            // 10) Outbox BEFORE final save + commit (house rule)
             await _outbox.EnqueueUpsertAsync(_db, newSale, ct);
 
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
-            // GL revision (if not already)
+            // 11) GL revision (delta-only) — posts Revenue/Tax Δ, sign-aware Receipts/AR Δ, and COGS/Inventory Δ (from SaleRev costs)
             var already = await _db.GlEntries.AsNoTracking()
                 .AnyAsync(g => g.DocType == Pos.Domain.Accounting.GlDocType.SaleRevision && g.DocId == newSale.Id, ct);
             if (!already)
-                await _gl.PostSaleRevisionAsync(newSale, deltaSub, deltaTax); // keep signature as-is if it has no ct
+                await _gl.PostSaleRevisionAsync(newSale, deltaSub, deltaTax);
 
             return new EditSaleSaveResult(
                 NewSaleId: newSale.Id,
@@ -242,6 +277,7 @@ namespace Pos.Persistence.Services
                 DeltaGrand: deltaGrand
             );
         }
+
 
     }
 }

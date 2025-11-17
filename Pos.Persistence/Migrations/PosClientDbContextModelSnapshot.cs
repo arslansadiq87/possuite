@@ -1939,7 +1939,7 @@ namespace Pos.Persistence.Migrations
 
                     b.ToTable("Purchases", t =>
                         {
-                            t.HasCheckConstraint("CK_Purchase_Target", "(TargetType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (TargetType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
+                            t.HasCheckConstraint("CK_Purchase_Target", "(LocationType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (LocationType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)");
                         });
                 });
 

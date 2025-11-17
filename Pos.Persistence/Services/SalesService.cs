@@ -25,14 +25,16 @@ namespace Pos.Persistence.Services
         private readonly IGlPostingService _gl;
         private readonly IStockGuard _guard;
         private readonly IInvoiceSettingsService _invSettings;   // <-- add
+        private readonly IInventoryReadService _in = null!; // <-- add
 
-        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard, IInvoiceSettingsService invSettings)
+        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard, IInvoiceSettingsService invSettings, IInventoryReadService @in)
         {
             _db = db;
             _outbox = outbox;
             _gl = gl;
             _guard = guard;
             _invSettings = invSettings;
+            _in = @in;
         }
 
         // ---------- Reads ----------
@@ -338,7 +340,35 @@ namespace Pos.Persistence.Services
             _db.Sales.Add(sale);
             await _db.SaveChangesAsync(ct);
 
+            var nowUtc = DateTime.UtcNow;
+            var user = !string.IsNullOrWhiteSpace(sale.UpdatedBy) ? sale.UpdatedBy
+                        : !string.IsNullOrWhiteSpace(sale.CreatedBy) ? sale.CreatedBy
+                        : $"cashier:{req.CashierId}"; // fallback; replace with your real username if available
+
+            sale.CreatedAtUtc = nowUtc;
+            sale.CreatedBy = user;
+            sale.UpdatedAtUtc = nowUtc;
+            sale.UpdatedBy = user;
             // Lines & stock
+            // ----- PATCH: build original issue-cost map for returns -----
+            Dictionary<int, decimal>? issueCostByItem = null;
+            if (req.IsReturn && req.OriginalSaleId.HasValue)
+            {
+                issueCostByItem = await _db.StockEntries.AsNoTracking()
+                    .Where(e =>
+                        (e.RefType == "Sale" || e.RefType == "SaleRev") &&
+                        e.RefId == req.OriginalSaleId.Value &&
+                        e.QtyChange < 0) // OUT lines only
+                    .GroupBy(e => e.ItemId)
+                    .Select(g => new
+                    {
+                        ItemId = g.Key,
+                        UnitCost = g.Sum(x => (-x.QtyChange) * x.UnitCost) / g.Sum(x => -x.QtyChange)
+                    })
+                    .ToDictionaryAsync(x => x.ItemId, x => x.UnitCost, ct);
+            }
+
+
             foreach (var l in req.Lines)
             {
                 _db.SaleLines.Add(new SaleLine
@@ -355,24 +385,71 @@ namespace Pos.Persistence.Services
                     UnitNet = l.UnitNet,
                     LineNet = l.LineNet,
                     LineTax = l.LineTax,
-                    LineTotal = l.LineTotal
+                    LineTotal = l.LineTotal,
+
+
+                    CreatedAtUtc = nowUtc,
+                    CreatedBy = user,
+                    UpdatedAtUtc = nowUtc,
+                    UpdatedBy = user
                 });
 
-                _db.StockEntries.Add(new StockEntry
+                // BEFORE adding StockEntry for each line:
+                //var nowUtc = DateTime.UtcNow;
+                //var avgCost = await _in.GetMovingAverageCostAsync(
+                //    l.ItemId, InventoryLocationType.Outlet, req.OutletId, nowUtc, ct);
+
+                // 2) COST GUARD (STRICT MODE): block selling items with no known cost
+                //if (avgCost <= 0m && !sale.IsReturn)
+                //    throw new InvalidOperationException($"No cost available for ItemId={l.ItemId}. Receive stock before selling.");
+
+
+                // Ensure we tag the ref type correctly
+                // ----- PATCH: stock entry per line -----
+                var refType = sale.IsReturn ? "SaleReturn" : "Sale";
+                if (!sale.IsReturn)
                 {
-                    LocationType = InventoryLocationType.Outlet,
-                    LocationId = req.OutletId,
-                    OutletId = req.OutletId,
-                    ItemId = l.ItemId,
-                    //QtyChange = -l.Qty,
-                    QtyChange = sale.IsReturn ? +l.Qty : -l.Qty,
-                    UnitCost = 0m,
-                    RefType = "Sale",
-                    RefId = sale.Id,
-                    StockDocId = null,
-                    Ts = DateTime.UtcNow,
-                    Note = null
-                });
+                    // NORMAL SALE: OUT at current moving-average cost (your existing logic)
+                    var avgCost = await _in.GetMovingAverageCostAsync(
+                        l.ItemId, InventoryLocationType.Outlet, req.OutletId, nowUtc, ct);
+
+                    if (avgCost <= 0m && !sale.IsReturn)
+                        throw new InvalidOperationException($"No cost available for ItemId={l.ItemId}. Receive stock before selling.");
+
+                    _db.StockEntries.Add(new StockEntry
+                    {
+                        LocationType = InventoryLocationType.Outlet,
+                        LocationId = req.OutletId,
+                        OutletId = req.OutletId,
+                        ItemId = l.ItemId,
+                        QtyChange = -l.Qty,        // OUT
+                        UnitCost = avgCost,       // current MA
+                        RefType = refType,       // "Sale"
+                        RefId = sale.Id,
+                        Ts = nowUtc
+                    });
+                }
+                else
+                {
+                    // RETURN WITH INVOICE: IN at original issue cost (from the original sale)
+                    if (issueCostByItem is null || !issueCostByItem.TryGetValue(l.ItemId, out var issueCost) || issueCost <= 0m)
+                        issueCost = 0m; // optional: you can throw instead, but 0m maintains behavior
+
+                    _db.StockEntries.Add(new StockEntry
+                    {
+                        LocationType = InventoryLocationType.Outlet,
+                        LocationId = req.OutletId,
+                        OutletId = req.OutletId,
+                        ItemId = l.ItemId,
+                        QtyChange = +l.Qty,        // IN
+                        UnitCost = issueCost,     // <-- original issue cost
+                        RefType = refType,       // "SaleReturn"
+                        RefId = sale.Id,
+                        Ts = nowUtc
+                    });
+                }
+
+
             }
 
             await _db.SaveChangesAsync(ct);

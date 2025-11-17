@@ -12,7 +12,7 @@ using System.Linq; // add this
 using Pos.Client.Wpf.Windows.Sales; // for TillSessionSummaryVm
 using Pos.Domain.Entities; // for TillSession
 using Pos.Domain.Services;
-using Pos.Persistence.Migrations;
+//using Pos.Persistence.Migrations;
 using Microsoft.VisualBasic;
 using Pos.Domain.Models.Till;
 

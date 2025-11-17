@@ -155,10 +155,12 @@ namespace Pos.Persistence.Services
             if (!sale.IsReturn) throw new InvalidOperationException("Not a return.");
             if (sale.Status != SaleStatus.Final) throw new InvalidOperationException("Only FINAL returns can be voided.");
 
+            // Reverse the EXACT stock entries that posted for this return
             var prior = await db.StockEntries
                 .Where(e => e.RefId == sale.Id && e.RefType == "SaleReturn")
                 .ToListAsync(ct);
 
+            var nowUtc = DateTime.UtcNow;
             foreach (var p in prior)
             {
                 db.StockEntries.Add(new StockEntry
@@ -167,70 +169,81 @@ namespace Pos.Persistence.Services
                     LocationId = p.LocationId,
                     OutletId = p.OutletId,
                     ItemId = p.ItemId,
-                    QtyChange = -p.QtyChange, // exact negation
-                    RefType = "Void",
+                    QtyChange = -p.QtyChange,         // mirror quantity
+                    UnitCost = p.UnitCost,           // same cost
+                    RefType = "SaleReturnVoid",     // specific tag (was "Void")
                     RefId = sale.Id,
-                    Ts = DateTime.UtcNow
+                    Ts = nowUtc,
+                    Note = "Auto-reversal on return void"
                 });
             }
 
+            // Mark return void
             sale.Status = SaleStatus.Voided;
             sale.VoidReason = reason;
-            sale.VoidedAtUtc = DateTime.UtcNow;
+            sale.VoidedAtUtc = nowUtc;
+
+            // Inactivate ALL effective GL rows linked to this return chain
+            var glRows = await db.GlEntries
+                .Where(e => e.ChainId == sale.PublicId && e.IsEffective)
+                .ToListAsync(ct);
+            foreach (var r in glRows) r.IsEffective = false;
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
+
 
         public async Task VoidSaleAsync(int saleId, string reason, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
+            // Block if any non-void return exists against this sale (direct or ref)
             var hasReturn = await db.Sales.AsNoTracking()
                 .AnyAsync(s => s.IsReturn
-                           && (s.OriginalSaleId == saleId || s.RefSaleId == saleId)
-                           && s.Status != SaleStatus.Voided, ct);
+                            && (s.OriginalSaleId == saleId || s.RefSaleId == saleId)
+                            && s.Status != SaleStatus.Voided, ct);
             if (hasReturn) throw new InvalidOperationException("This sale has a return against it and cannot be voided.");
 
             var sale = await db.Sales.FirstAsync(s => s.Id == saleId, ct);
             if (sale.IsReturn) throw new InvalidOperationException("Selected document is a return.");
             if (sale.Status != SaleStatus.Final) throw new InvalidOperationException("Only FINAL invoices can be voided.");
 
-            // Reverse stock for each line
-            var lines = await db.SaleLines.Where(l => l.SaleId == sale.Id).ToListAsync(ct);
-            foreach (var l in lines)
+            // Reverse the ACTUAL stock entries that posted for this sale:
+            // include original "Sale" OUTs and any "SaleRev" deltas (IN/OUT)
+            var posted = await db.StockEntries
+                .Where(e => e.RefId == sale.Id && (e.RefType == "Sale" || e.RefType == "SaleRev"))
+                .ToListAsync(ct);
+
+            var nowUtc = DateTime.UtcNow;
+            foreach (var e in posted)
             {
                 db.StockEntries.Add(new StockEntry
                 {
-                    LocationType = InventoryLocationType.Outlet,
-                    LocationId = sale.OutletId,
-                    OutletId = sale.OutletId,
-                    ItemId = l.ItemId,
-                    QtyChange = +l.Qty, // reverse sale OUT -> IN
-                    RefType = "Void",
+                    LocationType = e.LocationType,
+                    LocationId = e.LocationId,
+                    OutletId = e.OutletId,
+                    ItemId = e.ItemId,
+                    QtyChange = -e.QtyChange,      // exact negation of posted movement
+                    UnitCost = e.UnitCost,        // preserve the historical cost used
+                    RefType = "SaleVoid",        // specific tag for audit
                     RefId = sale.Id,
-                    Ts = DateTime.UtcNow
+                    Ts = nowUtc,
+                    Note = "Auto-reversal on sale void"
                 });
             }
 
             // Mark sale void
             sale.Status = SaleStatus.Voided;
             sale.VoidReason = reason;
-            sale.VoidedAtUtc = DateTime.UtcNow;
+            sale.VoidedAtUtc = nowUtc;
 
-            // 🔻 NEW: Inactivate ALL effective GL rows for this sale's chain
-            // ChainId is Guid (sale.PublicId); IsEffective is bool
+            // Inactivate ALL effective GL rows for this sale chain (base + revisions)
             var glRows = await db.GlEntries
                 .Where(e => e.ChainId == sale.PublicId && e.IsEffective)
                 .ToListAsync(ct);
-
-            if (glRows.Count > 0)
-            {
-                foreach (var r in glRows)
-                    r.IsEffective = false;
-            }
-            // 🔺 END NEW
+            foreach (var r in glRows) r.IsEffective = false;
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);

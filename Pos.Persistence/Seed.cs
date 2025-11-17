@@ -29,6 +29,9 @@ namespace Pos.Persistence
             FixDuplicateProducts(db);
 
             EnsureUsers(db);
+            // Ensure Chart of Accounts exists (idempotent)
+            CoATemplateSeeder.SeedFromTemplateAsync(db).GetAwaiter().GetResult();
+
             EnsureSuppliers(db);
 
             // create locations first
@@ -39,8 +42,7 @@ namespace Pos.Persistence
             EnsureBasicItems(db, now);
             EnsureProductWithVariants(db, now);
             EnsureProductWithVariants_Jeans(db, now);
-            // Ensure Chart of Accounts exists (idempotent)
-            CoATemplateSeeder.SeedFromTemplateAsync(db).GetAwaiter().GetResult();
+            
             
             // finally opening stock (uses new header+lines model)
             //EnsureOpeningStock_UsingHeader(db, outletId: 1, openingQty: 50m, now);
@@ -569,11 +571,44 @@ namespace Pos.Persistence
             db.SaveChanges();
 
             // ---- Ensure COA Account under Supplier Header ----
-            var supplierHeader = db.Accounts.AsNoTracking()
-                .FirstOrDefault(a => a.Code == "61");
+            // ---- Ensure COA Account under Supplier Header ----
+            var supplierHeader = db.Accounts.FirstOrDefault(a => a.Code == "61");
 
             if (supplierHeader == null)
-                throw new InvalidOperationException("Missing Chart-of-Accounts header '61' for Suppliers.");
+            {
+                // Try to find a generic Parties header (code "6") if template changed
+                var partiesHeader = db.Accounts.FirstOrDefault(a => a.Code == "6");
+
+                if (partiesHeader == null)
+                {
+                    // As a last resort, create a minimal Parties root and Suppliers header
+                    partiesHeader = new Account
+                    {
+                        Code = "6",
+                        Name = "Parties",
+                        Type = AccountType.Parties,
+                        NormalSide = NormalSide.Debit,
+                        IsHeader = true,
+                        AllowPosting = false
+                    };
+                    db.Accounts.Add(partiesHeader);
+                    db.SaveChanges();
+                }
+
+                supplierHeader = new Account
+                {
+                    Code = "61",
+                    Name = "Suppliers",
+                    Type = AccountType.Parties,
+                    NormalSide = NormalSide.Credit,
+                    IsHeader = true,
+                    AllowPosting = false,
+                    ParentId = partiesHeader.Id
+                };
+                db.Accounts.Add(supplierHeader);
+                db.SaveChanges();
+            }
+
 
             // Generate next subcode safely
             var siblingCodes = db.Accounts

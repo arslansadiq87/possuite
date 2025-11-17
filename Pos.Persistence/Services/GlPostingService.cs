@@ -14,6 +14,7 @@ using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
 using Pos.Domain.Hr;
 using Pos.Domain.Services;
+using Pos.Domain.Utils;
 using Pos.Persistence;
 using Pos.Persistence.Services;
 using Pos.Persistence.Sync;
@@ -68,7 +69,7 @@ namespace Pos.Persistence.Services
             };
 
 
-        // GlPostingService.cs
+        // fo sales
         private GlEntry Row(
             DateTime tsUtc,
             DateTime effectiveDate,
@@ -94,7 +95,7 @@ namespace Pos.Persistence.Services
 
                 // link to Sale doc
                 DocId = s.Id,
-                DocNo = s.InvoiceNumber.ToString(), // or s.DocNo if you keep both
+                DocNo = Pos.Domain.Formatting.DocNoComposer.FromSale(s),  //s.InvoiceNumber.ToString(), // or s.DocNo if you keep both
                 PublicId = s.PublicId,
                 ChainId = s.PublicId,
 
@@ -315,13 +316,7 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await PostPurchaseReturnAsync(db, p, ct);
         }
-
-        //public async Task PostPurchaseVoidAsync(Purchase p, CancellationToken ct = default)
-        //{
-        //    await using var db = await _dbf.CreateDbContextAsync(ct);
-        //    await PostPurchaseVoidAsync(db, p, ct);
-        //}
-
+    
         public async Task PostPurchaseReturnVoidAsync(Purchase p, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
@@ -566,7 +561,7 @@ namespace Pos.Persistence.Services
                 DocType = docType,
                 DocSubType = subType,
                 DocId = p.Id,
-                DocNo = p.DocNo,
+                DocNo = Pos.Domain.Formatting.DocNoComposer.FromPurchase(p),
                 ChainId = p.PublicId,
                 IsEffective = true,
                 PartyId = partyId,
@@ -586,10 +581,8 @@ namespace Pos.Persistence.Services
             var ed = EffDate(p);
             var outletId = p.OutletId!.Value;
             var chainId = p.PublicId;
-            var docNo = p.DocNo; // keep doc no if assigned; fallback to PublicId below
+            var docNo = Pos.Domain.Formatting.DocNoComposer.FromPurchase(p);
 
-            if (string.IsNullOrWhiteSpace(docNo))
-                docNo = p.PublicId.ToString();
 
             var gross = Math.Round(p.GrandTotal, 2);
             var invAccId = await RequireAccountByCodeAsync(db, "1140", ct);              // Inventory
@@ -725,28 +718,52 @@ namespace Pos.Persistence.Services
         public Task PostPayrollAccrualAsync(PayrollRun run, CancellationToken ct = default) => Task.CompletedTask;
         public Task PostPayrollPaymentAsync(PayrollRun run, CancellationToken ct = default) => Task.CompletedTask;
 
-        private static async Task<int> ResolveCashInHandAsync(PosClientDbContext db, CancellationToken ct)
+     
+        private static async Task<int> ResolveShortAsync(PosClientDbContext db, CancellationToken ct)
         {
-            // Prefer standard "111" (Cash in Hand)
             var id = await db.Accounts.AsNoTracking()
-                .Where(a => a.Code == "111")
+                .Where(a => a.Code == "541") // Cash Short (Expense)
                 .Select(a => a.Id)
                 .FirstOrDefaultAsync(ct);
-            if (id == 0) throw new InvalidOperationException("CoA missing Cash in Hand (code 111).");
+
+            if (id == 0)
+                throw new InvalidOperationException("Chart of Accounts missing code 541 (Cash Short).");
+
             return id;
         }
 
-        /// <summary>Pick a reasonable Over/Short account. Tries common codes, falls back to 1999.</summary>
-        private static async Task<int> ResolveOverShortAsync(PosClientDbContext db, CancellationToken ct)
+        private static async Task<int> ResolveOverAsync(PosClientDbContext db, CancellationToken ct)
         {
-            var codes = new[] { "5599", "5590", "7999", "1999" }; // adjust to your CoA
             var id = await db.Accounts.AsNoTracking()
-                .Where(a => codes.Contains(a.Code))
-                .OrderBy(a => Array.IndexOf(codes, a.Code))
+                .Where(a => a.Code == "491") // Cash Over (Income)
                 .Select(a => a.Id)
                 .FirstOrDefaultAsync(ct);
 
-            if (id == 0) throw new InvalidOperationException("CoA missing Cash Over/Short (expected one of 5599/5590/7999/1999).");
+            if (id == 0)
+                throw new InvalidOperationException("Chart of Accounts missing code 491 (Cash Over).");
+
+            return id;
+        }
+
+        private static async Task<int> ResolveCashInHandForOutletAsync(
+    PosClientDbContext db, int outletId, CancellationToken ct)
+        {
+            // Get outlet code (e.g., O1, O2…)
+            var outlet = await db.Outlets.AsNoTracking()
+                .FirstAsync(o => o.Id == outletId, ct);
+
+            // Per-outlet cash account code: 111-<OutletCode>  (a.k.a. CoaCode.CASH_CHILD + "-" + outlet.Code)
+            var code = $"{CoaCode.CASH_CHILD}-{outlet.Code}";
+
+            var id = await db.Accounts.AsNoTracking()
+                .Where(a => a.Code == code && a.OutletId == outlet.Id)
+                .Select(a => a.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (id == 0)
+                throw new InvalidOperationException(
+                    $"CoA missing Cash in Hand for outlet '{outlet.Code}' (expected account code '{code}').");
+
             return id;
         }
 
@@ -767,13 +784,14 @@ namespace Pos.Persistence.Services
             var counterId = session.CounterId;
             var tsUtc = session.CloseTs ?? DateTime.UtcNow;
             var effDate = tsUtc.Date;
-            var chainId = session.PublicId;        // TillSession inherits BaseEntity → has PublicId
-            var docNo = $"TILL-{session.Id}";
+            var chainId = session.PublicId;  // stable chain for this session
+
+            // Use your global doc-no convention: outlet-counter-docno
+            var docNo = $"{outletId}-{counterId}-TILL{session.Id:000000}";
 
             // Accounts
-            var tillAccId = await ResolveTillAsync(db, outletId, ct);      // per-outlet (memo includes counter)
-            var handAccId = await ResolveCashInHandAsync(db, ct);          // 111
-            var ovrSrtAcc = await ResolveOverShortAsync(db, ct);           // 5599/…/1999
+            var tillAccId = await ResolveTillAsync(db, outletId, ct);   // per-outlet Till (memo includes counter)
+            var handAccId = await ResolveCashInHandForOutletAsync(db, outletId, ct);       // 111 Cash in Hand
 
             // 1) Move declared cash from Till → Cash in Hand
             var rows = new List<GlEntry>
@@ -787,36 +805,43 @@ namespace Pos.Persistence.Services
             $"Till close · Counter #{counterId} · Declared cash out of Till")
     };
 
-            // 2) Cash Over/Short so Till ends at opening float
+            // 2) Over/Short so Till ends at opening float
             // diff = moved - should-have-moved
             var diff = declaredToMove - systemCash;
 
-            if (diff != 0m)
+            // ignore tiny rounding noise
+            if (Math.Abs(diff) >= 0.005m)
             {
                 if (diff > 0m)
                 {
-                    // Over (moved too much): DR Till, CR Over/Short (gain)
+                    // OVER: moved too much → DR Till, CR Cash Over (Income 491)
+                    var overAccId = await ResolveOverAsync(db, ct);
+
                     rows.Add(Row(tsUtc, effDate, outletId, tillAccId, diff, 0m,
                         GlDocType.TillClose, GlDocSubType.Other, session.Id, docNo, chainId, null,
                         $"Till close · Counter #{counterId} · Over (+{diff:0.##}) adj to keep float"));
-                    rows.Add(Row(tsUtc, effDate, outletId, ovrSrtAcc, 0m, diff,
+
+                    rows.Add(Row(tsUtc, effDate, outletId, overAccId, 0m, diff,
                         GlDocType.TillClose, GlDocSubType.Other, session.Id, docNo, chainId, null,
-                        "Cash Over/Short (over)"));
+                        "Cash Over"));
                 }
                 else
                 {
+                    // SHORT: moved too little → DR Cash Short (Expense 541), CR Till
                     var abs = Math.Abs(diff);
-                    // Short (moved too little): DR Over/Short (expense), CR Till
-                    rows.Add(Row(tsUtc, effDate, outletId, ovrSrtAcc, abs, 0m,
+                    var shortAccId = await ResolveShortAsync(db, ct);
+
+                    rows.Add(Row(tsUtc, effDate, outletId, shortAccId, abs, 0m,
                         GlDocType.TillClose, GlDocSubType.Other, session.Id, docNo, chainId, null,
-                        "Cash Over/Short (short)"));
+                        "Cash Short"));
+
                     rows.Add(Row(tsUtc, effDate, outletId, tillAccId, 0m, abs,
                         GlDocType.TillClose, GlDocSubType.Other, session.Id, docNo, chainId, null,
                         $"Till close · Counter #{counterId} · Short (−{abs:0.##}) adj to keep float"));
                 }
             }
 
-            // TillClose is an “image” post for this session → invalidate older rows for this session chain
+            // Make this session's GL an “image” post: inactivate prior rows in the same chain
             await db.GlEntries
                 .Where(g => g.ChainId == chainId && g.IsEffective)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
@@ -824,6 +849,7 @@ namespace Pos.Persistence.Services
             await db.GlEntries.AddRangeAsync(rows, ct);
             await db.SaveChangesAsync(ct);
         }
+
 
 
         public async Task PostPurchasePaymentAddedAsync(PosClientDbContext db, Purchase p, PurchasePayment pay, CancellationToken ct)
@@ -936,7 +962,8 @@ namespace Pos.Persistence.Services
 
             var chainId = doc.PublicId;
             var docId = doc.Id;
-            string? docNo = null; // Opening Stock currently has no human-readable number; you can wire one later.
+            var docNo = Pos.Domain.Formatting.DocNoComposer.FromStockDoc(doc);
+
 
             var rows = new[]
             {
@@ -1009,8 +1036,12 @@ namespace Pos.Persistence.Services
             // Guard
             if (s.IsReturn) { await PostSaleReturnAsync(db, s, ct); return; }
 
+
             var tsUtc = DateTime.UtcNow;
-            var eff = s.Ts == default ? tsUtc.Date : s.Ts.Date;
+            // keep the real time-of-day; if Ts is default, compose “today at now” in UTC
+            var eff = (s.Ts != default)
+                ? s.Ts
+                : EffectiveTime.ComposeUtcFromDateAndNowTime(DateTime.UtcNow);
             var outletId = s.OutletId;
 
             // Accounts (resolve by CoA codes seeded in your template)
@@ -1040,6 +1071,7 @@ namespace Pos.Persistence.Services
             var paidCard = Math.Max(0m, s.CardAmount);
             var paidTotal = paidCash + paidCard;
             var arPortion = Math.Max(0m, total - paidTotal);
+            var memo = $"Sale {Pos.Domain.Formatting.DocNoComposer.FromSale(s)}";
 
             // Debits: Cash/Till, CardClearing, AR (for non-walk-in balance)
             var debitRows = new List<GlEntry>();
@@ -1048,28 +1080,65 @@ namespace Pos.Persistence.Services
             {
                 // If a till session is present → post to Till; else → Cash-in-Hand
                 var cashAccount = (s.TillSessionId.HasValue && s.TillSessionId.Value > 0) ? tillId : cashId;
-                debitRows.Add(Row(tsUtc, eff, outletId, cashAccount, debit: paidCash, credit: 0m, GlDocType.Sale, GlDocSubType.Sale_Receipt, s));
+                debitRows.Add(Row(tsUtc, eff, outletId, cashAccount, debit: paidCash, credit: 0m, GlDocType.Sale, GlDocSubType.Sale_Receipt, s, memo: memo));
             }
 
             if (paidCard > 0m)
             {
                 if (cardClearingId == 0)
                     throw new InvalidOperationException("Sales card clearing account is not configured (Preferences → Invoice Settings).");
-                debitRows.Add(Row(tsUtc, eff, outletId, cardClearingId, debit: paidCard, credit: 0m, GlDocType.Sale, GlDocSubType.Sale_Receipt, s));
+                debitRows.Add(Row(tsUtc, eff, outletId, cardClearingId, debit: paidCard, credit: 0m, GlDocType.Sale, GlDocSubType.Sale_Receipt, s, memo: memo));
             }
 
             if (arPortion > 0m && customerAccId.HasValue)
             {
                 debitRows.Add(Row(tsUtc, eff, outletId, customerAccId.Value, debit: arPortion, credit: 0m,
-                                  GlDocType.Sale, GlDocSubType.Sale_Receipt, s, partyId: s.CustomerId));
+                                  GlDocType.Sale, GlDocSubType.Sale_Receipt, s, partyId: s.CustomerId, memo: memo));
             }
 
             // Credits: Tax payable, Revenue(net)
             var creditRows = new List<GlEntry>();
             if (tax > 0m && taxPayableId != 0)
-                creditRows.Add(Row(tsUtc, eff, outletId, taxPayableId, debit: 0m, credit: tax, GlDocType.Sale, GlDocSubType.Sale_Gross, s));
+                creditRows.Add(Row(tsUtc, eff, outletId, taxPayableId, debit: 0m, credit: tax, GlDocType.Sale, GlDocSubType.Sale_Gross, s, memo: memo));
 
-            creditRows.Add(Row(tsUtc, eff, outletId, revenueId, debit: 0m, credit: net, GlDocType.Sale, GlDocSubType.Sale_Gross, s));
+            creditRows.Add(Row(tsUtc, eff, outletId, revenueId, debit: 0m, credit: net, GlDocType.Sale, GlDocSubType.Sale_Gross, s, memo: memo));
+            // ===== COGS & Inventory for this sale =====
+
+            // Sum absolute cost of the items shipped on this sale
+            var cogs = await db.Set<StockEntry>()
+                .AsNoTracking()
+                .Where(e => e.RefType == "Sale" && e.RefId == s.Id)
+                .Select(e => (-e.QtyChange) * e.UnitCost) // QtyChange is negative; flip to +
+                .SumAsync(ct);
+
+            // If no stock lines or zero cost, skip gracefully
+            if (cogs > 0m)
+            {
+                var cogsId = await ResolveAccountByCodeAsync(db, "5111", ct); // Actual cost of sold stock
+                var inventoryId = await ResolveAccountByCodeAsync(db, "1140", ct);
+
+                // DR COGS
+                var eCogs = Row(tsUtc, eff, outletId, cogsId, debit: cogs, credit: 0m,
+                                GlDocType.Sale, GlDocSubType.Sale_COGS, s, memo: memo);
+                // CR Inventory
+                var eInv = Row(tsUtc, eff, outletId, inventoryId, debit: 0m, credit: cogs,
+                                GlDocType.Sale, GlDocSubType.Sale_COGS, s, memo: memo);
+
+                debitRows.Add(eCogs);   // you can also build a separate list; merging is fine
+                creditRows.Add(eInv);
+            }
+
+
+            var glUser = string.IsNullOrWhiteSpace(s.UpdatedBy) ? (s.CreatedBy ?? "system") : s.UpdatedBy;
+
+            foreach (var r in debitRows.Concat(creditRows))
+            {
+                r.CreatedAtUtc = tsUtc;
+                r.CreatedBy = glUser;
+                r.UpdatedAtUtc = tsUtc;
+                r.UpdatedBy = glUser;
+                if (string.IsNullOrWhiteSpace(r.Memo)) r.Memo = memo;
+            }
 
             await db.GlEntries.AddRangeAsync(debitRows.Concat(creditRows), ct);
             // do not SaveChanges here (caller controls commit)
@@ -1079,7 +1148,8 @@ namespace Pos.Persistence.Services
         {
             // A return in your system has Total < 0 (you sum ABS in Till code). We’ll work in absolutes for clarity.
             var tsUtc = DateTime.UtcNow;
-            var eff = s.Ts == default ? tsUtc.Date : s.Ts.Date;
+            var eff = (s.Ts != default) ? s.Ts : EffectiveTime.ComposeUtcFromDateAndNowTime(DateTime.UtcNow);
+            var memo = $"Sales Return {Pos.Domain.Formatting.DocNoComposer.FromSale(s)}";
             var outletId = s.OutletId;
 
             var salesReturnId = await ResolveAccountByCodeAsync(db, "412", ct); // Sales returns
@@ -1110,28 +1180,57 @@ namespace Pos.Persistence.Services
             // Debits (reduce liabilities/increase contra-income): SalesReturns (debit), TaxPayable (debit)
             var debits = new List<GlEntry>
     {
-        Row(tsUtc, eff, outletId, salesReturnId, debit: netAbs, credit: 0m, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s)
+        Row(tsUtc, eff, outletId, salesReturnId, debit: netAbs, credit: 0m, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s, memo: memo)
     };
             if (taxAbs > 0m && taxPayableId != 0)
-                debits.Add(Row(tsUtc, eff, outletId, taxPayableId, debit: taxAbs, credit: 0m, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s));
+                debits.Add(Row(tsUtc, eff, outletId, taxPayableId, debit: taxAbs, credit: 0m, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s, memo: memo));
 
             // Credits (refund to cash/till, card clearing, or reduce AR)
             var credits = new List<GlEntry>();
             if (refundCashAbs > 0m)
             {
                 var cashAccount = (s.TillSessionId.HasValue && s.TillSessionId.Value > 0) ? tillId : cashId;
-                credits.Add(Row(tsUtc, eff, outletId, cashAccount, debit: 0m, credit: refundCashAbs, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s));
+                credits.Add(Row(tsUtc, eff, outletId, cashAccount, debit: 0m, credit: refundCashAbs, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s, memo: memo));
             }
             if (refundCardAbs > 0m)
             {
                 if (cardClearingId == 0)
                     throw new InvalidOperationException("Sales card clearing account is not configured (Preferences → Invoice Settings).");
-                credits.Add(Row(tsUtc, eff, outletId, cardClearingId, debit: 0m, credit: refundCardAbs, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s));
+                credits.Add(Row(tsUtc, eff, outletId, cardClearingId, debit: 0m, credit: refundCardAbs, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s, memo: memo));
             }
             if (arReduceAbs > 0m && customerAccId.HasValue)
             {
                 credits.Add(Row(tsUtc, eff, outletId, customerAccId.Value, debit: 0m, credit: arReduceAbs,
-                                GlDocType.SaleReturn, GlDocSubType.Sale_Return, s, partyId: s.CustomerId));
+                                GlDocType.SaleReturn, GlDocSubType.Sale_Return, s, partyId: s.CustomerId, memo: memo));
+            }
+
+            // ===== Inventory back in, and contra-COGS for returns =====
+            var invIn = await db.Set<StockEntry>()
+                .AsNoTracking()
+                .Where(e => e.RefType == "SaleReturn" && e.RefId == s.Id)
+                .Select(e => (e.QtyChange) * e.UnitCost) // QtyChange is positive for return
+                .SumAsync(ct);
+
+            if (invIn > 0m)
+            {
+                var inventoryId = await ResolveAccountByCodeAsync(db, "1140", ct);
+                var cogsReturnId = await ResolveAccountByCodeAsync(db, "5112", ct); // Actual cost of returned stock
+
+                // DR Inventory
+                debits.Add(Row(tsUtc, eff, outletId, inventoryId, debit: invIn, credit: 0m,
+                               GlDocType.SaleReturn, GlDocSubType.Sale_Return_COGS, s, memo: memo));
+                // CR COGS (return)
+                credits.Add(Row(tsUtc, eff, outletId, cogsReturnId, debit: 0m, credit: invIn,
+                                GlDocType.SaleReturn, GlDocSubType.Sale_Return_COGS, s, memo: memo));
+            }
+
+            // stamp user
+            var glUser = string.IsNullOrWhiteSpace(s.UpdatedBy) ? (s.CreatedBy ?? "system") : s.UpdatedBy;
+            foreach (var r in debits.Concat(credits))
+            {
+                r.CreatedAtUtc = tsUtc; r.CreatedBy = glUser;
+                r.UpdatedAtUtc = tsUtc; r.UpdatedBy = glUser;
+                if (string.IsNullOrWhiteSpace(r.Memo)) r.Memo = memo;
             }
 
             await db.GlEntries.AddRangeAsync(debits.Concat(credits), ct);
@@ -1142,8 +1241,12 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             var tsUtc = DateTime.UtcNow;
-            var eff = amended.Ts == default ? tsUtc.Date : amended.Ts.Date;
+            var eff = (amended.Ts != default) ? amended.Ts : EffectiveTime.ComposeUtcFromDateAndNowTime(DateTime.UtcNow);
+            var memo = isReturn ? $"Sales Return Rev Δ #{amended.InvoiceNumber}" : $"Sale Rev Δ #{amended.InvoiceNumber}";
             var outletId = amended.OutletId;
+
+            await InactivateEffectiveAsync(db, amended.PublicId, GlDocType.SaleRevision, GlDocSubType.Sale_AmendDelta, ct);
+            await InactivateEffectiveAsync(db, amended.PublicId, GlDocType.SaleRevision, GlDocSubType.Sale_COGS, ct);
 
             var subType = isReturn ? GlDocSubType.Sale_Return : GlDocSubType.Sale_AmendDelta;
             var docType = isReturn ? GlDocType.SaleReturn : GlDocType.SaleRevision;
@@ -1159,7 +1262,7 @@ namespace Pos.Persistence.Services
             {
                 lines.Add(Row(tsUtc, eff, outletId, taxPayableId,
                     debit: deltaTax < 0 ? Math.Abs(deltaTax) : 0m,
-                    credit: deltaTax > 0 ? deltaTax : 0m, docType, subType, amended));
+                    credit: deltaTax > 0 ? deltaTax : 0m, docType, subType, amended, memo: memo));
             }
 
             if (deltaSub != 0m)
@@ -1177,11 +1280,98 @@ namespace Pos.Persistence.Services
                 lines.Add(Row(tsUtc, eff, outletId, revenueId, debit, credit, docType, subType, amended));
             }
 
-            if (lines.Count > 0)
+
+
+            // ===== (A) Receipts / AR delta (match ΔGrand exactly) =====
+            var deltaGrand = deltaSub + deltaTax;
+            if (deltaGrand != 0m)
+            {
+                var tillId = await ResolveTillAsync(db, outletId, ct);
+                var cashId = await ResolveCashAsync(db, outletId, ct);
+                var cardClearingId = await ResolveSalesCardClearingForOutletAsync(db, outletId, ct);
+
+                int? customerAccId = null;
+                if (amended.CustomerKind != CustomerKind.WalkIn && amended.CustomerId.HasValue)
+                    customerAccId = await db.Parties.AsNoTracking()
+                        .Where(p => p.Id == amended.CustomerId.Value)
+                        .Select(p => p.AccountId)
+                        .FirstOrDefaultAsync(ct);
+
+                // helpers handle both signs
+                void AddDebit(int accountId, decimal amount) { if (amount > 0m) lines.Add(Row(tsUtc, eff, outletId, accountId, debit: amount, credit: 0m, docType, subType, amended, partyId: amended.CustomerId, memo: memo)); }
+                void AddCredit(int accountId, decimal amount) { if (amount > 0m) lines.Add(Row(tsUtc, eff, outletId, accountId, debit: 0m, credit: amount, docType, subType, amended, partyId: amended.CustomerId, memo: memo)); }
+
+                // These are DELTA amounts you already set on amended (not totals)
+                var cashDelta = amended.CashAmount;
+                var cardDelta = amended.CardAmount;
+                var collectedDelta = cashDelta + cardDelta;
+                var arDelta = deltaGrand - collectedDelta; // residual to/from AR
+
+                // choose cash ledger (Till vs Cash) if using till
+                var cashLedger = (amended.TillSessionId.HasValue && amended.TillSessionId.Value > 0) ? tillId : cashId;
+
+                // Cash delta
+                if (cashLedger != 0)
                 {
+                    if (cashDelta > 0m) AddDebit(cashLedger, cashDelta);
+                    if (cashDelta < 0m) AddCredit(cashLedger, Math.Abs(cashDelta)); // refund / reduction
+                }
+
+                // Card delta
+                if (cardClearingId != 0)
+                {
+                    if (cardDelta > 0m) AddDebit(cardClearingId, cardDelta);
+                    if (cardDelta < 0m) AddCredit(cardClearingId, Math.Abs(cardDelta));
+                }
+
+                // AR delta (if a customer account exists; otherwise we leave any tiny rounding residual at zero)
+                if (customerAccId.HasValue && arDelta != 0m)
+                {
+                    if (arDelta > 0m) AddDebit(customerAccId.Value, arDelta);
+                    if (arDelta < 0m) AddCredit(customerAccId.Value, Math.Abs(arDelta));
+                }
+            }
+
+            // ===== (B) COGS / Inventory delta (even when grand total = 0) =====
+            var cogsDelta = await db.Set<StockEntry>().AsNoTracking()
+                .Where(e => e.RefType == "SaleRev" && e.RefId == amended.Id)
+                .Select(e => (-e.QtyChange) * e.UnitCost)
+                .SumAsync(ct);
+
+            if (cogsDelta != 0m)
+            {
+                var cogsId = await ResolveAccountByCodeAsync(db, "5111", ct);
+                var inventoryId = await ResolveAccountByCodeAsync(db, "1140", ct);
+
+                if (cogsDelta > 0m)
+                {
+                    // DR COGS, CR Inventory
+                    lines.Add(Row(tsUtc, eff, outletId, cogsId, debit: cogsDelta, credit: 0m, docType, GlDocSubType.Sale_COGS, amended, memo: memo));
+                    lines.Add(Row(tsUtc, eff, outletId, inventoryId, debit: 0m, credit: cogsDelta, docType, GlDocSubType.Sale_COGS, amended, memo: memo));
+                }
+                else
+                {
+                    var v = Math.Abs(cogsDelta);
+                    // DR Inventory, CR COGS
+                    lines.Add(Row(tsUtc, eff, outletId, inventoryId, debit: v, credit: 0m, docType, GlDocSubType.Sale_COGS, amended, memo: memo));
+                    lines.Add(Row(tsUtc, eff, outletId, cogsId, debit: 0m, credit: v, docType, GlDocSubType.Sale_COGS, amended, memo: memo));
+                }
+            }
+
+            // ✅ Apply metadata to ALL lines (after all adds)
+            var glUser = string.IsNullOrWhiteSpace(amended.UpdatedBy) ? (amended.CreatedBy ?? "system") : amended.UpdatedBy;
+            foreach (var r in lines)
+            {
+                r.CreatedAtUtc = tsUtc; r.CreatedBy = glUser;
+                r.UpdatedAtUtc = tsUtc; r.UpdatedBy = glUser;
+                if (string.IsNullOrWhiteSpace(r.Memo)) r.Memo = memo;
+            }
+            if (lines.Count > 0)
+            {
                 await db.GlEntries.AddRangeAsync(lines, ct);
                 await db.SaveChangesAsync(ct);
-                }
+            }
+
         }
 
         // -------- local resolvers (no new DbContext!) --------

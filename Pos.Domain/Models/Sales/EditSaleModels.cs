@@ -42,7 +42,7 @@ namespace Pos.Domain.Models.Sales
         int OriginalSaleId,
         int OutletId,
         int CounterId,
-        int TillSessionId,
+        int? TillSessionId,
         int NewRevisionNumber,                         // usually original.Revision + 1
         decimal Subtotal,
         decimal TaxTotal,

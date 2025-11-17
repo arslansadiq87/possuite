@@ -274,16 +274,15 @@ namespace Pos.Persistence
                  .HasForeignKey(x => x.WarehouseId)
                  .OnDelete(DeleteBehavior.Restrict);
                 var targetCheck =
-                    provider.Contains("MySql", StringComparison.OrdinalIgnoreCase)
-                        ? "((`TargetType` = 1 AND `OutletId` IS NOT NULL AND `WarehouseId` IS NULL) OR (`TargetType` = 2 AND `WarehouseId` IS NOT NULL AND `OutletId` IS NULL))"
+                provider.Contains("MySql", StringComparison.OrdinalIgnoreCase)
+                    ? "((`LocationType` = 1 AND `OutletId` IS NOT NULL AND `WarehouseId` IS NULL) OR (`LocationType` = 2 AND `WarehouseId` IS NOT NULL AND `OutletId` IS NULL))"
                 : provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase)
-                        ? "([TargetType] = 1 AND [OutletId] IS NOT NULL AND [WarehouseId] IS NULL) OR ([TargetType] = 2 AND [WarehouseId] IS NOT NULL AND [OutletId] IS NULL)"
+                        ? "([LocationType] = 1 AND [OutletId] IS NOT NULL AND [WarehouseId] IS NULL) OR ([LocationType] = 2 AND [WarehouseId] IS NOT NULL AND [OutletId] IS NULL)"
                 : provider.Contains("Sqlite", StringComparison.OrdinalIgnoreCase)
-                        ? "(TargetType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (TargetType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)"
+                        ? "(LocationType = 1 AND OutletId IS NOT NULL AND WarehouseId IS NULL) OR (LocationType = 2 AND WarehouseId IS NOT NULL AND OutletId IS NULL)"
                 : provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase)
-                        ? "((\"TargetType\" = 1 AND \"OutletId\" IS NOT NULL AND \"WarehouseId\" IS NULL) OR (\"TargetType\" = 2 AND \"WarehouseId\" IS NOT NULL AND \"OutletId\" IS NULL))"
+                        ? "((\"LocationType\" = 1 AND \"OutletId\" IS NOT NULL AND \"WarehouseId\" IS NULL) OR (\"LocationType\" = 2 AND \"WarehouseId\" IS NOT NULL AND \"OutletId\" IS NULL))"
                 : null;
-
 
                 if (!string.IsNullOrWhiteSpace(targetCheck))
                     e.ToTable(t => t.HasCheckConstraint("CK_Purchase_Target", targetCheck!));

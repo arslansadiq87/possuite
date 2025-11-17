@@ -14,6 +14,7 @@ using Pos.Domain.Pricing;
 using Pos.Domain.Services;
 using Pos.Domain.Models.Sales;
 using DomainItemIndexDto = Pos.Domain.Models.Sales.ItemIndexDto;
+using Pos.Domain.Entities;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -24,6 +25,9 @@ namespace Pos.Client.Wpf.Windows.Sales
         private EditSaleLoadDto _orig = null!;
         private decimal _origSubtotal, _origTax, _origGrand;
         private readonly ObservableCollection<CartLine> _cart = new();
+        private readonly IInvoiceSettingsService _invSettings; // NEW
+        private bool _useTill; // NEW
+
         public ObservableCollection<Pos.Domain.Models.Sales.ItemIndexDto> DataContextItemIndex { get; } = new();
         private readonly Dictionary<string, Pos.Domain.Models.Sales.ItemIndexDto> _barcodeIndex = new(StringComparer.OrdinalIgnoreCase);
 
@@ -41,6 +45,8 @@ namespace Pos.Client.Wpf.Windows.Sales
             InitializeComponent();
             _saleId = saleId;
             _sales = App.Services.GetRequiredService<ISalesService>();
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>(); // NEW
+
             CartGrid.ItemsSource = _cart;
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
             CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
@@ -51,8 +57,13 @@ namespace Pos.Client.Wpf.Windows.Sales
             };
             Loaded += async (_, __) =>
             {
+                
                 await LoadSaleAsync();
                 await LoadItemIndexAsync();
+                var (settings, _) = await _invSettings.GetAsync(_orig.OutletId, "en");
+                _useTill = settings.UseTill;
+                //await UpdateTillStatusUiAsync(); // if you show a till status text here
+
                 CashierNameText.Text = cashierDisplay;
                 LoadSalesmen(); // keep your local UI fill if you want; not touching EF here
                 UpdateHeaderUi();
@@ -145,30 +156,25 @@ namespace Pos.Client.Wpf.Windows.Sales
             catch { /* optional: toast/log */ }
         }
 
-
         private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var box = (Pos.Client.Wpf.Controls.ItemSearchBox)sender;
             object? selected = box.SelectedItem;
             if (selected is null) return;
-
             var pick = selected as DomainItemIndexDto;
             if (pick is null)
             {
                 MessageBox.Show($"Unsupported SelectedItem: {selected.GetType().FullName}");
                 return;
             }
-
             var itemId = pick.Id;
             var existing = _cart.FirstOrDefault(c => c.ItemId == itemId);
             var proposedCartQty = (existing?.Qty ?? 0m) + 1m;
-
             if (!await GuardEditLineQtyAsync(itemId, proposedCartQty))
             {
                 try { ItemSearch?.FocusSearch(); } catch { }
                 return;
             }
-
             if (existing != null)
             {
                 existing.Qty += 1;
@@ -178,7 +184,6 @@ namespace Pos.Client.Wpf.Windows.Sales
             {
                 AddItemToCart(pick);  // ✅ domain DTO
             }
-
             UpdateTotal();
             try { ItemSearch?.FocusSearch(); } catch { }
         }
@@ -194,7 +199,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 UpdateTotal();
                 return;
             }
-
             var cl = new CartLine
             {
                 ItemId = item.Id,
@@ -209,7 +213,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 DiscountAmt = item.DefaultDiscountAmt ?? 0m
             };
             if ((cl.DiscountAmt ?? 0) > 0) cl.DiscountPct = null;
-
             RecalcLineShared(cl);
             _cart.Add(cl);
             UpdateTotal();
@@ -227,7 +230,6 @@ namespace Pos.Client.Wpf.Windows.Sales
                 taxInclusive: l.TaxInclusive,
                 taxRatePct: l.TaxRatePct
             );
-
             // Map back to your line fields
             // (UnitNet = per-unit net excl. tax; keep your existing rounding helper)
             l.LineNet = t.Net;
@@ -450,12 +452,23 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             if (!_cart.Any()) { MessageBox.Show("Cart is empty."); return; }
 
-            var open = await _sales.GetOpenTillAsync(_orig.OutletId, _orig.CounterId);
-            if (open == null)
+            //var open = await _sales.GetOpenTillAsync(_orig.OutletId, _orig.CounterId);
+            //if (open == null)
+            //{
+            //    MessageBox.Show("Till is CLOSED. Open till before saving an amendment.", "Till Closed");
+            //    return;
+            //}
+            TillSession? open = null;
+            if (_useTill)
             {
-                MessageBox.Show("Till is CLOSED. Open till before saving an amendment.", "Till Closed");
-                return;
+                open = await _sales.GetOpenTillAsync(_orig.OutletId, _orig.CounterId);
+                if (open == null)
+                {
+                    MessageBox.Show("Till is CLOSED. Open till before saving an amendment.", "Till Closed");
+                    return;
+                }
             }
+
 
             foreach (var cl in _cart) RecalcLineShared(cl);
 
@@ -539,7 +552,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 OriginalSaleId: _orig.SaleId,
                 OutletId: _orig.OutletId,
                 CounterId: _orig.CounterId,
-                TillSessionId: open.Id,
+                TillSessionId: _useTill ? open!.Id : (int?)null,
                 NewRevisionNumber: _orig.Revision + 1,
                 Subtotal: newSub,
                 TaxTotal: newTax,

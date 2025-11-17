@@ -91,6 +91,8 @@ namespace Pos.Persistence.Seeding
                 new("412",  "Sales returns",         AccountType.Income,  "41",  false, true,  NormalSide.Debit),
                 new("43",   "Invoice Offer Discount On Sales", AccountType.Income, "4", false,true, NormalSide.Debit),
                 new("49",   "Other incomes",         AccountType.Income,  "4",   true,  false, NormalSide.Credit),
+                new("491", "Cash over",              AccountType.Income, "49", false, true, NormalSide.Credit),
+
 
                 // 5 Expense
                 new("5",    "Expense",               AccountType.Expense, null,  true,  false, NormalSide.Debit),

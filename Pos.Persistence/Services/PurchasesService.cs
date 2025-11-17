@@ -141,6 +141,7 @@ namespace Pos.Persistence.Services
                 global::System.Diagnostics.Debug.WriteLine($"{trace} 02.UpsertHeaderAndLines");
                 UpsertHeaderAndLines(db, purchase, lines);
 
+        
                 if (isNew)
                 {
                     // ✅ ensure audit on brand-new header
@@ -155,6 +156,9 @@ namespace Pos.Persistence.Services
                 System.Diagnostics.Debug.WriteLine($"{trace} 03b.SaveHeader");
                 await db.SaveChangesAsync(ct);
 
+                // right before you build/apply stock deltas
+                var unitCostByItem = BuildPerItemUnitCostMap(purchase);
+
                 global::System.Diagnostics.Debug.WriteLine($"{trace} 04.BuildPurchaseStockDeltas");
                 var stockDeltas = BuildPurchaseStockDeltas(db, purchase);
 
@@ -162,7 +166,8 @@ namespace Pos.Persistence.Services
                 await _stockGuard.EnsureNoNegativeAtLocationAsync(stockDeltas, nowUtc, ct);
 
                 global::System.Diagnostics.Debug.WriteLine($"{trace} 06.ApplyStock");
-                await ApplyStockAsync(db, purchase, stockDeltas, nowUtc, user, ct);
+                await ApplyStockAsync(db, purchase, stockDeltas, unitCostByItem, nowUtc, user, ct);
+
 
                 global::System.Diagnostics.Debug.WriteLine($"{trace} 07.GL Gross (Inventory DR / Supplier CR)");
                 await ((IGlPostingServiceDb)_gl).PostPurchaseAsync(db, purchase, ct);
@@ -630,27 +635,29 @@ namespace Pos.Persistence.Services
         }
 
         private async Task ApplyStockAsync(
-    PosClientDbContext db, Purchase p,
+    PosClientDbContext db,
+    Purchase p,
     IEnumerable<Pos.Domain.Models.Inventory.StockDeltaDto> deltas,
+    Dictionary<int, decimal> unitCostByItem,
     DateTime nowUtc, string user, CancellationToken ct)
         {
             foreach (var d in deltas)
             {
                 if (d.Delta == 0) continue;
+                var cost = unitCostByItem.TryGetValue(d.ItemId, out var c) ? c : 0m;
 
                 db.StockEntries.Add(new StockEntry
                 {
                     OutletId = p.OutletId ?? 0,
                     ItemId = d.ItemId,
-                    QtyChange = d.Delta,          // + for add, - for reduce
-                    UnitCost = 0m,               // keep as-is in your schema
+                    QtyChange = d.Delta,
+                    UnitCost = cost,                  // <-- write cost
                     LocationType = d.LocType,
                     LocationId = d.LocId,
                     RefType = "Purchase",
                     RefId = p.Id,
                     Ts = nowUtc,
                     Note = p.DocNo,
-                    // ✅ audit
                     CreatedAtUtc = nowUtc,
                     CreatedBy = user,
                     UpdatedAtUtc = null,
@@ -659,6 +666,7 @@ namespace Pos.Persistence.Services
             }
             await Task.CompletedTask;
         }
+
 
 
         // inside PurchasesService (private region)
@@ -1039,5 +1047,38 @@ namespace Pos.Persistence.Services
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
+
+        // Build per-item effective unit cost for this purchase header.
+        // Rule: start from line UnitCost, allocate header-level Discount (-) and OtherCharges (+)
+        // proportionally to each line's pre-VAT amount. Tax is excluded from capitalized cost.
+        private static Dictionary<int, decimal> BuildPerItemUnitCostMap(Purchase p)
+        {
+            // group by item: base amount = sum(Qty * UnitCost)
+            var groups = p.Lines
+                .GroupBy(l => l.ItemId)
+                .Select(g => new
+                {
+                    ItemId = g.Key,
+                    Qty = g.Sum(x => x.Qty),
+                    BaseAmount = g.Sum(x => x.UnitCost * x.Qty)
+                })
+                .ToList();
+
+            var baseTotal = groups.Sum(x => x.BaseAmount);
+            var allocTotal = (-p.Discount) + p.OtherCharges; // discount reduces, other charges add
+
+            var map = new Dictionary<int, decimal>(groups.Count);
+            foreach (var g in groups)
+            {
+                if (g.Qty == 0m) { map[g.ItemId] = 0m; continue; }
+
+                var share = baseTotal > 0m ? (g.BaseAmount / baseTotal) : 0m;
+                var effAmount = g.BaseAmount + (allocTotal * share);
+                var effUnit = Math.Round(effAmount / g.Qty, 4);
+                map[g.ItemId] = effUnit;
+            }
+            return map;
+        }
+
     }
 }
