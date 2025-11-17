@@ -73,5 +73,6 @@ public class InvoiceSettings
     public int? PurchaseBankAccountId { get; set; }          // default bank/clearing for supplier payments (Bank/Card)
     public int? SalesCardClearingAccountId { get; set; }     // default bank/clearing for sales card receipts
                                                              // --- END NEW ---
+    public bool UseTill { get; set; } = true; // NEW: per-outlet toggle. If false => no open till required, cash posts to Cash-in-Hand
 
 }

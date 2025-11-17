@@ -245,22 +245,26 @@ namespace Pos.Persistence.Services
             if (req.Total <= 0m) throw new InvalidOperationException("Total must be > 0.");
 
             // Ensure open till exists (defensive)
-            var open = await GetOpenTillAsync(req.OutletId, req.CounterId, ct);
-            if (open == null || open.Id != req.TillSessionId)
-                throw new InvalidOperationException("Till is closed.");
+            // READ outlet settings
+            // Read per-outlet preference for till usage
+            var (settings, _) = await _invSettings.GetAsync(req.OutletId, "en", ct);
 
-            //// Negative stock guard (aggregate cart)
-            //var guard = new StockGuard(_db);
-            //var deltas = req.Lines
-            //    .GroupBy(l => l.ItemId)
-            //    .Select(g => (itemId: g.Key,
-            //                  outletId: req.OutletId,
-            //                  locType: InventoryLocationType.Outlet,
-            //                  locId: req.OutletId,
-            //                  delta: -g.Sum(x => x.Qty)))
-            //    .ToArray();
-            //await guard.EnsureNoNegativeAtLocationAsync(deltas, atUtc: null, ct: ct);
-            // Guard only when it’s an OUT flow (normal sale). Returns add stock.
+            if (settings.UseTill)
+            {
+                // Till required → enforce open till for this counter/session
+                var open = await GetOpenTillAsync(req.OutletId, req.CounterId, ct);
+                if (open == null || open.Id != req.TillSessionId)
+                    throw new InvalidOperationException("Till is closed.");
+            }
+            else
+            {
+                // No-Till mode:
+                // - Skip the open-till validation entirely.
+                // - Do NOT attempt to mutate req (SaleFinalizeRequest has init-only props and is not a record).
+                // - Downstream logic (GL posting) already treats TillSessionId == 0 as cash-in-hand (not till).
+            }
+
+
             if (!req.IsReturn)
             {
                 var deltas = req.Lines
@@ -274,6 +278,16 @@ namespace Pos.Persistence.Services
                     .ToArray();
 
                 await _guard.EnsureNoNegativeAtLocationAsync(deltas, atUtc: null, ct);
+            }
+
+            // If this is a return, enforce single-return-per-invoice
+            if (req.IsReturn)
+            {
+                if (!req.OriginalSaleId.HasValue || req.OriginalSaleId.Value <= 0)
+                    throw new InvalidOperationException("Return must reference an original invoice.");
+
+                if (await HasActiveReturnAsync(req.OriginalSaleId.Value, ct))
+                    throw new InvalidOperationException("A return already exists for this invoice. Amend the existing return instead of creating another.");
             }
 
             using var tx = await _db.Database.BeginTransactionAsync(ct);
@@ -374,7 +388,11 @@ namespace Pos.Persistence.Services
                 else
                     await _gl.PostSaleReturnAsync(sale);
             }
-            catch { /* swallow; log elsewhere */ }
+            catch (Exception ex)
+            {
+                 // At least log to GL/diagnostics; don’t fail the sale save.
+                System.Diagnostics.Debug.WriteLine("GL post failed: " + ex.Message);
+            }
 
             // Void held draft if any
             if (req.HeldSaleId.HasValue)
@@ -410,6 +428,10 @@ namespace Pos.Persistence.Services
 
             original.Status = SaleStatus.Revised;
             original.Note = AppendNote(original.Note, $"Revised on {DateTime.UtcNow:u} by {userId}. {reason ?? ""}".Trim());
+
+            // Do not allow amending the original if a (non-void) return exists
+            if (await HasActiveReturnAsync(originalSaleId, default))
+                throw new InvalidOperationException("This invoice has a posted return; you cannot void or amend the original. Amend the return instead.");
 
             var newSale = new Sale
             {
@@ -545,7 +567,14 @@ namespace Pos.Persistence.Services
             return SaveAmendmentAsync(req, ct);
         }
 
+        private async Task<bool> HasActiveReturnAsync(int originalSaleId, CancellationToken ct)
+        {
+            return await _db.Sales.AsNoTracking()
+                .AnyAsync(x => x.IsReturn
+                            && x.OriginalSaleId == originalSaleId
+                            && x.Status != SaleStatus.Voided, ct);
+        }
 
-
+        
     }
 }

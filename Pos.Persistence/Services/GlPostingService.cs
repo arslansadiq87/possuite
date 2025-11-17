@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
 using Microsoft.VisualBasic;
+using Pos.Domain;
 using Pos.Domain.Abstractions;
 using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
@@ -65,6 +66,67 @@ namespace Pos.Persistence.Services
                 PartyId = partyId,
                 Memo = memo
             };
+
+
+        // GlPostingService.cs
+        private GlEntry Row(
+            DateTime tsUtc,
+            DateTime effectiveDate,
+            int? outletId,
+            int accountId,
+            decimal debit,
+            decimal credit,
+            GlDocType docType,
+            GlDocSubType subType,
+            Sale s,
+            int? partyId = null,
+            string? memo = null)
+        {
+            return new GlEntry
+            {
+                TsUtc = tsUtc,
+                OutletId = outletId,
+                AccountId = accountId,
+                Debit = debit,
+                Credit = credit,
+                DocType = docType,
+                DocSubType = subType,
+
+                // link to Sale doc
+                DocId = s.Id,
+                DocNo = s.InvoiceNumber.ToString(), // or s.DocNo if you keep both
+                PublicId = s.PublicId,
+                ChainId = s.PublicId,
+
+                PartyId = partyId ?? s.CustomerId,
+
+                EffectiveDate = effectiveDate,
+                IsEffective = true,
+
+                CreatedAtUtc = tsUtc,
+                CreatedBy = s.UpdatedBy ?? s.CreatedBy,
+                UpdatedAtUtc = tsUtc,
+                UpdatedBy = s.UpdatedBy ?? s.CreatedBy,
+
+                Memo = memo
+            };
+        }
+
+        private GlEntry Row(
+            int accountId,
+            decimal debit,
+            decimal credit,
+            GlDocType docType,
+            GlDocSubType subType,
+            Sale s,
+            DateTime tsUtc,
+            DateTime effectiveDate,
+            int? outletId,
+            int? partyId = null,
+            string? memo = null)
+            => Row(tsUtc, effectiveDate, outletId, accountId, debit, credit, docType, subType, s, partyId, memo);
+
+             
 
         // Add near top (helpers region)
         private static IEnumerable<GlEntry> PaymentRows(
@@ -163,6 +225,28 @@ namespace Pos.Persistence.Services
 
             return id;
         }
+
+
+        private async Task<int> ResolveCashAsync(PosClientDbContext db, int? outletId, CancellationToken ct)
+        {
+            // Prefer your CoA service mapping (e.g., 111-<OutletCode>)
+            var cashId = await _coa.GetCashAccountIdAsync(outletId, ct); // returns int
+            if (cashId != 0)
+                return cashId;
+
+            // Fallback: any postable leaf under 111
+            var fallbackId = await db.Accounts.AsNoTracking()
+                .Where(a => !a.IsHeader && a.AllowPosting && (a.Code == "111" || a.Code.StartsWith("111-")))
+                .OrderBy(a => a.Code)
+                .Select(a => a.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (fallbackId == 0)
+                throw new InvalidOperationException("Cash-in-Hand account (code 111 or 111-*) not found or not postable. Configure CoA or preferences.");
+
+            return fallbackId;
+        }
+
 
 
 
@@ -633,11 +717,7 @@ namespace Pos.Persistence.Services
         }
 
         // -------------------- Sales/Vouchers/Payroll stubs to satisfy IGlPostingService --------------------
-        public Task PostSaleAsync(Sale sale, CancellationToken ct = default) => Task.CompletedTask;
-        public Task PostSaleRevisionAsync(Sale amended, decimal deltaSub, decimal deltaTax, CancellationToken ct = default) => Task.CompletedTask;
-        public Task PostSaleReturnAsync(Sale sale, CancellationToken ct = default) => Task.CompletedTask;
-        public Task PostReturnRevisionAsync(Sale amended, decimal deltaSub, decimal deltaTax, CancellationToken ct = default) => Task.CompletedTask;
-
+     
         public Task PostVoucherAsync(Voucher v, CancellationToken ct = default) => Task.CompletedTask;
         public Task PostVoucherVoidAsync(Voucher voucherToVoid, CancellationToken ct = default) => Task.CompletedTask;
         public Task PostVoucherRevisionAsync(Voucher newVoucher, IReadOnlyList<VoucherLine> oldLines, CancellationToken ct = default) => Task.CompletedTask;
@@ -901,6 +981,274 @@ namespace Pos.Persistence.Services
             await InactivateEffectiveAsync(db, doc.PublicId, GlDocType.StockAdjust, GlDocSubType.Other, ct);
             await db.SaveChangesAsync(ct);
         }
+
+        // -------------------- Sales (per-document gross snapshot) --------------------
+        public async Task PostSaleAsync(Sale s, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await PostSaleAsync(db, s, ct);
+            await db.SaveChangesAsync(ct);   // <-- persist the rows we just added
+        }
+
+        public async Task PostSaleReturnAsync(Sale s, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await PostSaleReturnAsync(db, s, ct);
+            await db.SaveChangesAsync(ct);
+        }
+
+        public Task PostSaleRevisionAsync(Sale amended, decimal deltaSub, decimal deltaTax, CancellationToken ct = default)
+            => PostSaleDeltaAsync(amended, deltaSub, deltaTax, isReturn: false, ct);
+
+        public Task PostReturnRevisionAsync(Sale amended, decimal deltaSub, decimal deltaTax, CancellationToken ct = default)
+            => PostSaleDeltaAsync(amended, deltaSub, deltaTax, isReturn: true, ct);
+
+        // -------- DB overloads (participate in caller's transaction/UoW) --------
+        private async Task PostSaleAsync(PosClientDbContext db, Sale s, CancellationToken ct)
+        {
+            // Guard
+            if (s.IsReturn) { await PostSaleReturnAsync(db, s, ct); return; }
+
+            var tsUtc = DateTime.UtcNow;
+            var eff = s.Ts == default ? tsUtc.Date : s.Ts.Date;
+            var outletId = s.OutletId;
+
+            // Accounts (resolve by CoA codes seeded in your template)
+            var revenueId = await ResolveAccountByCodeAsync(db, "411", ct);   // Gross sales value
+            var taxPayableId = await ResolveOptionalAccountByCodeAsync(db, "2110", ct); // Sales tax payable (output), optional
+            var tillId = await ResolveTillAsync(db, outletId, ct);            // prefers outlet till (112 child), fallback cash(111)
+            var cashId = await ResolveCashAsync(db, outletId, ct);            // outlet cash in hand (111 child)
+            var cardClearingId = await ResolveSalesCardClearingForOutletAsync(db, outletId, ct); // from InvoiceSettings (per-outlet or global)
+
+            // Optional AR (customer account) when not fully paid and non-walkin
+            int? customerAccId = null;
+            if (s.CustomerKind != CustomerKind.WalkIn && s.CustomerId.HasValue)
+                customerAccId = await db.Parties.AsNoTracking()
+                    .Where(p => p.Id == s.CustomerId.Value)
+                    .Select(p => p.AccountId)
+                    .FirstOrDefaultAsync(ct);
+
+            // Inactivate previous “gross” for this chain and rewrite snapshot
+            await InactivateEffectiveAsync(db, s.PublicId, GlDocType.Sale, GlDocSubType.Sale_Gross, ct);
+
+            // Split total into pieces
+            var total = s.Total;                 // > 0 for sale
+            var tax = Math.Max(0m, s.TaxTotal);  // defensive
+            var net = total - tax;
+
+            var paidCash = Math.Max(0m, s.CashAmount);
+            var paidCard = Math.Max(0m, s.CardAmount);
+            var paidTotal = paidCash + paidCard;
+            var arPortion = Math.Max(0m, total - paidTotal);
+
+            // Debits: Cash/Till, CardClearing, AR (for non-walk-in balance)
+            var debitRows = new List<GlEntry>();
+
+            if (paidCash > 0m)
+            {
+                // If a till session is present → post to Till; else → Cash-in-Hand
+                var cashAccount = (s.TillSessionId.HasValue && s.TillSessionId.Value > 0) ? tillId : cashId;
+                debitRows.Add(Row(tsUtc, eff, outletId, cashAccount, debit: paidCash, credit: 0m, GlDocType.Sale, GlDocSubType.Sale_Receipt, s));
+            }
+
+            if (paidCard > 0m)
+            {
+                if (cardClearingId == 0)
+                    throw new InvalidOperationException("Sales card clearing account is not configured (Preferences → Invoice Settings).");
+                debitRows.Add(Row(tsUtc, eff, outletId, cardClearingId, debit: paidCard, credit: 0m, GlDocType.Sale, GlDocSubType.Sale_Receipt, s));
+            }
+
+            if (arPortion > 0m && customerAccId.HasValue)
+            {
+                debitRows.Add(Row(tsUtc, eff, outletId, customerAccId.Value, debit: arPortion, credit: 0m,
+                                  GlDocType.Sale, GlDocSubType.Sale_Receipt, s, partyId: s.CustomerId));
+            }
+
+            // Credits: Tax payable, Revenue(net)
+            var creditRows = new List<GlEntry>();
+            if (tax > 0m && taxPayableId != 0)
+                creditRows.Add(Row(tsUtc, eff, outletId, taxPayableId, debit: 0m, credit: tax, GlDocType.Sale, GlDocSubType.Sale_Gross, s));
+
+            creditRows.Add(Row(tsUtc, eff, outletId, revenueId, debit: 0m, credit: net, GlDocType.Sale, GlDocSubType.Sale_Gross, s));
+
+            await db.GlEntries.AddRangeAsync(debitRows.Concat(creditRows), ct);
+            // do not SaveChanges here (caller controls commit)
+        }
+
+        private async Task PostSaleReturnAsync(PosClientDbContext db, Sale s, CancellationToken ct)
+        {
+            // A return in your system has Total < 0 (you sum ABS in Till code). We’ll work in absolutes for clarity.
+            var tsUtc = DateTime.UtcNow;
+            var eff = s.Ts == default ? tsUtc.Date : s.Ts.Date;
+            var outletId = s.OutletId;
+
+            var salesReturnId = await ResolveAccountByCodeAsync(db, "412", ct); // Sales returns
+            var taxPayableId = await ResolveOptionalAccountByCodeAsync(db, "2110", ct); // Sales tax payable (output)
+            var tillId = await ResolveTillAsync(db, outletId, ct);
+            var cashId = await ResolveCashAsync(db, outletId, ct);
+            var cardClearingId = await ResolveSalesCardClearingForOutletAsync(db, outletId, ct);
+
+            int? customerAccId = null;
+            if (s.CustomerKind != CustomerKind.WalkIn && s.CustomerId.HasValue)
+                customerAccId = await db.Parties.AsNoTracking()
+                    .Where(p => p.Id == s.CustomerId.Value)
+                    .Select(p => p.AccountId)
+                    .FirstOrDefaultAsync(ct);
+
+            await InactivateEffectiveAsync(db, s.PublicId, GlDocType.SaleReturn, GlDocSubType.Sale_Return, ct);
+
+            var totalAbs = Math.Abs(s.Total);
+            var taxAbs = Math.Abs(s.TaxTotal);
+            var netAbs = Math.Max(0m, totalAbs - taxAbs);
+
+            var refundCashAbs = Math.Abs(Math.Min(0m, s.CashAmount)); // if you store negative on return; else use Math.Abs(s.CashAmount)
+            if (refundCashAbs == 0m) refundCashAbs = Math.Abs(s.CashAmount);
+            var refundCardAbs = Math.Abs(s.CardAmount);
+            var refundTotalAbs = refundCashAbs + refundCardAbs;
+            var arReduceAbs = Math.Max(0m, totalAbs - refundTotalAbs);
+
+            // Debits (reduce liabilities/increase contra-income): SalesReturns (debit), TaxPayable (debit)
+            var debits = new List<GlEntry>
+    {
+        Row(tsUtc, eff, outletId, salesReturnId, debit: netAbs, credit: 0m, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s)
+    };
+            if (taxAbs > 0m && taxPayableId != 0)
+                debits.Add(Row(tsUtc, eff, outletId, taxPayableId, debit: taxAbs, credit: 0m, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s));
+
+            // Credits (refund to cash/till, card clearing, or reduce AR)
+            var credits = new List<GlEntry>();
+            if (refundCashAbs > 0m)
+            {
+                var cashAccount = (s.TillSessionId.HasValue && s.TillSessionId.Value > 0) ? tillId : cashId;
+                credits.Add(Row(tsUtc, eff, outletId, cashAccount, debit: 0m, credit: refundCashAbs, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s));
+            }
+            if (refundCardAbs > 0m)
+            {
+                if (cardClearingId == 0)
+                    throw new InvalidOperationException("Sales card clearing account is not configured (Preferences → Invoice Settings).");
+                credits.Add(Row(tsUtc, eff, outletId, cardClearingId, debit: 0m, credit: refundCardAbs, GlDocType.SaleReturn, GlDocSubType.Sale_Return, s));
+            }
+            if (arReduceAbs > 0m && customerAccId.HasValue)
+            {
+                credits.Add(Row(tsUtc, eff, outletId, customerAccId.Value, debit: 0m, credit: arReduceAbs,
+                                GlDocType.SaleReturn, GlDocSubType.Sale_Return, s, partyId: s.CustomerId));
+            }
+
+            await db.GlEntries.AddRangeAsync(debits.Concat(credits), ct);
+            // no SaveChanges here
+        }
+
+        private async Task PostSaleDeltaAsync(Sale amended, decimal deltaSub, decimal deltaTax, bool isReturn, CancellationToken ct)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var tsUtc = DateTime.UtcNow;
+            var eff = amended.Ts == default ? tsUtc.Date : amended.Ts.Date;
+            var outletId = amended.OutletId;
+
+            var subType = isReturn ? GlDocSubType.Sale_Return : GlDocSubType.Sale_AmendDelta;
+            var docType = isReturn ? GlDocType.SaleReturn : GlDocType.SaleRevision;
+
+            var revenueId = await ResolveAccountByCodeAsync(db, isReturn ? "412" : "411", ct);
+            var taxPayableId = await ResolveOptionalAccountByCodeAsync(db, "2110", ct);
+
+            // When delta is positive in SALE context → increase credit revenue/tax.
+            // In RETURN context you passed deltaSub/deltaTax with sign already (call appropriately).
+            var lines = new List<GlEntry>();
+
+            if (deltaTax != 0m && taxPayableId != 0)
+            {
+                lines.Add(Row(tsUtc, eff, outletId, taxPayableId,
+                    debit: deltaTax < 0 ? Math.Abs(deltaTax) : 0m,
+                    credit: deltaTax > 0 ? deltaTax : 0m, docType, subType, amended));
+            }
+
+            if (deltaSub != 0m)
+            {
+                // For returns we hit 412; for normal sale we hit 411
+                var debit = 0m; var credit = 0m;
+                if (isReturn)
+                    debit = deltaSub > 0 ? deltaSub : 0m; // increase SalesReturns
+                else
+                    credit = deltaSub > 0 ? deltaSub : 0m; // increase Sales revenue
+
+                if (deltaSub < 0 && !isReturn) debit = Math.Abs(deltaSub); // reduce revenue
+                if (deltaSub < 0 && isReturn) credit = Math.Abs(deltaSub); // reduce SalesReturns
+
+                lines.Add(Row(tsUtc, eff, outletId, revenueId, debit, credit, docType, subType, amended));
+            }
+
+            if (lines.Count > 0)
+                {
+                await db.GlEntries.AddRangeAsync(lines, ct);
+                await db.SaveChangesAsync(ct);
+                }
+        }
+
+        // -------- local resolvers (no new DbContext!) --------
+        private static async Task<int> ResolveAccountByCodeAsync(PosClientDbContext db, string code, CancellationToken ct)
+        {
+            var id = await db.Accounts.AsNoTracking()
+                .Where(a => a.Code == code && !a.IsHeader && a.AllowPosting)
+                .Select(a => a.Id).FirstOrDefaultAsync(ct);
+            if (id == 0) throw new InvalidOperationException($"CoA account code {code} not found or not postable.");
+            return id;
+        }
+
+        private static async Task<int> ResolveOptionalAccountByCodeAsync(PosClientDbContext db, string code, CancellationToken ct)
+        {
+            var id = await db.Accounts.AsNoTracking()
+                .Where(a => a.Code == code && !a.IsHeader && a.AllowPosting)
+                .Select(a => a.Id).FirstOrDefaultAsync(ct);
+            return id; // 0 when missing → treated as optional
+        }
+
+        // Pull SalesCardClearingAccountId from per-outlet InvoiceSettings (fallback to global row)
+        private static async Task<int> ResolveSalesCardClearingForOutletAsync(PosClientDbContext db, int? outletId, CancellationToken ct)
+        {
+            int? id = null;
+
+            if (outletId.HasValue)
+            {
+                id = await db.InvoiceSettings.AsNoTracking()
+                    .Where(x => x.OutletId == outletId.Value)
+                    .OrderByDescending(x => x.UpdatedAtUtc)
+                    .Select(x => x.SalesCardClearingAccountId)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            if (!id.HasValue || id.Value == 0)
+            {
+                id = await db.InvoiceSettings.AsNoTracking()
+                    .Where(x => x.OutletId == null)
+                    .OrderByDescending(x => x.UpdatedAtUtc)
+                    .Select(x => x.SalesCardClearingAccountId)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            return id ?? 0;
+        }
+
+        // Inactivate all effective GL rows for a sale chain (gross + receipts + deltas)
+        private static async Task InactivateAllForChainAsync(PosClientDbContext db, Guid chainId, CancellationToken ct)
+        {
+            var rows = await db.GlEntries
+                .Where(e => e.ChainId == chainId && e.IsEffective)   // ChainId: Guid; IsEffective: bool
+                .ToListAsync(ct);
+
+            if (rows.Count == 0) return;
+
+            foreach (var r in rows)
+                r.IsEffective = false;
+        }
+
+        public async Task VoidSaleAsync(Sale s, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            await InactivateAllForChainAsync(db, s.PublicId, ct);   // s.PublicId is Guid — correct
+            await db.SaveChangesAsync(ct);
+        }
+
+
 
     }
 }

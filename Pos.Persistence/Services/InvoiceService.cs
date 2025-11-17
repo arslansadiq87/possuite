@@ -197,6 +197,7 @@ namespace Pos.Persistence.Services
             if (sale.IsReturn) throw new InvalidOperationException("Selected document is a return.");
             if (sale.Status != SaleStatus.Final) throw new InvalidOperationException("Only FINAL invoices can be voided.");
 
+            // Reverse stock for each line
             var lines = await db.SaleLines.Where(l => l.SaleId == sale.Id).ToListAsync(ct);
             foreach (var l in lines)
             {
@@ -213,13 +214,28 @@ namespace Pos.Persistence.Services
                 });
             }
 
+            // Mark sale void
             sale.Status = SaleStatus.Voided;
             sale.VoidReason = reason;
             sale.VoidedAtUtc = DateTime.UtcNow;
 
+            // 🔻 NEW: Inactivate ALL effective GL rows for this sale's chain
+            // ChainId is Guid (sale.PublicId); IsEffective is bool
+            var glRows = await db.GlEntries
+                .Where(e => e.ChainId == sale.PublicId && e.IsEffective)
+                .ToListAsync(ct);
+
+            if (glRows.Count > 0)
+            {
+                foreach (var r in glRows)
+                    r.IsEffective = false;
+            }
+            // 🔺 END NEW
+
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
+
 
         public async Task<IReadOnlyList<HeldRowDto>> GetHeldAsync(int outletId, int counterId, CancellationToken ct = default)
         {

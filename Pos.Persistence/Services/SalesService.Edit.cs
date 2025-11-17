@@ -79,6 +79,11 @@ namespace Pos.Persistence.Services
             if (orig.IsReturn) throw new InvalidOperationException("Returns cannot be amended here.");
             if (orig.Status != SaleStatus.Final) throw new InvalidOperationException("Only FINAL invoices can be amended.");
 
+            // Block editing the original when a return exists
+            if (await HasActiveReturnAsync(req.OriginalSaleId, ct))
+                throw new InvalidOperationException("This invoice has a posted return; you cannot amend the original. Amend the return instead.");
+
+
             // Totals deltas
             var deltaSub = req.Subtotal - orig.Subtotal;
             var deltaTax = req.TaxTotal - orig.TaxTotal;

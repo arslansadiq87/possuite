@@ -3,10 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ctrl="clr-namespace:Pos.Client.Wpf.Controls"
              mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="600">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="20">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="12"/>
                 <RowDefinition Height="Auto"/>
@@ -117,8 +120,57 @@
                 </Grid>
             </GroupBox>
 
+            <!-- === Till & Payments (Per-Outlet) === -->
+            <GroupBox Header="Till &amp; Payments (Per-Outlet)" Grid.Row="8" Margin="0,12,0,0"   IsEnabled="{Binding CanEditOutletPayments}">
+                <StackPanel Margin="12,8,12,12" Orientation="Vertical">
+
+                    <!-- Outlet picker -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Outlet" Width="140" VerticalAlignment="Center"/>
+                        <ComboBox Width="280"
+                ItemsSource="{Binding Outlets}"
+                DisplayMemberPath="Name"
+                SelectedItem="{Binding SelectedOutlet, Mode=TwoWay}"/>
+                    </StackPanel>
+
+                    <!-- Use Till -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Use Till" Width="140" VerticalAlignment="Center"/>
+                        <CheckBox IsChecked="{Binding UseTill, Mode=TwoWay}"
+                VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Sales Card Clearing Account -->
+                    <GroupBox Header="Sales Card Clearing" Margin="0,4,0,0">
+                        <StackPanel Margin="8">
+                            <!-- Reuse your existing AccountPicker style from Invoice Settings -->
+                            <ctrl:AccountSearchBox
+                                ItemsSource="{Binding BankAccounts}"
+                                SelectedAccount="{Binding SelectedSalesCardClearingAccount, Mode=TwoWay}"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- Purchase Bank Account -->
+                    <GroupBox Header="Purchase Bank" Margin="0,4,0,0">
+                        <StackPanel Margin="8">
+                            <ctrl:AccountSearchBox
+                                ItemsSource="{Binding BankAccounts}"
+                                SelectedAccount="{Binding SelectedPurchaseBankAccount, Mode=TwoWay}"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- Buttons -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="Reload" Command="{Binding ReloadOutletPaymentsCommand}"/>
+                    </StackPanel>
+
+                </StackPanel>
+            </GroupBox>
+
+
+
             <!-- Buttons -->
-            <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+            <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Save" Width="120"
                 Command="{Binding SaveCommand}"
                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanConverter}}">

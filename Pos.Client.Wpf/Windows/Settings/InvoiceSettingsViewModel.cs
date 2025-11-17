@@ -325,8 +325,6 @@ public partial class InvoiceSettingsViewModel : ObservableObject
 
         _loadedSettings.ShowFooter = ShowFooter;
         // --- Save bank defaults ---
-        _loadedSettings.PurchaseBankAccountId = SelectedPurchaseBankAccount?.Id;
-        _loadedSettings.SalesCardClearingAccountId = SelectedSalesCardClearingAccount?.Id;
         // ---------------------------
 
         await _svc.SaveAsync(_loadedSettings, _loadedLocs);
