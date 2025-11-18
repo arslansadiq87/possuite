@@ -78,6 +78,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
     public partial class ChartOfAccountsVm : ObservableObject, IDisposable
     {
         private readonly ICoaService _coa;   // NEW
+        private readonly IBankAccountService _bank;
+
 
         public ObservableCollection<AccountNode> Roots { get; } = new();
 
@@ -85,6 +87,14 @@ namespace Pos.Client.Wpf.Windows.Accounting
        
         private readonly HashSet<int> _expanded = new();
         private static bool IsPartyTree(AccountNode n) => n.Type == AccountType.Parties;
+
+        // Helpers that do not rely on Parent/ParentId or static Roots
+        private static bool IsBankHeader(AccountNode n)
+            => n.IsHeader && !string.IsNullOrWhiteSpace(n.Code) && n.Code.StartsWith("113");
+
+        private static bool IsUnderBankTree(AccountNode n)
+            => !string.IsNullOrWhiteSpace(n.Code) && n.Code.StartsWith("113");
+
 
         private static NormalSide DefaultNormalFor(AccountType t) => t switch
         {
@@ -134,10 +144,11 @@ namespace Pos.Client.Wpf.Windows.Accounting
             return name;
         }
 
-        public ChartOfAccountsVm(ICoaService coa)
+        public ChartOfAccountsVm(ICoaService coa, IBankAccountService bank)
         {
             _coa = coa;
             AppEvents.AccountsChanged += OnAccountsChanged;
+            _bank = bank;
         }
 
         private async void OnAccountsChanged()
@@ -224,29 +235,66 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public async Task NewHeaderAsync()
         {
             if (!CanManageCoA() || SelectedNode is null) return;
-            if (!CanHaveChildren(SelectedNode) || IsPartyTree(SelectedNode))
+            if (IsPartyTree(SelectedNode))
             {
-                MessageBox.Show("Select a header (non-posting) under a non-Party branch.", "Chart of Accounts");
+                MessageBox.Show("Party accounts are managed from their own forms.");
                 return;
             }
-            var name = AskName("Header name:", "New Header");
-            await _coa.CreateHeaderAsync(SelectedNode.Id, name);
-            await LoadAsync();
+
+            var parentHeader = SelectedNode;
+            var parentPath = $"{parentHeader.Code} – {parentHeader.Name}";
+
+            var dlg = new AccountEditorDialog(_coa, parentHeader.Id, parentPath, editId: null, currentName: null, isHeader: true)
+            {
+                Owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+            };
+
+            if (dlg.ShowDialog() == true)
+                await LoadAsync();
         }
+
+
 
         [RelayCommand(CanExecute = nameof(CanCreateUnderSelection))]
         public async Task NewAccountAsync()
         {
             if (!CanManageCoA() || SelectedNode is null) return;
-            if (!CanHaveChildren(SelectedNode) || IsPartyTree(SelectedNode))
+            if (IsPartyTree(SelectedNode))
             {
-                MessageBox.Show("Select a header (non-posting) under a non-Party branch.", "Chart of Accounts");
+                MessageBox.Show("Party accounts are managed from their own forms.");
                 return;
             }
-            var name = AskName("Account name:", "New Account");
-            await _coa.CreateAccountAsync(SelectedNode.Id, name);
-            await LoadAsync();
+
+            var parentHeader = SelectedNode;
+            if (!parentHeader.IsHeader)
+            {
+                MessageBox.Show("Select a header to create an account under.");
+                return;
+            }
+
+            var parentPath = $"{parentHeader.Code} – {parentHeader.Name}";
+
+            // If under Bank (113), open the bank account dialog
+            if (IsBankHeader(parentHeader) || IsUnderBankTree(parentHeader))
+            {
+                var dlg = new BankAccountDialog(_bank, parentHeader.Id, parentPath)
+                {
+                    Owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                };
+                if (dlg.ShowDialog() == true)
+                    await LoadAsync();
+                return;
+            }
+
+            // Generic account creation
+            var dlg2 = new AccountEditorDialog(_coa, parentHeader.Id, parentPath, editId: null, currentName: null, isHeader: false)
+            {
+                Owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+            };
+            if (dlg2.ShowDialog() == true)
+                await LoadAsync();
         }
+
 
         [RelayCommand]
         public async Task AddCashForOutletAsync()
@@ -299,22 +347,57 @@ namespace Pos.Client.Wpf.Windows.Accounting
         public async Task EditAccountAsync()
         {
             if (!CanManageCoA() || SelectedNode is null) return;
-            if (IsPartyTree(SelectedNode)) { MessageBox.Show("Party accounts are managed from their own forms."); return; }
-            if (SelectedNode.IsSystem) { MessageBox.Show("System accounts cannot be edited."); return; }
-            var newCode = Prompt("Account Code:", SelectedNode.Code) ?? SelectedNode.Code;
-            var newName = Prompt("Account Name:", SelectedNode.Name) ?? SelectedNode.Name;
-            var isHeader = MessageBoxYesNo("Mark as Header (no posting)?", SelectedNode.IsHeader);
-            var allowPosting = !isHeader && MessageBoxYesNo("Allow Posting on this account?", SelectedNode.AllowPosting);
-            try
+
+            if (IsPartyTree(SelectedNode))
             {
-                await _coa.EditAsync(new AccountEdit(SelectedNode.Id, newCode, newName, isHeader, allowPosting));
+                MessageBox.Show("Party accounts are managed from their own forms.");
+                return;
+            }
+
+            if (SelectedNode.IsSystem)
+            {
+                MessageBox.Show("System/template accounts cannot be edited.");
+                return;
+            }
+
+            // We don't rely on Parent/ParentId; show a neutral label
+            var parentPath = "(parent)";
+
+            // If this is a bank GL leaf, try to open bank form (if metadata exists)
+            if (!SelectedNode.IsHeader && IsUnderBankTree(SelectedNode))
+            {
+                //var bankSvc = _sp.GetRequiredService<IBankAccountService>();
+                var meta = await _bank.GetByAccountIdAsync(SelectedNode.Id);
+
+                if (meta != null)
+                {
+                    var dlg = new BankAccountDialog(_bank, meta.Id, meta.AccountId, parentPath, meta.Code, meta.Name)
+                    {
+                        Owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                    };
+                    if (dlg.ShowDialog() == true)
+                        await LoadAsync();
+                    return;
+                }
+
+                // No metadata found — block generic edit to keep the rule strict
+                MessageBox.Show("This account is under Bank (113) but has no bank metadata.\nPlease manage it via the Bank Account form under 113.");
+                return;
+            }
+
+            // Generic rename/header flip dialog
+            var dlg3 = new AccountEditorDialog(_coa, SelectedNode.Id, parentPath,
+                                               editId: SelectedNode.Id,
+                                               currentName: SelectedNode.Name,
+                                               isHeader: SelectedNode.IsHeader)
+            {
+                Owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+            };
+            if (dlg3.ShowDialog() == true)
                 await LoadAsync();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Edit Account");
-            }
         }
+
+
 
         [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
         public async Task DeleteAccountAsync()

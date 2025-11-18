@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Pos.Domain.Entities;
 
@@ -88,6 +89,19 @@ namespace Pos.Client.Wpf.Controls
                 }));
             };
         }
+
+        public double DropDownMaxHeight
+        {
+            get => (double)GetValue(DropDownMaxHeightProperty);
+            set => SetValue(DropDownMaxHeightProperty, value);
+        }
+        public static readonly DependencyProperty DropDownMaxHeightProperty =
+            DependencyProperty.Register(
+                nameof(DropDownMaxHeight),
+                typeof(double),
+                typeof(AccountSearchBox),
+                new PropertyMetadata(360d)); // default cap (pixels)
+
 
         private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -244,5 +258,54 @@ namespace Pos.Client.Wpf.Controls
                 RaiseEvent(new RoutedEventArgs(AccountCommittedEvent, this));
             }
         }
+
+        // (E) Commit when any list item is clicked (works regardless of inner template content)
+        private void ListItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is ListBoxItem lbi)
+            {
+                lbi.IsSelected = true;   // ensure SelectedItem is set
+                                         // Defer one tick so binding updates (SelectedItem) are settled
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CommitSelection));
+                e.Handled = true;
+            }
+        }
+
+        // (D) Scroll even when mouse is NOT on the scrollbar
+        private void List_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (FindScrollViewer(List) is ScrollViewer sv)
+            {
+                if (e.Delta < 0) sv.LineDown(); else sv.LineUp();
+                e.Handled = true;
+            }
+        }
+
+        // (A) Also catch wheel on the whole control (text area, padding, etc.)
+        private void Root_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (!Popup.IsOpen) return;
+            if (FindScrollViewer(List) is ScrollViewer sv)
+            {
+                if (e.Delta < 0) sv.LineDown(); else sv.LineUp();
+                e.Handled = true;
+            }
+        }
+
+        // Helper: find the dropdown ScrollViewer reliably
+        private static ScrollViewer? FindScrollViewer(DependencyObject? root)
+        {
+            if (root is null) return null;
+            if (root is ScrollViewer sv) return sv;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                var found = FindScrollViewer(child);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
     }
 }

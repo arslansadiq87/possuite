@@ -18,7 +18,7 @@ namespace Pos.Persistence.Services
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
-
+        private static string Norm(string s) => (s ?? "").Trim().ToLowerInvariant();
         public CatalogService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox)
         {
             _dbf = dbf;
@@ -357,6 +357,12 @@ namespace Pos.Persistence.Services
         public async Task<Product> CreateProductAsync(string name, int? brandId = null, int? categoryId = null, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
+            // BEFORE: var p = new Product { ... };
+            var norm = Norm(name);
+            bool exists = await db.Products
+                .AsNoTracking()
+                .AnyAsync(p => p.Name != null && p.Name.ToLower() == norm, ct);
+            if (exists) throw new InvalidOperationException("Product name must be unique.");
 
             var p = new Product
             {
@@ -589,6 +595,14 @@ namespace Pos.Persistence.Services
         public async Task<Item> CreateItemAsync(Item i, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
+            var n = Norm(i.Name);
+            if (i.ProductId == null) // standalone only
+            {
+                bool nameTaken = await db.Items
+                    .AsNoTracking()
+                    .AnyAsync(x => x.ProductId == null && x.Name != null && x.Name.ToLower() == n, ct);
+                if (nameTaken) throw new InvalidOperationException("Item name must be unique for standalone products.");
+            }
 
             i.UpdatedAt = DateTime.UtcNow;
             db.Items.Add(i);
@@ -620,6 +634,17 @@ namespace Pos.Persistence.Services
             e.Variant1Value = updated.Variant1Value;
             e.Variant2Name = updated.Variant2Name;
             e.Variant2Value = updated.Variant2Value;
+
+            // After you load the current entity and before SaveChanges:
+            var n = Norm(updated.Name);
+            if (updated.ProductId == null)
+            {
+                bool clash = await db.Items
+                    .AsNoTracking()
+                    .AnyAsync(x => x.Id != updated.Id && x.ProductId == null && x.Name != null && x.Name.ToLower() == n, ct);
+                if (clash) throw new InvalidOperationException("Item name must be unique for standalone products.");
+            }
+
 
             await db.SaveChangesAsync(ct);
 
@@ -1216,5 +1241,44 @@ namespace Pos.Persistence.Services
             Pos.Persistence.Media.MediaPaths.Ensure();
         }
 
+        public async Task<bool> ProductNameExistsAsync(string name, int? excludeProductId = null, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var norm = (name ?? string.Empty).Trim().ToLower();
+            return await db.Products.AsNoTracking()
+                .Where(p => excludeProductId == null || p.Id != excludeProductId.Value)
+                .AnyAsync(p => p.Name != null && p.Name.ToLower() == norm, ct);
+        }
+        public async Task<List<Item>> GetProductVariantsAsync(int productId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Items.AsNoTracking()
+                .Where(i => i.ProductId == productId && !i.IsVoided)
+                .OrderBy(i => i.Name)
+                .ToListAsync(ct);
+        }
+
+        // Pos.Persistence/Services/CatalogService.cs
+        public async Task<bool> StandaloneItemNameExistsAsync(string name, int? excludeItemId = null, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var norm = (name ?? string.Empty).Trim().ToLower();
+            return await db.Items.AsNoTracking()
+                .Where(i => i.ProductId == null) // standalone only
+                .Where(i => excludeItemId == null || i.Id != excludeItemId.Value)
+                .AnyAsync(i => i.Name != null && i.Name.ToLower() == norm, ct);
+        }
+
+        public async Task<bool> SkuExistsAsync(string sku, int? excludeItemId = null, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(sku)) return false;
+            sku = sku.Trim();
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await db.Items.AsNoTracking()
+                .Where(i => excludeItemId == null || i.Id != excludeItemId.Value)
+                .AnyAsync(i => i.Sku == sku, ct);
+        }
+
     }
 }
+

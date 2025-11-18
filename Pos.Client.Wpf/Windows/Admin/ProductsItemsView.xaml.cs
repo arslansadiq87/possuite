@@ -35,6 +35,9 @@ namespace Pos.Client.Wpf.Windows.Admin
         private bool _loadingVariants;
         private bool _loadingStandalone;
         private bool _saving;
+        // 1) Add this field near the other private fields
+        private int? _pendingSelectStandaloneId;
+
         private enum RightMode { Variants, Standalone }
         private RightMode _mode;
         private readonly ObservableCollection<Brand> _brands = new();
@@ -73,8 +76,8 @@ namespace Pos.Client.Wpf.Windows.Admin
             ColVar1Value.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
             ColVar2Name.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
             ColVar2Value.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
-            ColBrand.Visibility = isVariants ? Visibility.Collapsed : Visibility.Visible;
-            ColCategory.Visibility = isVariants ? Visibility.Collapsed : Visibility.Visible;
+            ColBrand.Visibility = Visibility.Collapsed;
+            ColCategory.Visibility = Visibility.Collapsed;
             if (BtnAddVariant != null) BtnAddVariant.Visibility = isVariants ? Visibility.Visible : Visibility.Collapsed;
             if (BtnDeleteVoidItem != null) BtnDeleteVoidItem.Tag = isVariants;
             if (BtnEditVariant != null) BtnEditVariant.Tag = isVariants;
@@ -156,6 +159,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                 SetRightGridMode(RightMode.Standalone);
                 _originals.Clear();
                 _dirtyIds.Clear();
+                _standaloneDirty = false;
                 UpdateSaveButtonVisibility();
             }
             finally { _loadingStandalone = false; }
@@ -260,6 +264,11 @@ namespace Pos.Client.Wpf.Windows.Admin
                                 stem => _thumbs.CreateThumb(g, stem));
                         }
                     }
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("Product name must be unique", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Show friendly message instead of crashing
+                    MessageBox.Show("Product name must be unique. Please choose a different name.");
                 }
                 catch (Exception ex)
                 {
@@ -409,10 +418,16 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
                 MessageBox.Show("Variants added.");
             }
+            // ⬇️ Always reload variants from DB after dialog completes (covers both paths)
+            await LoadVariantsForProduct(product);
+            VariantsGrid?.Items?.Refresh(); // optional; binding usually handles it
+
         }
 
         private async void NewStandaloneItem_Click(object sender, RoutedEventArgs e)
         {
+            _pendingSelectStandaloneId = null; // reset before opening the dialog
+
             var dlg = new VariantBatchDialog(VariantBatchDialog.Mode.Sequential);
             dlg.SaveImmediately = true;
             dlg.SaveOneAsync = async (item) =>
@@ -421,6 +436,8 @@ namespace Pos.Client.Wpf.Windows.Admin
                 {
                     var saved = await _svc.CreateItemAsync(item);
                     await ApplyPendingVariantImagesAsync(dlg, saved.Id);
+                    _pendingSelectStandaloneId = saved.Id;
+
                     var primary = saved.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
                                   ?? saved.Barcodes?.FirstOrDefault()?.Code
                                   ?? "";
@@ -458,43 +475,86 @@ namespace Pos.Client.Wpf.Windows.Admin
                 }
             };
             dlg.PrefillStandalone();
-            if (dlg.ShowDialog() == true && dlg.CreatedItems?.Count > 0)
+            // was: if (dlg.ShowDialog() == true && dlg.CreatedItems?.Count > 0)
+            if (dlg.ShowDialog() == true)
             {
-                foreach (var v in dlg.CreatedItems)
+                // If batch path was used, persist them now and remember the last id
+                if (dlg.CreatedItems?.Count > 0)
                 {
-                    var saved = await _svc.CreateItemAsync(v);
-                    await ApplyPendingVariantImagesAsync(dlg, saved.Id);
-                    var primary = saved.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
-                                  ?? saved.Barcodes?.FirstOrDefault()?.Code
-                                  ?? "";
-                    var row = new ItemVariantRow
+                    int? lastId = null;
+                    foreach (var v in dlg.CreatedItems)
                     {
-                        Id = saved.Id,
-                        Sku = saved.Sku,
-                        Name = saved.Name,
-                        ProductName = null,
-                        Barcode = primary,
-                        Price = saved.Price,
-                        Variant1Name = saved.Variant1Name,
-                        Variant1Value = saved.Variant1Value,
-                        Variant2Name = saved.Variant2Name,
-                        Variant2Value = saved.Variant2Value,
-                        TaxCode = saved.TaxCode,
-                        DefaultTaxRatePct = saved.DefaultTaxRatePct,
-                        TaxInclusive = saved.TaxInclusive,
-                        DefaultDiscountPct = saved.DefaultDiscountPct,
-                        DefaultDiscountAmt = saved.DefaultDiscountAmt,
-                        UpdatedAt = saved.UpdatedAt,
-                        IsActive = saved.IsActive
-                    };
-                    _standalone.Insert(0, row);
-                    _gridItems.Clear();
-                    _gridItems.Add(row);
-                    GridTitle.Text = $"Standalone Item — {row.Name}";
-                    SetRightGridMode(RightMode.Standalone);
+                        var saved = await _svc.CreateItemAsync(v);
+                        await ApplyPendingVariantImagesAsync(dlg, saved.Id);
+                        lastId = saved.Id;
+
+                        // (optional UX) keep this if you like instant visual feedback before reload
+                        var primary = saved.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
+                                      ?? saved.Barcodes?.FirstOrDefault()?.Code
+                                      ?? "";
+                        var row = new ItemVariantRow
+                        {
+                            Id = saved.Id,
+                            Sku = saved.Sku,
+                            Name = saved.Name,
+                            ProductName = null,
+                            Barcode = primary,
+                            Price = saved.Price,
+                            Variant1Name = saved.Variant1Name,
+                            Variant1Value = saved.Variant1Value,
+                            Variant2Name = saved.Variant2Name,
+                            Variant2Value = saved.Variant2Value,
+                            TaxCode = saved.TaxCode,
+                            DefaultTaxRatePct = saved.DefaultTaxRatePct,
+                            TaxInclusive = saved.TaxInclusive,
+                            DefaultDiscountPct = saved.DefaultDiscountPct,
+                            DefaultDiscountAmt = saved.DefaultDiscountAmt,
+                            UpdatedAt = saved.UpdatedAt,
+                            IsActive = saved.IsActive
+                        };
+                        _standalone.Insert(0, row);
+                        _gridItems.Clear();
+                        _gridItems.Add(row);
+                        GridTitle.Text = $"Standalone Item — {row.Name}";
+                        SetRightGridMode(RightMode.Standalone);
+                    }
+                    _pendingSelectStandaloneId = lastId;
                 }
+
+                // 🔑 Always refresh after dialog close (covers SaveImmediately path too)
+                await RefreshStandaloneAsync();
+
+                // Try to re-select the newly created item if we know it
+                if (_pendingSelectStandaloneId is int id)
+                {
+                    var restored = _standalone.FirstOrDefault(x => x.Id == id);
+
+                    // If a search term hid it, temporarily clear filter, reload, reselect, then restore term
+                    if (restored == null && !string.IsNullOrWhiteSpace(SearchBox.Text))
+                    {
+                        var old = SearchBox.Text;
+                        SearchBox.Text = "";
+                        await RefreshStandaloneAsync();
+                        restored = _standalone.FirstOrDefault(x => x.Id == id);
+                        SearchBox.Text = old; // restore
+                    }
+
+                    if (restored != null)
+                    {
+                        StandaloneList.SelectedItem = restored;
+                        StandaloneList.UpdateLayout();
+                        StandaloneList.ScrollIntoView(restored);
+
+                        _gridItems.Clear();
+                        _gridItems.Add(restored);
+                        GridTitle.Text = $"Standalone Item — {restored.Name}";
+                        await LoadGalleryForVariantAsync(restored.Id);
+                    }
+                }
+
                 MessageBox.Show("Item(s) added.");
             }
+
         }
 
         private async void SaveVariants_Click(object sender, RoutedEventArgs e)
@@ -672,14 +732,84 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        private async void DeleteStandaloneItem_Click(object sender, RoutedEventArgs e)
+        private async void DeleteOrVoidStandalone_Click(object sender, RoutedEventArgs e)
         {
-            var row = SelectedRow;
-            if (row == null || row.Id == 0 || row.ProductName != null)
+            // Must act on LEFT list selection (standalone item)
+            var row = StandaloneList?.SelectedItem as ItemVariantRow;
+            if (row == null || row.Id <= 0 || row.ProductName != null)
             {
-                MessageBox.Show("Pick a standalone item row to delete.");
+                MessageBox.Show("Pick a standalone item from the left list.");
                 return;
             }
+
+            // Ask the service if hard delete is allowed
+            var (canDelete, reason) = await _svc.CanHardDeleteItemAsync(row.Id);
+
+            if (canDelete)
+            {
+                // Offer Delete (Yes) or Void (No). Cancel does nothing.
+                var choice = MessageBox.Show(
+                    $"What do you want to do with '{row.Name}'?\n\n" +
+                    "Yes = Delete permanently\nNo = Void (disable)\nCancel = Do nothing",
+                    "Delete or Void item",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+
+                if (choice == MessageBoxResult.Yes)
+                {
+                    // Confirm destructive delete
+                    if (MessageBox.Show(
+                            $"Delete item '{row.Name}' permanently?",
+                            "Confirm Delete",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                        return;
+
+                    await _svc.DeleteItemAsync(row.Id);
+                    await RefreshAsync();
+                    MessageBox.Show("Item deleted.");
+                }
+                else if (choice == MessageBoxResult.No)
+                {
+                    await _svc.VoidItemAsync(row.Id, user: "admin");
+                    await RefreshAsync();
+                    MessageBox.Show("Item voided.");
+                }
+                // Cancel → do nothing
+            }
+            else
+            {
+                // Deletion not allowed: explain and offer Void
+                var choice = MessageBox.Show(
+                    $"This item can’t be deleted.\nReason: {reason}\n\n" +
+                    "Do you want to Void it instead?",
+                    "Void item",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (choice == MessageBoxResult.Yes)
+                {
+                    await _svc.VoidItemAsync(row.Id, user: "admin");
+                    await RefreshAsync();
+                    MessageBox.Show("Item voided.");
+                }
+            }
+        }
+
+        // REPLACE the body of DeleteStandaloneItem_Click with this:
+        private async void DeleteStandaloneItem_Click(object sender, RoutedEventArgs e)
+        {
+            // Prefer left list selection in Standalone mode
+            var row = _mode == RightMode.Standalone
+                ? StandaloneList.SelectedItem as ItemVariantRow
+                : SelectedRow;
+
+            if (row == null || row.Id <= 0 || row.ProductName != null)
+            {
+                MessageBox.Show("Pick a standalone item from the left list.");
+                return;
+            }
+
             var (can, reason) = await _svc.CanHardDeleteItemAsync(row.Id);
             if (!can)
             {
@@ -690,19 +820,26 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (MessageBox.Show($"Delete item '{row.Name}' permanently?",
                                 "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
+
             await _svc.DeleteItemAsync(row.Id);
             await RefreshAsync();
             MessageBox.Show("Item deleted.");
         }
 
+
+        // REPLACE the body of VoidStandaloneItem_Click with this:
         private async void VoidStandaloneItem_Click(object sender, RoutedEventArgs e)
         {
-            var row = SelectedRow;
-            if (row == null || row.Id == 0)
+            var row = _mode == RightMode.Standalone
+                ? StandaloneList.SelectedItem as ItemVariantRow
+                : SelectedRow;
+
+            if (row == null || row.Id <= 0 || row.ProductName != null)
             {
-                MessageBox.Show("Pick an item row to void.");
+                MessageBox.Show("Pick a standalone item from the left list.");
                 return;
             }
+
             await _svc.VoidItemAsync(row.Id, user: "admin");
             await RefreshAsync();
             MessageBox.Show("Item voided.");
@@ -821,10 +958,15 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
-        private void MarkDirtyForCurrentRow()
+        void MarkDirtyForCurrentRow()
         {
-            var row = VariantsGrid.SelectedItem as ItemVariantRow;
+            // Use the correct selection source based on current mode
+            var row = _mode == RightMode.Standalone
+                ? StandaloneList.SelectedItem as ItemVariantRow
+                : VariantsGrid.SelectedItem as ItemVariantRow;
+
             if (row is null) { UpdateSaveButtonVisibility(); return; }
+
             if (_mode == RightMode.Standalone)
             {
                 if (_standaloneOriginal is null)
@@ -838,7 +980,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
             else // Variants
             {
-                if (row.Id <= 0) return; // safety
+                if (row.Id <= 0) { UpdateSaveButtonVisibility(); return; }
                 if (_originals.TryGetValue(row.Id, out var orig))
                 {
                     bool dirty = !RowsEqual(row, orig);
@@ -849,7 +991,8 @@ namespace Pos.Client.Wpf.Windows.Admin
 
             UpdateSaveButtonVisibility();
         }
-                     
+
+
         public class NullToBoolConverter : System.Windows.Data.IValueConverter
         {
             public object Convert(object value, Type t, object p, CultureInfo c) => value != null;
@@ -928,6 +1071,13 @@ namespace Pos.Client.Wpf.Windows.Admin
                 var idx = _gridItems.IndexOf(row);
                 if (idx >= 0) _gridItems[idx] = freshRow;
                 MessageBox.Show("Variant updated.");
+                // ⬇️ Ensure grid shows authoritative state from DB
+                if (_selectedProduct != null)
+                {
+                    await LoadVariantsForProduct(_selectedProduct);
+                    VariantsGrid?.Items?.Refresh();
+                }
+
             }
             catch (Exception ex)
             {

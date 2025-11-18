@@ -64,8 +64,8 @@ namespace Pos.Persistence.Services
             await db.SaveChangesAsync(ct);
 
             // Outbox for sync (enqueue, then final save)
-            await _outbox.EnqueueUpsertAsync(db, s, ct);
-            await db.SaveChangesAsync(ct);
+            //await _outbox.EnqueueUpsertAsync(db, s, ct);
+            //await db.SaveChangesAsync(ct);
         }
     }
 }

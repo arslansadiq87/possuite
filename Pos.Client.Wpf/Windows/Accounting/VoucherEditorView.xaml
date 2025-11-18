@@ -59,8 +59,8 @@
                     <DataGridTemplateColumn Width="42" MinWidth="42">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="✕"
-                                        ToolTip="Delete row"
+                                <Button Content="🗑"
+                                        ToolTip="Delete this line"
                                         Padding="0"
                                         Width="28" Height="26"
                                         Command="{Binding DataContext.DeleteLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
@@ -79,9 +79,12 @@
                         <DataGridTemplateColumn.CellEditingTemplate>
                             <DataTemplate>
                                 <ctrl:AccountSearchBox
-                                    ItemsSource="{Binding DataContext.Accounts, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    SelectedAccount="{Binding Account, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                    AccountCommitted="AccountSearch_AccountCommitted"/>
+                                ItemsSource="{Binding DataContext.Accounts, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                SelectedAccount="{Binding Account, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                AccountCommitted="AccountSearch_AccountCommitted"
+                                Loaded="AccountSearchBox_Loaded"
+                                PreviewMouseLeftButtonUp="AccountSearchBox_ClickCommit"
+                                PreviewMouseWheel="AccountSearchBox_PreviewMouseWheel"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellEditingTemplate>
                     </DataGridTemplateColumn>

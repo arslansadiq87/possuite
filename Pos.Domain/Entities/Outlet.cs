@@ -10,12 +10,8 @@ namespace Pos.Domain.Entities
         public string? Address { get; set; }
         public bool IsActive { get; set; } = true;
         public ICollection<UserOutlet> UserOutlets { get; set; } = new List<UserOutlet>();
-
         public ICollection<Counter> Counters { get; set; } = new List<Counter>();
-
         public ICollection<CounterBinding> CounterBindings { get; set; } = new List<CounterBinding>();
         public ICollection<PartyOutlet> PartyOutlets { get; set; } = new List<PartyOutlet>();
-
-
     }
 }

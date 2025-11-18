@@ -11,16 +11,12 @@ namespace Pos.Domain.Entities
     {
         public int ItemId { get; set; }
         public Item? Item { get; set; }
-
         public bool IsPrimary { get; set; }
         public int SortOrder { get; set; }
-
         public string? LocalOriginalPath { get; set; }
         public string? LocalThumbPath { get; set; }
-
         public string? ServerOriginalUrl { get; set; }
         public string? ServerThumbUrl { get; set; }
-
         public int? Width { get; set; }
         public int? Height { get; set; }
         public long? SizeBytes { get; set; }

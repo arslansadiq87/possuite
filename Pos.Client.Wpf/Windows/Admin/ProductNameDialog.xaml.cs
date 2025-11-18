@@ -54,13 +54,24 @@ namespace Pos.Client.Wpf.Windows.Admin
         public int? CategoryId =>
             CategoryCombo.SelectedValue is int c ? c : (int?)null;
 
-        private void Create_Click(object sender, RoutedEventArgs e)
+        private async void Create_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(ProductName))
             {
                 MessageBox.Show("Please enter a product name.");
                 return;
             }
+
+            // Pre-check uniqueness to avoid service exception later
+            var exists = await _svc.ProductNameExistsAsync(ProductName, excludeProductId: null, ct: CancellationToken.None);
+            if (exists)
+            {
+                MessageBox.Show("Product name must be unique. Please choose a different name.");
+                NameBox.Focus();
+                NameBox.SelectAll();
+                return;
+            }
+
             DialogResult = true;
         }
 

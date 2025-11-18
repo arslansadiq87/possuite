@@ -8,7 +8,6 @@ namespace Pos.Domain.Entities
         public int UserId { get; set; }
         public int OutletId { get; set; }
         public UserRole Role { get; set; }
-
         public User User { get; set; } = null!;
         public Outlet Outlet { get; set; } = null!;
     }

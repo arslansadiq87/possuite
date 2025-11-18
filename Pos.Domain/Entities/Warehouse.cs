@@ -8,7 +8,6 @@ namespace Pos.Domain.Entities
         public string Code { get; set; } = "";   // e.g. MAIN, WH-N
         public string Name { get; set; } = "";
         public bool IsActive { get; set; } = true;
-
         // Optional metadata (handy in reports/transfers)
         public string? AddressLine { get; set; }
         public string? City { get; set; }

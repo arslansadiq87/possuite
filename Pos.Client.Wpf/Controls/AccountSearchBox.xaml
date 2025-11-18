@@ -1,39 +1,48 @@
 ﻿<UserControl x:Class="Pos.Client.Wpf.Controls.AccountSearchBox"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:sys="clr-namespace:System;assembly=mscorlib"
-             Focusable="False">
-    <Grid>
-        <!-- Input -->
-        <TextBox x:Name="Input"
-             Padding="6,4"
-             VerticalContentAlignment="Center"
-             Text="{Binding SearchText, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-             PreviewKeyDown="Input_PreviewKeyDown"
-             GotFocus="Input_GotFocus"
-             />
+             MinHeight="0" MinWidth="0"
+             PreviewMouseWheel="Root_PreviewMouseWheel">
 
-        <!-- Results -->
+    <Grid>
+        <TextBox x:Name="Input"
+             Text="{Binding SearchText, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}"
+             GotFocus="Input_GotFocus"
+             PreviewKeyDown="Input_PreviewKeyDown"/>
+
         <Popup x:Name="Popup"
-           Placement="Bottom"
            PlacementTarget="{Binding ElementName=Input}"
-           StaysOpen="False"
+           StaysOpen="True"
            AllowsTransparency="True"
            Focusable="False">
-            <Border Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-              BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-              BorderThickness="1"
-              CornerRadius="4"
-              Padding="2"
-              MinWidth="{Binding ActualWidth, ElementName=Input}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="280">
-                    <ListBox x:Name="List"
-                   ItemsSource="{Binding Filtered, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                   DisplayMemberPath="Name"
-                   MouseDoubleClick="List_MouseDoubleClick"
-                   PreviewMouseLeftButtonUp="List_PreviewMouseLeftButtonUp"
-                   />
-                </ScrollViewer>
+            <Border Padding="0" Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+
+                <ListBox x:Name="List"
+                 ItemsSource="{Binding Filtered, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                 Background="Transparent"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 PreviewMouseWheel="List_PreviewMouseWheel"
+                 MaxHeight="{Binding DropDownMaxHeight, RelativeSource={RelativeSource AncestorType=UserControl}}">
+
+                    <!-- No DataType: binds to whatever items expose Code/Name -->
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="6,4">
+                                <TextBlock Text="{Binding Code}" FontWeight="SemiBold"/>
+                                <TextBlock Text=" — " />
+                                <TextBlock Text="{Binding Name}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="ListItem_PreviewMouseLeftButtonDown"/>
+                            <Setter Property="Focusable" Value="False"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+
             </Border>
         </Popup>
     </Grid>

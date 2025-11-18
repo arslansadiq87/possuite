@@ -9,14 +9,9 @@ namespace Pos.Domain.Entities
         public string? Email { get; set; }
         public string? TaxNumber { get; set; }
         public bool IsActive { get; set; } = true;
-         // GL link (each party has its own account under the Parties header)
         public int? AccountId { get; set; }
         public Account? Account { get; set; }
-
-        // Visibility & defaults
         public bool IsSharedAcrossOutlets { get; set; } = true;
-
-        // Navigation
         public ICollection<PartyRole> Roles { get; set; } = new List<PartyRole>();
         public ICollection<PartyOutlet> Outlets { get; set; } = new List<PartyOutlet>();
     }
@@ -48,7 +43,6 @@ namespace Pos.Domain.Entities
         public string? Description { get; set; }
         public decimal Debit { get; set; }
         public decimal Credit { get; set; }
-        // public decimal RunningBalance { get; set; } // ← consider removing
         public Party Party { get; set; } = null!;
         public Outlet? Outlet { get; set; }
     }
@@ -69,5 +63,4 @@ namespace Pos.Domain.Entities
         public RoleType Role { get; set; }
         public Party Party { get; set; } = null!;
     }
-
 }

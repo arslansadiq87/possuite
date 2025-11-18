@@ -3,7 +3,6 @@ using Pos.Domain.Abstractions;
 
 namespace Pos.Domain.Entities
 {
-    // Keep single, canonical stock ledger elsewhere (StockEntry). No duplicate StockTxn here.
     public enum PurchaseStatus { Draft = 0, Final = 1, Voided = 2, Revised = 3 }
     //public enum StockTargetType { Outlet = 1, Warehouse = 2 }
     public enum PurchasePaymentKind { Advance = 0, OnReceive = 1, Adjustment = 2 }
@@ -14,66 +13,52 @@ namespace Pos.Domain.Entities
     {
         public int PartyId { get; set; }
         public Party? Party { get; set; }
-
         // Where stock lands
         //public StockTargetType TargetType { get; set; } = StockTargetType.Outlet;
         public InventoryLocationType LocationType { get; set; } = InventoryLocationType.Outlet;
-
         public int? OutletId { get; set; }
         public Outlet? Outlet { get; set; }
         public int? WarehouseId { get; set; }
         public Warehouse? Warehouse { get; set; }
-
         // Docs & dates
         public string? VendorInvoiceNo { get; set; }
         public string? DocNo { get; set; }
         public DateTime PurchaseDate { get; set; } = DateTime.UtcNow; // when created
         public DateTime? ReceivedAtUtc { get; set; }                  // when stock actually received
-
         // Money (snapshot)
         public decimal Subtotal { get; set; }
         public decimal Discount { get; set; }
         public decimal Tax { get; set; }
         public decimal OtherCharges { get; set; }
         public decimal GrandTotal { get; set; }
-
         public PurchaseStatus Status { get; set; } = PurchaseStatus.Draft;
-
         // Optional denormalized settlement snapshot (service will keep in sync with Payments)
         public decimal CashPaid { get; set; }
         public decimal CreditDue { get; set; }
-
         public List<PurchaseLine> Lines { get; set; } = new();
         public List<PurchasePayment> Payments { get; set; } = new();
         public int Revision { get; set; }  // 0 for first final; +1 per amendment
-                                           // --- Returns (mirror Sale) ---
         public bool IsReturn { get; set; }                 // true = this doc is a return
         public int? RefPurchaseId { get; set; }            // original purchase when "Return With..."
         public Purchase? RefPurchase { get; set; }         // self-ref navigation
-
         // --- Optional revision links (you already have Revision int) ---
         public int? RevisedFromPurchaseId { get; set; }
         public int? RevisedToPurchaseId { get; set; }
         public string? VoidReason { get; set; }   // <-- add this
-
     }
 
     public class PurchaseLine : BaseEntity
     {
         public int PurchaseId { get; set; }
         public int? RefPurchaseLineId { get; set; }        // original line id (if "Return With...")
-
         public Purchase? Purchase { get; set; }
-
         public int ItemId { get; set; }
         public Item? Item { get; set; }
-
         public decimal Qty { get; set; }
         public decimal UnitCost { get; set; }
         public decimal Discount { get; set; }   // absolute per line
         public decimal TaxRate { get; set; }    // percent 0..100
         public decimal LineTotal { get; set; }  // computed snapshot
-
         public string? Notes { get; set; }
     }
 
@@ -81,21 +66,17 @@ namespace Pos.Domain.Entities
     {
         public int PurchaseId { get; set; }
         public Purchase Purchase { get; set; } = null!;
-
         public int SupplierId { get; set; }
         //public int OutletId { get; set; }
         public int? OutletId { get; set; }                // nullable; used if LocationType=Outlet
         public int? WarehouseId { get; set; }            // used if LocationType=Warehouse
         public DateTime TsUtc { get; set; }
-
         public PurchasePaymentKind Kind { get; set; }
         public TenderMethod Method { get; set; }
         public int? BankAccountId { get; set; }   // NEW: when Method==Bank, the selected bank account (required at runtime)
-
         public decimal Amount { get; set; }
         public string? Note { get; set; }
         public bool IsEffective { get; set; } = true;   // <-- NEW
-
     }
 
     public class CashLedger : BaseEntity
@@ -103,10 +84,8 @@ namespace Pos.Domain.Entities
         public int OutletId { get; set; }
         public int? CounterId { get; set; }
         public int? TillSessionId { get; set; }
-
         public DateTime TsUtc { get; set; }
         public decimal Delta { get; set; }
-
         public string RefType { get; set; } = "";
         public int RefId { get; set; }
         public string? Note { get; set; }

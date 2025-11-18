@@ -17,6 +17,63 @@ namespace Pos.Client.Wpf.Windows.Settings
         /// All coordinates for texts are in millimeters from the label's top-left.
         /// The barcode block is defined by margins (mm) and an optional fixed height (mm).
         /// </summary>
+        /// 
+        private static int GetPixelsPerModule(int dpi)
+        {
+            // 203dpi => 3px (~0.375 mm), 300dpi => 4px (~0.339 mm)
+            if (dpi <= 0) return 3;
+            return dpi switch
+            {
+                203 => 3,
+                300 => 4,
+                _ => Math.Max(3, (int)Math.Round(dpi / 25.4 / 3.03)) // ~0.33 mm -> dpi/76.77
+            };
+        }
+
+        // Returns (barModules, quietLeftModules, quietRightModules)
+        private static (int bars, int ql, int qr) GetSymbologyModuleSpec(string codeType, string payload, out int code128SymbolChars)
+        {
+            code128SymbolChars = 0;
+            switch ((codeType ?? "").ToUpperInvariant())
+            {
+                case "EAN13":
+                case "EAN-13":
+                    // 95 modules bars; quiet 11X each side
+                    return (95, 11, 11);
+
+                case "UPCA":
+                case "UPC-A":
+                    // 95 modules bars; quiet 9X each side
+                    return (95, 9, 9);
+
+                case "EAN8":
+                case "EAN-8":
+                    // 67 modules bars; quiet 7X each side
+                    return (67, 7, 7);
+
+                case "CODE128":
+                case "CODE 128":
+                    // Code128 width depends on symbol characters.
+                    // Each symbol char consumes 11 modules. Start=11, checksum=11, stop+term=15.
+                    // For a decent estimate that matches ZXing’s encoding, we rely on the encoded content length:
+                    // If the payload is numeric and even-length, we *likely* are in Code C (half digits).
+                    var digitsOnly = new string((payload ?? "").Where(char.IsDigit).ToArray());
+                    if (!string.IsNullOrEmpty(payload) && payload.Length == digitsOnly.Length && payload.Length % 2 == 0)
+                    {
+                        code128SymbolChars = payload.Length / 2; // Code C
+                    }
+                    else
+                    {
+                        code128SymbolChars = payload?.Length ?? 0; // rough upper bound (Code B)
+                    }
+                    var bars = 11 + (11 * Math.Max(0, code128SymbolChars)) + 11 /*checksum*/ + 15 /*stop+term*/;
+                    return (bars, 10, 10);
+
+                default:
+                    throw new NotSupportedException($"Unsupported barcode type: {codeType}");
+            }
+        }
+
         public static ImageSource Build(
             // geometry (mm / dpi)
             int labelWidthMm, int labelHeightMm,
@@ -204,10 +261,52 @@ namespace Pos.Client.Wpf.Windows.Settings
                     var upc = digitsOnly.PadLeft(11, '0');
                     if (upc.Length > 11) upc = upc[^11..];
                     return (ZXing.BarcodeFormat.UPC_A, upc);
+                case "EAN8":
+                case "EAN-8":
+                    {
+                        // Allow 7 or 8 digits; auto-add check digit for 7.
+                        var digits = new string((raw ?? "").Where(char.IsDigit).ToArray());
+                        if (string.IsNullOrEmpty(digits)) digits = "5512345"; // safe 7-digit sample
+                        var e8 = EnsureEan8(digits);
+                        return (ZXing.BarcodeFormat.EAN_8, e8);
+                    }
+
 
                 default:
                     return (ZXing.BarcodeFormat.CODE_128, string.IsNullOrWhiteSpace(raw) ? "123456789012" : raw);
             }
         }
+
+        private static char ComputeEan8CheckDigit(ReadOnlySpan<char> sevenDigits)
+        {
+            // EAN-8 check digit: sum of (odd positions * 3) + (even positions * 1), modulo 10
+            int sum = 0;
+            for (int i = 0; i < 7; i++)
+            {
+                int d = sevenDigits[i] - '0';
+                if ((i % 2) == 0) // positions 1,3,5,7 (0-based even) => *3
+                    sum += d * 3;
+                else
+                    sum += d;
+            }
+            int mod = sum % 10;
+            int check = (10 - mod) % 10;
+            return (char)('0' + check);
+        }
+
+        private static string EnsureEan8(string code)
+        {
+            // Accepts:
+            //  - 7 digits: auto-append check digit
+            //  - 8 digits: returns as-is (assumes caller knows)
+            // Trims and strips spaces/hyphens.
+            var raw = new string(code.Where(char.IsDigit).ToArray());
+            if (raw.Length == 7)
+                return raw + ComputeEan8CheckDigit(raw);
+            if (raw.Length == 8)
+                return raw;
+            throw new ArgumentException("EAN-8 must be 7 or 8 digits.", nameof(code));
+        }
+
     }
 }

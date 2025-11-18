@@ -119,6 +119,9 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.UsersView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Admin.OutletsCountersView>();
             sc.AddTransient<WarehousesView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AccountEditorDialog>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.BankAccountDialog>();
+
             // NEW: OpeningStockView factory (parametrized)
             sc.AddTransient<Func<InventoryLocationType, int, string, Pos.Client.Wpf.Windows.Admin.OpeningStockView>>(sp =>
             {
@@ -190,7 +193,8 @@ namespace Pos.Client.Wpf
             sc.AddScoped<IGlPostingService, GlPostingService>();
             sc.AddScoped<IGlPostingServiceDb, GlPostingService>();  // db-aware, used by persistence services
             sc.AddScoped<IGlReadService, GlReadService>();
-
+            sc.AddScoped<Pos.Domain.Services.IBankAccountService, Pos.Persistence.Services.BankAccountService>();
+    
 
             sc.AddSingleton<Pos.Domain.Services.Security.IAuthService, Pos.Persistence.Services.Security.AuthService>();
             sc.AddSingleton<Pos.Domain.Services.Security.IAuthorizationService, Pos.Persistence.Services.Security.AuthorizationService>();

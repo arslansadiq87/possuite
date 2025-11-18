@@ -16,6 +16,35 @@ public partial class ProductsItemsVm : ObservableObject
     private readonly ThumbnailService _thumbs = new ThumbnailService();
     public ObservableCollection<Product> Products { get; } = new();
     public ObservableCollection<string> DisplayGalleryThumbs { get; } = new();
+    // inside class ProductsItemsVm
+    public ObservableCollection<Item> Variants { get; } = new();
+
+    public Product? SelectedProduct
+    {
+        get => _selectedProduct;
+        set
+        {
+            SetProperty(ref _selectedProduct, value);
+            _ = RefreshVariantsAsync(); // auto refresh when product changes
+        }
+    }
+    private Product? _selectedProduct;
+
+    public async Task RefreshVariantsAsync(CancellationToken ct = default)
+    {
+        if (SelectedProduct == null)
+        {
+            Variants.Clear();
+            return;
+        }
+
+        var list = await _svc.GetProductVariantsAsync(SelectedProduct.Id, ct);
+        Variants.Clear();
+        foreach (var v in list) Variants.Add(v);
+
+        OnPropertyChanged(nameof(Variants));
+    }
+
 
     [ObservableProperty] private Item? selectedVariant;
     [ObservableProperty] private string? selectedPrimaryThumb;

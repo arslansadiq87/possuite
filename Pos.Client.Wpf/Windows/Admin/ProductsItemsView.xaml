@@ -200,7 +200,7 @@
                             </Button>
                             <!-- Standalone mode only -->
                             <Separator ToolBar.OverflowMode="Never" Visibility="{Binding Visibility, Source={x:Reference BtnDeleteVoidItem}}"/>
-                            <Button x:Name="BtnDeleteVoidItem" Content="Delete/Void" Click="DeleteOrVoidVariant_Click" Width="100">
+                            <Button x:Name="BtnDeleteVoidItem" Content="Delete/Void" Click="DeleteOrVoidStandalone_Click" Width="100">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Visibility" Value="Visible"/>

@@ -25,6 +25,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private string _pendingQuery = "";
         private bool _lastEditCancelled = false;
         private bool _suppressNextAmountValidation = false;
+        private bool _suppressAccountFilter;     // true while user is clicking in dropdown
+        private bool _committingAccountClick;    // true while we’re committing the clicked item
 
         private bool _wired;
         public VoucherEditorView()
@@ -50,6 +52,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 await vm.LoadAsync();
                 BuildAccountIndex(vm);               // <-- build once
                 HookReload(vm);                      // <-- listen Clear/Save
+                UpdateAmountColumnVisibility(); // NEW
                 TypeBox.Focus();
             };
 
@@ -64,6 +67,22 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     }));
                 }
             };
+
+            LinesGrid.PreviewMouseDoubleClick += (s, e) =>
+            {
+                // find the clicked cell
+                var cell = e.OriginalSource as DependencyObject;
+                while (cell != null && cell is not DataGridCell) cell = VisualTreeHelper.GetParent(cell);
+                if (cell is not DataGridCell dgCell) return;
+
+                if ((dgCell.Column.Header?.ToString() ?? "") == "Account")
+                {
+                    e.Handled = true;
+                    LinesGrid.BeginEdit(); // triggers AccountCombo_Loaded, opens dropdown
+                }
+            };
+
+            TypeBox.SelectionChanged += (_, __) => UpdateAmountColumnVisibility();
 
             TypeBox.PreviewKeyDown += (s, e) =>
             {
@@ -140,14 +159,21 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private void AccountEditor_TextChanged(object? sender, TextChangedEventArgs e)
         {
             if (_activeAccountCombo == null) return;
+
+            // NEW: don't refilter while a click is happening/committing
+            if (_suppressAccountFilter || _committingAccountClick) return;
+
             _pendingQuery = (sender as TextBox)?.Text ?? "";
             EnsureDebouncer();
             _accountDebounce!.Stop();
             _accountDebounce!.Start();
             _activeAccountCombo.IsDropDownOpen = true;
+
+            // only clear selection when we are actively typing, not during click
             _activeAccountCombo.SelectedIndex = -1;
             _activeAccountCombo.SelectedItem = null;
         }
+
 
         private static TextBox? GetInnerTextBox(FrameworkElement root)
         {
@@ -306,35 +332,37 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
         private void ApplyAccountFilter(string query)
         {
+            if (_suppressAccountFilter || _committingAccountClick) return; // NEW
+
             string q = (query ?? "").Trim().ToLowerInvariant();
             var tokens = q.Length == 0
                 ? Array.Empty<string>()
                 : q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            IEnumerable<Account> results;
-            if (tokens.Length == 0)
-            {
-                results = _accountIndex.Select(t => t.acc);
-            }
-            else
-            {
-                results = _accountIndex.Where(t =>
+
+            IEnumerable<Account> results = tokens.Length == 0
+                ? _accountIndex.Select(t => t.acc)
+                : _accountIndex.Where(t =>
                 {
                     foreach (var tok in tokens)
                         if (!t.key.Contains(tok)) return false;
                     return true;
                 })
-                .Select(t => t.acc);
-            }
+                  .Select(t => t.acc);
+
             results = results.Take(500);
+
             _accountFiltered.Clear();
             foreach (var a in results) _accountFiltered.Add(a);
+
             if (_activeAccountCombo != null)
             {
                 _activeAccountCombo.IsDropDownOpen = true;
-                _activeAccountCombo.SelectedIndex = -1;
-                _activeAccountCombo.SelectedItem = null;
+
+                // IMPORTANT: don't clear SelectedItem here; that kills a just-clicked selection
+                // Only clear selection when the user is actively typing (handled in TextChanged).
             }
         }
+
 
         private void FocusGridAccountFirstCell()
         {
@@ -356,29 +384,43 @@ namespace Pos.Client.Wpf.Windows.Accounting
         {
             if (sender is not ComboBox cb) return;
             _activeAccountCombo = cb;
+
             cb.IsSynchronizedWithCurrentItem = false;
             cb.ItemsSource = _accountFiltered;
+
             if (cb.SelectedItem is not Account)
             {
                 cb.SelectedIndex = -1;
                 cb.SelectedItem = null;
                 cb.Text = "";
             }
+
             cb.IsDropDownOpen = true;
             cb.Focus();
             Keyboard.Focus(cb);
+
             if (cb.Template.FindName("PART_EditableTextBox", cb) is TextBox tb)
             {
                 tb.PreviewKeyDown -= AccountEditor_PreviewKeyDown;
                 tb.PreviewKeyDown += AccountEditor_PreviewKeyDown;
+
                 tb.TextChanged -= AccountEditor_TextChanged;
                 tb.TextChanged += AccountEditor_TextChanged;
+
+                tb.PreviewMouseWheel -= ForwardWheelToDropdown;
+                tb.PreviewMouseWheel += ForwardWheelToDropdown;
+
                 tb.CaretIndex = tb.Text?.Length ?? 0;
                 tb.Focus();
                 Keyboard.Focus(tb);
                 ApplyAccountFilter(tb.Text ?? "");
             }
+
+            // NEW: commit-on-click for dropdown items (bubbling handler on the ComboBox)
+            cb.RemoveHandler(UIElement.PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(AccountDropdown_ClickCommit));
+            cb.AddHandler(UIElement.PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(AccountDropdown_ClickCommit), true);
         }
+
 
         private void AccountEditor_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
@@ -420,8 +462,14 @@ namespace Pos.Client.Wpf.Windows.Accounting
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
+
+                // NEW: if exactly one, force-select it
+                if (_activeAccountCombo.SelectedItem == null && _accountFiltered.Count == 1)
+                    _activeAccountCombo.SelectedIndex = 0;
+
                 if (_activeAccountCombo.SelectedItem == null && _accountFiltered.Count > 0)
                     _activeAccountCombo.SelectedIndex = 0;
+
                 if (_activeAccountCombo.SelectedItem != null)
                 {
                     BindingOperations.GetBindingExpression(_activeAccountCombo, ComboBox.SelectedItemProperty)
@@ -430,6 +478,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 }
                 return;
             }
+
             if (e.Key == Key.Escape)
             {
                 e.Handled = true;
@@ -438,6 +487,47 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 return;
             }
         }
+
+        private void UpdateAmountColumnVisibility()
+        {
+            var vm = (VoucherEditorVm)DataContext;
+            var vt = Enum.Parse<VoucherType>(vm.Type);
+
+            var debitCol = LinesGrid.Columns.FirstOrDefault(c => (c.Header?.ToString() ?? "") == "Debit");
+            var creditCol = LinesGrid.Columns.FirstOrDefault(c => (c.Header?.ToString() ?? "") == "Credit");
+
+            if (debitCol == null || creditCol == null) return;
+
+            switch (vt)
+            {
+                case VoucherType.Payment:
+                    debitCol.Visibility = Visibility.Visible;
+                    creditCol.Visibility = Visibility.Collapsed;
+                    break;
+                case VoucherType.Receipt:
+                    debitCol.Visibility = Visibility.Collapsed;
+                    creditCol.Visibility = Visibility.Visible;
+                    break;
+                default: // Journal
+                    debitCol.Visibility = Visibility.Visible;
+                    creditCol.Visibility = Visibility.Visible;
+                    break;
+            }
+        }
+
+
+        private void ForwardWheelToDropdown(object? sender, MouseWheelEventArgs e)
+        {
+            if (_activeAccountCombo?.IsDropDownOpen != true) return;
+
+            var sv = FindVisualChild<ScrollViewer>(_activeAccountCombo);
+            if (sv == null) return;
+
+            if (e.Delta < 0) sv.LineDown();
+            else sv.LineUp();
+            e.Handled = true;
+        }
+
 
         private void AccountSearch_AccountCommitted(object sender, RoutedEventArgs e)
         {
@@ -461,33 +551,107 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
         private void AccountCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (Mouse.LeftButton == MouseButtonState.Pressed)
-            {
-                var cb = (ComboBox)sender;
-                BindingOperations.GetBindingExpression(cb, ComboBox.SelectedItemProperty)
-                                 ?.UpdateSource();
-                CommitAccountAndGoToDescription();
-            }
+            var cb = (ComboBox)sender;
+            if (cb.SelectedItem == null) return;
+
+            BindingOperations.GetBindingExpression(cb, ComboBox.SelectedItemProperty)
+                             ?.UpdateSource();
+            CommitAccountAndGoToDescription();
         }
 
         private void CommitAccountAndGoToDescription()
         {
+            _accountDebounce?.Stop();          // NEW: cancel late refilter ticks
+            _suppressAccountFilter = false;    // ensure normal state
+            _committingAccountClick = false;
+
             LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
             LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
             MoveToColumn("Description", beginEdit: true);
         }
 
-        private void AccountComboItem_Click(object sender, MouseButtonEventArgs e)
+        // Commit the clicked account even if focus/popup closes first
+        private void AccountSearchBox_ClickCommit(object sender, MouseButtonEventArgs e)
         {
-            CommitAccountAndGoToDescription();
+            // Only react if the click bubbled from an item inside the dropdown
+            var item = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject)
+                       ?? FindVisualParent<ComboBoxItem>(e.OriginalSource as DependencyObject);
+            if (item == null) return;
+
+            // Defer: let the AccountSearchBox finish setting SelectedAccount first
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                // Reuse your existing flow (this expects line.Account to be set by binding)
+                AccountSearch_AccountCommitted(sender, new RoutedEventArgs());
+            }));
+
             e.Handled = true;
         }
+
+        // Let the list scroll when the cursor is anywhere over the search box (not just the scrollbar)
+        private void AccountSearchBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            var sv = FindVisualChild<ScrollViewer>(sender as DependencyObject);
+            if (sv == null) return;
+
+            if (e.Delta < 0) sv.LineDown(); else sv.LineUp();
+            e.Handled = true;
+        }
+
 
         private void CommitCurrentCell()
         {
             LinesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
             LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
         }
+
+        private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T t) return t;
+                child = VisualTreeHelper.GetParent(child);
+            }
+            return null;
+        }
+
+        private void AccountDropdown_ClickCommit(object? sender, MouseButtonEventArgs e)
+        {
+            if (_activeAccountCombo?.IsDropDownOpen != true) return;
+
+            // only if clicking inside a ComboBoxItem
+            var cbi = FindVisualParent<ComboBoxItem>(e.OriginalSource as DependencyObject);
+            if (cbi == null) return;
+
+            // prevent TextChanged/debounce from firing a refilter that clears the selection
+            _suppressAccountFilter = true;
+
+            // Defer so WPF can set SelectedItem first
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                try
+                {
+                    _committingAccountClick = true;
+                    _accountDebounce?.Stop(); // kill any pending refilter tick
+
+                    if (_activeAccountCombo?.SelectedItem != null)
+                    {
+                        BindingOperations.GetBindingExpression(_activeAccountCombo, ComboBox.SelectedItemProperty)
+                                         ?.UpdateSource();
+                        CommitAccountAndGoToDescription();
+                    }
+                }
+                finally
+                {
+                    _committingAccountClick = false;
+                    _suppressAccountFilter = false;
+                }
+            }));
+
+            e.Handled = true;
+        }
+
+
 
         private void MoveToColumn(string header, bool beginEdit)
         {

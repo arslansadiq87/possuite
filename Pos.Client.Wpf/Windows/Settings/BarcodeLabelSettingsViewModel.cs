@@ -67,14 +67,44 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
 
 
     public int[] DpiOptions { get; } = new[] { 203, 300 };
-    public string[] CodeTypes { get; } = new[] { "Code128", "EAN13", "UPCA" };
+    public string[] CodeTypes { get; } = new[] { "Code128", "EAN13", "EAN8", "UPCA" };
 
     partial void OnLabelWidthMmChanged(int value) => RefreshPreviewDebounced();
     partial void OnLabelHeightMmChanged(int value) => RefreshPreviewDebounced();
     partial void OnMarginLeftMmChanged(int value) => RefreshPreviewDebounced();
     partial void OnMarginTopMmChanged(int value) => RefreshPreviewDebounced();
     partial void OnDpiChanged(int value) => RefreshPreviewDebounced();
-    partial void OnCodeTypeChanged(string value) => RefreshPreviewDebounced();
+    //partial void OnCodeTypeChanged(string value) => RefreshPreviewDebounced();
+    // Put this inside the same class, replacing your existing one-liner.
+    // Requires: using System.Linq;
+    partial void OnCodeTypeChanged(string value)
+    {
+        string v = (value ?? "").ToUpperInvariant();
+        string digits = new string((SampleCode ?? "").Where(char.IsDigit).ToArray());
+
+        if (v is "EAN8" or "EAN-8")
+        {
+            // EAN-8 expects 7 or 8 digits. If 7, preview will compute the check digit.
+            if (digits.Length != 7 && digits.Length != 8)
+                SampleCode = "5512345"; // 7-digit seed; preview adds check
+        }
+        else if (v is "EAN13" or "EAN-13")
+        {
+            // EAN-13 expects 12 digits (check digit computed in preview/writer)
+            if (digits.Length != 12)
+                SampleCode = "590123412345";
+        }
+        else if (v is "UPCA" or "UPC-A")
+        {
+            // UPC-A expects 11 digits (check digit computed)
+            if (digits.Length != 11)
+                SampleCode = "04210000526";
+        }
+        // Code128 accepts any content; keep whatever the user had.
+
+        RefreshPreviewDebounced();
+    }
+
     partial void OnShowNameChanged(bool value) => RefreshPreviewDebounced();
     partial void OnShowPriceChanged(bool value) => RefreshPreviewDebounced();
     partial void OnShowSkuChanged(bool value) => RefreshPreviewDebounced();

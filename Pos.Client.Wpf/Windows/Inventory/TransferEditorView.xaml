@@ -101,7 +101,7 @@
                     <DataGridTemplateColumn Header="" Width="60">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="Delete" Padding="6,2" Click="DeleteLine_Click"/>
+                                <Button Content="🗑" ToolTip="Delete this line" Padding="6,2" Click="DeleteLine_Click"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>

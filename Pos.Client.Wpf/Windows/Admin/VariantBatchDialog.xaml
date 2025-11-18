@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Name="Root"  
         Title="Add Products - Items - Variants" Width="1024" Height="720"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         Loaded="VariantBatchDialog_Loaded">
 
     <DockPanel Margin="12">

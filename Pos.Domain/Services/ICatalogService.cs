@@ -74,5 +74,10 @@ namespace Pos.Domain.Services
         Task VoidItemAsync(int itemId, string user, CancellationToken ct = default);
         Task DeleteItemAsync(int itemId, CancellationToken ct = default);
         Task<(bool canDelete, string? reason)> CanHardDeleteItemAsync(int itemId, CancellationToken ct = default);
+        Task<bool> ProductNameExistsAsync(string name, int? excludeProductId = null, CancellationToken ct = default);
+        Task<List<Item>> GetProductVariantsAsync(int productId, CancellationToken ct = default);
+        Task<bool> StandaloneItemNameExistsAsync(string name, int? excludeItemId = null, CancellationToken ct = default);
+        Task<bool> SkuExistsAsync(string sku, int? excludeItemId = null, CancellationToken ct = default);
+
     }
 }

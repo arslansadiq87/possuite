@@ -27,13 +27,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly List<(TenderMethod method, decimal amount, string? note)> _stagedPayments = new();
         private readonly ObservableCollection<PurchasePayment> _payments = new();
         
-
-        // expose for XAML combo
         public IReadOnlyList<TenderMethod> PaymentMethodItems { get; } = new[]
         {
             TenderMethod.Cash,
             TenderMethod.Bank,
         };
+
         public enum PurchaseEditorMode { Auto, Draft, Amend }
         public static readonly DependencyProperty ModeProperty =
            DependencyProperty.Register(
@@ -81,7 +80,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             public string? Notes { get; set; }
             public event PropertyChangedEventHandler? PropertyChanged;
             void OnPropertyChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-
             void Recalc()
             {
                 var baseAmt = Qty * UnitCost;
@@ -137,6 +135,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly IItemsReadService _itemsSvc;
         private readonly IGlPostingService _gl;
         private readonly IUserPreferencesService _prefs;
+        private readonly IDialogService _dialogs;   // overlay-based confirms, etc.
         private Purchase _model = new();
         private readonly ObservableCollection<PurchaseLineVM> _lines = new();
         private ObservableCollection<Item> _itemResults = new();
@@ -153,6 +152,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _gl = App.Services.GetRequiredService<IGlPostingService>();
             _prefs = App.Services.GetRequiredService<IUserPreferencesService>();
             _lookup = App.Services.GetRequiredService<ILookupService>(); // interface
+            _dialogs = App.Services.GetRequiredService<IDialogService>();
             if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
             DatePicker.SelectedDate = DateTime.Now;
             OtherChargesBox.Text = "0.00";
@@ -199,7 +199,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             var isBank = string.Equals(sel, "Bank", StringComparison.OrdinalIgnoreCase);
             if (!_bankPaymentsAllowed && isBank)
             {
-                MessageBox.Show("Bank payments are disabled. Configure a Purchase Bank Account in Invoice Settings for this outlet.");
+                //MessageBox.Show("Bank payments are disabled. Configure a Purchase Bank Account in Invoice Settings for this outlet.");
+                _dialogs.AlertAsync($"Bank payments are disabled. Configure a Purchase Bank Account in Invoice Settings for this outlet.", "Bank Settings Disabled");
                 try { cb.SelectedIndex = 0; } catch { }
                 isBank = false;
             }
@@ -379,10 +380,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private void SupplierSearch_CustomerPicked(object sender, RoutedEventArgs e)
         {
-            // Defer until after the popup closes and internal TextBox regains focus.
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                // Prefer VendorInvBox if usable, otherwise jump to items.
                 if (VendorInvBox != null && VendorInvBox.IsEnabled && VendorInvBox.IsVisible)
                 {
                     VendorInvBox.IsTabStop = true;           // belt & suspenders
@@ -396,8 +395,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 }
             }), System.Windows.Threading.DispatcherPriority.Input);
         }
-
-
 
         private void LinesGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -568,12 +565,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             if (_lines.Count == 0)
             {
-                MessageBox.Show("Add at least one item.");
+                //MessageBox.Show("Add at least one item.");
+                await _dialogs.AlertAsync($"Add at least one item.", "POS");
                 return;
             }
             if (_lines.Any(l => l.Qty <= 0 || l.UnitCost < 0 || l.Discount < 0))
             {
-                MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative.");
+                //MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative.");
+                await _dialogs.AlertAsync($"Please ensure Qty > 0 and Price/Discount are not negative.", "POS");
                 return;
             }
             foreach (var l in _lines)
@@ -581,14 +580,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 var baseAmt = l.Qty * l.UnitCost;
                 if (l.Discount > baseAmt)
                 {
-                    MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'.");
+                    //MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'.");
+                    await _dialogs.AlertAsync($"Discount exceeds base amount for item '{l.Name}'.", "POS");
                     return;
                 }
             }
 
             if (SupplierId is null)
             {
-                MessageBox.Show("Please pick a Supplier (type at least 2 letters and select).");
+                await _dialogs.AlertAsync($"Please pick a Supplier (type at least 2 letters and select).", "POS");
+                //MessageBox.Show("Please pick a Supplier (type at least 2 letters and select).");
                 return;
             }
             int? outletId = null;
@@ -600,7 +601,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 {
                     if (WarehouseBox.SelectedItem is not Warehouse wh)
                     {
-                        MessageBox.Show("Please pick a warehouse.");
+                        //MessageBox.Show("Please pick a warehouse.");
+                        await _dialogs.AlertAsync($"Please pick a warehouse.", "POS");
                         return;
                     }
                     warehouseId = wh.Id;
@@ -610,7 +612,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 {
                     if (OutletBox.SelectedItem is not Outlet ot)
                     {
-                        MessageBox.Show("Please pick an outlet.");
+                        await _dialogs.AlertAsync($"Please pick an outlet.", "POS");
+                        //MessageBox.Show("Please pick an outlet.");
                         return;
                     }
                     outletId = ot.Id;
@@ -643,7 +646,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 Notes = l.Notes
             });
             _model = await _purchaseSvc.SaveDraftAsync(_model, lines, user: "admin");
-            MessageBox.Show($"Purchase held as Draft. Purchase Id: #{_model.Id}", "Held");
+            //MessageBox.Show($"Purchase held as Draft. Purchase Id: #{_model.Id}", "Held");
+            await _dialogs.AlertAsync($"Purchase held as Draft. Purchase Id: #{_model.Id}", "Held");
             await ResetFormAsync(keepDestination: true);
         }
 
@@ -658,13 +662,15 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
                 if (_lines.Count == 0)
                 {
-                    MessageBox.Show("Add at least one item.");
+                    await _dialogs.AlertAsync($"Add at least one item.", "POS");
+                    //MessageBox.Show("Add at least one item.");
                     return;
                 }
 
                 if (_lines.Any(l => l.Qty <= 0 || l.UnitCost < 0 || l.Discount < 0))
                 {
-                    MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative.");
+                    await _dialogs.AlertAsync($"Please ensure Qty > 0 and Price/Discount are not negative.", "POS");
+                    //MessageBox.Show("Please ensure Qty > 0 and Price/Discount are not negative.");
                     return;
                 }
 
@@ -673,14 +679,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     var baseAmt = l.Qty * l.UnitCost;
                     if (l.Discount > baseAmt)
                     {
-                        MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'.");
+                        await _dialogs.AlertAsync($"Discount exceeds base amount for item '{l.Name}'.", "POS");
+                        //MessageBox.Show($"Discount exceeds base amount for item '{l.Name}'.");
                         return;
                     }
                 }
 
                 if (SupplierId is null)
                 {
-                    MessageBox.Show("Please pick a Supplier (type at least 2 letters and select).");
+                    await _dialogs.AlertAsync($"Please pick a Supplier (type at least 2 letters and select).", "POS");
+                    //MessageBox.Show("Please pick a Supplier (type at least 2 letters and select).");
                     return;
                 }
                 _model.PartyId = SupplierId.Value;
@@ -692,12 +700,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 {
                     if (DestWarehouseRadio.IsChecked == true)
                     {
-                        if (WarehouseBox.SelectedItem is not Warehouse wh) { MessageBox.Show("Please pick a warehouse."); return; }
+                        if (WarehouseBox.SelectedItem is not Warehouse wh) { await _dialogs.AlertAsync($"Please pick a warehouse.", "POS"); return; }
                         warehouseId = wh.Id; target = InventoryLocationType.Warehouse;
                     }
                     else if (DestOutletRadio.IsChecked == true)
                     {
-                        if (OutletBox.SelectedItem is not Outlet ot) { MessageBox.Show("Please pick an outlet."); return; }
+                        if (OutletBox.SelectedItem is not Outlet ot) { await _dialogs.AlertAsync($"Please pick an outlet.", "POS"); return; }
                         outletId = ot.Id; target = InventoryLocationType.Outlet;
                     }
                     else { target = InventoryLocationType.Outlet; }
@@ -768,27 +776,30 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 );
 
                 System.Diagnostics.Debug.WriteLine($"[UI] FinalizeReceiveAsync returned Id={_model.Id} DocNo={_model.DocNo} Grand={_model.GrandTotal}");
-
-                MessageBox.Show(
-                    $"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}",
-                    "Saved (Final)", MessageBoxButton.OK, MessageBoxImage.Information);
+                await _dialogs.AlertAsync($"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}", "Saved (Final)");
+                //MessageBox.Show(
+                //    $"Purchase finalized.\nDoc #: {(_model.DocNo ?? $"#{_model.Id}")}\nTotal: {_model.GrandTotal:N2}",
+                //    "Saved (Final)", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 await ResetFormAsync(keepDestination: true);
             }
             catch (InvalidOperationException ex)
             {
-                MessageBox.Show(ex.Message, "Amendment blocked",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                await _dialogs.AlertAsync(ex.Message, "Amendment blocked");
+                //MessageBox.Show(ex.Message, "Amendment blocked",
+                //    MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
             {
-                MessageBox.Show("Save failed:\n" + ex.GetBaseException().Message,
-                    "Database error", MessageBoxButton.OK, MessageBoxImage.Error);
+                await _dialogs.AlertAsync($"Save failed:\n" + ex.GetBaseException().Message, "Database error");
+                //MessageBox.Show("Save failed:\n" + ex.GetBaseException().Message,
+                //    "Database error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Unexpected error:\n" + ex.Message,
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                await _dialogs.AlertAsync($"Unexpected error:\n" + ex.Message, "Error");
+                //MessageBox.Show("Unexpected error:\n" + ex.Message,
+                //    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -798,15 +809,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private decimal RemainingDueBeforeStaging()
         {
-            // only persisted + effective rows (Id > 0)
             var paidPersisted = _payments.Where(p => p.Id > 0 && p.IsEffective)
                                          .Sum(p => p.Amount);
             var due = decimal.Round(_model.GrandTotal - paidPersisted, 2, MidpointRounding.AwayFromZero);
             return Math.Max(0m, due);
         }
-
-            
-        // validate the whole staged list (applies each in sequence and reduces the remaining)
+       
         private bool ValidateStagedPayments(IReadOnlyList<(TenderMethod method, decimal amount, string? note)> staged)
         {
             var remaining = RemainingDueBeforeStaging();
@@ -817,14 +825,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
                 if (amount <= 0m)
                 {
-                    MessageBox.Show($"{label} must be greater than 0.", "Invalid payment",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _dialogs.AlertAsync($"{label} must be greater than 0.", "Invalid payment");
+                    //MessageBox.Show($"{label} must be greater than 0.", "Invalid payment",
+                    //    MessageBoxButton.OK, MessageBoxImage.Warning);
                     return false;
                 }
                 if (amount > remaining + 0.0001m)
                 {
-                    MessageBox.Show($"{label} exceeds remaining due ({remaining:N2}).",
-                        "Overpay blocked", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    //MessageBox.Show($"{label} exceeds remaining due ({remaining:N2}).",
+                    //    "Overpay blocked", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _dialogs.AlertAsync($"{label} exceeds remaining due ({remaining:N2}).", "Overpay blocked");
                     return false;
                 }
 
@@ -834,19 +844,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
             return true;
         }
 
-
-
-
         private async Task RefreshPaymentsAsync()
         {
             _payments.Clear();
-
             if (_model.Id > 0)
             {
                 var pays = await _purchaseSvc.GetPaymentsAsync(_model.Id, CancellationToken.None);
                 foreach (var p in pays) _payments.Add(p);
             }
-
 
             // append staged (if any)
             foreach (var sp in _stagedPayments)
@@ -870,18 +875,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void BtnAddAdvance_Click(object sender, RoutedEventArgs e)
         {
             if (!decimal.TryParse(AdvanceAmtBox.Text, out var amt) || amt <= 0m)
-            { MessageBox.Show("Enter amount > 0"); return; }
-
+            { _dialogs.AlertAsync($"Enter amount > 0", "Payment");  return; }
             var sel = (AdvanceMethodBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Cash";
             var method = Enum.TryParse<TenderMethod>(sel, out var m) ? m : TenderMethod.Cash;
-
-            // (Optional) if you want to allow only Cash during editing, enforce here.
-            // Bank can still work if we resolve bank account during final save (see service patch below).
-
-            // Stage locally
             _stagedPayments.Add((method, Math.Round(amt, 2), note: null));
-
-            // Show it in the grid without hitting DB
             _payments.Add(new PurchasePayment
             {
                 Id = 0, // staged marker
@@ -893,7 +890,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 Note = "(staged — will post on Save)"
             });
             PaymentsGrid.ItemsSource = _payments;
-
             AdvanceAmtBox.Clear();
             AdvanceMethodBox.SelectedItem = AdvanceMethodCashItem;
             BankPickerPanel.Visibility = Visibility.Collapsed;
@@ -906,11 +902,9 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             if (row.Id == 0)
             {
-                // update staged list to match the edited grid row
                 var idx = _payments.IndexOf(row);
                 if (idx >= 0)
                 {
-                    // find corresponding staged entry by position among staged items
                     var stagedIdx = 0;
                     for (int i = 0, s = 0; i < _payments.Count; i++)
                     {
@@ -919,7 +913,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                             if (i == idx)
                             {
                                 var amt = Math.Round(row.Amount, 2);
-                                if (amt <= 0m) { MessageBox.Show("Amount must be > 0"); row.Amount = 1m; }
+                                if (amt <= 0m) { _dialogs.AlertAsync($"Amount must be > 0", "POS"); row.Amount = 1m; }
                                 // update staged entry
                                 _stagedPayments[s] = (row.Method, Math.Round(row.Amount, 2), null);
                                 break;
@@ -941,11 +935,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
             try
             {
                 await _purchaseSvc.UpdatePaymentAsync(row.Id, Math.Round(row.Amount, 2), row.Method, row.Note, AppState.Current?.CurrentUser?.DisplayName ?? "system");
-                // no exception → row already reflects latest values
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Update payment failed");
+                await _dialogs.AlertAsync(ex.Message, "Update payment failed");
+                //MessageBox.Show(ex.Message, "Update payment failed");
                 await RefreshPaymentsAsync(); // revert view
             }
         }
@@ -959,8 +953,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
             if (row.Id == 0)
             {
-                // staged: remove from both staged list and grid
-                // find staged index by position among staged items
                 var idx = _payments.IndexOf(row);
                 if (idx >= 0)
                 {
@@ -984,16 +976,14 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     var user = AppState.Current?.CurrentUserName
                                ?? AppState.Current?.CurrentUser?.DisplayName
                                ?? "system";
-
                     await _purchaseSvc.RemovePaymentAsync(row.Id, user);
-
-                    // IMPORTANT: do not _payments.Remove(row);
                     await ReloadPaymentsAsync();            // refresh from DB so you see the reversal row
                     RecomputeAndUpdateTotals();             // refresh header CashPaid/CreditDue on screen
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(ex.Message, "Delete payment failed");
+                    await _dialogs.AlertAsync(ex.Message, "Delete payment failed");
+                    //MessageBox.Show(ex.Message, "Delete payment failed");
                 }
             }
 
@@ -1006,52 +996,50 @@ namespace Pos.Client.Wpf.Windows.Purchases
             foreach (var p in list) _payments.Add(p);
         }
 
-
-        private async Task<bool> EnsurePurchasePersistedAsync()
-        {
-            if (_model.Id > 0) return true;
-            if (_lines.Count == 0)
-            {
-                MessageBox.Show("Add at least one item before taking a payment.");
-                return false;
-            }
-            if (SupplierId is null)
-            {
-                MessageBox.Show("Please pick a Supplier (type at least 2 letters and select).");
-                return false;
-            }
-
-            int? outletId = null, warehouseId = null;
-            var target = InventoryLocationType.Outlet;
-            try
-            {
-                if (DestWarehouseRadio.IsChecked == true && WarehouseBox.SelectedItem is Warehouse wh)
-                { warehouseId = wh.Id; target = InventoryLocationType.Warehouse; }
-                else if (DestOutletRadio.IsChecked == true && OutletBox.SelectedItem is Outlet ot)
-                { outletId = ot.Id; target = InventoryLocationType.Outlet; }
-            }
-            catch { /* ignore if controls not present */ }
-            EnforceDestinationPolicy(ref target, ref outletId, ref warehouseId);
-            _model.PartyId = SupplierId.Value;
-            _model.LocationType = target;
-            _model.OutletId = outletId;
-            _model.WarehouseId = warehouseId;
-            _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
-            _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now;
-            _model.Status = PurchaseStatus.Draft;
-            var lines = _lines.Select(l => new PurchaseLine
-            {
-                ItemId = l.ItemId,
-                Qty = l.Qty,
-                UnitCost = l.UnitCost,
-                Discount = l.Discount,
-                TaxRate = l.TaxRate,
-                Notes = l.Notes
-            });
-            _model = await _purchaseSvc.SaveDraftAsync(_model, lines, user: "admin");
-            await RefreshPaymentsAsync(); // bind grid to the now-real purchase
-            return _model.Id > 0;
-        }
+        //private async Task<bool> EnsurePurchasePersistedAsync()
+        //{
+        //    if (_model.Id > 0) return true;
+        //    if (_lines.Count == 0)
+        //    {
+        //        MessageBox.Show("Add at least one item before taking a payment.");
+        //        return false;
+        //    }
+        //    if (SupplierId is null)
+        //    {
+        //        MessageBox.Show("Please pick a Supplier (type at least 2 letters and select).");
+        //        return false;
+        //    }
+        //    int? outletId = null, warehouseId = null;
+        //    var target = InventoryLocationType.Outlet;
+        //    try
+        //    {
+        //        if (DestWarehouseRadio.IsChecked == true && WarehouseBox.SelectedItem is Warehouse wh)
+        //        { warehouseId = wh.Id; target = InventoryLocationType.Warehouse; }
+        //        else if (DestOutletRadio.IsChecked == true && OutletBox.SelectedItem is Outlet ot)
+        //        { outletId = ot.Id; target = InventoryLocationType.Outlet; }
+        //    }
+        //    catch { /* ignore if controls not present */ }
+        //    EnforceDestinationPolicy(ref target, ref outletId, ref warehouseId);
+        //    _model.PartyId = SupplierId.Value;
+        //    _model.LocationType = target;
+        //    _model.OutletId = outletId;
+        //    _model.WarehouseId = warehouseId;
+        //    _model.VendorInvoiceNo = string.IsNullOrWhiteSpace(VendorInvBox.Text) ? null : VendorInvBox.Text.Trim();
+        //    _model.PurchaseDate = DatePicker.SelectedDate ?? DateTime.Now;
+        //    _model.Status = PurchaseStatus.Draft;
+        //    var lines = _lines.Select(l => new PurchaseLine
+        //    {
+        //        ItemId = l.ItemId,
+        //        Qty = l.Qty,
+        //        UnitCost = l.UnitCost,
+        //        Discount = l.Discount,
+        //        TaxRate = l.TaxRate,
+        //        Notes = l.Notes
+        //    });
+        //    _model = await _purchaseSvc.SaveDraftAsync(_model, lines, user: "admin");
+        //    await RefreshPaymentsAsync(); // bind grid to the now-real purchase
+        //    return _model.Id > 0;
+        //}
 
         private async Task ResetFormAsync(bool keepDestination = true)
         {
@@ -1068,7 +1056,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 catch { }
             }
             _model = new Purchase();
-            //_selectedPartyId = null;
             SupplierSearch.SelectedCustomer = null;
             SupplierSearch.SelectedCustomerId = null;
             SupplierSearch.Query = string.Empty;
@@ -1082,7 +1069,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
             DiscountText.Text = "0.00";
             TaxText.Text = "0.00";
             GrandTotalText.Text = "0.00";
-            //await LoadSuppliersAsync("");
             if (!keepDestination)
             {
                 await InitDestinationsAsync();
@@ -1117,16 +1103,16 @@ namespace Pos.Client.Wpf.Windows.Purchases
             _ = Dispatcher.BeginInvoke(() => SupplierSearch.Focus()); // explicit discard
         }
 
-        private async Task ResumeHeldAsync(int id)
-        {
-            var draft = await _purchaseSvc.LoadDraftWithLinesAsync(id);
-            if (draft == null)
-            {
-                MessageBox.Show($"Held purchase #{id} not found or not in Draft.", "Not found");
-                return;
-            }
-            LoadDraft(draft);
-        }
+        //private async Task ResumeHeldAsync(int id)
+        //{
+        //    var draft = await _purchaseSvc.LoadDraftWithLinesAsync(id);
+        //    if (draft == null)
+        //    {
+        //        MessageBox.Show($"Held purchase #{id} not found or not in Draft.", "Not found");
+        //        return;
+        //    }
+        //    LoadDraft(draft);
+        //}
 
         private void ClearButton_Click(object sender, RoutedEventArgs e)
         {
@@ -1186,7 +1172,6 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 MessageBox.Show("Please pick a Supplier (type at least 2 letters and select).");
                 return;
             }
-
 
             int? outletId = null;
             int? warehouseId = null;

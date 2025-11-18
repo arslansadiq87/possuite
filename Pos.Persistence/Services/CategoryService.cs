@@ -15,7 +15,7 @@ namespace Pos.Persistence.Services
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
-
+        
         public CategoryService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox)
         {
             _dbf = dbf;
@@ -154,5 +154,20 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
             return await db.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
         }
+
+        public async Task<bool> ProductNameExistsAsync(string name, int? excludeProductId = null, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var n = (name ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(n)) return false;
+
+            return await db.Products
+                .AsNoTracking()
+                .Where(p => excludeProductId == null || p.Id != excludeProductId.Value)
+                .AnyAsync(p => EF.Functions.Like(p.Name, n)            // fast path
+                            || p.Name.ToLower().Trim() == n.ToLower(), // hard CI check
+                    ct);
+        }
+
     }
 }
