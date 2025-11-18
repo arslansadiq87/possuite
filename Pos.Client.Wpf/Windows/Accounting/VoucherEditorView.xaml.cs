@@ -180,7 +180,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 if (tb == null || !decimal.TryParse(tb.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out val))
                     val = 0m;
                 var vt = Enum.Parse<VoucherType>(vm.Type);
-                if (vt == VoucherType.Debit)
+                if (vt == VoucherType.Payment)
                 {
                     if (colHeader == "Debit" && val <= 0m)
                     {
@@ -200,7 +200,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                         return;
                     }
                 }
-                else if (vt == VoucherType.Credit)
+                else if (vt == VoucherType.Receipt)
                 {
                     if (colHeader == "Credit" && val <= 0m)
                     {
@@ -251,8 +251,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
                     var text = (tbDesc.Text ?? "").Trim();
                     if (string.IsNullOrEmpty(text))
                     {
-                        string auto = vm.Type == nameof(VoucherType.Debit) ? "Cash Payment Voucher"
-                                    : vm.Type == nameof(VoucherType.Credit) ? "Cash Receiving Voucher"
+                        string auto = vm.Type == nameof(VoucherType.Payment) ? "Cash Payment Voucher"
+                                    : vm.Type == nameof(VoucherType.Receipt) ? "Cash Receiving Voucher"
                                     : "Journal Voucher";
                         tbDesc.Text = auto;
                         if (LinesGrid.SelectedItem is VoucherLineVm ln)
@@ -546,8 +546,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
         private void MoveToAmountColumn()
         {
             var vm = (VoucherEditorVm)DataContext;
-            var isDebit = vm.Type == nameof(VoucherType.Debit);
-            var isCredit = vm.Type == nameof(VoucherType.Credit);
+            var isDebit = vm.Type == nameof(VoucherType.Payment);
+            var isCredit = vm.Type == nameof(VoucherType.Receipt);
             var isJournal = vm.Type == nameof(VoucherType.Journal);
             DataGridColumn? targetCol = null;
             if (isDebit || isJournal)

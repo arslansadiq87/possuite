@@ -173,7 +173,8 @@ namespace Pos.Persistence.Services
                 ?? throw new InvalidOperationException($"Old voucher #{oldVoucherId} not found.");
 
             // Post GL delta between newV and old lines
-            await _gl.PostVoucherRevisionAsync(newV, old.Lines.ToList());
+            await ((IGlPostingServiceDb)_gl).PostVoucherRevisionAsync(db, newV, old.Lines.ToList(), ct);
+
 
             old.Status = VoucherStatus.Amended;
             old.AmendedAtUtc = DateTime.UtcNow;
@@ -201,7 +202,7 @@ namespace Pos.Persistence.Services
             if (v.Status != VoucherStatus.Posted)
                 throw new InvalidOperationException("Only posted vouchers can be voided.");
 
-            await _gl.PostVoucherVoidAsync(v); // reversal GL
+            await ((IGlPostingServiceDb)_gl).PostVoucherVoidAsync(db, v, ct);
             v.Status = VoucherStatus.Voided;
             v.VoidReason = reason.Trim();
             v.VoidedAtUtc = DateTime.UtcNow;
@@ -283,7 +284,7 @@ namespace Pos.Persistence.Services
                     }
                     await db.SaveChangesAsync(ct);
 
-                    await _gl.PostVoucherAsync(v); // base posting
+                    await ((IGlPostingServiceDb)_gl).PostVoucherAsync(db, v, ct);
 
                     // outbox first, then save+commit
                     await _outbox.EnqueueUpsertAsync(db, v);

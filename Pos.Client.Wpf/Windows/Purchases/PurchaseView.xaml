@@ -6,7 +6,13 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:Controls="clr-namespace:Pos.Client.Wpf.Controls"
         mc:Ignorable="d"
-        Loaded="UserControl_Loaded">
+        Loaded="UserControl_Loaded"
+        FocusManager.FocusedElement="{Binding ElementName=SupplierSearch}">
+    <UserControl.Resources>
+        <Style TargetType="{x:Type DatePickerTextBox}">
+            <EventSetter Event="PreviewKeyDown" Handler="DatePickerTextBox_PreviewKeyDown"/>
+        </Style>
+    </UserControl.Resources>
 
 
     <Grid>

@@ -404,6 +404,108 @@ namespace Pos.Persistence.Services
             return acc?.Id ?? await EnsureOutletTillAccountAsync(db, outlet.Id, ct);
         }
 
+        private async Task<int> EnsureCompanyTillHeaderAsync(PosClientDbContext db, CancellationToken ct)
+        {
+            // parent cash header "111" at company level
+            var cashHeader = await db.Accounts.FirstOrDefaultAsync(a => a.Code == CoaCode.CASH_HEADER && a.OutletId == null, ct);
+            if (cashHeader == null)
+            {
+                cashHeader = new Account
+                {
+                    Code = CoaCode.CASH_HEADER,            // "111"
+                    Name = "Cash",
+                    Type = AccountType.Asset,
+                    NormalSide = NormalSide.Debit,
+                    IsHeader = true,
+                    AllowPosting = false,
+                    IsSystem = true,
+                    OutletId = null,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                db.Accounts.Add(cashHeader);
+                await db.SaveChangesAsync(ct);
+                await _outbox.EnqueueUpsertAsync(db, cashHeader, ct);
+                await db.SaveChangesAsync(ct);
+            }
+
+            // company-level till header "11102" (no OutletId)
+            var tillHeader = await db.Accounts.FirstOrDefaultAsync(a => a.Code == CoaCode.TILL_CHILD && a.OutletId == null, ct);
+            if (tillHeader != null) return tillHeader.Id;
+
+            tillHeader = new Account
+            {
+                Code = CoaCode.TILL_CHILD,                // "11102"
+                Name = "Cash in Till",
+                Type = AccountType.Asset,
+                NormalSide = NormalSide.Debit,
+                IsHeader = true,
+                AllowPosting = false,
+                IsSystem = true,
+                ParentId = cashHeader.Id,
+                OutletId = null,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Accounts.Add(tillHeader);
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, tillHeader, ct);
+            await db.SaveChangesAsync(ct);
+            return tillHeader.Id;
+        }
+
+        public async Task<int> EnsureCounterTillAccountAsync(int outletId, int counterId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await EnsureCounterTillAccountAsync(db, outletId, counterId, ct);
+        }
+
+        public async Task<int> GetCounterTillAccountIdAsync(int outletId, int counterId, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            return await GetCounterTillAccountIdAsync(db, outletId, counterId, ct);
+        }
+
+        private async Task<int> EnsureCounterTillAccountAsync(PosClientDbContext db, int outletId, int counterId, CancellationToken ct)
+        {
+            var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId, ct);
+            var counter = await db.Counters.AsNoTracking().FirstAsync(c => c.Id == counterId, ct);
+
+            var parentTillHeaderId = await EnsureCompanyTillHeaderAsync(db, ct);
+
+            var code = $"{CoaCode.TILL_CHILD}-{outlet.Code}-C{counter.Id}"; // 11102-<OUT>-C<CounterId>
+            var existing = await db.Accounts.FirstOrDefaultAsync(a => a.Code == code && a.OutletId == outlet.Id, ct);
+            if (existing != null) return existing.Id;
+
+            var acc = new Account
+            {
+                Code = code,
+                Name = $"Cash in Till – {outlet.Name} / {counter.Name}",
+                Type = AccountType.Asset,
+                NormalSide = NormalSide.Debit,
+                IsHeader = false,
+                AllowPosting = true,
+                IsSystem = true,
+                SystemKey = SystemAccountKey.CashInTillOutlet, // reuse key family
+                ParentId = parentTillHeaderId,
+                OutletId = outlet.Id,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            db.Accounts.Add(acc);
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, acc, ct);
+            await db.SaveChangesAsync(ct);
+            return acc.Id;
+        }
+
+        private async Task<int> GetCounterTillAccountIdAsync(PosClientDbContext db, int outletId, int counterId, CancellationToken ct)
+        {
+            var outlet = await db.Outlets.AsNoTracking().FirstAsync(o => o.Id == outletId, ct);
+            var code = $"{CoaCode.TILL_CHILD}-{outlet.Code}-C{counterId}";
+            var acc = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Code == code && a.OutletId == outlet.Id, ct);
+            return acc?.Id ?? await EnsureCounterTillAccountAsync(db, outletId, counterId, ct);
+        }
+
+
         private static async Task<string> GenerateNextChildCodeAsync(PosClientDbContext db, Account parent, bool forHeader, CancellationToken ct)
         {
             var siblingsCodes = await db.Accounts

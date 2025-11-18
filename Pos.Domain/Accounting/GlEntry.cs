@@ -30,6 +30,13 @@ namespace Pos.Domain.Accounting
         Sale_COGS = 24,          // DR COGS / CR Inventory on sale
         Sale_Return_COGS = 25,   // DR Inventory / CR COGS on sale return
 
+        // Vouchers (NEW)
+        Voucher_Payment = 70,     // base snapshot for Cash Payment voucher
+        Voucher_Receipt = 71,     // base snapshot for Cash Receipt voucher
+        Voucher_Journal = 72,     // base snapshot for Journal voucher
+        Voucher_AmendDelta = 73,  // delta rows for voucher edit/revision
+        Voucher_Void = 74,        // (optional) reversal rows if you ever post reversals on void
+
 
         Journal = 90,
         Other = 99

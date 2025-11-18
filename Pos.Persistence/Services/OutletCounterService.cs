@@ -18,11 +18,12 @@ namespace Pos.Persistence.Services
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly IOutboxWriter _outbox;
-
-        public OutletCounterService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox)
+        private readonly ICoaService _coa;
+        public OutletCounterService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox, ICoaService coa)
         {
             _dbf = dbf;
             _outbox = outbox;
+            _coa = coa;
         }
 
         // ─────────────────────────  Queries  ─────────────────────────
@@ -142,6 +143,9 @@ namespace Pos.Persistence.Services
 
             await db.SaveChangesAsync(ct);
             await _outbox.EnqueueUpsertAsync(db, counter, ct);
+            await db.SaveChangesAsync(ct);
+            // ensure per-counter till posting account (no outlet-level till)
+            await _coa.EnsureCounterTillAccountAsync(counter.OutletId, counter.Id, ct);
             await db.SaveChangesAsync(ct);
 
             await tx.CommitAsync(ct);

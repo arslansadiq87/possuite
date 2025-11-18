@@ -36,6 +36,7 @@ namespace Pos.Domain.Services
         Task<int> EnsureInventoryAccountIdAsync(CancellationToken ct = default);
         Task<int> EnsureSupplierAccountIdAsync(int partyId, CancellationToken ct = default);
 
-       
+        Task<int> EnsureCounterTillAccountAsync(int outletId, int counterId, CancellationToken ct = default);
+        Task<int> GetCounterTillAccountIdAsync(int outletId, int counterId, CancellationToken ct = default);
     }
 }

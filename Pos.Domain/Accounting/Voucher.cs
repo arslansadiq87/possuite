@@ -4,7 +4,20 @@ using System.Collections.Generic;
 
 namespace Pos.Domain.Accounting
 {
-    public enum VoucherType { Debit, Credit, Journal }
+    public enum VoucherType : short
+    {
+        // New canonical names (keep integer values stable!)
+        Payment = 0,   // was Debit
+        Receipt = 1,   // was Credit
+        Journal = 2,
+
+        // Back-compat aliases (optional; remove later)
+        //[Obsolete("Use VoucherType.Payment")]
+        //Debit = Payment,
+
+        //[Obsolete("Use VoucherType.Receipt")]
+        //Credit = Receipt
+    }
     public enum VoucherStatus { Draft = 0, Posted = 1, Amended = 2, Voided = 3 }
 
     public class Voucher : BaseEntity

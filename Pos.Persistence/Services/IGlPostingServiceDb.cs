@@ -2,6 +2,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
 
 namespace Pos.Persistence.Services
@@ -44,6 +45,11 @@ namespace Pos.Persistence.Services
             PosClientDbContext db,
             StockDoc doc,
             CancellationToken ct = default);
+
+
+        Task PostVoucherAsync(PosClientDbContext db, Voucher v, CancellationToken ct = default);
+        Task PostVoucherRevisionAsync(PosClientDbContext db, Voucher newVoucher, IReadOnlyList<VoucherLine> oldLines, CancellationToken ct = default);
+        Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid, CancellationToken ct = default);
 
     }
 }

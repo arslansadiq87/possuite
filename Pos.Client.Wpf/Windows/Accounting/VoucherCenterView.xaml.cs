@@ -84,8 +84,8 @@ namespace Pos.Client.Wpf.Windows.Accounting
 
             var types = new System.Collections.Generic.List<Pos.Domain.Accounting.VoucherType>();
             if (ChkJournal.IsChecked == true) types.Add(Pos.Domain.Accounting.VoucherType.Journal);
-            if (ChkDebit.IsChecked == true) types.Add(Pos.Domain.Accounting.VoucherType.Debit);
-            if (ChkCredit.IsChecked == true) types.Add(Pos.Domain.Accounting.VoucherType.Credit);
+            if (ChkDebit.IsChecked == true) types.Add(Pos.Domain.Accounting.VoucherType.Payment);
+            if (ChkCredit.IsChecked == true) types.Add(Pos.Domain.Accounting.VoucherType.Receipt);
             vm.TypeMulti = types;   // see VM addition below
 
             var statuses = new System.Collections.Generic.List<Pos.Domain.Accounting.VoucherStatus>();

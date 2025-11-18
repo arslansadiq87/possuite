@@ -285,7 +285,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }
         }
 
-        private void DatePicker_PreviewKeyDown(object sender, KeyEventArgs e)
+        private void DatePickerTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
@@ -293,6 +293,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 FocusItemSearchBox();
             }
         }
+
 
         private async Task InitDestinationsAsync()
         {

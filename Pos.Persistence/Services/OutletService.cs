@@ -42,7 +42,7 @@ namespace Pos.Persistence.Services
 
             // Ensure COA accounts (idempotent)
             await _coa.EnsureOutletCashAccountAsync(outlet.Id, ct);
-            await _coa.EnsureOutletTillAccountAsync(outlet.Id, ct);
+            //await _coa.EnsureOutletTillAccountAsync(outlet.Id, ct);
 
             // Outbox before final save/commit
             await _outbox.EnqueueUpsertAsync(db, outlet, ct);

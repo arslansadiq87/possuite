@@ -42,14 +42,14 @@ namespace Pos.Client.Wpf.Windows.Accounting
         [ObservableProperty] private VoucherLineVm? selectedLine;
         [ObservableProperty] private string memo = "";
         [ObservableProperty] private string refNo = "";
-        [ObservableProperty] private string type = nameof(VoucherType.Debit);
+        [ObservableProperty] private string type = nameof(VoucherType.Payment);
         [ObservableProperty] private Outlet? selectedOutlet;
 
         public decimal TotalDebit => Lines.Sum(l => l.Debit);
         public decimal TotalCredit => Lines.Sum(l => l.Credit);
 
-        public bool ShowDebitColumn => Type == nameof(VoucherType.Debit) || Type == nameof(VoucherType.Journal);
-        public bool ShowCreditColumn => Type == nameof(VoucherType.Credit) || Type == nameof(VoucherType.Journal);
+        public bool ShowDebitColumn => Type == nameof(VoucherType.Payment) || Type == nameof(VoucherType.Journal);
+        public bool ShowCreditColumn => Type == nameof(VoucherType.Receipt) || Type == nameof(VoucherType.Journal);
 
         public event Action? AccountsReloadRequested;
 
@@ -92,9 +92,9 @@ namespace Pos.Client.Wpf.Windows.Accounting
             {
                 if (SelectedOutlet == null) return false;
                 var vt = Enum.Parse<VoucherType>(Type);
-                if (vt == VoucherType.Debit)
+                if (vt == VoucherType.Payment)
                     return Lines.Any(l => l.Account != null && l.Debit > 0m);
-                if (vt == VoucherType.Credit)
+                if (vt == VoucherType.Receipt)
                     return Lines.Any(l => l.Account != null && l.Credit > 0m);
                 return Lines.Any(l => l.Account != null && (l.Debit > 0m || l.Credit > 0m));
             }
@@ -263,7 +263,7 @@ namespace Pos.Client.Wpf.Windows.Accounting
                 if (totalDebit <= 0m || Math.Abs(totalDebit - totalCredit) > 0.004m)
                     throw new InvalidOperationException("For Journal Voucher, Debits must equal Credits and be > 0.");
             }
-            else if (vt == VoucherType.Debit)
+            else if (vt == VoucherType.Payment)
             {
                 if (linesToSave.Any(l => l.Credit != 0m || l.Debit <= 0m))
                     throw new InvalidOperationException("For Debit Voucher, only Debit amounts (> 0) are allowed.");

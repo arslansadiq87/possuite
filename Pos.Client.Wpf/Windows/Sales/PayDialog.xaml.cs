@@ -232,6 +232,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             decimal.TryParse(CashBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var cash);
             decimal.TryParse(CardBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var card);
+
             var target = Math.Round(TargetAmount, 2);
             var tendered = Math.Round(cash + card, 2);
 
@@ -242,18 +243,29 @@ namespace Pos.Client.Wpf.Windows.Sales
                     MessageBox.Show($"Please enter exactly {target:0.00} split across Cash/Card.");
                     return;
                 }
-            }
-            else
-            {
-                if (tendered + 0.01m < target)
-                {
-                    MessageBox.Show("Payment is less than total.");
-                    return;
-                }
+                // exact amount → applied equals entered
+                CompleteAndClose(true, cash, card);
+                return;
             }
 
-            CompleteAndClose(true, cash, card);
+            // Normal sale: allow over-tender but don't post it; compute APPLIED amounts
+            if (tendered + 0.01m < target)
+            {
+                MessageBox.Show("Payment is less than total.");
+                return;
+            }
+
+            // Rule: never give "change" to card; cap card first, then cash fills the rest
+            var appliedCard = Math.Min(card, target);
+            var remaining = target - appliedCard;
+            var appliedCash = Math.Min(cash, remaining);
+
+            // (Optional) if someone entered card>target and cash>0, remaining will be 0 and all over-tender becomes "change"
+            // Change = tendered - (appliedCash + appliedCard) // for receipt print if you store it elsewhere
+
+            CompleteAndClose(true, appliedCash, appliedCard);
         }
+
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
