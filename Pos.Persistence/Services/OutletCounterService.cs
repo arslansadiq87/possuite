@@ -142,15 +142,20 @@ namespace Pos.Persistence.Services
             }
 
             await db.SaveChangesAsync(ct);
+
+            // outbox inside the same transaction is fine
             await _outbox.EnqueueUpsertAsync(db, counter, ct);
-            await db.SaveChangesAsync(ct);
-            // ensure per-counter till posting account (no outlet-level till)
-            await _coa.EnsureCounterTillAccountAsync(counter.OutletId, counter.Id, ct);
             await db.SaveChangesAsync(ct);
 
             await tx.CommitAsync(ct);
+
+            // IMPORTANT: do NOT call a service that opens a new DbContext while the above tx is active.
+            // Call COA ensure *after* committing so it uses its own context without hitting the write lock.
+            await _coa.EnsureCounterTillAccountAsync(counter.OutletId, counter.Id, ct);
+
             return counter.Id;
         }
+
 
         public async Task DeleteCounterAsync(int counterId, CancellationToken ct = default)
         {

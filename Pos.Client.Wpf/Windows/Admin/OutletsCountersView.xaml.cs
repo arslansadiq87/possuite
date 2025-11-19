@@ -352,12 +352,12 @@ namespace Pos.Client.Wpf.Windows.Admin
 
                 var sp = App.Services;
                 var midS = sp.GetRequiredService<IMachineIdentityService>();
-                var svc = sp.GetRequiredService<ICounterBindingService>();
+                var svc = sp.GetRequiredService<IOutletCounterService>(); // ⟵ use the new service
 
-                var machineId = await midS.GetMachineIdAsync();
+                // use machine NAME because bindings are keyed by MachineName in DB
                 var machineName = await midS.GetMachineNameAsync();
 
-                await svc.AssignAsync(machineId, machineName, outletId, row.Id, CancellationToken.None);
+                await svc.AssignThisPcAsync(outletId, row.Id, machineName, CancellationToken.None);
                 await SafeLoadCountersAsync(outletId);
 
                 MessageBox.Show("This PC is now assigned to the selected counter.",
@@ -370,17 +370,19 @@ namespace Pos.Client.Wpf.Windows.Admin
             }
         }
 
+
         private async void UnassignThisPc_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 var sp = App.Services;
                 var midS = sp.GetRequiredService<IMachineIdentityService>();
-                var svc = sp.GetRequiredService<ICounterBindingService>();
+                var svc = sp.GetRequiredService<IOutletCounterService>(); // ⟵ use the new service
 
-                var machineId =await midS.GetMachineIdAsync();
+                // bindings are keyed by MachineName
+                var machineName = await midS.GetMachineNameAsync();
 
-                await svc.UnassignAsync(machineId, CancellationToken.None);
+                await svc.UnassignThisPcAsync(machineName, CancellationToken.None);
 
                 if (_selectedOutletId is int outletId)
                     await SafeLoadCountersAsync(outletId);
@@ -394,6 +396,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
 
         private void UpdateOutletSearchRowVisibility()

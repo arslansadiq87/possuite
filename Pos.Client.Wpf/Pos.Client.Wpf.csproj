@@ -10,7 +10,9 @@
     <Compile Remove="Services\Context\TerminalContext.cs" />
     <Compile Remove="Services\CounterBindingService.cs" />
     <Compile Remove="Services\CurrentUserService.cs" />
+    <Compile Remove="Services\ILabelPrintService.cs" />
     <Compile Remove="Services\ITillService.cs" />
+    <Compile Remove="Services\LabelPrintServiceStub.cs" />
     <Compile Remove="Services\MachineIdentityService.cs" />
     <Compile Remove="Services\MediaPaths.cs" />
     <Compile Remove="Services\OpeningBalanceService.cs" />
@@ -75,8 +77,12 @@
     <Folder Include="Resources\Icons\" />
     <Folder Include="Services\Context\" />
   </ItemGroup>
+	<ItemGroup>
+		<Reference Include="ReachFramework" />
+	</ItemGroup>
 
-  <PropertyGroup>
+
+	<PropertyGroup>
     <OutputType>WinExe</OutputType>
 	  <!--<TargetFramework>net9.0-windows</TargetFramework>-->
 	  <TargetFramework>net9.0-windows10.0.19041</TargetFramework>

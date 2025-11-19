@@ -17,6 +17,10 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     private readonly ILookupService _lookup;
     private readonly IBarcodeLabelSettingsService _svc;
     private readonly ILabelPrintService? _labelPrinter;
+    private readonly Pos.Client.Wpf.Printing.ITscCommandService? _tsc;
+
+    // Preview zoom factor (applies to the whole preview surface via LayoutTransform)
+    [ObservableProperty] private double previewZoom = 2.0;
 
     private CancellationTokenSource? _previewCts;
     public void ForceRefreshPreview() => RefreshPreviewDebounced();
@@ -69,8 +73,18 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     public int[] DpiOptions { get; } = new[] { 203, 300 };
     public string[] CodeTypes { get; } = new[] { "Code128", "EAN13", "EAN8", "UPCA" };
 
-    partial void OnLabelWidthMmChanged(int value) => RefreshPreviewDebounced();
-    partial void OnLabelHeightMmChanged(int value) => RefreshPreviewDebounced();
+    partial void OnLabelWidthMmChanged(int value)
+    {
+        OnPropertyChanged(nameof(PreviewWidthDip));   // notify the Image/Canvas width binding
+        RefreshPreviewDebounced();
+    }
+
+    partial void OnLabelHeightMmChanged(int value)
+    {
+        OnPropertyChanged(nameof(PreviewHeightDip));  // notify the Image/Canvas height binding
+        RefreshPreviewDebounced();
+    }
+
     partial void OnMarginLeftMmChanged(int value) => RefreshPreviewDebounced();
     partial void OnMarginTopMmChanged(int value) => RefreshPreviewDebounced();
     partial void OnDpiChanged(int value) => RefreshPreviewDebounced();
@@ -166,15 +180,166 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
 
     private BarcodeLabelSettings? _loaded;
 
+    // ctor param: add ITscCommandService tsc = null
     public BarcodeLabelSettingsViewModel(
-    ILookupService lookup,
-    IBarcodeLabelSettingsService svc,
-    ILabelPrintService? labelPrinter = null)
+        ILookupService lookup,
+        IBarcodeLabelSettingsService svc,
+        ILabelPrintService? labelPrinter = null,
+        Pos.Client.Wpf.Printing.ITscCommandService? tsc = null)
     {
         _lookup = lookup;
         _svc = svc;
         _labelPrinter = labelPrinter;
+        _tsc = tsc;
         _ = InitAsync();
+    }
+
+    // --- TSC Media / Setup (defaults matching common 38x25mm roll) ---
+    [ObservableProperty] private double tscMediaWidthMm = 38.0;
+    [ObservableProperty] private double tscMediaHeightMm = 25.0;
+    [ObservableProperty] private double tscGapMm = 2.0;
+    [ObservableProperty] private double tscGapOffsetMm = 0.0;
+
+    [ObservableProperty] private int tscSpeed = 3;     // 1..5 (model dependent)
+    [ObservableProperty] private int tscDensity = 8;   // 0..15
+    [ObservableProperty] private int tscDirection = 1; // 0/1
+    [ObservableProperty] private bool tscTear = true;
+    [ObservableProperty] private bool tscPeel = false; // model must support peel
+
+    [ObservableProperty] private string tscCodepage = "1252"; // 437, 850, 852, 1252 etc.
+    [ObservableProperty] private int tscBeepTimes = 1;   // 1..9
+    [ObservableProperty] private int tscBeepMs = 100;    // 10..1000
+    public string[] QuickBarcodeTypes { get; } = new[] { "CODE128", "EAN13", "EAN8", "UPCA", "QRCODE" };
+
+    [ObservableProperty] private string quickText = "Sample";
+    [ObservableProperty] private string quickBarcodeType = "CODE128";
+    [ObservableProperty] private string quickBarcodeData = "123456789012";
+    [ObservableProperty] private double quickBarcodeHeightMm = 20.0; // used for linear barcodes
+    [ObservableProperty] private int quickCopies = 1;
+
+    // How big each nudge is (in dots). 203 dpi ≈ 8 dots/mm. So 16 = ~2 mm
+    //[ObservableProperty] private int nudgeDots = 16;
+    [ObservableProperty] private double nudgeMm = 2.0;
+
+    // Convert millimeters to device dots using current DPI
+    private int ToDots(double mm)
+    {
+        // guard + clamp: at least 1 dot to ensure a move
+        var dots = (int)Math.Round(mm * Dpi / 25.4);
+        return Math.Max(1, dots);
+    }
+
+    [RelayCommand]
+    private async Task TscApplyMediaAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        {
+            System.Windows.MessageBox.Show("TSC service not available or no printer selected.");
+            return;
+        }
+
+        var p = PrinterName!;
+        await _tsc.SetSizeMmAsync(p, TscMediaWidthMm, TscMediaHeightMm);
+        await _tsc.SetGapMmAsync(p, TscGapMm, TscGapOffsetMm);
+        await _tsc.SetSpeedAsync(p, Math.Clamp(TscSpeed, 1, 5));
+        await _tsc.SetDensityAsync(p, Math.Clamp(TscDensity, 0, 15));
+        await _tsc.SetDirectionAsync(p, TscDirection == 0 ? 0 : 1);
+        await _tsc.SetTearAsync(p, TscTear);
+        await _tsc.SetPeelAsync(p, TscPeel);
+        await _tsc.SetCodePageAsync(p, TscCodepage);
+        await _tsc.HomeAsync(p);
+    }
+
+    [RelayCommand]
+    private async Task TscFeedMmAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        { System.Windows.MessageBox.Show("TSC service not available or no printer selected."); return; }
+        await _tsc.FeedAsync(PrinterName!, ToDots(NudgeMm));
+    }
+
+    [RelayCommand]
+    private async Task TscBackfeedMmAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        { System.Windows.MessageBox.Show("TSC service not available or no printer selected."); return; }
+        await _tsc.BackfeedAsync(PrinterName!, ToDots(NudgeMm));
+    }
+
+    [RelayCommand]
+    private async Task TscNextLabelAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        { System.Windows.MessageBox.Show("TSC service not available or no printer selected."); return; }
+        await _tsc.FormfeedAsync(PrinterName!);
+    }
+
+    [RelayCommand]
+    private async Task TscHomeAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        { System.Windows.MessageBox.Show("TSC service not available or no printer selected."); return; }
+        await _tsc.HomeAsync(PrinterName!);
+    }
+
+    [RelayCommand]
+    private async Task TscAutodetectAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        { System.Windows.MessageBox.Show("TSC service not available or no printer selected."); return; }
+        await _tsc.AutoDetectAsync(PrinterName!);
+    }
+
+    [RelayCommand]
+    private async Task TscBeepAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        { System.Windows.MessageBox.Show("TSC service not available or no printer selected."); return; }
+        await _tsc.BeepAsync(PrinterName!, Math.Clamp(TscBeepTimes, 1, 9), Math.Clamp(TscBeepMs, 10, 1000));
+    }
+
+    [RelayCommand]
+    private async Task TscQuickLabelAsync()
+    {
+        if (_tsc == null || string.IsNullOrWhiteSpace(PrinterName))
+        { System.Windows.MessageBox.Show("TSC service not available or no printer selected."); return; }
+
+        var p = PrinterName!;
+        var w = TscMediaWidthMm;
+        var h = TscMediaHeightMm;
+
+        await _tsc.PrintQuickLabelAsync(p, w, h, lb =>
+        {
+            // Simple layout: text at top, barcode under it
+            // 203dpi => ~8 dots per mm; we’ll place at 4mm left margin
+            int x = ToDots(4);
+            int yText = ToDots(3);
+            int yBarcode = ToDots(10);
+
+            // Text (font "3" is readable on 203dpi)
+            lb.Text(x, yText, font: "3", rotation: 0, xMul: 1, yMul: 1, text: QuickText ?? "");
+
+            if (QuickBarcodeType.Equals("QRCODE", StringComparison.OrdinalIgnoreCase))
+            {
+                // QRCODE cell size auto-ish (6 is medium); place it below text
+                lb.QrCode(x, yBarcode, ecc: "H", cell: 6, data: QuickBarcodeData ?? "");
+            }
+            else
+            {
+                // Linear barcode height in dots from mm
+                int bh = ToDots(Math.Max(8.0, QuickBarcodeHeightMm)); // min ~8mm for readability
+                                                                      // TSC BARCODE narrow/wide: 2/4 are safe for 203dpi; readable=1 prints human text
+                lb.Barcode(
+                    x, yBarcode,
+                    type: QuickBarcodeType.ToUpperInvariant(),
+                    heightDots: bh,
+                    readable: 1,
+                    rotation: 0,
+                    narrow: 2,
+                    wide: 4,
+                    data: QuickBarcodeData ?? "123456789012");
+            }
+        }, copies: Math.Clamp(QuickCopies, 1, 999));
     }
 
 
@@ -294,10 +459,53 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
             return;
         }
 
-        var outletId = IsGlobal ? (int?)null : SelectedOutlet?.Id;
-        var settings = await _svc.GetAsync(outletId);
-        await _labelPrinter.PrintSampleAsync(settings);
+        var s = new BarcodeLabelSettings
+        {
+            OutletId = IsGlobal ? (int?)null : SelectedOutlet?.Id,
+            PrinterName = PrinterName,
+            Dpi = Dpi,
+            LabelWidthMm = LabelWidthMm,
+            LabelHeightMm = LabelHeightMm,
+            HorizontalGapMm = HorizontalGapMm,
+            VerticalGapMm = VerticalGapMm,
+            MarginLeftMm = MarginLeftMm,
+            MarginTopMm = MarginTopMm,
+            Columns = Math.Max(1, Columns),
+            Rows = Math.Max(1, Rows),
+            CodeType = CodeType,
+            ShowName = ShowName,
+            ShowPrice = ShowPrice,
+            ShowSku = ShowSku,
+            FontSizePt = FontSizePt,
+            NameXmm = NameXmm,
+            NameYmm = NameYmm,
+            PriceXmm = PriceXmm,
+            PriceYmm = PriceYmm,
+            SkuXmm = SkuXmm,
+            SkuYmm = SkuYmm,
+            BarcodeMarginLeftMm = BarcodeMarginLeftMm,
+            BarcodeMarginTopMm = BarcodeMarginTopMm,
+            BarcodeMarginRightMm = BarcodeMarginRightMm,
+            BarcodeMarginBottomMm = BarcodeMarginBottomMm,
+            BarcodeHeightMm = BarcodeHeightMm,
+            ShowBusinessName = ShowBusinessName,
+            BusinessName = BusinessName,
+            BusinessXmm = BusinessXmm,
+            BusinessYmm = BusinessYmm
+        };
+
+        await _labelPrinter.PrintSampleAsync(
+            s,
+            sampleCode: SampleCode,
+            sampleName: SampleName,
+            samplePrice: SamplePrice,
+            sampleSku: SampleSku,
+            showBusinessName: ShowBusinessName,
+            businessName: BusinessName
+        );
     }
+
+
 
     private async void RefreshPreviewDebounced()
     {

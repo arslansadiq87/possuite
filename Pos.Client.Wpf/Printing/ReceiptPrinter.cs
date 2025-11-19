@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Pos.Client.Wpf.Models;
+using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
 using Pos.Domain.Models.Settings;
 using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // CartLine
@@ -153,5 +154,51 @@ namespace Pos.Client.Wpf.Printing
             RawPrinterHelper.SendBytesToPrinter(printerName ?? DefaultPrinterName, bytes);
             return Task.CompletedTask;
         }
+
+        public static Task PrintAsync(
+    ReceiptDocType docType,
+    ReceiptTemplate tpl,
+    Sale? sale = null,
+    List<CartLine>? cart = null,
+    TillSession? till = null,
+    Voucher? voucher = null,
+    ZReportModel? z = null,
+    string? storeNameOverride = null,
+    string? cashierName = null,
+    string? salesmanName = null)
+        {
+            // Choose builder based on docType
+            byte[] bytes = docType switch
+            {
+                ReceiptDocType.Sale => EscPosReceiptBuilder.Build(
+                    sale!, cart!, till,
+                    storeName: storeNameOverride ?? (tpl.OutletDisplayName ?? DefaultStoreName),
+                    cashierName: cashierName,
+                    salesmanName: salesmanName,
+                    eReceiptBaseUrl: null
+                ),
+
+                // BEFORE (causing CS7036)
+                // ReceiptDocType.SaleReturn => SaleReturnReceiptBuilder.Build(/* same pattern */),
+
+                // AFTER: reuse sale builder for now
+                ReceiptDocType.SaleReturn => EscPosReceiptBuilder.Build(
+                    sale!, cart!, till,
+                    storeName: storeNameOverride ?? (tpl.OutletDisplayName ?? DefaultStoreName),
+                    cashierName: cashierName,
+                    salesmanName: salesmanName,
+                    eReceiptBaseUrl: null
+                ),
+
+                ReceiptDocType.Voucher => VoucherReceiptBuilder.Build(voucher!, tpl),
+                ReceiptDocType.ZReport => ZReportReceiptBuilder.Build(z!, tpl),
+                _ => throw new NotSupportedException(docType.ToString())
+            };
+
+
+            RawPrinterHelper.SendBytesToPrinter(tpl.PrinterName ?? DefaultPrinterName, bytes);
+            return Task.CompletedTask;
+        }
+
     }
 }

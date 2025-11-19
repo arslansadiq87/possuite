@@ -55,11 +55,15 @@
                             <!-- Fix: Ensure the InvoiceSettingsPage is properly defined and accessible -->
                             <views:InvoiceSettingsPage/>
                         </Fluent:BackstageTabItem>
-						<Fluent:BackstageTabItem Header="Barcode Labels">
+                        
+                        <Fluent:BackstageTabItem Header="Barcode Labels">
 							<views:BarcodeLabelSettingsPage/>
 						</Fluent:BackstageTabItem>
                         <Fluent:BackstageTabItem Header="Preferences" x:Name="BackstagePreferencesTab">
                             <ContentPresenter/>
+                        </Fluent:BackstageTabItem>
+                        <Fluent:BackstageTabItem Header="Receipt Builder">
+                            <views:ReceiptBuilderPage/>
                         </Fluent:BackstageTabItem>
                         <Fluent:BackstageTabItem Header="Security">
                             <views:SecurityPage/>

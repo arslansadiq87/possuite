@@ -165,6 +165,10 @@
                     <Border BorderBrush="#DDD" BorderThickness="1" Padding="8" Background="White" HorizontalAlignment="Left">
                         <!-- Preview Surface -->
                         <Grid>
+                            <Grid.LayoutTransform>
+                                <!-- 2x zoom from VM; defaults to 2.0 -->
+                                <ScaleTransform ScaleX="{Binding PreviewZoom}" ScaleY="{Binding PreviewZoom}" />
+                            </Grid.LayoutTransform>
                             <!-- The rendered label image -->
                             <Image x:Name="PreviewImage"
                                Source="{Binding PreviewImage}"
@@ -291,6 +295,149 @@
                Opacity=".7" Margin="0,6,0,0"/>
                 </StackPanel>
             </GroupBox>
+
+            <Expander Header="Printer Tools (TSC)" Margin="0,8,0,0" IsExpanded="False">
+                <StackPanel Margin="8,6,8,8" Orientation="Vertical" >
+
+                    <!-- MEDIA -->
+                    <GroupBox Header="Media / Setup (applies on printer)" Margin="0,0,0,8">
+                        <Grid Margin="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Width (mm):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Width="100" Margin="8,0,0,0"
+                   Text="{Binding TscMediaWidthMm, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Height (mm):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="0" Grid.Column="3" Width="100" Margin="8,0,0,0"
+                   Text="{Binding TscMediaHeightMm, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Gap (mm):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Width="100" Margin="8,0,0,0"
+                   Text="{Binding TscGapMm, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Gap Offset (mm):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="1" Grid.Column="3" Width="100" Margin="8,0,0,0"
+                   Text="{Binding TscGapOffsetMm, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Speed (1–5):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" Width="100" Margin="8,0,0,0"
+                   Text="{Binding TscSpeed, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="Density (0–15):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="2" Grid.Column="3" Width="100" Margin="8,0,0,0"
+                   Text="{Binding TscDensity, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Direction (0/1):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="3" Grid.Column="1" Width="100" Margin="8,0,0,0"
+                   Text="{Binding TscDirection, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <CheckBox  Grid.Row="3" Grid.Column="2" Content="Tear" IsChecked="{Binding TscTear}" VerticalAlignment="Center"/>
+                            <CheckBox  Grid.Row="3" Grid.Column="3" Content="Peel" IsChecked="{Binding TscPeel}" VerticalAlignment="Center"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Codepage:" VerticalAlignment="Center"/>
+                            <ComboBox  Grid.Row="4" Grid.Column="1" Width="120" Margin="8,0,0,0"
+                   SelectedItem="{Binding TscCodepage}">
+                                <ComboBoxItem Content="437"/>
+                                <ComboBoxItem Content="850"/>
+                                <ComboBoxItem Content="852"/>
+                                <ComboBoxItem Content="1252"/>
+                            </ComboBox>
+
+                            <Button Grid.Row="4" Grid.Column="3" Content="Apply to Printer"
+                HorizontalAlignment="Right" Width="160"
+                Command="{Binding TscApplyMediaCommand}"/>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- MOTION -->
+                    <GroupBox Header="Motion" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" Margin="8">
+                            <TextBlock Text="Nudge (mm):" VerticalAlignment="Center"/>
+                            <TextBox Width="60" Margin="8,0,12,0" Text="{Binding NudgeMm, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.0}}"/>
+                            <Button Content="⬆ Forward"  Width="110" Margin="0,0,8,0" Command="{Binding TscFeedMmCommand}"/>
+                            <Button Content="⬇ Backward" Width="110" Margin="0,0,8,0" Command="{Binding TscBackfeedMmCommand}"/>
+                            <Button Content="Next Label" Width="110" Margin="0,0,8,0" Command="{Binding TscNextLabelCommand}"/>
+                            <Button Content="Home" Width="90" Margin="0,0,8,0" Command="{Binding TscHomeCommand}"/>
+                            <Button Content="Auto Detect" Width="120" Command="{Binding TscAutodetectCommand}"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- SOUND -->
+                    <GroupBox Header="Sound" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" Margin="8">
+                            <TextBlock Text="Times:" VerticalAlignment="Center"/>
+                            <TextBox Width="50" Margin="8,0,12,0" Text="{Binding TscBeepTimes, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="Duration (ms):" VerticalAlignment="Center"/>
+                            <TextBox Width="60" Margin="8,0,12,0" Text="{Binding TscBeepMs, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Content="Beep" Width="90" Command="{Binding TscBeepCommand}"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <!-- QUICK LABEL -->
+                    <GroupBox Header="Quick Label (TSPL direct)" Margin="0,0,0,8">
+                        <Grid Margin="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Text:" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Margin="8,0,0,0"
+                   Text="{Binding QuickText, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Barcode Type:" VerticalAlignment="Center"/>
+                            <ComboBox  Grid.Row="0" Grid.Column="3" Width="140" Margin="8,0,0,0"
+                   ItemsSource="{Binding QuickBarcodeTypes}"
+                   SelectedItem="{Binding QuickBarcodeType}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Barcode Data:" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Margin="8,0,0,0"
+                   Text="{Binding QuickBarcodeData, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Height (mm):" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="1" Grid.Column="3" Width="100" Margin="8,0,0,0"
+                   Text="{Binding QuickBarcodeHeightMm, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Copies:" VerticalAlignment="Center"/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" Width="80" Margin="8,0,0,0"
+                   Text="{Binding QuickCopies, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <Button Grid.Row="2" Grid.Column="3" Content="Print Quick Label"
+                HorizontalAlignment="Right" Width="160"
+                Command="{Binding TscQuickLabelCommand}"/>
+                        </Grid>
+                    </GroupBox>
+
+                    <!-- ADVANCED -->
+                    <GroupBox Header="Advanced (experts)" Margin="0,0,0,8">
+                        <StackPanel Margin="8">
+                            <TextBlock Text="Use Apply to Printer to push SIZE/GAP/SPEED/DENSITY/DIRECTION/TEAR/PEEL/CODEPAGE to the device. Quick Label uses TSPL directly." Opacity=".7"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                </StackPanel>
+            </Expander>
+
 
             <!-- Actions -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">

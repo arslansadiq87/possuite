@@ -173,7 +173,7 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>();
             sc.AddTransient<InvoiceSettingsViewModel>();
-            sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
+            //sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
             sc.AddScoped<IPurchaseCenterReadService, PurchaseCenterReadService>();
             sc.AddScoped<IPurchasesServiceFactory, PurchasesServiceFactory>();
             
@@ -185,6 +185,12 @@ namespace Pos.Client.Wpf
             sc.AddScoped<ISalesService, SalesService>();
             sc.AddScoped<IInvoiceService, InvoiceService>();
             //Manged services
+            sc.AddScoped<IReceiptTemplateService, ReceiptTemplateService>();
+            sc.AddTransient<ReceiptBuilderViewModel>();
+            sc.AddSingleton<ILabelPrintService, Pos.Client.Wpf.Printing.LabelPrintService>();
+            sc.AddSingleton<Pos.Client.Wpf.Printing.IRawPrinterService, Pos.Client.Wpf.Printing.RawPrinterService>();
+            sc.AddSingleton<Pos.Client.Wpf.Printing.ITscCommandService, Pos.Client.Wpf.Printing.TscCommandService>();
+
             sc.AddScoped<IPurchaseReturnsService, PurchaseReturnsService>();
             sc.AddScoped<IProductMediaService, ProductMediaService>();
             sc.AddScoped<IPartyPostingService, PartyPostingService>();

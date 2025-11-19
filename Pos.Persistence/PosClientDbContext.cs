@@ -68,7 +68,8 @@ namespace Pos.Persistence
         public DbSet<OtherAccount> OtherAccounts { get; set; } = null!;
         public DbSet<ProductImage> ProductImages => Set<ProductImage>();
         public DbSet<ItemImage> ItemImages => Set<ItemImage>();
-            
+        public DbSet<ReceiptTemplate> ReceiptTemplates => Set<ReceiptTemplate>();
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -692,6 +693,52 @@ namespace Pos.Persistence
                 e.HasIndex(x => x.PartyId);
                 e.Property(x => x.DocSubType).HasConversion<short>();
             });
+
+            b.Entity<ReceiptTemplate>(e =>
+            {
+                e.ToTable("ReceiptTemplates");
+
+                e.HasKey(x => x.Id);
+
+                // Foreign key (optional – only if you want FK to Outlets)
+                e.HasOne(x => x.Outlet)
+                 .WithMany()                // or .WithMany(o => o.ReceiptTemplates) if you add a nav
+                 .HasForeignKey(x => x.OutletId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                // Basic property sizing
+                e.Property(x => x.PrinterName).HasMaxLength(128);
+                e.Property(x => x.OutletDisplayName).HasMaxLength(128);
+                e.Property(x => x.AddressLine1).HasMaxLength(256);
+                e.Property(x => x.AddressLine2).HasMaxLength(256);
+                e.Property(x => x.Phone).HasMaxLength(64);
+                e.Property(x => x.LogoAlignment).HasMaxLength(16);
+                e.Property(x => x.HeaderText).HasMaxLength(1024);
+                e.Property(x => x.FooterText).HasMaxLength(1024);
+
+                // Bytes (logo) – no special config needed; EF maps byte[] to BLOB/bytea
+                // e.Property(x => x.LogoPng);
+
+                // Enum mapping (ReceiptDocType) – EF will map as int by default; that’s fine.
+                // e.Property(x => x.DocType).HasConversion<int>();
+
+                // Helpful index for lookups by outlet + doc type
+                e.HasIndex(x => new { x.DocType, x.OutletId });
+
+                // NOTE on uniqueness:
+                // We want at most ONE template per (OutletId, DocType) and also
+                // at most ONE *global* (OutletId = null) per DocType.
+                //
+                // Cross-DB portable way: enforce in service before Save (see below).
+                // If you're on PostgreSQL, you can also add partial unique indexes via migration:
+                //   CREATE UNIQUE INDEX ux_receipts_global ON "ReceiptTemplates"("DocType")
+                //   WHERE "OutletId" IS NULL;
+                //   CREATE UNIQUE INDEX ux_receipts_outlet ON "ReceiptTemplates"("DocType","OutletId")
+                //   WHERE "OutletId" IS NOT NULL;
+            });
+
+
+
             //var provider = Database.ProviderName ?? string.Empty;
             foreach (var et in b.Model.GetEntityTypes())
             {
