@@ -27,5 +27,10 @@ namespace Pos.Domain.Entities
         public byte[]? LogoPng { get; set; }
 
         public Outlet? Outlet { get; set; }
+
+        // NEW — Currency config
+        public bool CurrencyEnabled { get; set; } = false;
+        public string? CurrencyCode { get; set; }   // e.g., "PKR", "USD"
+        public string? CurrencySymbol { get; set; } // e.g., "Rs", "$"
     }
 }

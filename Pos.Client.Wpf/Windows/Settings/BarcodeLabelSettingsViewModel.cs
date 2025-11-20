@@ -5,8 +5,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Pos.Domain.Entities;
 using System.Threading;
-//using Pos.Persistence.Services;
 using Pos.Domain.Services;
+using Pos.Domain.Settings;               // InvoiceSettingsLocal
+using System.Windows;
 
 namespace Pos.Client.Wpf.Windows.Settings;
 
@@ -18,6 +19,9 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     private readonly IBarcodeLabelSettingsService _svc;
     private readonly ILabelPrintService? _labelPrinter;
     private readonly Pos.Client.Wpf.Printing.ITscCommandService? _tsc;
+    private readonly IInvoiceSettingsLocalService _invoiceLocal;
+    private readonly ITerminalContext _ctx;
+    private readonly IIdentitySettingsService _identity;
 
     // Preview zoom factor (applies to the whole preview surface via LayoutTransform)
     [ObservableProperty] private double previewZoom = 2.0;
@@ -69,6 +73,10 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     [ObservableProperty] private double businessXmm = 4.0;
     [ObservableProperty] private double businessYmm = 6.0;
 
+    
+    [ObservableProperty] private double barcodeZoomPct = 100.0; // 30..200 UI range recommended
+    partial void OnBarcodeZoomPctChanged(double value) => RefreshPreviewDebounced();
+    public double BarcodeZoomScale => Math.Clamp(BarcodeZoomPct / 100.0, 0.3, 2.0);
 
     public int[] DpiOptions { get; } = new[] { 203, 300 };
     public string[] CodeTypes { get; } = new[] { "Code128", "EAN13", "EAN8", "UPCA" };
@@ -145,6 +153,11 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     partial void OnBusinessXmmChanged(double value) => RefreshPreviewDebounced();
     partial void OnBusinessYmmChanged(double value) => RefreshPreviewDebounced();
 
+    // Rebuild preview when any alignment changes
+    partial void OnNameAlignChanged(string value) => RefreshPreviewDebounced();
+    partial void OnPriceAlignChanged(string value) => RefreshPreviewDebounced();
+    partial void OnSkuAlignChanged(string value) => RefreshPreviewDebounced();
+    partial void OnBusinessAlignChanged(string value) => RefreshPreviewDebounced();
 
 
     [ObservableProperty] private ImageSource? previewImage;
@@ -182,11 +195,17 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
 
     // ctor param: add ITscCommandService tsc = null
     public BarcodeLabelSettingsViewModel(
+        IInvoiceSettingsLocalService invoiceLocal,
+        ITerminalContext ctx,
+        IIdentitySettingsService identity,
         ILookupService lookup,
         IBarcodeLabelSettingsService svc,
         ILabelPrintService? labelPrinter = null,
         Pos.Client.Wpf.Printing.ITscCommandService? tsc = null)
     {
+        _invoiceLocal = invoiceLocal;
+        _ctx = ctx;
+        _identity = identity;
         _lookup = lookup;
         _svc = svc;
         _labelPrinter = labelPrinter;
@@ -345,6 +364,15 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
 
     private async Task InitAsync()
     {
+        var local = await _invoiceLocal.GetForCounterWithFallbackAsync(_ctx.CounterId);
+        SelectedLabelPrinter = local.LabelPrinterName ?? "(not selected in Invoice Settings)";
+
+        OnPropertyChanged(nameof(IsTscSelected));
+
+        // 2) Business name from Identity settings (respect scope)
+        // Prefer outlet-specific; fallback to global
+        var id = await _identity.GetAsync(_ctx.CounterId);
+        BusinessName = id?.OutletDisplayName ?? string.Empty;
         var outlets = await _lookup.GetOutletsAsync();
         Outlets.Clear();
         foreach (var o in outlets)
@@ -352,6 +380,30 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
 
         await LoadAsync();
     }
+
+    // -------- Read-only selected printer label ----------
+    [ObservableProperty] private string? selectedLabelPrinter;
+    public bool IsTscSelected =>
+        !string.IsNullOrWhiteSpace(SelectedLabelPrinter) &&
+        SelectedLabelPrinter!.IndexOf("TSC", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    // -------- Business name (content comes from Identity), checkbox decides visibility ----------
+    //[ObservableProperty] private bool showBusinessName;
+    //[ObservableProperty] private string? businessName;
+
+    // -------- Alignment options ----------
+    public IReadOnlyList<string> AlignOptions { get; } = new[] { "Left", "Center", "Right" };
+
+    [ObservableProperty] private string nameAlign = "Left";
+    [ObservableProperty] private string priceAlign = "Left";
+    [ObservableProperty] private string skuAlign = "Left";
+    [ObservableProperty] private string businessAlign = "Left";
+
+    // DIP proxies already exist, keep them:
+    // public double NameXDip { get => MmToDip(NameXmm); set => NameXmm = DipToMm(value); } etc.
+
+    // When building preview, pass the new align values (wire below in the calling code).
+
 
     partial void OnIsGlobalChanged(bool value) => _ = LoadAsync();
     partial void OnSelectedOutletChanged(Outlet? value) { if (!IsGlobal) _ = LoadAsync(); }
@@ -392,9 +444,13 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
         BarcodeHeightMm = _loaded.BarcodeHeightMm;
 
         ShowBusinessName = _loaded.ShowBusinessName;
-        BusinessName = string.IsNullOrWhiteSpace(_loaded.BusinessName) ? "My Business" : _loaded.BusinessName;
+        var id = await _identity.GetAsync(_ctx.OutletId); // outlet-scoped if available
+        BusinessName = id?.OutletDisplayName
+                       ?? "My Business";
         BusinessXmm = _loaded.BusinessXmm;
         BusinessYmm = _loaded.BusinessYmm;
+        BarcodeZoomPct = _loaded.BarcodeZoomPct ?? 100.0;
+
 
 
         RefreshPreviewDebounced();
@@ -441,10 +497,14 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
         s.BusinessName = BusinessName;
         s.BusinessXmm = BusinessXmm;
         s.BusinessYmm = BusinessYmm;
+        s.BarcodeZoomPct = BarcodeZoomPct;
 
 
         await _svc.SaveAsync(s);
         _loaded = s;
+
+        MessageBox.Show("Label settings saved.",
+            "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     [RelayCommand]
@@ -536,8 +596,16 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
                     BarcodeMarginRightMm, BarcodeMarginBottomMm,
                     BarcodeHeightMm,
                     // NEW business line
-                    ShowBusinessName, BusinessName, BusinessXmm, BusinessYmm
+                    ShowBusinessName, BusinessName, BusinessXmm, BusinessYmm,
+                    // NEW: alignments
+                    nameAlign: NameAlign,
+                    priceAlign: PriceAlign,
+                    skuAlign: SkuAlign,
+                    businessAlign: BusinessAlign,
+                    barcodeZoom: BarcodeZoomScale   // <--- NEW
+
                 ));
+
 
 
             PreviewImage = img;

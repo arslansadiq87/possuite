@@ -46,6 +46,10 @@ public partial class IdentitySettingsViewModel : ObservableObject
 
     // Dirty state
     [ObservableProperty] private bool hasChanges;
+    // Currency
+    [ObservableProperty] private bool currencyEnabled;
+    [ObservableProperty] private CurrencyOption? selectedCurrency;
+    public ObservableCollection<CurrencyOption> Currencies { get; } = new();
 
     public bool CanSave => CanEdit && HasChanges;
 
@@ -59,6 +63,12 @@ public partial class IdentitySettingsViewModel : ObservableObject
         _lookup = lookup;
         _ = InitAsync();
     }
+
+    public sealed record CurrencyOption(string Code, string Symbol, string Name)
+    {
+        public string Display => $"{Name} ({Code}) {Symbol}";
+    }
+
 
     private async Task InitAsync()
     {
@@ -84,7 +94,21 @@ public partial class IdentitySettingsViewModel : ObservableObject
 
         await LoadAsync();
         HasChanges = false;      // freshly loaded → clean
+        Currencies.Clear();
+        var list = new[]
+        {
+            new CurrencyOption("PKR", "Rs", "Pakistani Rupee"),
+            new CurrencyOption("USD", "$",  "US Dollar"),
+            new CurrencyOption("EUR", "€",  "Euro"),
+            new CurrencyOption("GBP", "£",  "British Pound"),
+            new CurrencyOption("AED", "د.إ", "UAE Dirham"),
+            new CurrencyOption("SAR", "﷼",  "Saudi Riyal"),
+            new CurrencyOption("INR", "₹",  "Indian Rupee"),
+            new CurrencyOption("CNY", "¥",  "Chinese Yuan"),
+        };
+                foreach (var c in list) Currencies.Add(c);
     }
+
 
     // ---------------- Scope change hooks ----------------
 
@@ -115,6 +139,8 @@ public partial class IdentitySettingsViewModel : ObservableObject
     }
 
     // ---------------- Dirty tracking hooks ----------------
+    partial void OnCurrencyEnabledChanged(bool value) => MarkDirty();
+    partial void OnSelectedCurrencyChanged(CurrencyOption? value) => MarkDirty();
 
     partial void OnOutletDisplayNameChanged(string? value) => MarkDirty();
     partial void OnAddressLine1Changed(string? value) => MarkDirty();
@@ -157,6 +183,10 @@ public partial class IdentitySettingsViewModel : ObservableObject
         FbrPosId = s.FbrPosId;
 
         LogoPng = s.LogoPng;
+        // NEW currency
+        CurrencyEnabled = s.CurrencyEnabled;
+        SelectedCurrency = Currencies.FirstOrDefault(x => x.Code == s.CurrencyCode)
+                           ?? Currencies.FirstOrDefault(); // fallback
 
         HasChanges = false;   // just loaded from DB
     }
@@ -178,6 +208,10 @@ public partial class IdentitySettingsViewModel : ObservableObject
         _loaded.FbrPosId = FbrPosId;
 
         _loaded.LogoPng = LogoPng;
+        // NEW currency
+        _loaded.CurrencyEnabled = CurrencyEnabled;
+        _loaded.CurrencyCode = SelectedCurrency?.Code;
+        _loaded.CurrencySymbol = SelectedCurrency?.Symbol;
         _loaded.UpdatedAtUtc = DateTime.UtcNow;
 
         await _svc.SaveAsync(_loaded);

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251120200101_invioicesettings8")]
+    partial class invioicesettings8
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
@@ -797,17 +800,6 @@ namespace Pos.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CurrencyCode")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("CurrencyEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("CurrencySymbol")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("EnableFbr")

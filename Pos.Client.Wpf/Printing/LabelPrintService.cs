@@ -22,9 +22,9 @@ namespace Pos.Client.Wpf.Printing
                 s,
                 sampleCode: s.CodeType?.ToUpperInvariant() switch
                 {
-                    "EAN8" or "EAN-8" => "5512345",
-                    "EAN13" or "EAN-13" => "590123412345",
-                    "UPCA" or "UPC-A" => "04210000526",
+                    "EAN8" or "EAN-8" => "5512345",        // 7 digits -> preview adds check
+                    "EAN13" or "EAN-13" => "590123412345",   // 12 digits -> preview adds check
+                    "UPCA" or "UPC-A" => "04210000526",    // 11 digits -> preview adds check
                     _ => "123456789012"
                 },
                 sampleName: "Sample Item",
@@ -37,16 +37,16 @@ namespace Pos.Client.Wpf.Printing
 
         // 2) Extended version (interface #2)
         public Task PrintSampleAsync(
-    BarcodeLabelSettings s,
-    string sampleCode,
-    string sampleName,
-    string samplePrice,
-    string sampleSku,
-    bool showBusinessName,
-    string businessName,
-    CancellationToken ct = default)
+            BarcodeLabelSettings s,
+            string sampleCode,
+            string sampleName,
+            string samplePrice,
+            string sampleSku,
+            bool showBusinessName,
+            string businessName,
+            CancellationToken ct = default)
         {
-            // 1) Build exact preview image (unchanged)
+            // Build preview image (exactly what we will print)
             var img = BarcodePreviewBuilder.Build(
                 labelWidthMm: s.LabelWidthMm,
                 labelHeightMm: s.LabelHeightMm,
@@ -62,12 +62,9 @@ namespace Pos.Client.Wpf.Printing
                 priceText: samplePrice,
                 skuText: sampleSku,
                 fontSizePt: s.FontSizePt,
-                nameXmm: s.NameXmm,
-                nameYmm: s.NameYmm,
-                priceXmm: s.PriceXmm,
-                priceYmm: s.PriceYmm,
-                skuXmm: s.SkuXmm,
-                skuYmm: s.SkuYmm,
+                nameXmm: s.NameXmm, nameYmm: s.NameYmm,
+                priceXmm: s.PriceXmm, priceYmm: s.PriceYmm,
+                skuXmm: s.SkuXmm, skuYmm: s.SkuYmm,
                 barcodeMarginLeftMm: s.BarcodeMarginLeftMm,
                 barcodeMarginTopMm: s.BarcodeMarginTopMm,
                 barcodeMarginRightMm: s.BarcodeMarginRightMm,
@@ -76,16 +73,21 @@ namespace Pos.Client.Wpf.Printing
                 showBusinessName: showBusinessName,
                 businessName: businessName,
                 businessXmm: s.BusinessXmm,
-                businessYmm: s.BusinessYmm
+                businessYmm: s.BusinessYmm,
+                // Alignments – use defaults for now (no persistence required)
+                nameAlign: "Left",
+                priceAlign: "Left",
+                skuAlign: "Left",
+                businessAlign: "Left"
             );
 
-            // 2) Snap page size to device dots to avoid driver rounding
-            int wPx = (int)Math.Round(s.LabelWidthMm * s.Dpi / 25.4);   // exact device dots
+            // Snap page size to device dots to avoid driver rounding
+            int wPx = (int)Math.Round(s.LabelWidthMm * s.Dpi / 25.4);
             int hPx = (int)Math.Round(s.LabelHeightMm * s.Dpi / 25.4);
-            double pageWdip = wPx * (96.0 / s.Dpi);  // WPF page size in DIPs
+            double pageWdip = wPx * (96.0 / s.Dpi);
             double pageHdip = hPx * (96.0 / s.Dpi);
 
-            // 3) Build FixedPage at exact snapped DIP size (no scaling)
+            // FixedPage sized to exact DIPs (no scaling)
             var page = new FixedPage { Width = pageWdip, Height = pageHdip, Background = Brushes.White };
             var imgCtrl = new Image
             {
@@ -109,15 +111,15 @@ namespace Pos.Client.Wpf.Printing
             doc.DocumentPaginator.PageSize = new Size(pageWdip, pageHdip);
             doc.Pages.Add(pc);
 
-            // 4) Create PrintDialog & select queue
+            // Print dialog & queue
             var pd = new PrintDialog();
             if (!string.IsNullOrWhiteSpace(s.PrinterName))
             {
                 try { pd.PrintQueue = new LocalPrintServer().GetPrintQueue(s.PrinterName); }
-                catch { /* fallback to default */ }
+                catch { /* fallback to default printer */ }
             }
 
-            // 5) Build a ticket that matches device media as closely as possible
+            // Ticket close to device media
             var baseTicket = pd.PrintQueue?.UserPrintTicket ?? pd.PrintTicket ?? new PrintTicket();
             var ticket = new PrintTicket
             {
@@ -125,38 +127,32 @@ namespace Pos.Client.Wpf.Printing
                 PageOrientation = PageOrientation.Portrait
             };
 
-            // Try to find a matching PageMediaSize from capabilities (width/height in DIPs)
+            // Try choose exact media size (in DIPs)
             var caps = pd.PrintQueue?.GetPrintCapabilities();
             PageMediaSize? chosen = null;
             if (caps?.PageMediaSizeCapability != null)
             {
-                const double tolDip = 2.0; // ~0.5 mm tolerance
+                const double tolDip = 2.0; // ~0.5 mm
                 foreach (var ms in caps.PageMediaSizeCapability)
                 {
-                    if (ms.Width.HasValue && ms.Height.HasValue)
+                    if (ms.Width.HasValue && ms.Height.HasValue &&
+                        Math.Abs(ms.Width.Value - pageWdip) <= tolDip &&
+                        Math.Abs(ms.Height.Value - pageHdip) <= tolDip)
                     {
-                        if (Math.Abs(ms.Width.Value - pageWdip) <= tolDip &&
-                            Math.Abs(ms.Height.Value - pageHdip) <= tolDip)
-                        {
-                            chosen = ms;
-                            break;
-                        }
+                        chosen = ms; break;
                     }
                 }
             }
 
             ticket.PageMediaSize = chosen ?? new PageMediaSize(PageMediaSizeName.Unknown, pageWdip, pageHdip);
-            // Some drivers support MediaType=Label – set if available
             if (caps?.PageMediaTypeCapability?.Contains(PageMediaType.Label) == true)
                 ticket.PageMediaType = PageMediaType.Label;
-            // 6) Merge & validate (critical for thermal drivers)
+
             var result = pd.PrintQueue?.MergeAndValidatePrintTicket(baseTicket, ticket);
-            var validated = result?.ValidatedPrintTicket ?? ticket;
-            pd.PrintTicket = validated;
-            // 7) Print
+            pd.PrintTicket = result?.ValidatedPrintTicket ?? ticket;
+
             pd.PrintDocument(doc.DocumentPaginator, "POS Label – Sample");
             return Task.CompletedTask;
         }
-
     }
 }

@@ -566,6 +566,8 @@ namespace Pos.Persistence
                 e.HasIndex(x => x.OutletId);
                 e.Property(x => x.PrinterName).HasMaxLength(200);
                 e.Property(x => x.CodeType).HasMaxLength(20);
+                e.Property(p => p.BarcodeZoomPct)
+                    .HasDefaultValue(100.0);
             });
             //b.Entity<UserPreference>()
             //.HasIndex(p => p.MachineName)
@@ -730,6 +732,8 @@ namespace Pos.Persistence
 
                 // One row per outlet (or null = GLOBAL)
                 e.HasIndex(x => x.OutletId).IsUnique();
+                e.Property(x => x.CurrencyEnabled)
+                                .HasDefaultValue(false);
             });
 
             b.Entity<InvoiceSettingsLocal>(e =>

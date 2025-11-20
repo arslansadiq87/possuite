@@ -200,8 +200,7 @@
                                   ItemsSource="{Binding Printers}"
                                   SelectedItem="{Binding PrinterName}"
                                   VerticalContentAlignment="Center"/>
-                        <Button Grid.Column="2" Content="Use Windows default" Height="26" Margin="8,0,0,0"
-                                Command="{Binding UseWindowsDefaultPrinterCommand}"/>
+                        
                     </Grid>
 
                     <Grid>

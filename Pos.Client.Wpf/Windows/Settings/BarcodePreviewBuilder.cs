@@ -7,66 +7,70 @@ using ZXing;
 
 namespace Pos.Client.Wpf.Windows.Settings
 {
+    /// <summary>
+    /// Renders a label preview (WPF ImageSource) with:
+    /// - An absolutely-positioned barcode block (by margins & optional fixed height).
+    /// - Free-positioned text fields (Name, Price, SKU, Business) in mm from label TL.
+    /// - Per-field alignment (Left | Center | Right) that keeps content centered/right-aligned
+    ///   inside the remaining width to the label’s right edge.
+    ///
+    /// Units:
+    ///   Input coordinates are in millimeters; WPF draws in DIPs (96 per inch).
+    ///   Barcode bitmap is sized in device pixels to match the target DIP rect @ DPI.
+    /// </summary>
     public static class BarcodePreviewBuilder
     {
-        // mm → px
+        // mm → px helper (not strictly required in this file but kept for parity)
         private static double PxPerMm(int dpi) => dpi / 25.4;
 
         /// <summary>
-        /// Renders a label preview with an absolutely-positioned barcode block and free-positioned texts.
-        /// All coordinates for texts are in millimeters from the label's top-left.
-        /// The barcode block is defined by margins (mm) and an optional fixed height (mm).
+        /// Pixels per module heuristic for 1D symbologies (kept for future tuning).
         /// </summary>
-        /// 
         private static int GetPixelsPerModule(int dpi)
         {
-            // 203dpi => 3px (~0.375 mm), 300dpi => 4px (~0.339 mm)
             if (dpi <= 0) return 3;
             return dpi switch
             {
-                203 => 3,
-                300 => 4,
-                _ => Math.Max(3, (int)Math.Round(dpi / 25.4 / 3.03)) // ~0.33 mm -> dpi/76.77
+                203 => 3, // ~0.375 mm/module
+                300 => 4, // ~0.339 mm/module
+                _ => Math.Max(3, (int)Math.Round(dpi / 25.4 / 3.03)) // ~0.33 mm/module
             };
         }
 
-        // Returns (barModules, quietLeftModules, quietRightModules)
-        private static (int bars, int ql, int qr) GetSymbologyModuleSpec(string codeType, string payload, out int code128SymbolChars)
+        /// <summary>
+        /// Returns (barModules, quietLeftModules, quietRightModules). Useful if you derive expected widths.
+        /// For Code128, approximate symbol chars are computed in out param.
+        /// </summary>
+        private static (int bars, int ql, int qr) GetSymbologyModuleSpec(
+            string codeType, string payload, out int code128SymbolChars)
         {
             code128SymbolChars = 0;
             switch ((codeType ?? "").ToUpperInvariant())
             {
                 case "EAN13":
                 case "EAN-13":
-                    // 95 modules bars; quiet 11X each side
+                    // 95 modules; quiet zones 11X each side
                     return (95, 11, 11);
 
                 case "UPCA":
                 case "UPC-A":
-                    // 95 modules bars; quiet 9X each side
+                    // 95 modules; quiet zones 9X each side
                     return (95, 9, 9);
 
                 case "EAN8":
                 case "EAN-8":
-                    // 67 modules bars; quiet 7X each side
+                    // 67 modules; quiet zones 7X each side
                     return (67, 7, 7);
 
                 case "CODE128":
                 case "CODE 128":
-                    // Code128 width depends on symbol characters.
-                    // Each symbol char consumes 11 modules. Start=11, checksum=11, stop+term=15.
-                    // For a decent estimate that matches ZXing’s encoding, we rely on the encoded content length:
-                    // If the payload is numeric and even-length, we *likely* are in Code C (half digits).
+                    // Each symbol consumes 11 modules. Start=11, checksum=11, stop+term=15.
                     var digitsOnly = new string((payload ?? "").Where(char.IsDigit).ToArray());
                     if (!string.IsNullOrEmpty(payload) && payload.Length == digitsOnly.Length && payload.Length % 2 == 0)
-                    {
-                        code128SymbolChars = payload.Length / 2; // Code C
-                    }
+                        code128SymbolChars = payload.Length / 2; // likely Code C
                     else
-                    {
-                        code128SymbolChars = payload?.Length ?? 0; // rough upper bound (Code B)
-                    }
-                    var bars = 11 + (11 * Math.Max(0, code128SymbolChars)) + 11 /*checksum*/ + 15 /*stop+term*/;
+                        code128SymbolChars = payload?.Length ?? 0; // rough for Code B
+                    var bars = 11 + (11 * Math.Max(0, code128SymbolChars)) + 11 + 15;
                     return (bars, 10, 10);
 
                 default:
@@ -74,80 +78,96 @@ namespace Pos.Client.Wpf.Windows.Settings
             }
         }
 
+        /// <summary>
+        /// Build a WPF ImageSource preview for the given label + content.
+        /// </summary>
         public static ImageSource Build(
-            // geometry (mm / dpi)
+            // Label geometry (mm / dpi)
             int labelWidthMm, int labelHeightMm,
-            int marginLeftMm, int marginTopMm, // kept for compatibility (not used for barcode layout anymore)
+            int marginLeftMm, int marginTopMm, // kept for compatibility (not used by barcode layout)
             int dpi,
-            // barcode
+
+            // Barcode
             string codeType, string payload,
-            // text (3 fields)
+
+            // Text fields (content & visibility)
             bool showName, bool showPrice, bool showSku,
             string nameText, string priceText, string skuText,
             int fontSizePt,
             double nameXmm, double nameYmm,
             double priceXmm, double priceYmm,
             double skuXmm, double skuYmm,
-            // NEW: barcode block controls (mm)
+
+            // Barcode block (mm)
             double barcodeMarginLeftMm, double barcodeMarginTopMm,
             double barcodeMarginRightMm, double barcodeMarginBottomMm,
             double barcodeHeightMm,
-            // NEW: business name (content + visibility + position in mm)
-            bool showBusinessName, string businessName, double businessXmm, double businessYmm
+
+            // Business name (content + visibility + position in mm)
+            bool showBusinessName, string businessName, double businessXmm, double businessYmm,
+
+            // Alignments (Left | Center | Right)
+            string nameAlign = "Left",
+            string priceAlign = "Left",
+            string skuAlign = "Left",
+            string businessAlign = "Left",
+
+            // NEW: horizontal zoom for barcode width (1.0 = fill area width)
+            double barcodeZoom = 1.0
         )
         {
-            // ---- Units
-            // WPF draws in DIPs (96 DIPs = 1 inch). Printers/ZXing use device pixels.
-            double dipPerMm = 96.0 / 25.4;   // convert mm → DIP
-            double pxPerDip = dpi / 96.0;    // convert DIP → px
-            double pxPerMm = dpi / 25.4;    // convert mm → px (for ZXing only)
+            // ---- Unit conversions
+            double dipPerMm = 96.0 / 25.4;  // mm → DIP
+            double pxPerDip = dpi / 96.0;   // DIP → px
 
             // ---- Label size (DIP)
             double widthDip = Math.Max(32, labelWidthMm * dipPerMm);
             double heightDip = Math.Max(32, labelHeightMm * dipPerMm);
 
-            // ---- Compute barcode rect from margins/height (all in DIP)
-            // Convert mm → DIP
+            // ---- Compute barcode area from margins/height (all in DIP)
             double leftDip = barcodeMarginLeftMm * dipPerMm;
             double topDip = barcodeMarginTopMm * dipPerMm;
             double rightDip = barcodeMarginRightMm * dipPerMm;
             double bottomDip = barcodeMarginBottomMm * dipPerMm;
 
-            // Width is always from left/right margins
-            double bcWidthDip = Math.Max(2, widthDip - leftDip - rightDip);
-
-            // Height: if explicit height is given (>0), use that; else derive from top/bottom margins
-            double bcHeightDip = (barcodeHeightMm > 0.0)
+            double bcAreaWidthDip = Math.Max(2, widthDip - leftDip - rightDip);
+            double bcAreaHeightDip = (barcodeHeightMm > 0.0)
                 ? Math.Min(barcodeHeightMm * dipPerMm, Math.Max(2, heightDip - topDip - bottomDip))
                 : Math.Max(2, heightDip - topDip - bottomDip);
 
-            // Final barcode rect (clamped to label)
+            // ---- Apply user zoom (keep sensible bounds and center inside area)
+            double z = Math.Clamp(barcodeZoom, 0.3, 2.0); // 30%..200%
+            double bcDrawWidthDip = Math.Max(2, Math.Min(bcAreaWidthDip * z, widthDip));   // never exceed label width
+            double bcDrawHeightDip = bcAreaHeightDip;
+            double bcDrawLeftDip = leftDip + (bcAreaWidthDip - bcDrawWidthDip) / 2.0;      // center horizontally
+            double bcDrawTopDip = topDip;
+
             Rect bcRect = new Rect(
-                x: Math.Clamp(leftDip, 0, Math.Max(0, widthDip - 2)),
-                y: Math.Clamp(topDip, 0, Math.Max(0, heightDip - 2)),
-                width: Math.Max(2, Math.Min(bcWidthDip, widthDip - leftDip)),
-                height: Math.Max(2, Math.Min(bcHeightDip, heightDip - topDip))
+                x: Math.Clamp(bcDrawLeftDip, 0, Math.Max(0, widthDip - 2)),
+                y: Math.Clamp(bcDrawTopDip, 0, Math.Max(0, heightDip - 2)),
+                width: Math.Max(2, Math.Min(bcDrawWidthDip, widthDip - bcDrawLeftDip)),
+                height: Math.Max(2, Math.Min(bcDrawHeightDip, heightDip - bcDrawTopDip))
             );
 
-            // ---- ZXing bitmap size (px) — match barcode rect size
+            // ---- ZXing bitmap size (px) → matches the barcode draw rect size
             int zxW = Math.Max(8, (int)Math.Round(bcRect.Width * pxPerDip));
             int zxH = Math.Max(8, (int)Math.Round(bcRect.Height * pxPerDip));
 
-            // ---- RenderTarget size (px)
+            // ---- Render target size (px)
             int bmpW = Math.Max(32, (int)Math.Round(widthDip * pxPerDip));
             int bmpH = Math.Max(32, (int)Math.Round(heightDip * pxPerDip));
 
             var dv = new DrawingVisual();
             using var dc = dv.RenderOpen();
 
-            // Label background + hairline border (DIP)
+            // Label background + gentle border (DIP)
             var labelRect = new Rect(0, 0, widthDip, heightDip);
             dc.DrawRectangle(Brushes.White, new Pen(Brushes.LightGray, 1), labelRect);
 
-            // Format + payload normalization
+            // Normalize format/payload (incl. EAN-8 support)
             var (format, encoded) = CoerceFormatAndPayload(codeType, payload);
 
-            // ---- Barcode image (pixel) → draw into DIP rect
+            // ---- Draw barcode into its DIP rectangle
             try
             {
                 var writer = new ZXing.BarcodeWriterPixelData
@@ -161,11 +181,11 @@ namespace Pos.Client.Wpf.Windows.Settings
                         PureBarcode = true
                     }
                 };
-                var pix = writer.Write(encoded);
 
+                var pix = writer.Write(encoded);
                 var bmp = BitmapSource.Create(
-                    pix.Width, pix.Height,      // px
-                    dpi, dpi,                   // dpi
+                    pix.Width, pix.Height,   // px
+                    dpi, dpi,                // image dpi
                     PixelFormats.Bgra32, null,
                     pix.Pixels, pix.Width * 4);
 
@@ -173,38 +193,37 @@ namespace Pos.Client.Wpf.Windows.Settings
             }
             catch
             {
-                // draw a visible error block if ZXing fails
+                // Visible error block if ZXing fails
                 var pen = new Pen(Brushes.IndianRed, 2);
                 dc.DrawRectangle(Brushes.White, pen, bcRect);
                 dc.DrawLine(pen, bcRect.TopLeft, bcRect.BottomRight);
                 dc.DrawLine(pen, bcRect.BottomLeft, bcRect.TopRight);
             }
 
-            // ---- Texts at absolute mm positions (independent of barcode)
-            var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+            // ---- Texts (absolute mm → DIP). Max width = to right edge (w/ small padding).
+            var typeface = new Typeface(
+                new FontFamily("Segoe UI"),
+                FontStyles.Normal,
+                FontWeights.Normal,
+                FontStretches.Normal);
 
-            void DrawAtMm(string text, bool visible, double xmm, double ymm)
+            void DrawAtMm(string text, bool visible, double xmm, double ymm, string align)
             {
                 if (!visible || string.IsNullOrWhiteSpace(text)) return;
 
                 double xDip = xmm * dipPerMm;
                 double yDip = ymm * dipPerMm;
 
-                // optional: clamp to label bounds (soft clamp: skip if outside)
-                if (xDip > widthDip - 2 || yDip > heightDip - 2) return;
+                if (xDip > widthDip - 2 || yDip > heightDip - 2) return; // soft clamp
 
-                // max width = to right edge minus 2 dips padding
                 double maxW = Math.Max(0, widthDip - xDip - 2);
-                DrawText(dc, text, typeface, fontSizePt, Brushes.Black, xDip, yDip, maxW);
+                DrawText(dc, text, typeface, fontSizePt, Brushes.Black, xDip, yDip, maxW, align);
             }
 
-            // existing 3 fields
-            DrawAtMm(nameText, showName, nameXmm, nameYmm);
-            DrawAtMm(priceText, showPrice, priceXmm, priceYmm);
-            DrawAtMm(skuText, showSku, skuXmm, skuYmm);
-
-            // NEW: business name
-            DrawAtMm(businessName ?? "", showBusinessName, businessXmm, businessYmm);
+            DrawAtMm(nameText, showName, nameXmm, nameYmm, nameAlign);
+            DrawAtMm(priceText, showPrice, priceXmm, priceYmm, priceAlign);
+            DrawAtMm(skuText, showSku, skuXmm, skuYmm, skuAlign);
+            DrawAtMm(businessName ?? "", showBusinessName, businessXmm, businessYmm, businessAlign);
 
             dc.Close();
 
@@ -214,19 +233,25 @@ namespace Pos.Client.Wpf.Windows.Settings
             return rtb;
         }
 
+        /// <summary>
+        /// Draw formatted text at (x,y) with a max width, using the requested alignment.
+        /// (x,y) is the LEFT of the layout box; alignment applies inside MaxTextWidth.
+        /// </summary>
         private static void DrawText(
             DrawingContext dc, string text, Typeface tf, double fontPt,
-            Brush brush, double x, double y, double maxWidthDip)
+            Brush brush, double x, double y, double maxWidthDip, string align)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
 
-            // WPF fonts are specified in DIP; convert pt → DIP (1 pt = 96/72 DIP)
-            double fontDip = fontPt * (96.0 / 72.0);
-
-            // pixelsPerDip should come from the current display; 1.0 is OK
+            double fontDip = fontPt * (96.0 / 72.0); // pt → DIP
             double pixelsPerDip = 1.0;
             if (Application.Current?.MainWindow != null)
                 pixelsPerDip = VisualTreeHelper.GetDpi(Application.Current.MainWindow).PixelsPerDip;
+
+            var alignment =
+                align?.Equals("Center", StringComparison.OrdinalIgnoreCase) == true ? TextAlignment.Center :
+                align?.Equals("Right", StringComparison.OrdinalIgnoreCase) == true ? TextAlignment.Right :
+                TextAlignment.Left;
 
             var ft = new FormattedText(
                 text,
@@ -239,28 +264,42 @@ namespace Pos.Client.Wpf.Windows.Settings
             {
                 MaxTextWidth = Math.Max(0, maxWidthDip),
                 Trimming = TextTrimming.CharacterEllipsis,
-                TextAlignment = TextAlignment.Left
+                TextAlignment = alignment
             };
 
             dc.DrawText(ft, new Point(x, y));
         }
 
+        /// <summary>
+        /// Coerces the human-readable code type + payload into ZXing format + usable payload.
+        /// Handles:
+        ///  - EAN-13 (pads/trim to 12; ZXing adds check digit)
+        ///  - UPC-A  (pads/trim to 11; ZXing adds check digit)
+        ///  - EAN-8  (accepts 7 (auto check) or 8 digits)
+        ///  - Code 128 (default fallback)
+        /// </summary>
         private static (BarcodeFormat format, string payload) CoerceFormatAndPayload(string codeType, string raw)
         {
             string digitsOnly = new(raw?.Where(char.IsDigit).ToArray());
+
             switch ((codeType ?? "Code128").ToUpperInvariant())
             {
                 case "EAN13":
                 case "EAN-13":
-                    var ean = digitsOnly.PadLeft(12, '0');
-                    if (ean.Length > 12) ean = ean[^12..];
-                    return (ZXing.BarcodeFormat.EAN_13, ean);
+                    {
+                        var ean = digitsOnly.PadLeft(12, '0');
+                        if (ean.Length > 12) ean = ean[^12..];
+                        return (BarcodeFormat.EAN_13, ean);
+                    }
 
                 case "UPCA":
                 case "UPC-A":
-                    var upc = digitsOnly.PadLeft(11, '0');
-                    if (upc.Length > 11) upc = upc[^11..];
-                    return (ZXing.BarcodeFormat.UPC_A, upc);
+                    {
+                        var upc = digitsOnly.PadLeft(11, '0');
+                        if (upc.Length > 11) upc = upc[^11..];
+                        return (BarcodeFormat.UPC_A, upc);
+                    }
+
                 case "EAN8":
                 case "EAN-8":
                     {
@@ -268,15 +307,17 @@ namespace Pos.Client.Wpf.Windows.Settings
                         var digits = new string((raw ?? "").Where(char.IsDigit).ToArray());
                         if (string.IsNullOrEmpty(digits)) digits = "5512345"; // safe 7-digit sample
                         var e8 = EnsureEan8(digits);
-                        return (ZXing.BarcodeFormat.EAN_8, e8);
+                        return (BarcodeFormat.EAN_8, e8);
                     }
 
-
                 default:
-                    return (ZXing.BarcodeFormat.CODE_128, string.IsNullOrWhiteSpace(raw) ? "123456789012" : raw);
+                    return (BarcodeFormat.CODE_128, string.IsNullOrWhiteSpace(raw) ? "123456789012" : raw);
             }
         }
 
+        /// <summary>
+        /// Compute EAN-8 check digit for 7 digits.
+        /// </summary>
         private static char ComputeEan8CheckDigit(ReadOnlySpan<char> sevenDigits)
         {
             // EAN-8 check digit: sum of (odd positions * 3) + (even positions * 1), modulo 10
@@ -284,7 +325,7 @@ namespace Pos.Client.Wpf.Windows.Settings
             for (int i = 0; i < 7; i++)
             {
                 int d = sevenDigits[i] - '0';
-                if ((i % 2) == 0) // positions 1,3,5,7 (0-based even) => *3
+                if ((i % 2) == 0) // positions 1,3,5,7 (0-based even indices)
                     sum += d * 3;
                 else
                     sum += d;
@@ -294,12 +335,14 @@ namespace Pos.Client.Wpf.Windows.Settings
             return (char)('0' + check);
         }
 
+        /// <summary>
+        /// Normalize an EAN-8 code string:
+        ///  - 7 digits → append computed check digit
+        ///  - 8 digits → returned as-is
+        ///  - otherwise → ArgumentException
+        /// </summary>
         private static string EnsureEan8(string code)
         {
-            // Accepts:
-            //  - 7 digits: auto-append check digit
-            //  - 8 digits: returns as-is (assumes caller knows)
-            // Trims and strips spaces/hyphens.
             var raw = new string(code.Where(char.IsDigit).ToArray());
             if (raw.Length == 7)
                 return raw + ComputeEan8CheckDigit(raw);
@@ -307,6 +350,5 @@ namespace Pos.Client.Wpf.Windows.Settings
                 return raw;
             throw new ArgumentException("EAN-8 must be 7 or 8 digits.", nameof(code));
         }
-
     }
 }

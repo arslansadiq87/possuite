@@ -34,5 +34,7 @@ public class BarcodeLabelSettings
     public string? BusinessName { get; set; } = null;
     public double BusinessXmm { get; set; } = 4.0;
     public double BusinessYmm { get; set; } = 6.0;
+    public double? BarcodeZoomPct { get; set; } = 100.0;
+
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }
