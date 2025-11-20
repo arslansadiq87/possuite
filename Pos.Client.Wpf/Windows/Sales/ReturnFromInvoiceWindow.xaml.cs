@@ -1,6 +1,7 @@
 ﻿// Pos.Client.Wpf/Windows/Sales/ReturnFromInvoiceWindow.xaml.cs
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics.Metrics;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,7 +21,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly int _origSaleId;
         private readonly ISalesService _sales;
         private readonly AppState _state;
-        private readonly IInvoiceSettingsService _invSettings; // NEW
+        private readonly IInvoiceSettingsLocalService _invSettings; // NEW
         private bool _useTill; // NEW
 
         public bool Confirmed { get; private set; }
@@ -72,7 +73,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             InitializeComponent();
             _origSaleId = saleId;
-            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>(); // NEW
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsLocalService>(); // NEW
 
             _sales = App.Services.GetRequiredService<ISalesService>();
             _state = App.Services.GetRequiredService<AppState>();
@@ -82,7 +83,9 @@ namespace Pos.Client.Wpf.Windows.Sales
             Loaded += async (_, __) =>
             {
                 var dto = await _sales.GetReturnFromInvoiceAsync(_origSaleId);
-                var (settings, _) = await _invSettings.GetAsync(_state.CurrentOutletId, "en");
+                var counterId = AppState.Current.CurrentCounterId;
+                var settings = await _invSettings.GetForCounterWithFallbackAsync(counterId, default);
+
                 _useTill = settings.UseTill;
 
                 HeaderText.Text = dto.HeaderHuman;

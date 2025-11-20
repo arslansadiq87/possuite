@@ -29,7 +29,7 @@ namespace Pos.Persistence.Services
         public GlPostingService(
             IDbContextFactory<PosClientDbContext> dbf,
             ICoaService coa,
-            IInvoiceSettingsService _ignore,
+            IInvoiceSettingsLocalService _ignore,
             IOutboxWriter _ignore2)
         {
             _dbf = dbf;
@@ -1221,25 +1221,32 @@ namespace Pos.Persistence.Services
             return id; // 0 when missing → treated as optional
         }
 
-        private static async Task<int> ResolveSalesCardClearingForOutletAsync(PosClientDbContext db, int? outletId, CancellationToken ct)
+        // Convenience overload if the caller still has only an outletId (legacy call-sites)
+        private static async Task<int> ResolveSalesCardClearingForOutletAsync(
+            PosClientDbContext db, int? outletId, CancellationToken ct)
         {
-            int? id = null;
-            if (outletId.HasValue)
-            {
-                id = await db.InvoiceSettings.AsNoTracking()
-                    .Where(x => x.OutletId == outletId.Value)
-                    .OrderByDescending(x => x.UpdatedAtUtc)
-                    .Select(x => x.SalesCardClearingAccountId)
-                    .FirstOrDefaultAsync(ct);
-            }
-            if (!id.HasValue || id.Value == 0)
-            {
-                id = await db.InvoiceSettings.AsNoTracking()
-                    .Where(x => x.OutletId == null)
-                    .OrderByDescending(x => x.UpdatedAtUtc)
-                    .Select(x => x.SalesCardClearingAccountId)
-                    .FirstOrDefaultAsync(ct);
-            }
+            if (!outletId.HasValue || outletId.Value <= 0)
+                return 0;
+
+            // Prefer the most recent setting among counters in this outlet
+            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+                            where c.OutletId == outletId.Value
+                               && s.SalesCardClearingAccountId != null
+                               && s.SalesCardClearingAccountId > 0
+                            orderby s.UpdatedAtUtc descending
+                            select s.SalesCardClearingAccountId)
+                          .FirstOrDefaultAsync(ct);
+
+            if (id.GetValueOrDefault() > 0) return id!.Value;
+
+            // Fallback to any latest
+            id = await db.InvoiceSettingsLocals.AsNoTracking()
+                .Where(s => s.SalesCardClearingAccountId != null && s.SalesCardClearingAccountId > 0)
+                .OrderByDescending(s => s.UpdatedAtUtc)
+                .Select(s => s.SalesCardClearingAccountId)
+                .FirstOrDefaultAsync(ct);
+
             return id ?? 0;
         }
 

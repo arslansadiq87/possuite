@@ -65,8 +65,8 @@ namespace Pos.Client.Wpf.Windows.Shell
         private void InitBackstage()
         {
             // construct the page from DI so its VM and services are resolved
-            var prefs = App.Services.GetRequiredService<PreferencesPage>();
-            BackstagePreferencesTab.Content = prefs;
+            //var prefs = App.Services.GetRequiredService<PreferencesPage>();
+            //BackstagePreferencesTab.Content = prefs;
         }
 
 

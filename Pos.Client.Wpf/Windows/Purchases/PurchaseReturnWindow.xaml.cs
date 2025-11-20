@@ -41,7 +41,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private readonly IInventoryReadService _invRead;
         private readonly IPurchasesService _purSvc;
 
-        private bool _uiReady;
+        //private bool _uiReady;
         private readonly ObservableCollection<Account> _bankAccounts = new();
         private bool _bankPaymentsAllowed; // true only if InvoiceSettings.PurchaseBankAccountId is set for the outlet
         private readonly List<(TenderMethod method, decimal amount, string? note)> _stagedPayments = new();

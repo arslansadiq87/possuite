@@ -178,71 +178,75 @@ namespace Pos.Persistence.Services
         }
 
         // ─────────────────────────  Binding (Assign / Unassign)  ─────────────────────────
-        public async Task AssignThisPcAsync(int outletId, int counterId, string machine, CancellationToken ct = default)
-        {
-            await using var db = await _dbf.CreateDbContextAsync(ct);
-            await using var tx = await db.Database.BeginTransactionAsync(ct);
+        //public async Task AssignThisPcAsync(int outletId, int counterId, string machine, CancellationToken ct = default)
+        //{
+        //    await using var db = await _dbf.CreateDbContextAsync(ct);
+        //    await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            var exists = await db.Counters.AnyAsync(c => c.Id == counterId && c.OutletId == outletId, ct);
-            if (!exists)
-                throw new InvalidOperationException("Counter not found for the selected outlet.");
+        //    var exists = await db.Counters.AnyAsync(c => c.Id == counterId && c.OutletId == outletId, ct);
+        //    if (!exists)
+        //        throw new InvalidOperationException("Counter not found for the selected outlet.");
 
-            // ensure one binding per machine (free previous)
-            var existingForMachine = await db.CounterBindings
-                .Where(b => b.MachineName == machine)
-                .ToListAsync(ct);
+        //    // Remove existing bindings for this machine OR this counter
+        //    var toRemove = await db.CounterBindings
+        //        .Where(b => b.MachineName == machine || b.CounterId == counterId)
+        //        .ToListAsync(ct);
 
-            if (existingForMachine.Count > 0)
-            {
-                db.CounterBindings.RemoveRange(existingForMachine);
-                await db.SaveChangesAsync(ct);
+        //    if (toRemove.Count > 0)
+        //    {
+        //        db.CounterBindings.RemoveRange(toRemove);
+        //        await db.SaveChangesAsync(ct);
 
-                foreach (var b in existingForMachine)
-                {
-                    var topicOld = nameof(CounterBinding);
-                    var sidOld = GuidUtility.FromString($"{topicOld}:{b.CounterId}:{b.MachineName}");
-                    await _outbox.EnqueueDeleteAsync(db, topicOld, sidOld, ct);
-                }
-                await db.SaveChangesAsync(ct);
-            }
+        //        foreach (var b in toRemove)
+        //        {
+        //            var topic = nameof(CounterBinding);
+        //            var sid = GuidUtility.FromString($"{topic}:{b.CounterId}:{b.MachineName}");
+        //            await _outbox.EnqueueDeleteAsync(db, topic, sid, ct);
+        //        }
 
-            var binding = new CounterBinding
-            {
-                CounterId = counterId,
-                MachineName = machine,
-                CreatedAtUtc = DateTime.UtcNow
-            };
-            await db.CounterBindings.AddAsync(binding, ct);
-            await db.SaveChangesAsync(ct);
+        //        await db.SaveChangesAsync(ct);
+        //    }
 
-            await _outbox.EnqueueUpsertAsync(db, binding, ct);
-            await db.SaveChangesAsync(ct);
+        //    // ✅ IMPORTANT: set OutletId as well, to satisfy FK
+        //    var binding = new CounterBinding
+        //    {
+        //        OutletId = outletId,
+        //        CounterId = counterId,
+        //        MachineName = machine,
+        //        CreatedAtUtc = DateTime.UtcNow
+        //    };
 
-            await tx.CommitAsync(ct);
-        }
+        //    await db.CounterBindings.AddAsync(binding, ct);
+        //    await db.SaveChangesAsync(ct);
 
-        public async Task UnassignThisPcAsync(string machine, CancellationToken ct = default)
-        {
-            await using var db = await _dbf.CreateDbContextAsync(ct);
-            await using var tx = await db.Database.BeginTransactionAsync(ct);
+        //    await _outbox.EnqueueUpsertAsync(db, binding, ct);
+        //    await db.SaveChangesAsync(ct);
 
-            var bindings = await db.CounterBindings.Where(b => b.MachineName == machine).ToListAsync(ct);
-            if (bindings.Count == 0)
-                return;
+        //    await tx.CommitAsync(ct);
+        //}
 
-            db.CounterBindings.RemoveRange(bindings);
-            await db.SaveChangesAsync(ct);
+        //public async Task UnassignThisPcAsync(string machine, CancellationToken ct = default)
+        //{
+        //    await using var db = await _dbf.CreateDbContextAsync(ct);
+        //    await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            foreach (var b in bindings)
-            {
-                var topic = nameof(CounterBinding);
-                var streamId = GuidUtility.FromString($"{topic}:{b.CounterId}:{b.MachineName}");
-                await _outbox.EnqueueDeleteAsync(db, topic, streamId, ct);
-            }
-            await db.SaveChangesAsync(ct);
+        //    var bindings = await db.CounterBindings.Where(b => b.MachineName == machine).ToListAsync(ct);
+        //    if (bindings.Count == 0)
+        //        return;
 
-            await tx.CommitAsync(ct);
-        }
+        //    db.CounterBindings.RemoveRange(bindings);
+        //    await db.SaveChangesAsync(ct);
+
+        //    foreach (var b in bindings)
+        //    {
+        //        var topic = nameof(CounterBinding);
+        //        var streamId = GuidUtility.FromString($"{topic}:{b.CounterId}:{b.MachineName}");
+        //        await _outbox.EnqueueDeleteAsync(db, topic, streamId, ct);
+        //    }
+        //    await db.SaveChangesAsync(ct);
+
+        //    await tx.CommitAsync(ct);
+        //}
 
         // ─────────────────────────  Lookups  ─────────────────────────
         public async Task<Outlet?> GetOutletAsync(int outletId, CancellationToken ct = default)

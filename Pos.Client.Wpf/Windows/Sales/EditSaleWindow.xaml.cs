@@ -15,6 +15,7 @@ using Pos.Domain.Services;
 using Pos.Domain.Models.Sales;
 using DomainItemIndexDto = Pos.Domain.Models.Sales.ItemIndexDto;
 using Pos.Domain.Entities;
+using System.Diagnostics.Metrics;
 
 namespace Pos.Client.Wpf.Windows.Sales
 {
@@ -25,7 +26,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private EditSaleLoadDto _orig = null!;
         private decimal _origSubtotal, _origTax, _origGrand;
         private readonly ObservableCollection<CartLine> _cart = new();
-        private readonly IInvoiceSettingsService _invSettings; // NEW
+        private readonly IInvoiceSettingsLocalService _invSettings; // NEW
         private bool _useTill; // NEW
 
         public ObservableCollection<Pos.Domain.Models.Sales.ItemIndexDto> DataContextItemIndex { get; } = new();
@@ -45,7 +46,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             InitializeComponent();
             _saleId = saleId;
             _sales = App.Services.GetRequiredService<ISalesService>();
-            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>(); // NEW
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsLocalService>(); // NEW
 
             CartGrid.ItemsSource = _cart;
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
@@ -60,7 +61,11 @@ namespace Pos.Client.Wpf.Windows.Sales
                 
                 await LoadSaleAsync();
                 await LoadItemIndexAsync();
-                var (settings, _) = await _invSettings.GetAsync(_orig.OutletId, "en");
+                //var (settings, _) = await _invSettings.GetAsync(_orig.OutletId, "en");
+                var counterId = AppState.Current.CurrentCounterId; // or pass the known counter
+
+                var settings = await _invSettings.GetForCounterWithFallbackAsync(counterId, default);
+
                 _useTill = settings.UseTill;
                 //await UpdateTillStatusUiAsync(); // if you show a till status text here
 

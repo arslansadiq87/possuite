@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
+using Pos.Domain.Settings;
 using Pos.Domain.Models.Purchases;
 using Pos.Domain.Services;
 using Pos.Persistence.Sync;
@@ -429,10 +430,19 @@ namespace Pos.Persistence.Services
         public async Task<bool> IsPurchaseBankConfiguredAsync(int outletId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            var id = await db.InvoiceSettings.Where(x => x.OutletId == outletId)
-                        .Select(x => x.PurchaseBankAccountId).FirstOrDefaultAsync(ct);
-            return id.HasValue;
+
+            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+                            where c.OutletId == outletId
+                               && s.PurchaseBankAccountId != null
+                               && s.PurchaseBankAccountId > 0
+                            orderby s.UpdatedAtUtc descending
+                            select s.PurchaseBankAccountId)
+                           .FirstOrDefaultAsync(ct);
+
+            return id.HasValue && id.Value > 0;
         }
+
 
         public async Task<List<Account>> ListBankAccountsForOutletAsync(int outletId, CancellationToken ct = default)
         {
@@ -446,9 +456,29 @@ namespace Pos.Persistence.Services
         public async Task<int?> GetConfiguredPurchaseBankAccountIdAsync(int outletId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            return await db.InvoiceSettings.Where(x => x.OutletId == outletId)
-                       .Select(x => x.PurchaseBankAccountId).FirstOrDefaultAsync(ct);
+
+            // prefer most-recent counter in this outlet
+            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+                            where c.OutletId == outletId
+                               && s.PurchaseBankAccountId != null
+                               && s.PurchaseBankAccountId > 0
+                            orderby s.UpdatedAtUtc descending
+                            select s.PurchaseBankAccountId)
+                           .FirstOrDefaultAsync(ct);
+
+            if (id.HasValue && id.Value > 0) return id.Value;
+
+            // fallback: any latest non-null config on this machine/db
+            id = await db.InvoiceSettingsLocals.AsNoTracking()
+                    .Where(s => s.PurchaseBankAccountId != null && s.PurchaseBankAccountId > 0)
+                    .OrderByDescending(s => s.UpdatedAtUtc)
+                    .Select(s => s.PurchaseBankAccountId)
+                    .FirstOrDefaultAsync(ct);
+
+            return id; // may be null
         }
+
 
         // ------- VOID -------
 
@@ -796,11 +826,21 @@ namespace Pos.Persistence.Services
 
         private async Task<int> RequireDefaultBankAsync(PosClientDbContext db, int outletId, CancellationToken ct)
         {
-            var id = await db.InvoiceSettings.Where(x => x.OutletId == outletId)
-                    .Select(x => x.PurchaseBankAccountId).FirstOrDefaultAsync(ct);
-            if (!id.HasValue) throw new InvalidOperationException("No default Purchase Bank account configured for this outlet.");
+            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+                            where c.OutletId == outletId
+                               && s.PurchaseBankAccountId != null
+                               && s.PurchaseBankAccountId > 0
+                            orderby s.UpdatedAtUtc descending
+                            select s.PurchaseBankAccountId)
+                           .FirstOrDefaultAsync(ct);
+
+            if (!id.HasValue || id.Value <= 0)
+                throw new InvalidOperationException("No default Purchase Bank account configured in Invoice Settings (counter-scoped).");
+
             return id.Value;
         }
+
 
         /// <summary>
         /// Computes delta across all effective payments and posts two rows per payment delta:

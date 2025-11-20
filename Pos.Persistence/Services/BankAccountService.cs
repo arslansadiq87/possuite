@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain.Models;
 using Pos.Domain.Services;
+using static Pos.Domain.Services.IBankAccountService;
 
 namespace Pos.Persistence.Services
 {
@@ -135,6 +136,17 @@ namespace Pos.Persistence.Services
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+        }
+
+
+        // Persistence (optional)
+        public async Task<IReadOnlyList<BankAccountPickDto>> GetAllPicksAsync(CancellationToken ct = default)
+        {
+            var list = await SearchAsync(null, ct); // reuse your existing SearchAsync
+            return list
+                .Where(b => b.IsActive)
+                .Select(b => new BankAccountPickDto(b.AccountId, b.Id, $"{b.Code} — {b.Name} ({b.BankName})"))
+                .ToList();
         }
     }
 }

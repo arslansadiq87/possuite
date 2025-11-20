@@ -352,12 +352,13 @@ namespace Pos.Client.Wpf.Windows.Admin
 
                 var sp = App.Services;
                 var midS = sp.GetRequiredService<IMachineIdentityService>();
-                var svc = sp.GetRequiredService<IOutletCounterService>(); // ⟵ use the new service
+                var bind = sp.GetRequiredService<ICounterBindingService>();
 
-                // use machine NAME because bindings are keyed by MachineName in DB
+                // Stable GUID + friendly name
+                var machineId = await midS.GetMachineIdAsync();
                 var machineName = await midS.GetMachineNameAsync();
 
-                await svc.AssignThisPcAsync(outletId, row.Id, machineName, CancellationToken.None);
+                await bind.AssignAsync(machineId, machineName, outletId, row.Id, CancellationToken.None);
                 await SafeLoadCountersAsync(outletId);
 
                 MessageBox.Show("This PC is now assigned to the selected counter.",
@@ -377,12 +378,11 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 var sp = App.Services;
                 var midS = sp.GetRequiredService<IMachineIdentityService>();
-                var svc = sp.GetRequiredService<IOutletCounterService>(); // ⟵ use the new service
+                var bind = sp.GetRequiredService<ICounterBindingService>();
 
-                // bindings are keyed by MachineName
-                var machineName = await midS.GetMachineNameAsync();
+                var machineId = await midS.GetMachineIdAsync();
 
-                await svc.UnassignThisPcAsync(machineName, CancellationToken.None);
+                await bind.UnassignAsync(machineId, CancellationToken.None);
 
                 if (_selectedOutletId is int outletId)
                     await SafeLoadCountersAsync(outletId);
@@ -396,6 +396,7 @@ namespace Pos.Client.Wpf.Windows.Admin
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
 
 
 

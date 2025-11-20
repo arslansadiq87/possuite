@@ -21,8 +21,8 @@ namespace Pos.Domain.Services
         Task DeleteCounterAsync(int counterId, CancellationToken ct = default);
 
         // Binding
-        Task AssignThisPcAsync(int outletId, int counterId, string machine, CancellationToken ct = default);
-        Task UnassignThisPcAsync(string machine, CancellationToken ct = default);
+        //Task AssignThisPcAsync(int outletId, int counterId, string machine, CancellationToken ct = default);
+        //Task UnassignThisPcAsync(string machine, CancellationToken ct = default);
 
         // Lookups
         Task<Outlet?> GetOutletAsync(int outletId, CancellationToken ct = default);

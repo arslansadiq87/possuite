@@ -13,263 +13,339 @@ using Pos.Client.Wpf.Models;                  // CartLine
 using Pos.Client.Wpf.Printing;               // ReceiptPreviewBuilder, RawPrinterHelper
 using Pos.Client.Wpf.Services;               // IDialogService
 using Pos.Domain.Entities;                   // ReceiptTemplate, Outlet, Sale, etc.
-using Pos.Domain.Services;                   // IReceiptTemplateService, IInvoiceSettingsService, ILookupService
+using Pos.Domain.Services;
+using System.Windows.Threading;
+using System.Security.Cryptography;
+// IReceiptTemplateService, IInvoiceSettingsService, ILookupService
 using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // CartLine (type location)
 
 namespace Pos.Client.Wpf.Windows.Settings
 {
     public partial class ReceiptBuilderViewModel : ObservableObject
     {
-        private readonly IReceiptTemplateService _tplSvc;
-        private readonly IInvoiceSettingsService _invoiceSettings;  // one-time seed from legacy invoice settings
-        private readonly ILookupService _lookup;                    // outlets
-        private readonly IDialogService _dialogs;                   // app dialog service
+        //private readonly IReceiptTemplateService _tplSvc;
+        //private readonly IInvoiceSettingsLocalService _invoiceSettings;  // one-time seed from legacy invoice settings
+        //private readonly ILookupService _lookup;                    // outlets
+        //private readonly IDialogService _dialogs;                   // app dialog service
+        //private System.Windows.Threading.DispatcherTimer? _livePreviewTimer;
+        //private CancellationTokenSource _previewCts = new();
 
-        public ReceiptBuilderViewModel(
-            IReceiptTemplateService tplSvc,
-            IInvoiceSettingsService invoiceSettings,
-            ILookupService lookup,
-            IDialogService dialogs)
-        {
-            _tplSvc = tplSvc;
-            _invoiceSettings = invoiceSettings;
-            _lookup = lookup;
-            _dialogs = dialogs;
+        //public ReceiptBuilderViewModel(
+        //    IReceiptTemplateService tplSvc,
+        //    IInvoiceSettingsLocalService invoiceSettings,
+        //    ILookupService lookup,
+        //    IDialogService dialogs)
+        //{
+        //    _tplSvc = tplSvc;
+        //    _invoiceSettings = invoiceSettings;
+        //    _lookup = lookup;
+        //    _dialogs = dialogs;
 
-            InstalledPrinters = new ObservableCollection<string>(
-                PrinterSettings.InstalledPrinters.Cast<string>()
-            );
+        //    InstalledPrinters = new ObservableCollection<string>(
+        //        PrinterSettings.InstalledPrinters.Cast<string>()
+        //    );
 
-            // Centralized reactions (replaces partial On...Changed hooks)
-            PropertyChanged += async (s, e) =>
-            {
-                if (e.PropertyName == nameof(IsGlobal) || e.PropertyName == nameof(SelectedOutlet))
-                    await LoadAllTemplatesAsync();
+        //    // Centralized reactions (replaces partial On...Changed hooks)
+        //    PropertyChanged += async (s, e) =>
+        //    {
+        //        if (e.PropertyName == nameof(IsGlobal) || e.PropertyName == nameof(SelectedOutlet))
+        //            await LoadAllTemplatesAsync();
 
-                if (e.PropertyName == nameof(SelectedTabIndex))
-                    await PreviewCurrentTabAsync();
-            };
-        }
+        //        if (e.PropertyName == nameof(SelectedTabIndex))
+        //            await PreviewCurrentTabAsync();
+        //    };
+        //}
 
-        // ---------- Scope / Outlet ----------
-        [ObservableProperty] private bool isGlobal = true;        // Global templates when true
-        [ObservableProperty] private Outlet? selectedOutlet;      // When IsGlobal == false
-        public ObservableCollection<Outlet> Outlets { get; } = new();
+        //private DispatcherTimer? _livePreviewTimer;
+        //private string? _lastPreviewFingerprint;
 
-        // ---------- Tabs ----------
-        [ObservableProperty] private int selectedTabIndex = 0;    // 0=Sale,1=SaleReturn,2=Voucher,3=ZReport
+        //public int[] PaperWidths { get; } = new[] { 58, 80 };
+        //// ---------- Scope / Outlet ----------
+        //[ObservableProperty] private bool isGlobal = true;        // Global templates when true
+        //[ObservableProperty] private Outlet? selectedOutlet;      // When IsGlobal == false
+        //public ObservableCollection<Outlet> Outlets { get; } = new();
 
-        // ---------- Installed Printers ----------
-        public ObservableCollection<string> InstalledPrinters { get; }
+        //// ---------- Tabs ----------
+        //[ObservableProperty] private int selectedTabIndex = 0;    // 0=Sale,1=SaleReturn,2=Voucher,3=ZReport
 
-        // ---------- Templates (one per tab) ----------
-        [ObservableProperty] private ReceiptTemplate saleTemplate = new();
-        [ObservableProperty] private ReceiptTemplate saleReturnTemplate = new();
-        [ObservableProperty] private ReceiptTemplate voucherTemplate = new();
-        [ObservableProperty] private ReceiptTemplate zReportTemplate = new();
+        //// ---------- Installed Printers ----------
+        //public ObservableCollection<string> InstalledPrinters { get; }
 
-        // ---------- Live preview ----------
-        [ObservableProperty] private string previewText = "";
+        //// ---------- Templates (one per tab) ----------
+        //[ObservableProperty] private ReceiptTemplate saleTemplate = new();
+        //[ObservableProperty] private ReceiptTemplate saleReturnTemplate = new();
+        //[ObservableProperty] private ReceiptTemplate voucherTemplate = new();
+        //[ObservableProperty] private ReceiptTemplate zReportTemplate = new();
+
+        //// ---------- Live preview ----------
+        //[ObservableProperty] private string previewText = "";
 
         // ======================================================
         // Init
         // ======================================================
-        public async Task InitAsync(CancellationToken ct = default)
-        {
-            await LoadOutletsAsync(ct);
-            await EnsureSeedFromInvoiceSettingsOnceAsync(ct); // migration-less soft copy for Sale
-            await LoadAllTemplatesAsync(ct);
-            await PreviewCurrentTabAsync();
-        }
+        //public async Task InitAsync(CancellationToken ct = default)
+        //{
+        //    await LoadOutletsAsync(ct);
+        //    await EnsureSeedFromInvoiceSettingsOnceAsync(ct); // migration-less soft copy for Sale
+        //    await LoadAllTemplatesAsync(ct);
+        //    await PreviewCurrentTabAsync();
+        //    StartLivePreview(); // <- add this
 
-        private async Task LoadOutletsAsync(CancellationToken ct = default)
-        {
-            Outlets.Clear();
-            var all = await _lookup.GetOutletsAsync(ct);
-            foreach (var o in all) Outlets.Add(o);
+        //}
 
-            // default: Global on first open
-            if (!Outlets.Any()) IsGlobal = true;
-        }
+        //private async Task LoadOutletsAsync(CancellationToken ct = default)
+        //{
+        //    Outlets.Clear();
+        //    var all = await _lookup.GetOutletsAsync(ct);
+        //    foreach (var o in all) Outlets.Add(o);
 
-        /// <summary>
-        /// If there is no Sale template for the current scope, copy receipt layout from legacy InvoiceSettings once.
-        /// </summary>
-        private async Task EnsureSeedFromInvoiceSettingsOnceAsync(CancellationToken ct)
-        {
-            int? outletId = IsGlobal ? null : SelectedOutlet?.Id;
+        //    // default: Global on first open
+        //    if (!Outlets.Any()) IsGlobal = true;
+        //}
 
-            var existing = await _tplSvc.GetAsync(outletId, ReceiptDocType.Sale, ct);
-            if (existing.Id != 0) return; // already seeded/created
+        ///// <summary>
+        ///// If there is no Sale template for the current scope, copy receipt layout from legacy InvoiceSettings once.
+        ///// </summary>
+        //private async Task EnsureSeedFromInvoiceSettingsOnceAsync(CancellationToken ct)
+        //{
+        //    int? outletId = IsGlobal ? null : SelectedOutlet?.Id;
 
-            var (settings, _) = await _invoiceSettings.GetAsync(outletId, "en", ct);
-            var seed = new ReceiptTemplate
-            {
-                OutletId = outletId,
-                DocType = ReceiptDocType.Sale,
-                PrinterName = settings.PrinterName,
-                PaperWidthMm = settings.PaperWidthMm <= 0 ? 80 : settings.PaperWidthMm,
-                EnableDrawerKick = settings.EnableDrawerKick,
+        //    var existing = await _tplSvc.GetAsync(outletId, ReceiptDocType.Sale, ct);
+        //    if (existing.Id != 0) return; // already seeded/created
+        //    var counterId = AppState.Current.CurrentCounterId; // or pass the known counter
+        //    var settings = await _invoiceSettings.GetForCounterWithFallbackAsync(counterId, ct);
 
-                OutletDisplayName = settings.OutletDisplayName,
-                AddressLine1 = settings.AddressLine1,
-                AddressLine2 = settings.AddressLine2,
-                Phone = settings.Phone,
+        //    //var (settings, _) = await _invoiceSettings.GetAsync(outletId, "en", ct);
+        //    var seed = new ReceiptTemplate
+        //    {
+                //OutletId = outletId,
+                //DocType = ReceiptDocType.Sale,
+                //PrinterName = settings.PrinterName,
+                //PaperWidthMm = settings.PaperWidthMm <= 0 ? 80 : settings.PaperWidthMm,
+                //EnableDrawerKick = settings.EnableDrawerKick,
 
-                LogoPng = settings.LogoPng,
-                LogoMaxWidthPx = settings.LogoMaxWidthPx,
-                LogoAlignment = string.IsNullOrWhiteSpace(settings.LogoAlignment) ? "Center" : settings.LogoAlignment,
+                //OutletDisplayName = settings.OutletDisplayName,
+                //AddressLine1 = settings.AddressLine1,
+                //AddressLine2 = settings.AddressLine2,
+                //Phone = settings.Phone,
 
-                ShowQr = settings.ShowQr,
-                ShowCustomerOnReceipt = settings.ShowCustomerOnReceipt,
-                ShowCashierOnReceipt = settings.ShowCashierOnReceipt,
-                PrintBarcodeOnReceipt = settings.PrintBarcodeOnReceipt,
+                //LogoPng = settings.LogoPng,
+                //LogoMaxWidthPx = settings.LogoMaxWidthPx,
+                //LogoAlignment = string.IsNullOrWhiteSpace(settings.LogoAlignment) ? "Center" : settings.LogoAlignment,
 
-                RowShowProductName = settings.RowShowProductName,
-                RowShowProductSku = settings.RowShowProductSku,
-                RowShowQty = settings.RowShowQty,
-                RowShowUnitPrice = settings.RowShowUnitPrice,
-                RowShowLineDiscount = settings.RowShowLineDiscount,
-                RowShowLineTotal = settings.RowShowLineTotal,
+                //ShowQr = settings.ShowQr,
+                //ShowCustomerOnReceipt = settings.ShowCustomerOnReceipt,
+                //ShowCashierOnReceipt = settings.ShowCashierOnReceipt,
+                //PrintBarcodeOnReceipt = settings.PrintBarcodeOnReceipt,
 
-                TotalsShowTaxes = settings.TotalsShowTaxes,
-                TotalsShowDiscounts = settings.TotalsShowDiscounts,
-                TotalsShowOtherExpenses = settings.TotalsShowOtherExpenses,
-                TotalsShowGrandTotal = settings.TotalsShowGrandTotal,
-                TotalsShowPaymentRecv = settings.TotalsShowPaymentRecv,
-                TotalsShowBalance = settings.TotalsShowBalance
-            };
-            await _tplSvc.SaveAsync(seed, ct);
-        }
+                //RowShowProductName = settings.RowShowProductName,
+                //RowShowProductSku = settings.RowShowProductSku,
+                //RowShowQty = settings.RowShowQty,
+                //RowShowUnitPrice = settings.RowShowUnitPrice,
+                //RowShowLineDiscount = settings.RowShowLineDiscount,
+                //RowShowLineTotal = settings.RowShowLineTotal,
 
-        private async Task LoadAllTemplatesAsync(CancellationToken ct = default)
-        {
-            int? outletId = IsGlobal ? null : SelectedOutlet?.Id;
+                //TotalsShowTaxes = settings.TotalsShowTaxes,
+                //TotalsShowDiscounts = settings.TotalsShowDiscounts,
+                //TotalsShowOtherExpenses = settings.TotalsShowOtherExpenses,
+                //TotalsShowGrandTotal = settings.TotalsShowGrandTotal,
+                //TotalsShowPaymentRecv = settings.TotalsShowPaymentRecv,
+                //TotalsShowBalance = settings.TotalsShowBalance
+        //    };
+        //    await _tplSvc.SaveAsync(seed, ct);
+        //}
 
-            SaleTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.Sale, ct);
-            SaleReturnTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.SaleReturn, ct);
-            VoucherTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.Voucher, ct);
-            ZReportTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.ZReport, ct);
-        }
+        //private async Task LoadAllTemplatesAsync(CancellationToken ct = default)
+        //{
+        //    int? outletId = IsGlobal ? null : SelectedOutlet?.Id;
+
+        //    SaleTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.Sale, ct);
+        //    SaleReturnTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.SaleReturn, ct);
+        //    VoucherTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.Voucher, ct);
+        //    ZReportTemplate = await _tplSvc.GetOrCreateDefaultAsync(outletId, ReceiptDocType.ZReport, ct);
+        //}
 
         // ======================================================
         // Preview helpers
         // ======================================================
-        private async Task PreviewCurrentTabAsync()
-        {
-            switch (SelectedTabIndex)
-            {
-                case 0: PreviewText = BuildSalePreview(SaleTemplate); break;
-                case 1: PreviewText = BuildSaleReturnPreview(SaleReturnTemplate); break;
-                case 2: PreviewText = BuildVoucherPreview(VoucherTemplate); break;
-                case 3: PreviewText = BuildZReportPreview(ZReportTemplate); break;
-            }
-            await Task.CompletedTask;
-        }
+        //private async Task PreviewCurrentTabAsync()
+        //{
+        //    switch (SelectedTabIndex)
+        //    {
+        //        case 0: await BuildSalePreviewAsync(SaleTemplate); break;
+        //        case 1: await BuildSaleReturnPreviewAsync(SaleReturnTemplate); break;
+        //        case 2: PreviewText = BuildVoucherPreview(VoucherTemplate); break;
+        //        case 3: PreviewText = BuildZReportPreview(ZReportTemplate); break;
+        //    }
+        //    await Task.CompletedTask;
+        //}
 
-        private static IReadOnlyList<ReceiptPreviewLine> SampleLines =>
-            new[]
-            {
-                new ReceiptPreviewLine { Name = "Milk 1L", Sku = "MILK-1L", Qty = 1, Unit = 220, LineDiscount = 0 },
-                new ReceiptPreviewLine { Name = "Bread",   Sku = "BRD-01",  Qty = 2, Unit =  90, LineDiscount = 10 }
-            };
+        //private static IReadOnlyList<ReceiptPreviewLine> SampleLines =>
+        //    new[]
+        //    {
+        //        new ReceiptPreviewLine { Name = "Milk 1L", Sku = "MILK-1L", Qty = 1, Unit = 220, LineDiscount = 0 },
+        //        new ReceiptPreviewLine { Name = "Bread",   Sku = "BRD-01",  Qty = 2, Unit =  90, LineDiscount = 10 }
+        //    };
 
-        private static ReceiptPreviewSale SampleSale(ReceiptTemplate tpl, bool isReturn = false)
-        {
-            var gross = SampleLines.Sum(x => x.Qty * x.Unit) - SampleLines.Sum(x => x.LineDiscount);
-            var disc = 0m;
-            var tax = Math.Round(gross * 0.0m, 2);
-            var other = 0m;
-            var total = isReturn ? -gross : gross;
-            var paid = total;
-            var bal = 0m;
+        //private async Task<(string? name, string? address, string? phone, string? ntn, byte[]? logo, int logoMaxPx, string align)>
+    //LoadIdentityAsync(CancellationToken ct = default)
+    //    {
+    //        var outletId = IsGlobal ? (int?)null : SelectedOutlet?.Id;
+    //        var counterId = AppState.Current.CurrentCounterId; // or pass the known counter
+    //        var settings = await _invoiceSettings.GetForCounterWithFallbackAsync(counterId, ct);
 
-            return new ReceiptPreviewSale
-            {
-                Ts = DateTime.Now,
-                OutletId = tpl.OutletId,
-                OutletCode = tpl.OutletId?.ToString(),
-                CounterId = 1,
-                CounterName = "Counter-1",
-                InvoiceNumber = 12345,
-                CashierName = "Ali",
+    //        //var (settings, _) = await _invoiceSettings.GetAsync(outletId, "en", ct);
 
-                Subtotal = gross,
-                InvoiceDiscount = disc,
-                Tax = tax,
-                OtherExpenses = other,
-                Total = total,
-                Paid = paid,
-                Balance = bal,
+    //        var address = string.Join("\n", new[] { settings.AddressLine1, settings.AddressLine2 }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    //        return (
+    //            settings.OutletDisplayName,
+    //            string.IsNullOrWhiteSpace(address) ? null : address,
+    //            settings.Phone,
+    //            settings.ShowBusinessNtn ? settings.BusinessNtn : null,
+    //            settings.LogoPng,
+    //            settings.LogoMaxWidthPx <= 0 ? 384 : settings.LogoMaxWidthPx,
+    //            string.IsNullOrWhiteSpace(settings.LogoAlignment) ? "Center" : settings.LogoAlignment
+    //        );
+    //    }
 
-                BarcodeText = "INV-12345",
-                QrText = "https://example.com/r/INV-12345"
-            };
-        }
 
-        private static string BuildSalePreview(ReceiptTemplate tpl)
-        {
-            int width = tpl.PaperWidthMm <= 58 ? 32 : 42;
-            var address = string.Join("\n", new[] { tpl.AddressLine1, tpl.AddressLine2 }.Where(s => !string.IsNullOrWhiteSpace(s)));
-            var contacts = string.IsNullOrWhiteSpace(tpl.Phone) ? null : $"Ph: {tpl.Phone}";
-            var sale = SampleSale(tpl, isReturn: false);
+        //private static ReceiptPreviewSale SampleSale(ReceiptTemplate tpl, bool isReturn = false)
+        //{
+        //    var gross = SampleLines.Sum(x => x.Qty * x.Unit) - SampleLines.Sum(x => x.LineDiscount);
 
-            return ReceiptPreviewBuilder.BuildText(
-                width,
-                tpl.OutletDisplayName,
-                address,
-                contacts,
-                null,                            // businessNTN (kept in InvoiceSettings if you want)
-                showLogo: tpl.LogoPng != null,   // preview shows [LOGO]
-                                                 // item flags
-                tpl.RowShowProductName, tpl.RowShowProductSku, tpl.RowShowQty, tpl.RowShowUnitPrice, tpl.RowShowLineDiscount, tpl.RowShowLineTotal,
-                // totals flags
-                tpl.TotalsShowTaxes, tpl.TotalsShowDiscounts, tpl.TotalsShowOtherExpenses, tpl.TotalsShowGrandTotal, tpl.TotalsShowPaymentRecv, tpl.TotalsShowBalance,
-                // footer
-                tpl.FooterText,
-                // FBR flags (not previewed here)
-                enableFbr: false, showFbrQr: false, fbrPosId: null,
-                // data
-                SampleLines, sale,
-                // barcode & QR toggles
-                tpl.PrintBarcodeOnReceipt, tpl.ShowQr
-            );
-        }
+        //    // Demo values so toggles are visible in preview
+        //    var disc = Math.Round(gross * 0.05m, 2);                   // 5% invoice discount
+        //    var tax = Math.Round((gross - disc) * 0.17m, 2);          // 17% tax on net
+        //    var other = 50m;                                            // other expenses
+        //    var total = (gross - disc) + tax + other;
+        //    if (isReturn) total = -total;
 
-        private static string BuildSaleReturnPreview(ReceiptTemplate tpl)
-        {
-            // Simple variant for now; when you add a dedicated return builder, swap preview too.
-            return BuildSalePreview(tpl).Replace("SALE", "SALE RETURN");
-        }
+        //    var paid = Math.Max(0m, total - 200m);                     // leave a balance to show
+        //    var bal = Math.Max(0m, total - paid);
 
-        private static string BuildVoucherPreview(ReceiptTemplate tpl)
-        {
-            var sb = new StringBuilder();
-            int width = tpl.PaperWidthMm <= 58 ? 32 : 42;
-            string line = new string('-', width);
-            string title = Center("VOUCHER", width);
 
-            sb.AppendLine(title);
-            if (!string.IsNullOrWhiteSpace(tpl.OutletDisplayName))
-                sb.AppendLine(Center(tpl.OutletDisplayName!.ToUpperInvariant(), width));
-            sb.AppendLine(line);
-            sb.AppendLine($"No: VCH-1001");
-            sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm}");
-            sb.AppendLine($"Party: Walk-in");
-            sb.AppendLine(line);
-            sb.AppendLine($"Expense A".PadRight(width - 8) + "500.00");
-            sb.AppendLine($"Expense B".PadRight(width - 8) + "250.00");
-            sb.AppendLine(line);
-            sb.AppendLine("Total".PadRight(width - 8) + "750.00");
-            sb.AppendLine(line);
-            if (!string.IsNullOrWhiteSpace(tpl.FooterText))
-                sb.AppendLine(tpl.FooterText!);
-            return sb.ToString();
+        //    return new ReceiptPreviewSale
+        //    {
+        //        Ts = DateTime.Now,
+        //        OutletId = tpl.OutletId,
+        //        OutletCode = tpl.OutletId?.ToString(),
+        //        CounterId = 1,
+        //        CounterName = "Counter-1",
+        //        InvoiceNumber = 12345,
+        //        CashierName = "Ali",
+        //        CustomerName = "Walk-in",
+        //        Subtotal = gross,
+        //        InvoiceDiscount = disc,
+        //        Tax = tax,
+        //        OtherExpenses = other,
+        //        Total = total,
+        //        Paid = paid,
+        //        Balance = bal,
 
-            // RIGHT:
-            static string Center(string s, int w) =>
-                s.Length >= w ? s : new string(' ', Math.Max(0, (w - s.Length) / 2)) + s;
-        }
+        //        BarcodeText = "INV-12345",
+        //        QrText = "https://example.com/r/INV-12345"
+        //    };
+        //}
+
+        // at top if missing
+
+        // new async instance method
+        //private async Task BuildSalePreviewAsync(ReceiptTemplate tpl, CancellationToken ct = default)
+        //{
+        //    (string? name, string? addr, string? phone, string? ntn,
+        //     byte[]? _logoPng, int _logoMax, string _logoAlign) = await LoadIdentityAsync(ct);
+
+        //    int width = tpl.PaperWidthMm <= 58 ? 32 : 42;
+        //    var sale = SampleSale(tpl, isReturn: false);
+
+        //    PreviewText = ReceiptPreviewBuilder.BuildText(
+        //        width,
+        //        name, addr, phone, ntn,
+        //        showLogo: tpl.ShowLogoOnReceipt,
+        //        showCustomer: tpl.ShowCustomerOnReceipt,
+        //        showCashier: tpl.ShowCashierOnReceipt,
+        //        // item flags
+        //        tpl.RowShowProductName, tpl.RowShowProductSku, tpl.RowShowQty,
+        //        tpl.RowShowUnitPrice, tpl.RowShowLineDiscount, tpl.RowShowLineTotal,
+        //        // totals flags
+        //        tpl.TotalsShowTaxes, tpl.TotalsShowDiscounts, tpl.TotalsShowOtherExpenses,
+        //        tpl.TotalsShowGrandTotal, tpl.TotalsShowPaymentRecv, tpl.TotalsShowBalance,
+        //        // footer
+        //        tpl.FooterText,
+        //        // FBR (off for preview)
+        //        enableFbr: false, showFbrQr: false, fbrPosId: null,
+        //        // data
+        //        SampleLines, sale,
+        //        // barcode / QR
+        //        tpl.PrintBarcodeOnReceipt, tpl.ShowQr
+        //    );
+        //}
+
+
+
+
+        //private async Task BuildSaleReturnPreviewAsync(ReceiptTemplate tpl, CancellationToken ct = default)
+        //{
+        //    (string? name, string? addr, string? phone, string? ntn,
+        //     byte[]? _logoPng, int _logoMax, string _logoAlign) = await LoadIdentityAsync(ct);
+
+        //    int width = tpl.PaperWidthMm <= 58 ? 32 : 42;
+
+        //    // Build a sample **return** (note: isReturn = true)
+        //    var sale = SampleSale(tpl, isReturn: true);
+
+        //    PreviewText = ReceiptPreviewBuilder.BuildText(
+        //        width,
+        //        name, addr, phone, ntn,
+        //        showLogo: tpl.ShowLogoOnReceipt,
+        //        showCustomer: tpl.ShowCustomerOnReceipt,
+        //        showCashier: tpl.ShowCashierOnReceipt,
+        //        // item flags
+        //        tpl.RowShowProductName, tpl.RowShowProductSku, tpl.RowShowQty,
+        //        tpl.RowShowUnitPrice, tpl.RowShowLineDiscount, tpl.RowShowLineTotal,
+        //        // totals flags
+        //        tpl.TotalsShowTaxes, tpl.TotalsShowDiscounts, tpl.TotalsShowOtherExpenses,
+        //        tpl.TotalsShowGrandTotal, tpl.TotalsShowPaymentRecv, tpl.TotalsShowBalance,
+        //        // footer
+        //        tpl.FooterText,
+        //        // FBR (off in preview)
+        //        enableFbr: false, showFbrQr: false, fbrPosId: null,
+        //        // data
+        //        SampleLines, sale,
+        //        // barcode / QR
+        //        tpl.PrintBarcodeOnReceipt, tpl.ShowQr
+        //    );
+        //}
+
+
+        //private static string BuildVoucherPreview(ReceiptTemplate tpl)
+        //{
+        //    var sb = new StringBuilder();
+        //    int width = tpl.PaperWidthMm <= 58 ? 32 : 42;
+        //    string line = new string('-', width);
+        //    string title = Center("VOUCHER", width);
+
+        //    sb.AppendLine(title);
+        //    if (!string.IsNullOrWhiteSpace(tpl.OutletDisplayName))
+        //        sb.AppendLine(Center(tpl.OutletDisplayName!.ToUpperInvariant(), width));
+        //    sb.AppendLine(line);
+        //    sb.AppendLine($"No: VCH-1001");
+        //    sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        //    sb.AppendLine($"Party: Walk-in");
+        //    sb.AppendLine(line);
+        //    sb.AppendLine($"Expense A".PadRight(width - 8) + "500.00");
+        //    sb.AppendLine($"Expense B".PadRight(width - 8) + "250.00");
+        //    sb.AppendLine(line);
+        //    sb.AppendLine("Total".PadRight(width - 8) + "750.00");
+        //    sb.AppendLine(line);
+        //    if (!string.IsNullOrWhiteSpace(tpl.FooterText))
+        //        sb.AppendLine(tpl.FooterText!);
+        //    return sb.ToString();
+
+        //    // RIGHT:
+        //    static string Center(string s, int w) =>
+        //        s.Length >= w ? s : new string(' ', Math.Max(0, (w - s.Length) / 2)) + s;
+        //}
 
         private static string BuildZReportPreview(ReceiptTemplate tpl)
         {
@@ -304,94 +380,187 @@ namespace Pos.Client.Wpf.Windows.Settings
         // Commands
         // ======================================================
 
-        [RelayCommand]
-        private async Task SaveSaleAsync()
-        {
-            await _tplSvc.SaveAsync(SaleTemplate);
-            await _dialogs.AlertAsync("Sale receipt saved.", "Receipt Builder");
-        }
+        //[RelayCommand]
+        //private async Task SaveSaleAsync()
+        //{
+        //    await _tplSvc.SaveAsync(SaleTemplate);
+        //    await _dialogs.AlertAsync("Sale receipt saved.", "Receipt Builder");
+        //}
 
-        [RelayCommand]
-        private async Task SaveSaleReturnAsync()
-        {
-            await _tplSvc.SaveAsync(SaleReturnTemplate);
-            await _dialogs.AlertAsync("Sale Return receipt saved.", "Receipt Builder");
-        }
+        //[RelayCommand]
+        //private async Task SaveSaleReturnAsync()
+        //{
+        //    await _tplSvc.SaveAsync(SaleReturnTemplate);
+        //    await _dialogs.AlertAsync("Sale Return receipt saved.", "Receipt Builder");
+        //}
 
-        [RelayCommand]
-        private async Task SaveVoucherAsync()
-        {
-            await _tplSvc.SaveAsync(VoucherTemplate);
-            await _dialogs.AlertAsync("Voucher receipt saved.", "Receipt Builder");
-        }
+        //[RelayCommand]
+        //private async Task SaveVoucherAsync()
+        //{
+        //    await _tplSvc.SaveAsync(VoucherTemplate);
+        //    await _dialogs.AlertAsync("Voucher receipt saved.", "Receipt Builder");
+        //}
 
-        [RelayCommand]
-        private async Task SaveZReportAsync()
-        {
-            await _tplSvc.SaveAsync(ZReportTemplate);
-            await _dialogs.AlertAsync("Z-Report receipt saved.", "Receipt Builder");
-        }
+        //[RelayCommand]
+        //private async Task SaveZReportAsync()
+        //{
+        //    await _tplSvc.SaveAsync(ZReportTemplate);
+        //    await _dialogs.AlertAsync("Z-Report receipt saved.", "Receipt Builder");
+        //}
 
-        [RelayCommand] private Task PreviewSaleAsync() { PreviewText = BuildSalePreview(SaleTemplate); return Task.CompletedTask; }
-        [RelayCommand] private Task PreviewSaleReturnAsync() { PreviewText = BuildSaleReturnPreview(SaleReturnTemplate); return Task.CompletedTask; }
-        [RelayCommand] private Task PreviewVoucherAsync() { PreviewText = BuildVoucherPreview(VoucherTemplate); return Task.CompletedTask; }
-        [RelayCommand] private Task PreviewZReportAsync() { PreviewText = BuildZReportPreview(ZReportTemplate); return Task.CompletedTask; }
+        //[RelayCommand]
+    //    private async Task PreviewSaleAsync()
+    //    {
+    //        await BuildSalePreviewAsync(SaleTemplate, _previewCts.Token);
+    //    }
+    //    [RelayCommand]
+    //    private async Task PreviewSaleReturnAsync()
+    //    {
+    //        await BuildSaleReturnPreviewAsync(SaleReturnTemplate, _previewCts.Token);
+    //    }
+    //    [RelayCommand] private Task PreviewVoucherAsync() { PreviewText = BuildVoucherPreview(VoucherTemplate); return Task.CompletedTask; }
+    //    [RelayCommand] private Task PreviewZReportAsync() { PreviewText = BuildZReportPreview(ZReportTemplate); return Task.CompletedTask; }
 
-        [RelayCommand]
-        private async Task PrintSaleAsync()
-        {
-            // Build a synthetic Sale + Cart for test print (user previewing in builder)
-            var sale = new Sale { Id = 0, InvoiceNumber = 9999, InvoiceFooter = SaleTemplate.FooterText };
-            var cart = new List<CartLine>
-    {
-        new CartLine { DisplayName = "Milk 1L", Sku = "MILK-1L", Qty = 1, UnitNet = 220m },
-        new CartLine { DisplayName = "Bread",   Sku = "BRD-01",  Qty = 2, UnitNet =  90m }
-    };
+    //    [RelayCommand]
+    //    private async Task PrintSaleAsync()
+    //    {
+    //        // Build a synthetic Sale + Cart for test print (user previewing in builder)
+    //        var sale = new Sale { Id = 0, InvoiceNumber = 9999, InvoiceFooter = SaleTemplate.FooterText };
+    //        var cart = new List<CartLine>
+    //{
+    //    new CartLine { DisplayName = "Milk 1L", Sku = "MILK-1L", Qty = 1, UnitNet = 220m },
+    //    new CartLine { DisplayName = "Bread",   Sku = "BRD-01",  Qty = 2, UnitNet =  90m }
+    //};
 
-            await ReceiptPrinter.PrintAsync(
-                docType: ReceiptDocType.Sale,
-                tpl: SaleTemplate,
-                sale: sale,
-                cart: cart,
-                till: null,
-                storeNameOverride: string.IsNullOrWhiteSpace(SaleTemplate.OutletDisplayName)
-                    ? ReceiptPrinter.DefaultStoreName
-                    : SaleTemplate.OutletDisplayName,
-                cashierName: "Test Cashier",
-                salesmanName: null
-            );
-        }
+    //        await ReceiptPrinter.PrintAsync(
+    //            docType: ReceiptDocType.Sale,
+    //            tpl: SaleTemplate,
+    //            sale: sale,
+    //            cart: cart,
+    //            till: null,
+    //            storeNameOverride: string.IsNullOrWhiteSpace(SaleTemplate.OutletDisplayName)
+    //                ? ReceiptPrinter.DefaultStoreName
+    //                : SaleTemplate.OutletDisplayName,
+    //            cashierName: "Test Cashier",
+    //            salesmanName: null
+    //        );
+    //    }
+
+    //    private async Task<string> RenderSaleReturnTextAsync(ReceiptTemplate tpl, CancellationToken ct = default)
+    //    {
+    //        (string? name, string? addr, string? phone, string? ntn,
+    //         byte[]? _logoPng, int _logoMax, string _logoAlign) = await LoadIdentityAsync(ct);
+
+    //        int width = tpl.PaperWidthMm <= 58 ? 32 : 42;
+    //        var sale = SampleSale(tpl, isReturn: true);
+
+    //        return ReceiptPreviewBuilder.BuildText(
+    //            width,
+    //            name, addr, phone, ntn,
+    //            showLogo: tpl.ShowLogoOnReceipt,
+    //            showCustomer: tpl.ShowCustomerOnReceipt,
+    //            showCashier: tpl.ShowCashierOnReceipt,
+    //            // item flags
+    //            tpl.RowShowProductName, tpl.RowShowProductSku, tpl.RowShowQty,
+    //            tpl.RowShowUnitPrice, tpl.RowShowLineDiscount, tpl.RowShowLineTotal,
+    //            // totals flags
+    //            tpl.TotalsShowTaxes, tpl.TotalsShowDiscounts, tpl.TotalsShowOtherExpenses,
+    //            tpl.TotalsShowGrandTotal, tpl.TotalsShowPaymentRecv, tpl.TotalsShowBalance,
+    //            // footer
+    //            tpl.FooterText,
+    //            // FBR (off)
+    //            enableFbr: false, showFbrQr: false, fbrPosId: null,
+    //            // data
+    //            SampleLines, sale,
+    //            tpl.PrintBarcodeOnReceipt, tpl.ShowQr
+    //        );
+    //    }
 
 
-        [RelayCommand]
-        private async Task PrintSaleReturnAsync()
-        {
-            // For now print as text; switch to dedicated ESC/POS builder when ready
-            var text = BuildSaleReturnPreview(SaleReturnTemplate);
-            await PrintPlainAsync(text, SaleReturnTemplate.PrinterName);
-        }
 
-        [RelayCommand]
-        private async Task PrintVoucherAsync()
-        {
-            var text = BuildVoucherPreview(VoucherTemplate);
-            await PrintPlainAsync(text, VoucherTemplate.PrinterName);
-        }
+        //[RelayCommand]
+        //private async Task PrintSaleReturnAsync()
+        //{
+        //    // For now print as text; switch to dedicated ESC/POS builder when ready
+        //    var text = await RenderSaleReturnTextAsync(SaleReturnTemplate);
+        //    await PrintPlainAsync(text, SaleReturnTemplate.PrinterName);
+        //}
 
-        [RelayCommand]
-        private async Task PrintZReportAsync()
-        {
-            var text = BuildZReportPreview(ZReportTemplate);
-            await PrintPlainAsync(text, ZReportTemplate.PrinterName);
-        }
+        //[RelayCommand]
+        //private async Task PrintVoucherAsync()
+        //{
+        //    var text = BuildVoucherPreview(VoucherTemplate);
+        //    await PrintPlainAsync(text, VoucherTemplate.PrinterName);
+        //}
 
-        private static Task PrintPlainAsync(string text, string? printerName)
-        {
-            var bytes = new List<byte>();
-            bytes.AddRange(Encoding.ASCII.GetBytes(text + "\n\n"));
-            bytes.AddRange(new byte[] { 0x1D, 0x56, 0x00 }); // GS V 0 = Cut
-            RawPrinterHelper.SendBytesToPrinter(printerName ?? ReceiptPrinter.DefaultPrinterName, bytes.ToArray());
-            return Task.CompletedTask;
-        }
+        //[RelayCommand]
+        //private async Task PrintZReportAsync()
+        //{
+        //    var text = BuildZReportPreview(ZReportTemplate);
+        //    await PrintPlainAsync(text, ZReportTemplate.PrinterName);
+        //}
+
+        //private static Task PrintPlainAsync(string text, string? printerName)
+        //{
+        //    var bytes = new List<byte>();
+        //    bytes.AddRange(Encoding.ASCII.GetBytes(text + "\n\n"));
+        //    bytes.AddRange(new byte[] { 0x1D, 0x56, 0x00 }); // GS V 0 = Cut
+        //    RawPrinterHelper.SendBytesToPrinter(printerName ?? ReceiptPrinter.DefaultPrinterName, bytes.ToArray());
+        //    return Task.CompletedTask;
+        //}
+
+        //private void StartLivePreview()
+        //{
+        //    if (_livePreviewTimer != null) return;
+        //    _livePreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        //    _livePreviewTimer.Tick += async (_, __) =>
+        //    {
+        //        var tpl = SelectedTabIndex switch
+        //        {
+        //            0 => SaleTemplate,
+        //            1 => SaleReturnTemplate,
+        //            2 => VoucherTemplate,
+        //            3 => ZReportTemplate,
+        //            _ => SaleTemplate
+        //        };
+        //        var fp = ComputeTplFingerprint(tpl);
+        //        if (fp == _lastPreviewFingerprint) return;
+        //        _lastPreviewFingerprint = fp;
+
+        //        _previewCts.Cancel();
+        //        _previewCts.Dispose();
+        //        _previewCts = new CancellationTokenSource();
+
+        //        try
+        //        {
+        //            switch (SelectedTabIndex)
+        //            {
+        //                case 0: await BuildSalePreviewAsync(SaleTemplate, _previewCts.Token); break;
+        //                case 1: await BuildSaleReturnPreviewAsync(SaleReturnTemplate, _previewCts.Token); break;
+        //                case 2: PreviewText = BuildVoucherPreview(VoucherTemplate); break;
+        //                case 3: PreviewText = BuildZReportPreview(ZReportTemplate); break;
+        //            }
+        //        }
+        //        catch (OperationCanceledException) { }
+        //    };
+        //    _livePreviewTimer.Start();
+        //}
+
+        //private static string ComputeTplFingerprint(ReceiptTemplate t)
+        //{
+        //    // Concatenate only fields that affect preview; keep it cheap
+        //    var s =
+        //        $"{t.PrinterName}|{t.PaperWidthMm}|{t.EnableDrawerKick}|" +
+        //        $"{t.OutletDisplayName}|{t.AddressLine1}|{t.AddressLine2}|{t.Phone}|" +
+        //        $"{t.LogoMaxWidthPx}|{t.LogoAlignment}|len:{t.LogoPng?.Length ?? 0}|" +
+        //        $"{t.RowShowProductName}|{t.RowShowProductSku}|{t.RowShowQty}|{t.RowShowUnitPrice}|{t.RowShowLineDiscount}|{t.RowShowLineTotal}|" +
+        //        $"{t.TotalsShowTaxes}|{t.TotalsShowDiscounts}|{t.TotalsShowOtherExpenses}|{t.TotalsShowGrandTotal}|{t.TotalsShowPaymentRecv}|{t.TotalsShowBalance}|" +
+        //        $"{t.ShowQr}|{t.ShowCustomerOnReceipt}|{t.ShowCashierOnReceipt}|{t.PrintBarcodeOnReceipt}|" +
+        //        $"{t.HeaderText}|{t.FooterText}";
+        //    using var sha = SHA256.Create();
+        //    var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(s));
+        //    return Convert.ToHexString(hash, 0, 8);
+        //}
+
     }
 }

@@ -33,6 +33,7 @@ using Pos.Persistence.Services.Systems;
 using Pos.Domain.Services.Accounting;
 using Pos.Persistence.Services.Accounting;
 using Pos.Persistence.Services.Hr;
+using Pos.Client.Wpf.Startup;
 
 namespace Pos.Client.Wpf
 {
@@ -121,6 +122,8 @@ namespace Pos.Client.Wpf
             sc.AddTransient<WarehousesView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AccountEditorDialog>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.BankAccountDialog>();
+            sc.AddSingleton<IdentitySettingsViewModel>();
+            sc.AddScoped<IIdentitySettingsService, IdentitySettingsService>();
 
             // NEW: OpeningStockView factory (parametrized)
             sc.AddTransient<Func<InventoryLocationType, int, string, Pos.Client.Wpf.Windows.Admin.OpeningStockView>>(sp =>
@@ -152,8 +155,10 @@ namespace Pos.Client.Wpf
             sc.AddTransient<EditCategoryWindow>();
             
             sc.AddTransient<EditWarehouseWindow>();
-            sc.AddTransient<PreferencesViewModel>();
-            sc.AddTransient<PreferencesPage>();
+            //sc.AddTransient<PreferencesViewModel>();
+            //sc.AddTransient<PreferencesPage>();
+            // ...
+            sc.AddScoped<IInvoiceSettingsLocalService, InvoiceSettingsLocalService>();
 
             // Windows (transient)
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView>();
@@ -173,6 +178,8 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchVm>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>();
             sc.AddTransient<InvoiceSettingsViewModel>();
+            sc.AddTransient<InvoiceSettingsPage>();
+
             //sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
             sc.AddScoped<IPurchaseCenterReadService, PurchaseCenterReadService>();
             sc.AddScoped<IPurchasesServiceFactory, PurchasesServiceFactory>();
@@ -222,7 +229,7 @@ namespace Pos.Client.Wpf
                 (tillId, outletId, counterId) => new TillSessionSummaryWindow(tillId, outletId, counterId));
             sc.AddScoped<IPartyService, PartyService>();
             sc.AddScoped<IItemsReadService, ItemsService>();
-            sc.AddScoped<IInvoiceSettingsService, InvoiceSettingsService>();
+            //sc.AddScoped<IInvoiceSettingsService, InvoiceSettingsService>();
             sc.AddScoped<ICategoryService, CategoryService>();
             sc.AddScoped<IItemsWriteService, CatalogService>();
             sc.AddScoped<ICatalogService, CatalogService>();
@@ -239,7 +246,7 @@ namespace Pos.Client.Wpf
             sc.AddScoped<ICoaService, CoaService>();
             sc.AddScoped<IStockGuard, StockGuard>();
             sc.AddScoped<IUserAdminService, UserAdminService>();
-            sc.AddSingleton<IUserPreferencesService, UserPreferencesService>();
+            //sc.AddSingleton<IUserPreferencesService, UserPreferencesService>();
             sc.AddScoped<IUserReadService, UserReadService>();
             sc.AddScoped<IVoucherCenterService, VoucherCenterService>();
             sc.AddScoped<IWarehouseService, WarehouseService>();
@@ -265,16 +272,7 @@ namespace Pos.Client.Wpf
             });
 
             Services = sc.BuildServiceProvider();
-            var prefs = Services.GetRequiredService<IUserPreferencesService>();
-            try
-            {
-                var p = prefs.GetAsync().GetAwaiter().GetResult();  // sync call
-                TimeService.SetTimeZone(p.DisplayTimeZoneId);
-            }
-            catch
-            {
-                TimeService.SetTimeZone(null);
-            }
+            TimeZoneBootstrapper.ApplyInitial(Services);
 
             // 5) Ensure DB + seed (delegated to persistence bootstrapper)
             try

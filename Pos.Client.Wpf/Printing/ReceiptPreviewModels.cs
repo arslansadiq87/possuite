@@ -32,6 +32,7 @@ namespace Pos.Client.Wpf.Printing
         public string? CounterName { get; set; }   // NEW
         public int? InvoiceNumber { get; set; }
         public string? CashierName { get; set; }   // NEW
+        public string? CustomerName { get; set; }   // NEW
 
         // Optional barcode/QR demo payloads
         public string? BarcodeText { get; set; }

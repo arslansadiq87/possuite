@@ -4,66 +4,177 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:conv="clr-namespace:Pos.Client.Wpf.Converters"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="680">
+    <UserControl.Resources>
+        <conv:NegateBooleanConverter x:Key="NegateBool"/>
+        <conv:BytesToBitmapConverter x:Key="BytesToBitmap"/>
+
+    </UserControl.Resources>
     <Grid Margin="20">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2*"/>
             <ColumnDefinition Width="3*"/>
+            <ColumnDefinition Width="2*"/>
         </Grid.ColumnDefinitions>
-
-        <!-- Left: Template editors per DocType -->
-        <TabControl Grid.Column="0" Margin="0,0,12,0"
-                SelectedIndex="{Binding SelectedTabIndex}">
-            <TabItem Header="Sale">
-                <ScrollViewer>
-                    <StackPanel Margin="8">
-                        <!-- Outlet Display Name -->
-                        <TextBlock Text="Outlet Display Name" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <TextBox Text="{Binding SaleTemplate.OutletDisplayName}" />
-
-                        <!-- Paper Width -->
-                        <TextBlock Text="Paper Width (mm)" FontWeight="SemiBold" Margin="0,12,0,4"/>
-                        <ComboBox SelectedValue="{Binding SaleTemplate.PaperWidthMm}">
-                            <sys:Int32>58</sys:Int32>
-                            <sys:Int32>80</sys:Int32>
-                        </ComboBox>
-
-                        <!-- Show Customer/Cashier -->
-                        <CheckBox Content="Show Customer" IsChecked="{Binding SaleTemplate.ShowCustomerOnReceipt}" Margin="0,12,0,0"/>
-                        <CheckBox Content="Show Cashier"  IsChecked="{Binding SaleTemplate.ShowCashierOnReceipt}"/>
-
-                        <!-- Footer -->
-                        <TextBlock Text="Footer" FontWeight="SemiBold" Margin="0,12,0,4"/>
-                        <TextBox AcceptsReturn="True" Height="80" Text="{Binding SaleTemplate.FooterText}"/>
-
-                        <!-- Actions -->
-                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                            <Button Content="Save"    Command="{Binding SaveSaleCommand}"    Margin="0,0,8,0"/>
-                            <Button Content="Preview" Command="{Binding PreviewSaleCommand}" Margin="0,0,8,0"/>
-                            <Button Content="Print"   Command="{Binding PrintSaleCommand}"/>
+        <!-- LEFT: Single "Sales" editor (no tabs) -->
+        <ScrollViewer Grid.Column="0" Margin="0,0,12,0">
+            <StackPanel>
+                <!-- Scope (unchanged bindings) -->
+                <GroupBox Header="Scope">
+                    <StackPanel>
+                        <RadioButton Content="Global (all outlets)"
+                   GroupName="Scope"
+                   IsChecked="{Binding IsGlobal}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <RadioButton Content="Specific outlet:"
+                     GroupName="Scope"
+                     IsChecked="{Binding IsGlobal, Converter={StaticResource NegateBool}}"/>
+                            <ComboBox Width="220" Margin="8,0,0,0"
+                  ItemsSource="{Binding Outlets}"
+                  SelectedItem="{Binding SelectedOutlet}"
+                  DisplayMemberPath="Name"/>
                         </StackPanel>
                     </StackPanel>
+                </GroupBox>
 
-                </ScrollViewer>
-            </TabItem>
+                <!-- Printer & Page -->
+                <GroupBox Header="Printer">
+                    <StackPanel>
+                        <ComboBox ItemsSource="{Binding InstalledPrinters}"
+                    SelectedItem="{Binding SaleTemplate.PrinterName}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="Paper width (mm):" VerticalAlignment="Center"/>
+                            <ComboBox Width="80" Margin="8,0,0,0"
+                      ItemsSource="{Binding PaperWidths}"
+                      SelectedItem="{Binding SaleTemplate.PaperWidthMm}"/>
+                        </StackPanel>
+                        <CheckBox Content="Open cash drawer (kick)"
+                    IsChecked="{Binding SaleTemplate.EnableDrawerKick}"/>
+                    </StackPanel>
+                </GroupBox>
 
-            <TabItem Header="Sale Return">
-                <!-- same as above, bound to SaleReturnTemplate -->
-                <!-- ... -->
-            </TabItem>
+                <!-- Identity & Branding (rebased to ReceiptTemplate fields) -->
+                <GroupBox Header="Identity &amp; Branding" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-            <TabItem Header="Voucher">
-                <!-- bound to VoucherTemplate -->
-                <!-- ... -->
-            </TabItem>
+                        <!-- Left: Text -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Outlet / Business Name" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding SaleTemplate.OutletDisplayName, UpdateSourceTrigger=PropertyChanged}"/>
 
-            <TabItem Header="Z-Report">
-                <!-- bound to ZReportTemplate -->
-                <!-- ... -->
-            </TabItem>
-        </TabControl>
+                            <TextBlock Text="Address line 1" Margin="0,8,0,0"/>
+                            <TextBox Text="{Binding SaleTemplate.AddressLine1, UpdateSourceTrigger=PropertyChanged}"/>
 
-        <!-- Right: Live text preview (monospace) -->
+                            <TextBlock Text="Address line 2" Margin="0,8,0,0"/>
+                            <TextBox Text="{Binding SaleTemplate.AddressLine2, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Text="Phone" Margin="0,8,0,0"/>
+                            <TextBox Text="{Binding SaleTemplate.Phone, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+
+                        <!-- Right: Logo -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                            <WrapPanel VerticalAlignment="Center">
+                                <TextBlock Text="Logo max width (px)" VerticalAlignment="Center"/>
+                                <TextBox Width="80" Margin="8,0,0,0"
+                       Text="{Binding SaleTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="Alignment" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                <ComboBox Width="100"
+                        SelectedValue="{Binding SaleTemplate.LogoAlignment, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        SelectedValuePath="Content" Margin="8,0,0,0">
+                                    <ComboBoxItem Content="Left"/>
+                                    <ComboBoxItem Content="Center"/>
+                                    <ComboBoxItem Content="Right"/>
+                                </ComboBox>
+                                <CheckBox Content="Show logo on receipt"
+                                      IsChecked="{Binding SaleTemplate.ShowLogoOnReceipt}" />
+
+                            </WrapPanel>
+
+                            <!-- Quick logo preview (PNG bytes) -->
+                            <Border BorderBrush="#DDD" BorderThickness="1" Padding="6" Height="120" Margin="0,8,0,0">
+                                <Grid Width="{Binding SaleTemplate.LogoMaxWidthPx}" HorizontalAlignment="Left">
+                                    <Image Source="{Binding SaleTemplate.LogoPng, Converter={StaticResource BytesToBitmap}}"
+                       Stretch="Uniform"
+                       HorizontalAlignment="Stretch"
+                       VerticalAlignment="Center"
+                       MaxWidth="{Binding SaleTemplate.LogoMaxWidthPx}"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Row Visibility (Items Section) -->
+                <GroupBox Header="Row Visibility (Items Section)" Margin="0,8,0,0">
+                    <WrapPanel>
+                        <CheckBox Content="Product Name"   IsChecked="{Binding SaleTemplate.RowShowProductName}"  Margin="0,0,16,6"/>
+                        <CheckBox Content="Product SKU"    IsChecked="{Binding SaleTemplate.RowShowProductSku}"   Margin="0,0,16,6"/>
+                        <CheckBox Content="Quantity"       IsChecked="{Binding SaleTemplate.RowShowQty}"          Margin="0,0,16,6"/>
+                        <CheckBox Content="Unit Price"     IsChecked="{Binding SaleTemplate.RowShowUnitPrice}"    Margin="0,0,16,6"/>
+                        <CheckBox Content="Line Discount"  IsChecked="{Binding SaleTemplate.RowShowLineDiscount}" Margin="0,0,16,6"/>
+                        <CheckBox Content="Line Total"     IsChecked="{Binding SaleTemplate.RowShowLineTotal}"    Margin="0,0,16,6"/>
+                    </WrapPanel>
+                </GroupBox>
+
+                <!-- Totals -->
+                <GroupBox Header="Totals" Margin="0,8,0,0">
+                    <WrapPanel>
+                        <CheckBox Content="Taxes"            IsChecked="{Binding SaleTemplate.TotalsShowTaxes}"          Margin="0,0,16,6"/>
+                        <CheckBox Content="Discounts"        IsChecked="{Binding SaleTemplate.TotalsShowDiscounts}"      Margin="0,0,16,6"/>
+                        <CheckBox Content="Other Expenses"   IsChecked="{Binding SaleTemplate.TotalsShowOtherExpenses}"  Margin="0,0,16,6"/>
+                        <CheckBox Content="Grand Total"      IsChecked="{Binding SaleTemplate.TotalsShowGrandTotal}"     Margin="0,0,16,6"/>
+                        <CheckBox Content="Payment Received" IsChecked="{Binding SaleTemplate.TotalsShowPaymentRecv}"    Margin="0,0,16,6"/>
+                        <CheckBox Content="Balance"          IsChecked="{Binding SaleTemplate.TotalsShowBalance}"        Margin="0,0,16,6"/>
+                    </WrapPanel>
+                </GroupBox>
+
+                <!-- Common toggles for Sales -->
+                <GroupBox Header="Common (Sales)">
+                    <StackPanel>
+                        <CheckBox Content="Show QR (e-receipt/other)"   IsChecked="{Binding SaleTemplate.ShowQr}" />
+                        <CheckBox Content="Show Customer on receipt"    IsChecked="{Binding SaleTemplate.ShowCustomerOnReceipt}" />
+                        <CheckBox Content="Show Cashier on receipt"     IsChecked="{Binding SaleTemplate.ShowCashierOnReceipt}" />
+                        <CheckBox Content="Print barcode on receipt"    IsChecked="{Binding SaleTemplate.PrintBarcodeOnReceipt}" />
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Header/Footer -->
+                <GroupBox Header="Header &amp; Footer" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Header (Sales)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <TextBox AcceptsReturn="True" Height="80"
+                     Text="{Binding SaleTemplate.HeaderText, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                            <TextBlock Text="Footer (Sales)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <TextBox AcceptsReturn="True" Height="80"
+                     Text="{Binding SaleTemplate.FooterText, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Actions -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Content="Save"       Command="{Binding SaveSaleCommand}"     Margin="0,0,8,0"/>
+                    <Button Content="Preview"    Command="{Binding PreviewSaleCommand}"  Margin="0,0,8,0"/>
+                    <Button Content="Print Test" Command="{Binding PrintSaleCommand}"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- RIGHT: Live text preview (unchanged) -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -75,4 +186,5 @@
             </ScrollViewer>
         </Grid>
     </Grid>
+
 </UserControl>

@@ -2,12 +2,12 @@
 
   <ItemGroup>
     <Compile Remove="Contracts\IScanFocusable.cs" />
+    <Compile Remove="Printing\RawPrinterHelper.cs" />
     <Compile Remove="Services\ArApQueryService.cs" />
     <Compile Remove="Services\AttendanceService.cs" />
     <Compile Remove="Services\AuthService.cs" />
     <Compile Remove="Services\AuthZ.cs" />
     <Compile Remove="Services\CoaService.cs" />
-    <Compile Remove="Services\Context\TerminalContext.cs" />
     <Compile Remove="Services\CounterBindingService.cs" />
     <Compile Remove="Services\CurrentUserService.cs" />
     <Compile Remove="Services\ILabelPrintService.cs" />
@@ -30,6 +30,8 @@
     <Compile Remove="Windows\Accounting\VoucherEditorWindow.xaml.cs" />
     <Compile Remove="Windows\Purchases\ItemQuickDialog.xaml.cs" />
     <Compile Remove="Windows\Purchases\SupplierQuickDialog.xaml.cs" />
+    <Compile Remove="Windows\Settings\PreferencesPage.xaml.cs" />
+    <Compile Remove="Windows\Settings\PreferencesViewModel.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,6 +40,7 @@
     <Page Remove="Windows\Accounting\VoucherEditorWindow.xaml" />
     <Page Remove="Windows\Purchases\ItemQuickDialog.xaml" />
     <Page Remove="Windows\Purchases\SupplierQuickDialog.xaml" />
+    <Page Remove="Windows\Settings\PreferencesPage.xaml" />
   </ItemGroup>
   
 	<ItemGroup>
@@ -75,7 +78,6 @@
 
   <ItemGroup>
     <Folder Include="Resources\Icons\" />
-    <Folder Include="Services\Context\" />
   </ItemGroup>
 	<ItemGroup>
 		<Reference Include="ReachFramework" />

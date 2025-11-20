@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Pos.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class initialreceipt : Migration
+    public partial class initialreceipt3 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

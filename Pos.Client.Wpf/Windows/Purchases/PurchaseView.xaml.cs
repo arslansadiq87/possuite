@@ -129,12 +129,12 @@ namespace Pos.Client.Wpf.Windows.Purchases
         }
 
         private readonly IPurchasesService _purchaseSvc;
-        private readonly IInvoiceSettingsService _invSettingSvc;
+        private readonly IInvoiceSettingsLocalService _invSettingSvc;
         private readonly IPartyLookupService _partySvc;
         private readonly ILookupService _lookup;  // ← interface
         private readonly IItemsReadService _itemsSvc;
         private readonly IGlPostingService _gl;
-        private readonly IUserPreferencesService _prefs;
+        //private readonly IUserPreferencesService _prefs;
         private readonly IDialogService _dialogs;   // overlay-based confirms, etc.
         private Purchase _model = new();
         private readonly ObservableCollection<PurchaseLineVM> _lines = new();
@@ -146,11 +146,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
         {
             InitializeComponent();
             _purchaseSvc = App.Services.GetRequiredService<IPurchasesService>();  // ✅
-            _invSettingSvc = App.Services.GetRequiredService<IInvoiceSettingsService>();  // ✅
+            _invSettingSvc = App.Services.GetRequiredService<IInvoiceSettingsLocalService>();  // ✅
             _partySvc = App.Services.GetRequiredService<IPartyLookupService>();
             _itemsSvc = App.Services.GetRequiredService<IItemsReadService>();
             _gl = App.Services.GetRequiredService<IGlPostingService>();
-            _prefs = App.Services.GetRequiredService<IUserPreferencesService>();
+            //_prefs = App.Services.GetRequiredService<IUserPreferencesService>();
             _lookup = App.Services.GetRequiredService<ILookupService>(); // interface
             _dialogs = App.Services.GetRequiredService<IDialogService>();
             if (DataContext is not PurchaseEditorVM) DataContext = new PurchaseEditorVM();
@@ -1644,46 +1644,51 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private async Task ApplyUserPrefsToDestinationAsync()
         {
+            // If editing an existing doc or bound to an existing Purchase, do nothing
             if ((_model?.Id ?? 0) > 0) return;
             if (PurchaseId is int pid && pid > 0) return;
+
             try
             {
-                var prefSvc = App.Services.GetRequiredService<IUserPreferencesService>();
-                var prefs = await prefSvc.GetAsync();
-                var scope = prefs?.PurchaseDestinationScope ?? "Outlet";
-                var id = prefs?.PurchaseDestinationId;
-                if (string.Equals(scope, "Warehouse", StringComparison.OrdinalIgnoreCase) && _warehouseResults.Any())
+                // Force "Outlet" scope UI
+                try { DestOutletRadio.IsChecked = true; } catch { }
+                try
                 {
-                    try { DestWarehouseRadio.IsChecked = true; } catch { }
-                    try { WarehouseBox.IsEnabled = true; OutletBox.IsEnabled = false; } catch { }
-                    if (id.HasValue)
+                    OutletBox.IsEnabled = true;
+                    WarehouseBox.IsEnabled = false;
+                }
+                catch { }
+
+                // Select the first outlet if available
+                if (_outletResults != null && _outletResults.Count > 0)
+                {
+                    var first = _outletResults[0];
+                    try
                     {
-                        try { WarehouseBox.SelectedValue = id.Value; } catch { }
+                        // Prefer SelectedValue when you have ValueMemberPath bound to Id
+                        OutletBox.SelectedValue = first.Id;
                     }
-                    if (WarehouseBox.SelectedValue == null)
+                    catch
                     {
-                        var match = _warehouseResults.FirstOrDefault(w => w.Id == id);
-                        if (match != null) try { WarehouseBox.SelectedItem = match; } catch { }
-                        else if (_warehouseResults.Count > 0) try { WarehouseBox.SelectedIndex = 0; } catch { }
+                        // Fallback to object selection
+                        try { OutletBox.SelectedItem = first; } catch { }
                     }
                 }
                 else
                 {
-                    try { DestOutletRadio.IsChecked = true; } catch { }
-                    try { OutletBox.IsEnabled = true; WarehouseBox.IsEnabled = false; } catch { }
-                    var outletId = id ?? AppState.Current.CurrentOutletId;
-                    try { OutletBox.SelectedValue = outletId; } catch { }
-                    if (OutletBox.SelectedValue == null)
-                    {
-                        var match = _outletResults.FirstOrDefault(o => o.Id == outletId);
-                        if (match != null) try { OutletBox.SelectedItem = match; } catch { }
-                        else if (_outletResults.Count > 0) try { OutletBox.SelectedIndex = 0; } catch { }
-                    }
+                    // If outlets aren’t loaded yet, at least clear warehouse selection
+                    try { OutletBox.SelectedIndex = -1; } catch { }
                 }
+
+                // Ensure warehouse UI is not selected
+                try { DestWarehouseRadio.IsChecked = false; } catch { }
+                try { WarehouseBox.SelectedIndex = -1; } catch { }
             }
             catch
             {
+                // swallow – safe defaults already applied above
             }
         }
+
     }
 }

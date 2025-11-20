@@ -21,6 +21,7 @@ namespace Pos.Domain.Entities
         public string? Phone { get; set; }
 
         // Logo
+        public bool ShowLogoOnReceipt { get; set; } = true;
         public byte[]? LogoPng { get; set; }
         public int LogoMaxWidthPx { get; set; } = 384;
         public string LogoAlignment { get; set; } = "Center";

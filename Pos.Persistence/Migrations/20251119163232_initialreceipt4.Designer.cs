@@ -11,8 +11,8 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    [Migration("20251119003721_initialreceipt")]
-    partial class initialreceipt
+    [Migration("20251119163232_initialreceipt4")]
+    partial class initialreceipt4
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2222,6 +2222,9 @@ namespace Pos.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("ShowCustomerOnReceipt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowLogoOnReceipt")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("ShowQr")

@@ -10,12 +10,17 @@
     <Compile Remove="Accounting\AccountType.cs" />
     <Compile Remove="Accounting\OpeningBalance.cs" />
     <Compile Remove="Entities\Customer.cs" />
+    <Compile Remove="Entities\InvoiceLocalization.cs" />
+    <Compile Remove="Entities\InvoiceSettings.cs" />
     <Compile Remove="Entities\ReceiptProfile.cs" />
     <Compile Remove="Entities\SaleLine.cs" />
     <Compile Remove="Entities\Supplier.cs" />
+    <Compile Remove="Entities\UserPreference.cs" />
+    <Compile Remove="Services\IInvoiceSettingsService.cs" />
     <Compile Remove="Services\IPartyReadService.cs" />
     <Compile Remove="Services\IPartyWriteService.cs" />
     <Compile Remove="Services\IPurchasesService_old.cs" />
+    <Compile Remove="Services\IUserPreferencesService.cs" />
   </ItemGroup>
 
 </Project>

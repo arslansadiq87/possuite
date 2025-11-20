@@ -16,5 +16,8 @@ namespace Pos.Domain.Services
 
         // Updates both the BankAccount row and the linked GL account Name
         Task UpdateAsync(BankAccountUpsertDto dto, CancellationToken ct = default);
+
+        public sealed record BankAccountPickDto(int AccountId, int BankAccountId, string Display);
+
     }
 }

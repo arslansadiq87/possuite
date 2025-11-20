@@ -14,6 +14,7 @@ using Pos.Domain.Formatting;
 using Pos.Domain.Accounting;
 using Pos.Domain.Models.Inventory;
 using Pos.Domain.Models.Settings;
+using System.Net.NetworkInformation;
 
 
 namespace Pos.Persistence.Services
@@ -24,10 +25,10 @@ namespace Pos.Persistence.Services
         private readonly IOutboxWriter _outbox;
         private readonly IGlPostingService _gl;
         private readonly IStockGuard _guard;
-        private readonly IInvoiceSettingsService _invSettings;   // <-- add
+        private readonly IInvoiceSettingsLocalService _invSettings;   // <-- add
         private readonly IInventoryReadService _in = null!; // <-- add
 
-        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard, IInvoiceSettingsService invSettings, IInventoryReadService @in)
+        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard, IInvoiceSettingsLocalService invSettings, IInventoryReadService @in)
         {
             _db = db;
             _outbox = outbox;
@@ -249,7 +250,10 @@ namespace Pos.Persistence.Services
             // Ensure open till exists (defensive)
             // READ outlet settings
             // Read per-outlet preference for till usage
-            var (settings, _) = await _invSettings.GetAsync(req.OutletId, "en", ct);
+            //var counterId = AppState.Current.CurrentCounterId; // or pass the known counter
+            var settings = await _invSettings.GetForCounterWithFallbackAsync(req.CounterId, ct);
+
+            //var (settings, _) = await _invSettings.GetAsync(req.OutletId, "en", ct);
 
             if (settings.UseTill)
             {
@@ -605,27 +609,28 @@ namespace Pos.Persistence.Services
             => string.IsNullOrWhiteSpace(existing) ? add : existing + Environment.NewLine + add;
 
         public async Task<InvoiceSettingsDto> GetInvoiceSettingsAsync(
-    int outletId,
-    string lang = "en",
+    int counterId,
     CancellationToken ct = default)
         {
-            var (s, loc) = await _invSettings.GetAsync(outletId, lang, ct);
+            // New API returns a single model (no localization tuple)
+            var s = await _invSettings.GetForCounterWithFallbackAsync(counterId, ct);
 
-            // Normalize paper width & footer similar to your service’s behavior
-            var width = s.PaperWidthMm <= 0 ? 80 : s.PaperWidthMm;
-            var footer = string.IsNullOrWhiteSpace(loc.Footer)
-                ? "Thank you for shopping with us!"
-                : loc.Footer!;
+            // If you don’t store paper width in local settings, keep 80mm default
+            var width = 80;
 
+            // Map old DTO fields to new properties
             return new InvoiceSettingsDto(
-                PrintOnSave: s.PrintOnSave,
-                AskToPrintOnSave: s.AskToPrintOnSave,
+                PrintOnSave: s.AutoPrintOnSave,
+                AskToPrintOnSave: s.AskBeforePrint,
                 PaperWidthMm: width,
                 SalesCardClearingAccountId: s.SalesCardClearingAccountId,
                 PrinterName: s.PrinterName,
-                FooterText: footer
+                FooterText: string.IsNullOrWhiteSpace(s.FooterSale)
+                                        ? "Thank you for shopping with us!"
+                                        : s.FooterSale!
             );
         }
+
 
         // NEW: interface-conform aliases for the amend/edit flow
         public Task<Pos.Domain.Models.Sales.EditSaleLoadDto> LoadForEditAsync(

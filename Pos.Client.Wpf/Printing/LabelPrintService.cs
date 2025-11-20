@@ -146,16 +146,13 @@ namespace Pos.Client.Wpf.Printing
             }
 
             ticket.PageMediaSize = chosen ?? new PageMediaSize(PageMediaSizeName.Unknown, pageWdip, pageHdip);
-
             // Some drivers support MediaType=Label – set if available
             if (caps?.PageMediaTypeCapability?.Contains(PageMediaType.Label) == true)
                 ticket.PageMediaType = PageMediaType.Label;
-
             // 6) Merge & validate (critical for thermal drivers)
             var result = pd.PrintQueue?.MergeAndValidatePrintTicket(baseTicket, ticket);
             var validated = result?.ValidatedPrintTicket ?? ticket;
             pd.PrintTicket = validated;
-
             // 7) Print
             pd.PrintDocument(doc.DocumentPaginator, "POS Label – Sample");
             return Task.CompletedTask;

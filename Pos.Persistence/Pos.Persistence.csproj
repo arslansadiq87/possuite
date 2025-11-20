@@ -7,8 +7,10 @@
     <Compile Remove="Features\OpeningStock\OpeningStockDtos.cs" />
     <Compile Remove="Features\OpeningStock\OpeningStockService.cs" />
     <Compile Remove="Seeding\CoASeeder.cs" />
+    <Compile Remove="Services\InvoiceSettingsService.cs" />
     <Compile Remove="Services\PurchasesService_old.cs" />
     <Compile Remove="Services\SuppliersService.cs" />
+    <Compile Remove="Services\UserPreferencesService.cs" />
   </ItemGroup>
 
   <ItemGroup>

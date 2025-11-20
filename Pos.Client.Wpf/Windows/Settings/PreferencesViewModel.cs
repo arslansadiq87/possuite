@@ -39,6 +39,7 @@ public partial class PreferencesViewModel : ObservableObject
     [ObservableProperty] private string purchaseDestinationScope = "Outlet"; // "Outlet" | "Warehouse"
     [ObservableProperty] private int? purchaseDestinationId;
     [ObservableProperty] private string defaultBarcodeType = "EAN13";
+    
 
     [ObservableProperty] private bool isBusy;
 
@@ -155,6 +156,7 @@ public partial class PreferencesViewModel : ObservableObject
             PurchaseDestinationScope = p.PurchaseDestinationScope ?? "Outlet";
             PurchaseDestinationId = p.PurchaseDestinationId;
             DefaultBarcodeType = string.IsNullOrWhiteSpace(p.DefaultBarcodeType) ? "EAN13" : p.DefaultBarcodeType;
+            
 
             // Time zones
             TimeZones.Clear();

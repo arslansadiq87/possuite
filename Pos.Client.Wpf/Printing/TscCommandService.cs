@@ -114,12 +114,12 @@ namespace Pos.Client.Wpf.Printing
             sb.Append(lb.Body);                       // TEXT/BARCODE/QRCODE etc.
             sb.AppendLine($"PRINT {Clamp(copies, 1, 999)}");
 
-            await _raw.SendAsync(printerName, sb.ToString(), ct);
+            await _raw.SendTsplAsync(printerName, sb.ToString(), ct);
         }
 
         // --- helpers ---
         private Task Send(string printerName, string cmd, CancellationToken ct)
-            => _raw.SendAsync(printerName, cmd, ct);
+            => _raw.SendTsplAsync(printerName, cmd, ct);
 
         private static string Fm(double mm) => mm.ToString("0.##", CultureInfo.InvariantCulture);
         private static int Clamp(int v, int min, int max) => v < min ? min : (v > max ? max : v);

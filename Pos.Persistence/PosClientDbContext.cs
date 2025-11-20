@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Entities;
 using Pos.Domain.Abstractions;
 using Pos.Domain.Accounting;
+using Pos.Domain.Settings;
 
 
 
@@ -47,10 +48,10 @@ namespace Pos.Persistence
         public DbSet<OpeningStock> OpeningStocks => Set<OpeningStock>();
         public DbSet<OpeningStockLine> OpeningStockLines => Set<OpeningStockLine>();
         public DbSet<OpeningStockDraftLine> OpeningStockDraftLines => Set<OpeningStockDraftLine>();
-        public DbSet<InvoiceSettings> InvoiceSettings { get; set; } = default!;
-        public DbSet<InvoiceLocalization> InvoiceLocalizations { get; set; } = default!;
+        
+        //public DbSet<InvoiceLocalization> InvoiceLocalizations { get; set; } = default!;
         public DbSet<BarcodeLabelSettings> BarcodeLabelSettings { get; set; } = default!;
-        public DbSet<UserPreference> UserPreferences { get; set; }   // ✅ add this line
+        //public DbSet<UserPreference> UserPreferences { get; set; }   // ✅ add this line
         public DbSet<BankAccount> BankAccounts { get; set; } = null!;
         public DbSet<Account> Accounts { get; set; }
         public DbSet<Journal> Journals { get; set; }
@@ -69,7 +70,9 @@ namespace Pos.Persistence
         public DbSet<ProductImage> ProductImages => Set<ProductImage>();
         public DbSet<ItemImage> ItemImages => Set<ItemImage>();
         public DbSet<ReceiptTemplate> ReceiptTemplates => Set<ReceiptTemplate>();
-
+        public DbSet<IdentitySettings> IdentitySettings { get; set; } = default!;
+        //public DbSet<InvoiceSettingsLocal> InvoiceSettingsLocals => Set<InvoiceSettingsLocal>();
+        public DbSet<InvoiceSettingsLocal> InvoiceSettingsLocals { get; set; } = default!;
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -87,8 +90,8 @@ namespace Pos.Persistence
             bool isSqlServer = provider.Contains("SqlServer", StringComparison.OrdinalIgnoreCase);
             bool isMySql = provider.Contains("MySql", StringComparison.OrdinalIgnoreCase);
             bool isNpgsql = provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase);
-            b.ApplyConfiguration(new Configurations.InvoiceSettingsConfig());
-            b.ApplyConfiguration(new Configurations.InvoiceLocalizationConfig());
+            //b.ApplyConfiguration(new Configurations.InvoiceSettingsConfig());
+            //b.ApplyConfiguration(new Configurations.InvoiceLocalizationConfig());
             b.Entity<User>().Property(u => u.Role).HasConversion<int>();
             b.Entity<User>()
                 .HasIndex(u => u.Username)
@@ -561,9 +564,9 @@ namespace Pos.Persistence
                 e.Property(x => x.PrinterName).HasMaxLength(200);
                 e.Property(x => x.CodeType).HasMaxLength(20);
             });
-            b.Entity<UserPreference>()
-            .HasIndex(p => p.MachineName)
-            .IsUnique();
+            //b.Entity<UserPreference>()
+            //.HasIndex(p => p.MachineName)
+            //.IsUnique();
             // ---- Accounting (GL) ----
             b.Entity<Account>(e =>
             {
@@ -697,15 +700,12 @@ namespace Pos.Persistence
             b.Entity<ReceiptTemplate>(e =>
             {
                 e.ToTable("ReceiptTemplates");
-
                 e.HasKey(x => x.Id);
-
                 // Foreign key (optional – only if you want FK to Outlets)
                 e.HasOne(x => x.Outlet)
                  .WithMany()                // or .WithMany(o => o.ReceiptTemplates) if you add a nav
                  .HasForeignKey(x => x.OutletId)
                  .OnDelete(DeleteBehavior.Restrict);
-
                 // Basic property sizing
                 e.Property(x => x.PrinterName).HasMaxLength(128);
                 e.Property(x => x.OutletDisplayName).HasMaxLength(128);
@@ -716,26 +716,61 @@ namespace Pos.Persistence
                 e.Property(x => x.HeaderText).HasMaxLength(1024);
                 e.Property(x => x.FooterText).HasMaxLength(1024);
 
-                // Bytes (logo) – no special config needed; EF maps byte[] to BLOB/bytea
-                // e.Property(x => x.LogoPng);
-
-                // Enum mapping (ReceiptDocType) – EF will map as int by default; that’s fine.
-                // e.Property(x => x.DocType).HasConversion<int>();
-
-                // Helpful index for lookups by outlet + doc type
                 e.HasIndex(x => new { x.DocType, x.OutletId });
-
-                // NOTE on uniqueness:
-                // We want at most ONE template per (OutletId, DocType) and also
-                // at most ONE *global* (OutletId = null) per DocType.
-                //
-                // Cross-DB portable way: enforce in service before Save (see below).
-                // If you're on PostgreSQL, you can also add partial unique indexes via migration:
-                //   CREATE UNIQUE INDEX ux_receipts_global ON "ReceiptTemplates"("DocType")
-                //   WHERE "OutletId" IS NULL;
-                //   CREATE UNIQUE INDEX ux_receipts_outlet ON "ReceiptTemplates"("DocType","OutletId")
-                //   WHERE "OutletId" IS NOT NULL;
             });
+
+            b.Entity<IdentitySettings>(e =>
+            {
+                e.ToTable("IdentitySettings");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.OutletDisplayName).HasMaxLength(200);
+                e.Property(x => x.AddressLine1).HasMaxLength(200);
+                e.Property(x => x.AddressLine2).HasMaxLength(200);
+                e.Property(x => x.Phone).HasMaxLength(50);
+
+                e.Property(x => x.BusinessNtn);
+                e.Property(x => x.FbrPosId);
+
+                // One row per outlet (or null = GLOBAL)
+                e.HasIndex(x => x.OutletId).IsUnique();
+            });
+
+            b.Entity<InvoiceSettingsLocal>(e =>
+            {
+                e.ToTable("InvoiceSettingsLocals");
+                e.HasKey(x => x.Id);
+
+                // One settings row per counter
+                e.HasIndex(x => x.CounterId).IsUnique();
+
+                // Helpful for "latest settings" queries
+                e.HasIndex(x => x.UpdatedAtUtc);
+
+                e.Property(x => x.PrinterName).HasMaxLength(256);
+                e.Property(x => x.LabelPrinterName).HasMaxLength(256);
+                e.Property(x => x.DisplayTimeZoneId).HasMaxLength(128);
+
+                e.Property(x => x.FooterSale).HasMaxLength(2000);
+                e.Property(x => x.FooterSaleReturn).HasMaxLength(2000);
+                e.Property(x => x.FooterVoucher).HasMaxLength(2000);
+                e.Property(x => x.FooterZReport).HasMaxLength(2000);
+
+                // Optional: persist enum as string (nice for debugging);
+                // remove this line if you prefer default int storage
+                e.Property(x => x.DefaultBarcodeType).HasConversion<string>();
+
+                // Booleans (by convention; no extra config needed)
+                // e.Property(x => x.EnableDailyBackup);
+                // e.Property(x => x.EnableHourlyBackup);
+                // e.Property(x => x.UseTillMethod); // or UseTill if you kept that name
+
+                // If you want the DB to set UpdatedAtUtc automatically (optional):
+                // e.Property(x => x.UpdatedAtUtc)
+                //  .HasDefaultValueSql("CURRENT_TIMESTAMP");  // SQLite
+            });
+
+
 
 
 

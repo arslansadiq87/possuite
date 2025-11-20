@@ -19,6 +19,8 @@ using Pos.Domain.Models.Sales;
 using System.Threading.Tasks;
 using Pos.Domain.Accounting;
 using Pos.Domain.Services.Accounting;
+using Pos.Domain.Settings;
+using Pos.Domain.Models.Settings;
 
 
 namespace Pos.Client.Wpf.Windows.Sales
@@ -30,18 +32,20 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly IOutletReadService _outletRead;
         private readonly IPartyLookupService _partyLookup;
         private readonly IInventoryReadService _invRead;
-        private readonly IInvoiceSettingsService _invSettings; // NEW
-        private bool _useTill; // NEW
+        private readonly IInvoiceSettingsLocalService _invSettings; // NEW
                                // ✦ Add these private fields in your window class (if not present)
         private readonly IItemsReadService _items;
-        
-        private Pos.Domain.Models.Settings.InvoiceSettingsDto? _settings; // cache
+
+        //private Pos.Domain.Models.Settings.InvoiceSettingsDto? _settings; // cache
+        private InvoiceSettingsLocal? _settingsLocal; // cache new model
+        private bool _useTill;
+        private bool _printOnSave;
+        private bool _askBeforePrintOnSave;
+
         private readonly ObservableCollection<CartLine> _cart = new();
         private readonly IDialogService _dialogs;
         private int? _selectedCustomerId;
-        private bool _printOnSave;
-        private bool _askBeforePrintOnSave;
-    
+        
         public static readonly DependencyProperty IsCardEnabledProperty =
             DependencyProperty.Register(nameof(IsCardEnabled), typeof(bool), typeof(SaleInvoiceView), new PropertyMetadata(false));
 
@@ -77,7 +81,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             _sales = sales;
             _invRead = invRead;                     // if present
             _partyLookup = partyLookup;             // <-- store it
-            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsService>(); // NEW
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsLocalService>(); // NEW
             _items = App.Services.GetRequiredService<IItemsReadService>();
 
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
@@ -90,23 +94,39 @@ namespace Pos.Client.Wpf.Windows.Sales
             FooterBox.Text = _invoiceFooter;
             Loaded += async (_, __) =>
             {
-                _settings = await _sales.GetInvoiceSettingsAsync(_ctx.OutletId, "en");
-                var (settings, _) = await _invSettings.GetAsync(OutletId, "en");
-                _useTill = settings.UseTill;
-                //await UpdateTillStatusUiAsync(); // make sure the label matches the mode
+                try
+                {
+                    var settings = await _invSettings.GetForCounterWithFallbackAsync(_ctx.CounterId, default);
+                    _settingsLocal = settings;
 
+                    // If you standardized the name to UseTillMethod, use that instead:
+                    _useTill = settings.UseTill; // or settings.UseTillMethod
+                    _printOnSave = settings.AutoPrintOnSave;
+                    _askBeforePrintOnSave = settings.AskBeforePrint;
+                    IsCardEnabled = settings.SalesCardClearingAccountId.HasValue;
 
-                _printOnSave = _settings.PrintOnSave;
-                _askBeforePrintOnSave = _settings.AskToPrintOnSave;
-                IsCardEnabled = (_settings.SalesCardClearingAccountId != null);
-                UpdateInvoicePreview();
-                UpdateInvoiceDateNow();
-                UpdateLocationUi();
-                WalkInCheck_Changed(WalkInCheck!, new RoutedEventArgs());
-                if (Window.GetWindow(this) is Window w)
-                    w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
-                FocusScan();
+                    // Footer for this view (sale)
+                    _invoiceFooter = string.IsNullOrWhiteSpace(settings.FooterSale)
+                                             ? "Thank you for shopping with us!"
+                                             : settings.FooterSale!;
+                    FooterBox.Text = _invoiceFooter;
+
+                    UpdateInvoicePreview();
+                    UpdateInvoiceDateNow();
+                    UpdateLocationUi();
+                    WalkInCheck_Changed(WalkInCheck!, new RoutedEventArgs());
+
+                    if (Window.GetWindow(this) is Window w)
+                        w.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(Global_PreviewKeyDown), true);
+
+                    FocusScan();
+                }
+                catch (Exception ex)
+                {
+                    _dialogs?.AlertAsync($"Failed to load invoice settings.\n{ex.Message}", "Invoice Settings");
+                }
             };
+
         }
 
         // ✦ Add this local view-model to carry defaults from Items table
@@ -132,26 +152,48 @@ namespace Pos.Client.Wpf.Windows.Sales
                 ProductNameComposer.Compose(ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
         }
 
+        private InvoiceSettingsDto BuildPrintDtoShim()
+        {
+            // We no longer want printing to depend on this DTO.
+            // Until ReceiptPrinter is refactored, provide just what it needs.
+            var s = _settingsLocal;
+
+            return new InvoiceSettingsDto(
+                PrintOnSave: _printOnSave,
+                AskToPrintOnSave: _askBeforePrintOnSave,
+                PaperWidthMm: 80, // let printing layer resolve real paper later
+                SalesCardClearingAccountId: s?.SalesCardClearingAccountId,
+                PrinterName: null, // printing layer will resolve from counter printer settings
+                FooterText: string.IsNullOrWhiteSpace(s?.FooterSale)
+                            ? "Thank you for shopping with us!"
+                            : s!.FooterSale!
+            );
+        }
+
+
         private async Task MaybePrintReceiptAsync(Sale sale, TillSession? open)
         {
             var doPrint = _printOnSave;
             if (_askBeforePrintOnSave)
             {
-                var ans = MessageBox.Show("Print receipt now?", "Print", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                var ans = MessageBox.Show("Print receipt now?", "Print",
+                                          MessageBoxButton.YesNo, MessageBoxImage.Question);
                 doPrint = (ans == MessageBoxResult.Yes);
             }
             if (!doPrint) return;
 
             try
             {
-                var s = _settings ?? await _sales.GetInvoiceSettingsAsync(_ctx.OutletId, "en");
+                // TEMP: build DTO for the current printer API
+                var printDto = BuildPrintDtoShim();
+
                 await ReceiptPrinter.PrintSaleAsync(
                     sale: sale,
                     cart: _cart,
                     till: open,
                     cashierName: cashierDisplay,
                     salesmanName: _selectedSalesmanName,
-                    settings: s                                    // <-- pass DTO now
+                    settings: printDto // old signature expects DTO
                 );
             }
             catch (Exception ex)
@@ -159,6 +201,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 MessageBox.Show("Print failed: " + ex.Message, "Receipt Print");
             }
         }
+
 
         private async Task<bool> TryAddOrIncrementWithGuardAsync(ItemIndexDto item, string displayName)
         {

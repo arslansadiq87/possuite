@@ -24,7 +24,7 @@ namespace Pos.Client.Wpf.Windows.Settings
                 {
                     // only run once
                     Loaded -= async (_, __) => { };
-                    await vm.InitAsync();
+                    //await vm.InitAsync();
                 };
             }
         }

@@ -23,7 +23,8 @@ namespace Pos.Client.Wpf.Printing
             string? contacts,
             string? businessNtn,
             bool showLogo,
-            // item flags
+            bool showCustomer,                 // <-- add this
+            bool showCashier,                              // item flags
             bool showName, bool showSku, bool showQty, bool showUnit, bool showLineDisc, bool showLineTotal,
             // totals flags
             bool showTax, bool showInvDisc, bool showOtherExp, bool showGrand, bool showPaid, bool showBalance,
@@ -37,6 +38,7 @@ namespace Pos.Client.Wpf.Printing
             // generic barcode / QR preview
             bool showBarcodeOnReceipt,
             bool showGenericQr)
+
         {
             var sb = new StringBuilder();
 
@@ -104,9 +106,20 @@ namespace Pos.Client.Wpf.Printing
 
             sb.Append(Line($"Counter: {counterLabel}", outletRight));
 
-            // Cashier
-            if (!string.IsNullOrWhiteSpace(sale.CashierName))
-                sb.Append(Line("Cashier", sale.CashierName!));
+
+            // Cashier (left) | Customer (right) — each independently controlled by its toggle
+            if ((showCashier && !string.IsNullOrWhiteSpace(sale.CashierName)) ||
+                (showCustomer && !string.IsNullOrWhiteSpace(sale.CustomerName)))
+            {
+                var left = (showCashier && !string.IsNullOrWhiteSpace(sale.CashierName))
+                    ? $"Cashier: {sale.CashierName!.Trim()}"
+                    : "";
+                var right = (showCustomer && !string.IsNullOrWhiteSpace(sale.CustomerName))
+                    ? sale.CustomerName!.Trim()
+                    : "";
+                sb.Append(Line(left, right));
+            }
+
 
             sb.Append(Repeat('-'));
 
@@ -117,29 +130,51 @@ namespace Pos.Client.Wpf.Printing
                 int unitW = noDecimals ? 5 : 7;
                 int totalW = noDecimals ? 6 : 8;
 
-                // ensure the row fits the available width
-                int used = nameW + 1 + qtyW + 1 + unitW + 1 + totalW;
-                if (used > width)
-                {
-                    nameW -= (used - width);
-                    if (nameW < 6) nameW = 6;
-                }
+                // recompute available widths based on visible columns
+                int cols = 1
+                    + (showQty ? 1 : 0)
+                    + (showUnit ? 1 : 0)
+                    + (showLineTotal ? 1 : 0);
+
+                // nominal spaces between visible columns
+                int gaps = Math.Max(0, cols - 1);
+
+                // target: nameW + (qty?) + (unit?) + (total?) + gaps == width
+                int visibleWidth = (showQty ? qtyW : 0) + (showUnit ? unitW : 0) + (showLineTotal ? totalW : 0) + gaps;
+                nameW = Math.Max(6, width - visibleWidth);
+                if (nameW + visibleWidth > width)
+                    nameW = Math.Max(6, width - visibleWidth);
 
                 string Row(string n, string q, string u, string t)
                 {
-                    n = string.IsNullOrEmpty(n) ? "" : (n.Length <= nameW ? n : n[..nameW]);
-                    q = string.IsNullOrEmpty(q) ? "" : ClipRight(q, qtyW);
-                    u = string.IsNullOrEmpty(u) ? "" : ClipRight(u, unitW);
-                    t = string.IsNullOrEmpty(t) ? "" : ClipRight(t, totalW);
+                    var sbRow = new StringBuilder(width + 2);
 
-                    return n.PadRight(nameW) + " "
-                         + q.PadLeft(qtyW) + " "
-                         + u.PadLeft(unitW) + " "
-                         + t.PadLeft(totalW) + "\n";
+                    // Name (always present)
+                    n = string.IsNullOrEmpty(n) ? "" : (n.Length <= nameW ? n : n[..nameW]);
+                    sbRow.Append(n.PadRight(nameW));
+
+                    void AddCol(string s, int w)
+                    {
+                        sbRow.Append(' ');
+                        s = string.IsNullOrEmpty(s) ? "" : ClipRight(s, w);
+                        sbRow.Append(s.PadLeft(w));
+                    }
+
+                    if (showQty) AddCol(q, qtyW);
+                    if (showUnit) AddCol(u, unitW);
+                    if (showLineTotal) AddCol(t, totalW);
+
+                    sbRow.Append('\n');
+                    return sbRow.ToString();
                 }
 
-                // header row (preview only)
-                sb.Append(Row("Item", "Qty", "Price", "Total"));
+                // header row matches visible columns
+                string hName = "Item";
+                string hQty = showQty ? "Qty" : "";
+                string hUnit = showUnit ? "Price" : "";
+                string hTot = showLineTotal ? "Total" : "";
+
+                sb.Append(Row(hName, hQty, hUnit, hTot));
                 sb.Append(Repeat('-'));
 
                 foreach (var l in lines)
@@ -153,7 +188,7 @@ namespace Pos.Client.Wpf.Printing
 
                     sb.Append(Row(name, qty, unit, tot));
 
-                    // Discount: left, under the item name (indented)
+                    // Discount: left, under the item name (indented and only if enabled)
                     if (showLineDisc && l.LineDiscount > 0)
                     {
                         var discLeft = "    Disc: " + Money(l.LineDiscount); // 4-space indent
@@ -163,16 +198,25 @@ namespace Pos.Client.Wpf.Printing
                 sb.Append(Repeat('-'));
             }
 
+
             // ---------------- totals: right-anchored two columns ----------------
             {
-                // Build rows based on flags
+                decimal paid = sale.Paid;
+                decimal invDisc = sale.InvoiceDiscount;
+                decimal total = sale.Total;
+                decimal tax = sale.Tax;
+                decimal other = sale.OtherExpenses;
+
+                decimal balance = sale.Balance != 0m ? sale.Balance : Math.Max(0m, total - paid);
+
                 var rows = new List<(string Label, string Value)>();
-                if (showInvDisc && sale.InvoiceDiscount > 0) rows.Add(("Invoice Discount", "-" + Money(sale.InvoiceDiscount)));
-                if (showTax) rows.Add(("Tax", Money(sale.Tax)));
-                if (showOtherExp) rows.Add(("Other", Money(sale.OtherExpenses)));
-                if (showGrand) rows.Add((">> TOTAL <<", Money(sale.Total)));
-                if (showPaid) rows.Add(("Received", Money(sale.Paid)));
-                if (showBalance && sale.Balance > 0) rows.Add((">> BALANCE <<", Money(sale.Balance)));
+
+                if (showInvDisc && invDisc > 0m) rows.Add(("Invoice Discount", "-" + Money(invDisc)));
+                if (showTax && tax != 0m) rows.Add(("Tax", Money(tax)));
+                if (showOtherExp && other != 0m) rows.Add(("Other", Money(other)));
+                if (showGrand) rows.Add((">> TOTAL <<", Money(total)));
+                if (showPaid) rows.Add(("Received", Money(paid)));
+                if (showBalance && balance > 0m) rows.Add((">> BALANCE <<", Money(balance)));
 
                 if (rows.Count > 0)
                 {
@@ -181,7 +225,6 @@ namespace Pos.Client.Wpf.Printing
 
                     int maxLabelLen = rows.Max(r => r.Label.Length);
                     int labW = Math.Min(maxLabelLen, width - 1 - valW);
-                    // give labels decent room on 58mm to avoid truncation
                     labW = Math.Max(labW, Math.Min(maxLabelLen, (width >= 42 ? 18 : 16)));
                     if (labW + 1 + valW > width) labW = Math.Max(8, width - 1 - valW);
 
@@ -199,6 +242,8 @@ namespace Pos.Client.Wpf.Printing
                     sb.Append("\n");
                 }
             }
+
+
 
             // ---------------- generic barcode / QR (non-FBR) ----------------
             if (showBarcodeOnReceipt && !string.IsNullOrWhiteSpace(sale.BarcodeText))

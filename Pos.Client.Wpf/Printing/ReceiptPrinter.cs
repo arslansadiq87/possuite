@@ -1,6 +1,7 @@
 ﻿// Pos.Client.Wpf/Printing/ReceiptPrinter.cs
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Pos.Client.Wpf.Models;
 using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
@@ -14,8 +15,13 @@ namespace Pos.Client.Wpf.Printing
         // Fallbacks if settings not provided
         public static string DefaultPrinterName = "POS80";
         public static string DefaultStoreName = "My Store";
+        private static IRawPrinterService Raw => App.Services.GetRequiredService<IRawPrinterService>();
 
         // ---------------- Back-compat overloads (sync) ----------------
+        // ---------- SYNC helper (so existing callers can stay sync if needed) ----------
+        private static void SendEscPos(byte[] bytes)
+            => Raw.SendEscPosAsync(DefaultPrinterName, bytes, CancellationToken.None)
+                 .GetAwaiter().GetResult();
 
         // Old 2-arg
         public static void PrintSale(Sale sale, IEnumerable<CartLine> cart)
@@ -30,7 +36,7 @@ namespace Pos.Client.Wpf.Printing
                 salesmanName: null,
                 eReceiptBaseUrl: null
             );
-            RawPrinterHelper.SendBytesToPrinter(DefaultPrinterName, bytes);
+            SendEscPos(bytes);
         }
 
         // Current 5-arg you’re calling from the view
@@ -51,7 +57,7 @@ namespace Pos.Client.Wpf.Printing
                 salesmanName: salesmanName,
                 eReceiptBaseUrl: null
             );
-            RawPrinterHelper.SendBytesToPrinter(DefaultPrinterName, bytes);
+            SendEscPos(bytes);
         }
 
         // Richest sync overload if you want to supply a store name explicitly
@@ -68,7 +74,7 @@ namespace Pos.Client.Wpf.Printing
             var bytes = EscPosReceiptBuilder.Build(
                 sale, cart, till, storeName, cashierName, salesmanName, eReceiptBaseUrl
             );
-            RawPrinterHelper.SendBytesToPrinter(DefaultPrinterName, bytes);
+            SendEscPos(bytes);
         }
 
         // ---------------- New async overload using InvoiceSettingsDto ----------------
@@ -104,7 +110,7 @@ namespace Pos.Client.Wpf.Printing
             // If you need to inject footer text into the ticket, add it inside EscPosReceiptBuilder.Build(...)
             // using the 'settings.FooterText' value.
 
-            RawPrinterHelper.SendBytesToPrinter(printerName, bytes);
+            SendEscPos(bytes);
 
             // match async signature
             await Task.CompletedTask;
@@ -151,7 +157,7 @@ namespace Pos.Client.Wpf.Printing
             // If EscPosReceiptBuilder later supports paper width or footer,
             // pass them above and remove this comment.
 
-            RawPrinterHelper.SendBytesToPrinter(printerName ?? DefaultPrinterName, bytes);
+            SendEscPos(bytes);
             return Task.CompletedTask;
         }
 
@@ -196,7 +202,7 @@ namespace Pos.Client.Wpf.Printing
             };
 
 
-            RawPrinterHelper.SendBytesToPrinter(tpl.PrinterName ?? DefaultPrinterName, bytes);
+            SendEscPos(bytes);
             return Task.CompletedTask;
         }
 

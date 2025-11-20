@@ -52,11 +52,11 @@ namespace Pos.Persistence.Services.Admin
         }
 
         public async Task<CounterBindingDto> AssignAsync(
-            string machineId,
-            string machineName,
-            int outletId,
-            int counterId,
-            CancellationToken ct = default)
+    string machineId,
+    string machineName,
+    int outletId,
+    int counterId,
+    CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(machineId))
                 throw new InvalidOperationException("MachineId is required.");
@@ -72,40 +72,61 @@ namespace Pos.Persistence.Services.Admin
             if (counter.OutletId != outletId)
                 throw new InvalidOperationException("Counter does not belong to the selected outlet.");
 
-            // Enforce 1:1 both ways (filter by IsActive)
-            var existingForCounter = await db.CounterBindings
-                .Where(b => b.CounterId == counterId && b.IsActive)
-                .FirstOrDefaultAsync(ct);
-            if (existingForCounter is not null && existingForCounter.MachineId != machineId)
-                throw new InvalidOperationException("This counter is already assigned to another PC.");
-
-            // Upsert the machine binding row
-            var existingForMachine = await db.CounterBindings
-                .Where(b => b.MachineId == machineId)
-                .FirstOrDefaultAsync(ct);
-
             CounterBinding binding;
-            if (existingForMachine is not null)
+
+            // 1) Look for an existing row for this COUNTER (covers legacy rows with MachineId = "")
+            var existingForCounter = await db.CounterBindings
+                .Where(b => b.CounterId == counterId)
+                .FirstOrDefaultAsync(ct);
+
+            if (existingForCounter is not null)
             {
-                binding = existingForMachine;
+                // If it belongs to another *real* machine, block
+                if (!string.IsNullOrEmpty(existingForCounter.MachineId) &&
+                    !string.Equals(existingForCounter.MachineId, machineId, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("This counter is already assigned to another PC.");
+                }
+
+                // Reuse / migrate this row
+                binding = existingForCounter;
+                binding.MachineId = machineId;
+                binding.MachineName = machineName;
                 binding.OutletId = outletId;
                 binding.CounterId = counterId;
-                binding.MachineName = machineName;
                 binding.IsActive = true;
                 binding.LastSeenUtc = DateTime.UtcNow;
             }
             else
             {
-                binding = new CounterBinding
+                // 2) Maybe this machine was bound to some other counter
+                var existingForMachine = await db.CounterBindings
+                    .Where(b => b.MachineId == machineId)
+                    .FirstOrDefaultAsync(ct);
+
+                if (existingForMachine is not null)
                 {
-                    MachineId = machineId,
-                    MachineName = machineName,
-                    OutletId = outletId,
-                    CounterId = counterId,
-                    IsActive = true,
-                    LastSeenUtc = DateTime.UtcNow
-                };
-                await db.CounterBindings.AddAsync(binding, ct);
+                    binding = existingForMachine;
+                    binding.OutletId = outletId;
+                    binding.CounterId = counterId;
+                    binding.MachineName = machineName;
+                    binding.IsActive = true;
+                    binding.LastSeenUtc = DateTime.UtcNow;
+                }
+                else
+                {
+                    // 3) Brand-new binding
+                    binding = new CounterBinding
+                    {
+                        MachineId = machineId,
+                        MachineName = machineName,
+                        OutletId = outletId,
+                        CounterId = counterId,
+                        IsActive = true,
+                        LastSeenUtc = DateTime.UtcNow
+                    };
+                    await db.CounterBindings.AddAsync(binding, ct);
+                }
             }
 
             await db.SaveChangesAsync(ct);
@@ -127,9 +148,10 @@ namespace Pos.Persistence.Services.Admin
                 },
                 ct);
 
-            // Return DTO (hydrate names)
-            var outlet = await db.Outlets.AsNoTracking().FirstOrDefaultAsync(o => o.Id == outletId, ct);
-            var counterName = (await db.Counters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == counterId, ct))?.Name ?? "";
+            // Hydrate DTO
+            var outlet = await db.Outlets.AsNoTracking()
+                .FirstOrDefaultAsync(o => o.Id == outletId, ct);
+            var counterName = counter.Name;
 
             return new CounterBindingDto
             {
@@ -144,6 +166,7 @@ namespace Pos.Persistence.Services.Admin
                 LastSeenUtc = binding.LastSeenUtc
             };
         }
+
 
         public async Task UnassignAsync(string machineId, CancellationToken ct = default)
         {
