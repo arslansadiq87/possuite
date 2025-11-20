@@ -8,28 +8,39 @@ using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Pos.Client.Wpf.Services;        // AppState / AppCtx
-using Pos.Domain.Entities;
-using Pos.Domain.Services;            // IInvoiceSettingsLocalService, IBankAccountService
-using Pos.Domain.Settings;            // InvoiceSettingsLocal, DefaultBarcodeType
+using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Services;
+using Pos.Domain.Entities; // Outlet
+using Pos.Domain.Services; // IInvoiceSettingsLocalService, IInvoiceSettingsScopedService, IBankAccountService, IOutletService, ITerminalContext
+using Pos.Domain.Settings; // InvoiceSettingsLocal, InvoiceSettingsScoped, DefaultBarcodeType
 
 namespace Pos.Client.Wpf.Windows.Settings
 {
     public partial class InvoiceSettingsViewModel : ObservableObject
     {
-        private readonly IInvoiceSettingsLocalService _svc;
+        private readonly IInvoiceSettingsLocalService _localSvc;
+        private readonly IInvoiceSettingsScopedService _scopedSvc;
         private readonly IBankAccountService _banks;
-        private readonly IDialogService? _dialog;            // NEW
+        private readonly IOutletService _outlets;
+        private readonly ITerminalContext _ctx;
+        private readonly IDialogService? _dialog;
 
         public InvoiceSettingsViewModel(
-            IInvoiceSettingsLocalService svc,
-            IBankAccountService banks, IDialogService? dialog = null)
+            IInvoiceSettingsLocalService localSvc,
+            IInvoiceSettingsScopedService scopedSvc,
+            IBankAccountService banks,
+            IOutletService outlets,
+            ITerminalContext ctx,
+            IDialogService? dialog = null)
         {
-            _svc = svc;
+            _localSvc = localSvc;
+            _scopedSvc = scopedSvc;
             _banks = banks;
+            _outlets = outlets;
+            _ctx = ctx;
             _dialog = dialog;
 
-            // Load installed printers (invoice + label)
+            // Load installed printers
             try
             {
                 foreach (string p in PrinterSettings.InstalledPrinters)
@@ -38,192 +49,220 @@ namespace Pos.Client.Wpf.Windows.Settings
                     LabelPrinters.Add(p);
                 }
             }
-            catch
-            {
-                // Spooler not ready or no printers installed; ignore
-            }
+            catch { /* ignore */ }
 
-            // Load display time zones (Windows IDs)
+            // Windows display time zones
             foreach (var tz in TimeZoneInfo.GetSystemTimeZones())
                 TimeZones.Add(tz.Id);
 
-            // Fire-and-forget load
-            _ = LoadAsync();
+            _ = InitAsync();
         }
 
-        
+        // ===== Scope =====
+        [ObservableProperty] private bool isGlobal = true;
+        [ObservableProperty] private bool canEditGlobal = true; // wire to AuthZ if needed
+        [ObservableProperty] private bool canEdit = true;       // wire to AuthZ if needed
 
-        // ---------- Scope ----------
-        [ObservableProperty] private int _counterId;
+        [ObservableProperty] private ObservableCollection<Outlet> outletsList = new();
+        [ObservableProperty] private Outlet? selectedOutlet;
 
-        // ---------- Printers ----------
-        [ObservableProperty] private ObservableCollection<string> _printers = new();
-        [ObservableProperty] private string? _printerName;
+        // ===== Counter (local) =====
+        [ObservableProperty] private int counterId;
 
-        // Label printer
-        [ObservableProperty] private ObservableCollection<string> _labelPrinters = new();
-        [ObservableProperty] private string? _labelPrinterName;
+        // ===== Local: Printers only =====
+        [ObservableProperty] private ObservableCollection<string> printers = new();
+        [ObservableProperty] private string? printerName;
 
-        // ---------- Display Timezone ----------
-        [ObservableProperty] private ObservableCollection<string> _timeZones = new();
-        [ObservableProperty] private string? _displayTimeZoneId;
+        [ObservableProperty] private ObservableCollection<string> labelPrinters = new();
+        [ObservableProperty] private string? labelPrinterName;
 
-        // ---------- Bank Accounts (both pickers share this list) ----------
+        // ===== Scoped: Display Timezone =====
+        [ObservableProperty] private ObservableCollection<string> timeZones = new();
+        [ObservableProperty] private string? displayTimeZoneId;
+
+        // ===== Bank Accounts (shared list) =====
         public sealed record BankAccountPick(int AccountId, int BankAccountId, string Display);
+        [ObservableProperty] private ObservableCollection<BankAccountPick> bankAccounts = new();
 
-        [ObservableProperty] private ObservableCollection<BankAccountPick> _bankAccounts = new();
+        [ObservableProperty] private int? salesCardClearingAccountId;
+        [ObservableProperty] private int? purchaseBankAccountId;
 
-        // Selected values (store AccountId for both)
-        [ObservableProperty] private int? _salesCardClearingAccountId;
-        [ObservableProperty] private int? _purchaseBankAccountId;
-
-        // ---------- Items default barcode ----------
+        // ===== Items default barcode =====
         public Array BarcodeTypeValues { get; } = Enum.GetValues(typeof(DefaultBarcodeType));
-        [ObservableProperty] private DefaultBarcodeType _defaultBarcodeType = DefaultBarcodeType.Ean13;
+        [ObservableProperty] private DefaultBarcodeType defaultBarcodeType = DefaultBarcodeType.Ean13;
 
-        // ---------- Print behavior / Drawer ----------
-        [ObservableProperty] private bool _cashDrawerKickEnabled;
-        [ObservableProperty] private bool _autoPrintOnSave;
-        [ObservableProperty] private bool _askBeforePrint = true; // safe default
+        // ===== Print behavior / Drawer (scoped) =====
+        [ObservableProperty] private bool cashDrawerKickEnabled;
+        [ObservableProperty] private bool autoPrintOnSave;
+        [ObservableProperty] private bool askBeforePrint = true;
 
-        // ---------- Footers ----------
-        [ObservableProperty] private string? _footerSale;
-        [ObservableProperty] private string? _footerSaleReturn;
-        [ObservableProperty] private string? _footerVoucher;
-        [ObservableProperty] private string? _footerZReport;
-        // Backups
-        [ObservableProperty] private bool _enableDailyBackup;   // NEW
-        [ObservableProperty] private bool _enableHourlyBackup;  // NEW
-        [ObservableProperty] private bool _useTill;
+        // ===== Footers (scoped) =====
+        [ObservableProperty] private string? footerSale;
+        [ObservableProperty] private string? footerSaleReturn;
+        [ObservableProperty] private string? footerVoucher;
+        [ObservableProperty] private string? footerZReport;
 
+        // ===== Backups (scoped) =====
+        [ObservableProperty] private bool enableDailyBackup;
+        [ObservableProperty] private bool enableHourlyBackup;
 
-        // ---------- Load ----------
-        private async Task LoadAsync(CancellationToken ct = default)
+        // ===== Till requirement (scoped) =====
+        [ObservableProperty] private bool useTill = true;
+
+        // ===== Lifecycle =====
+        private async Task InitAsync(CancellationToken ct = default)
         {
-            // Resolve current counter; do not throw at startup
-            int counter = AppState.Current?.CurrentCounterId ?? 0;
-            try
-            {
-                var (_, c) = AppCtx.GetOutletCounterOrThrow();
-                counter = c;
-            }
-            catch { /* ignore until user assigns counter */ }
+            // Load outlets for scope selector
+            var outs = await _outlets.GetAllAsync(ct);
+            OutletsList = new ObservableCollection<Outlet>(outs.OrderBy(o => o.Name));
 
+            // Pick scope defaults: prefer current outlet
+            SelectedOutlet = OutletsList.FirstOrDefault(o => o.Id == _ctx.OutletId) ?? OutletsList.FirstOrDefault();
+            IsGlobal = true; // default to Global first (like Identity page)
+
+            // Resolve current counter for local settings
+            int counter = _ctx.CounterId;
             CounterId = counter;
-            if (CounterId <= 0) return;
 
-            // Bank accounts list (used for both sales clearing & purchase bank)
+            await LoadScopedAsync(ct);
+            await LoadLocalAsync(ct);
+            await LoadBankAccountsAsync(ct);
+        }
+
+        // ----- Loaders -----
+        private async Task LoadBankAccountsAsync(CancellationToken ct)
+        {
             try
             {
-                var bankDtos = await _banks.SearchAsync(null, ct); // all bank accounts
+                var bankDtos = await _banks.SearchAsync(null, ct);
                 BankAccounts = new ObservableCollection<BankAccountPick>(
-                    bankDtos
-                        .Where(b => b.IsActive)
-                        .Select(b => new BankAccountPick(
-                            b.AccountId,                                      // AccountId (stored in settings)
-                            b.Id,                                             // BankAccount row id (for later use if needed)
-                            $"{b.Code} — {b.Name} ({b.BankName})"
-                        ))
+                    bankDtos.Where(b => b.IsActive)
+                            .Select(b => new BankAccountPick(b.AccountId, b.Id, $"{b.Code} — {b.Name} ({b.BankName})"))
                 );
             }
             catch
             {
-                // If lookup fails, keep list empty; user can retry later
                 BankAccounts = new ObservableCollection<BankAccountPick>();
             }
+        }
 
-            // Load saved settings
-            var m = await _svc.GetForCounterAsync(CounterId, ct);
+        private async Task LoadLocalAsync(CancellationToken ct)
+        {
+            if (CounterId <= 0) return;
+            var local = await _localSvc.GetForCounterAsync(CounterId, ct);
 
-            PrinterName = FallbackPick(m.PrinterName, Printers);
-            LabelPrinterName = FallbackPick(m.LabelPrinterName, LabelPrinters);
-            DisplayTimeZoneId = string.IsNullOrWhiteSpace(m.DisplayTimeZoneId)
+            PrinterName = FallbackPick(local.PrinterName, Printers);
+            LabelPrinterName = FallbackPick(local.LabelPrinterName, LabelPrinters);
+        }
+
+        private async Task LoadScopedAsync(CancellationToken ct)
+        {
+            InvoiceSettingsScoped scoped = IsGlobal
+                ? await _scopedSvc.GetGlobalAsync(ct)
+                : await _scopedSvc.GetForOutletAsync(SelectedOutlet!.Id, ct);
+
+            CashDrawerKickEnabled = scoped.CashDrawerKickEnabled;
+            AutoPrintOnSave = scoped.AutoPrintOnSave;
+            AskBeforePrint = scoped.AskBeforePrint;
+
+            DisplayTimeZoneId = string.IsNullOrWhiteSpace(scoped.DisplayTimeZoneId)
                 ? TimeZones.FirstOrDefault()
-                : m.DisplayTimeZoneId;
+                : scoped.DisplayTimeZoneId;
 
-            CashDrawerKickEnabled = m.CashDrawerKickEnabled;
-            AutoPrintOnSave = m.AutoPrintOnSave;
-            AskBeforePrint = m.AskBeforePrint;
+            SalesCardClearingAccountId = scoped.SalesCardClearingAccountId;
+            PurchaseBankAccountId = scoped.PurchaseBankAccountId;
 
-            DefaultBarcodeType = m.DefaultBarcodeType;
+            DefaultBarcodeType = scoped.DefaultBarcodeType;
 
-            FooterSale = m.FooterSale;
-            FooterSaleReturn = m.FooterSaleReturn;
-            FooterVoucher = m.FooterVoucher;
-            FooterZReport = m.FooterZReport;
-            EnableDailyBackup = m.EnableDailyBackup;   // NEW
-            EnableHourlyBackup = m.EnableHourlyBackup;  // NEW
-            UseTill = m.UseTill;   // moved from Preferences
+            FooterSale = scoped.FooterSale;
+            FooterSaleReturn = scoped.FooterSaleReturn;
+            FooterVoucher = scoped.FooterVoucher;
+            FooterZReport = scoped.FooterZReport;
 
-            SalesCardClearingAccountId = m.SalesCardClearingAccountId;  // AccountId
-            PurchaseBankAccountId = m.PurchaseBankAccountId;       // AccountId
+            EnableDailyBackup = scoped.EnableDailyBackup;
+            EnableHourlyBackup = scoped.EnableHourlyBackup;
+
+            UseTill = scoped.UseTill;
         }
 
         private static string? FallbackPick(string? current, ObservableCollection<string> list)
             => string.IsNullOrWhiteSpace(current) ? list.FirstOrDefault() : current;
 
-        // ---------- Save ----------
+        // ----- Save -----
         [RelayCommand]
         private async Task SaveAsync(CancellationToken ct)
         {
-            if (CounterId <= 0) return;
-
-            try
+            // Save Scoped first
+            var scoped = new InvoiceSettingsScoped
             {
-                var model = new InvoiceSettingsLocal
+                OutletId = IsGlobal ? (int?)null : SelectedOutlet?.Id,
+
+                CashDrawerKickEnabled = CashDrawerKickEnabled,
+                AutoPrintOnSave = AutoPrintOnSave,
+                AskBeforePrint = AskBeforePrint,
+
+                DisplayTimeZoneId = DisplayTimeZoneId,
+
+                SalesCardClearingAccountId = SalesCardClearingAccountId,
+                PurchaseBankAccountId = PurchaseBankAccountId,
+
+                DefaultBarcodeType = DefaultBarcodeType,
+
+                FooterSale = FooterSale,
+                FooterSaleReturn = FooterSaleReturn,
+                FooterVoucher = FooterVoucher,
+                FooterZReport = FooterZReport,
+
+                EnableDailyBackup = EnableDailyBackup,
+                EnableHourlyBackup = EnableHourlyBackup,
+
+                UseTill = UseTill,
+
+                UpdatedAtUtc = DateTime.UtcNow
+            };
+
+            await _scopedSvc.UpsertAsync(scoped, ct);
+
+            // Save Local printers (per-counter)
+            if (CounterId > 0)
+            {
+                var local = new InvoiceSettingsLocal
                 {
                     CounterId = CounterId,
                     PrinterName = PrinterName,
                     LabelPrinterName = LabelPrinterName,
-                    CashDrawerKickEnabled = CashDrawerKickEnabled,
-                    AutoPrintOnSave = AutoPrintOnSave,
-                    AskBeforePrint = AskBeforePrint,
-                    DisplayTimeZoneId = DisplayTimeZoneId,
-                    SalesCardClearingAccountId = SalesCardClearingAccountId,
-                    PurchaseBankAccountId = PurchaseBankAccountId,
-                    DefaultBarcodeType = DefaultBarcodeType,
-                    FooterSale = FooterSale,
-                    FooterSaleReturn = FooterSaleReturn,
-                    FooterVoucher = FooterVoucher,
-                    FooterZReport = FooterZReport,
-                    EnableDailyBackup = EnableDailyBackup,    // NEW
-                    EnableHourlyBackup = EnableHourlyBackup,    // NEW
-                    UseTill = UseTill,
-
+                    UpdatedAtUtc = DateTime.UtcNow
                 };
-
-                await _svc.UpsertAsync(model, ct);
-
-                // ✅ Show success message box after save
-                MessageBox.Show("Invoice settings saved successfully.",
-                                "Saved",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Information);
-
-                //// (Optional) Also show your dialog service toast, if you want both:
-                //if (_dialog != null)
-                //    await _dialog.ShowAsync("Invoice settings saved.", "Success");
+                await _localSvc.UpsertAsync(local, ct);
             }
-            finally
-            {
-                // no-op
-            }
+
+            MessageBox.Show("Invoice settings saved.", "Saved",
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        // Scope react
+        partial void OnIsGlobalChanged(bool value)
+        {
+            _ = ReloadScopeAsync();
+        }
 
-        // ---------- Helpers ----------
+        partial void OnSelectedOutletChanged(Outlet? oldValue, Outlet? newValue)
+        {
+            if (!IsGlobal && newValue != null)
+                _ = ReloadScopeAsync();
+        }
+
+        private async Task ReloadScopeAsync()
+        {
+            try { await LoadScopedAsync(CancellationToken.None); }
+            catch { /* toast if you want */ }
+        }
+
         [RelayCommand]
         private void UseWindowsDefaultPrinter()
         {
-            try
-            {
-                using var doc = new PrintDocument();
-                PrinterName = doc.PrinterSettings.PrinterName;
-            }
-            catch
-            {
-                // Optional: dialog/toast
-            }
+            try { using var doc = new PrintDocument(); PrinterName = doc.PrinterSettings.PrinterName; }
+            catch { /* ignore */ }
         }
     }
 }

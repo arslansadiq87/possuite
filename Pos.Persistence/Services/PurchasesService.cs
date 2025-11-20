@@ -431,8 +431,8 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
-            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
-                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+            var id = await (from s in db.InvoiceSettingsScoped.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.OutletId equals c.Id
                             where c.OutletId == outletId
                                && s.PurchaseBankAccountId != null
                                && s.PurchaseBankAccountId > 0
@@ -458,8 +458,8 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
             // prefer most-recent counter in this outlet
-            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
-                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+            var id = await (from s in db.InvoiceSettingsScoped.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.OutletId equals c.Id
                             where c.OutletId == outletId
                                && s.PurchaseBankAccountId != null
                                && s.PurchaseBankAccountId > 0
@@ -470,7 +470,7 @@ namespace Pos.Persistence.Services
             if (id.HasValue && id.Value > 0) return id.Value;
 
             // fallback: any latest non-null config on this machine/db
-            id = await db.InvoiceSettingsLocals.AsNoTracking()
+            id = await db.InvoiceSettingsScoped.AsNoTracking()
                     .Where(s => s.PurchaseBankAccountId != null && s.PurchaseBankAccountId > 0)
                     .OrderByDescending(s => s.UpdatedAtUtc)
                     .Select(s => s.PurchaseBankAccountId)
@@ -826,8 +826,8 @@ namespace Pos.Persistence.Services
 
         private async Task<int> RequireDefaultBankAsync(PosClientDbContext db, int outletId, CancellationToken ct)
         {
-            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
-                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+            var id = await (from s in db.InvoiceSettingsScoped.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.OutletId equals c.Id
                             where c.OutletId == outletId
                                && s.PurchaseBankAccountId != null
                                && s.PurchaseBankAccountId > 0

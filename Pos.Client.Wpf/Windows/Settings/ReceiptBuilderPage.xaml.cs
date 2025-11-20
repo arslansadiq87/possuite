@@ -1,32 +1,23 @@
-﻿// Pos.Client.Wpf/Windows/Settings/ReceiptBuilderPage.xaml.cs
-using System.ComponentModel;
-using System.Windows.Controls;
+﻿using System.Threading.Tasks;
+using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Pos.Client.Wpf.Windows.Settings
 {
-    public partial class ReceiptBuilderPage : UserControl
+    public partial class ReceiptBuilderPage
     {
         public ReceiptBuilderPage()
         {
             InitializeComponent();
+            // Resolve the VM from DI and set DataContext if not set in XAML
+            DataContext ??= App.Services.GetRequiredService<ReceiptBuilderViewModel>();
+            Loaded += OnLoaded;
+        }
 
-            if (DesignerProperties.GetIsInDesignMode(this)) return;
-
-            var sp = App.Services;
-            if (sp is not null)
-            {
-                var vm = sp.GetRequiredService<ReceiptBuilderViewModel>();
-                DataContext = vm;
-
-                // Call Init once the view is actually loaded (ensures UI thread/dispatcher ready)
-                Loaded += async (_, __) =>
-                {
-                    // only run once
-                    Loaded -= async (_, __) => { };
-                    //await vm.InitAsync();
-                };
-            }
+        private async void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is ReceiptBuilderViewModel vm)
+                await vm.InitAsync();
         }
     }
 }

@@ -159,6 +159,7 @@ namespace Pos.Client.Wpf
             //sc.AddTransient<PreferencesPage>();
             // ...
             sc.AddScoped<IInvoiceSettingsLocalService, InvoiceSettingsLocalService>();
+            sc.AddScoped<IInvoiceSettingsScopedService, InvoiceSettingsScopedService>();
 
             // Windows (transient)
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.ChartOfAccountsView>();

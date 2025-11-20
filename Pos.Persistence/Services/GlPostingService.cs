@@ -1229,8 +1229,8 @@ namespace Pos.Persistence.Services
                 return 0;
 
             // Prefer the most recent setting among counters in this outlet
-            var id = await (from s in db.InvoiceSettingsLocals.AsNoTracking()
-                            join c in db.Counters.AsNoTracking() on s.CounterId equals c.Id
+            var id = await (from s in db.InvoiceSettingsScoped.AsNoTracking()
+                            join c in db.Counters.AsNoTracking() on s.OutletId equals c.Id
                             where c.OutletId == outletId.Value
                                && s.SalesCardClearingAccountId != null
                                && s.SalesCardClearingAccountId > 0
@@ -1241,7 +1241,7 @@ namespace Pos.Persistence.Services
             if (id.GetValueOrDefault() > 0) return id!.Value;
 
             // Fallback to any latest
-            id = await db.InvoiceSettingsLocals.AsNoTracking()
+            id = await db.InvoiceSettingsScoped.AsNoTracking()
                 .Where(s => s.SalesCardClearingAccountId != null && s.SalesCardClearingAccountId > 0)
                 .OrderByDescending(s => s.UpdatedAtUtc)
                 .Select(s => s.SalesCardClearingAccountId)

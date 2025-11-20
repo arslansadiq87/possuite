@@ -26,7 +26,9 @@ namespace Pos.Client.Wpf.Windows.Sales
         private EditSaleLoadDto _orig = null!;
         private decimal _origSubtotal, _origTax, _origGrand;
         private readonly ObservableCollection<CartLine> _cart = new();
-        private readonly IInvoiceSettingsLocalService _invSettings; // NEW
+        private readonly IInvoiceSettingsScopedService _scopedSettings;
+        private readonly IInvoiceSettingsLocalService _localSettings;
+
         private bool _useTill; // NEW
 
         public ObservableCollection<Pos.Domain.Models.Sales.ItemIndexDto> DataContextItemIndex { get; } = new();
@@ -46,8 +48,8 @@ namespace Pos.Client.Wpf.Windows.Sales
             InitializeComponent();
             _saleId = saleId;
             _sales = App.Services.GetRequiredService<ISalesService>();
-            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsLocalService>(); // NEW
-
+            _localSettings = App.Services.GetRequiredService<IInvoiceSettingsLocalService>(); // NEW
+            _scopedSettings = App.Services.GetRequiredService<IInvoiceSettingsScopedService>();
             CartGrid.ItemsSource = _cart;
             CartGrid.CellEditEnding += CartGrid_CellEditEnding;
             CustNameBox.IsEnabled = CustPhoneBox.IsEnabled = false;
@@ -62,11 +64,16 @@ namespace Pos.Client.Wpf.Windows.Sales
                 await LoadSaleAsync();
                 await LoadItemIndexAsync();
                 //var (settings, _) = await _invSettings.GetAsync(_orig.OutletId, "en");
-                var counterId = AppState.Current.CurrentCounterId; // or pass the known counter
+                // 1) Load SCOPED settings (per outlet)
+                var scoped = await _scopedSettings.GetForOutletAsync(_orig.OutletId, default);
 
-                var settings = await _invSettings.GetForCounterWithFallbackAsync(counterId, default);
+                // 2) Load LOCAL settings (per counter)
+                //var local = await _localSettings.GetForCounterAsync(_orig.OutletId, default);
 
-                _useTill = settings.UseTill;
+
+                //var settings = await _invSettings.GetForCounterWithFallbackAsync(counterId, default);
+
+                _useTill = scoped.UseTill;
                 //await UpdateTillStatusUiAsync(); // if you show a till status text here
 
                 CashierNameText.Text = cashierDisplay;

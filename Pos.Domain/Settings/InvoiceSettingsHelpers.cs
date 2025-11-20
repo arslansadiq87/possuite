@@ -1,11 +1,10 @@
-﻿// Pos.Domain/Settings/InvoiceSettingsHelpers.cs
-namespace Pos.Domain.Settings
+﻿namespace Pos.Domain.Settings
 {
     public enum ReceiptKind { Sale, SaleReturn, Voucher, ZReport }
 
     public static class InvoiceSettingsHelpers
     {
-        public static string ResolveFooter(InvoiceSettingsLocal s, ReceiptKind kind) =>
+        public static string ResolveFooter(InvoiceSettingsScoped s, ReceiptKind kind) =>
             kind switch
             {
                 ReceiptKind.Sale => s.FooterSale ?? "",

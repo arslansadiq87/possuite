@@ -48,15 +48,45 @@ namespace Pos.Persistence.Services
                 .OrderBy(t => t.DocType).ToListAsync(ct);
         }
 
+        // Pos.Persistence/Services/ReceiptTemplateService.cs  (inside ReceiptTemplateService)
         private static ReceiptTemplate Default(int? outletId, ReceiptDocType type)
         {
             return new ReceiptTemplate
             {
                 OutletId = outletId,
                 DocType = type,
+
+                // sane defaults for builder
                 PaperWidthMm = 80,
-                FooterText = "Thank you for shopping with us!"
+                EnableDrawerKick = true,
+
+                ShowLogoOnReceipt = true,
+                LogoMaxWidthPx = 384,
+                LogoAlignment = "Center",
+
+                RowShowProductName = true,
+                RowShowProductSku = false,
+                RowShowQty = true,
+                RowShowUnitPrice = true,
+                RowShowLineDiscount = true,
+                RowShowLineTotal = true,
+
+                TotalsShowTaxes = true,
+                TotalsShowDiscounts = true,
+                TotalsShowOtherExpenses = true,
+                TotalsShowGrandTotal = true,
+                TotalsShowPaymentRecv = true,
+                TotalsShowBalance = true,
+
+                ShowQr = false,
+                ShowCustomerOnReceipt = true,
+                ShowCashierOnReceipt = true,
+                PrintBarcodeOnReceipt = false,
+
+                ShowNtnOnReceipt = true,
+                ShowFbrOnReceipt = true
             };
         }
+
     }
 }

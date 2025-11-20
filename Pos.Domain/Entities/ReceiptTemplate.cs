@@ -1,32 +1,24 @@
-﻿using System;
-using System.Collections.Generic;
+﻿// Pos.Domain/Entities/ReceiptTemplate.cs
+using System;
 
 namespace Pos.Domain.Entities
 {
     public class ReceiptTemplate
     {
         public int Id { get; set; }
-        public int? OutletId { get; set; }      // null => Global/default
-        public ReceiptDocType DocType { get; set; }
+        public int? OutletId { get; set; }          // null => Global/default
+        public ReceiptDocType DocType { get; set; } // Sale, SaleReturn, Voucher, ZReport
 
-        // Printer & page
-        public string? PrinterName { get; set; }
-        public int PaperWidthMm { get; set; } = 80;
+        // ---------- Printer & page (kept here) ----------
+        public int PaperWidthMm { get; set; } = 80;     // 58 or 80
         public bool EnableDrawerKick { get; set; } = true;
 
-        // Identity (moved from InvoiceSettings)
-        public string? OutletDisplayName { get; set; }
-        public string? AddressLine1 { get; set; }
-        public string? AddressLine2 { get; set; }
-        public string? Phone { get; set; }
-
-        // Logo
+        // ---------- Logo (coming from Identity & Branding for content; here we only keep presentation) ----------
         public bool ShowLogoOnReceipt { get; set; } = true;
-        public byte[]? LogoPng { get; set; }
-        public int LogoMaxWidthPx { get; set; } = 384;
-        public string LogoAlignment { get; set; } = "Center";
+        public int LogoMaxWidthPx { get; set; } = 384;  // ESC/POS 80mm full width ~ 576; 384 keeps it moderate
+        public string LogoAlignment { get; set; } = "Center"; // "Left" | "Center" | "Right"
 
-        // Row & totals flags (same semantics as now)
+        // ---------- Row visibility ----------
         public bool RowShowProductName { get; set; } = true;
         public bool RowShowProductSku { get; set; } = false;
         public bool RowShowQty { get; set; } = true;
@@ -34,6 +26,7 @@ namespace Pos.Domain.Entities
         public bool RowShowLineDiscount { get; set; } = true;
         public bool RowShowLineTotal { get; set; } = true;
 
+        // ---------- Totals visibility ----------
         public bool TotalsShowTaxes { get; set; } = true;
         public bool TotalsShowDiscounts { get; set; } = true;
         public bool TotalsShowOtherExpenses { get; set; } = true;
@@ -41,17 +34,21 @@ namespace Pos.Domain.Entities
         public bool TotalsShowPaymentRecv { get; set; } = true;
         public bool TotalsShowBalance { get; set; } = true;
 
-        public bool ShowQr { get; set; } = false;
+        // ---------- Common sales section ----------
+        public bool ShowQr { get; set; } = false;                 // generic QR (e.g., e-receipt URL)
         public bool ShowCustomerOnReceipt { get; set; } = true;
         public bool ShowCashierOnReceipt { get; set; } = true;
         public bool PrintBarcodeOnReceipt { get; set; } = false;
 
-        // Localizable text (simple version)
-        public string? HeaderText { get; set; }
-        public string? FooterText { get; set; }
+        // ---------- New (from your requirements) ----------
+        // NOTE: Content (NTN, FBR enable, FBR QR/logo) comes from General/Identity settings at runtime.
+        // These booleans only toggle whether we should show them if available.
+        public bool ShowNtnOnReceipt { get; set; } = true;        // Render NTN if it exists in Identity/General settings
+        public bool ShowFbrOnReceipt { get; set; } = true;        // Render FBR QR/logo if FBR mode is enabled in General settings
 
         public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
+        // Nav
         public Outlet? Outlet { get; set; }
     }
 }

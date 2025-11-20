@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251120021114_invioicesettings6")]
+    partial class invioicesettings6
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
@@ -3206,8 +3209,47 @@ namespace Pos.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("AskBeforePrint")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AutoPrintOnSave")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("CashDrawerKickEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("CounterId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("DefaultBarcodeType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayTimeZoneId")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("EnableDailyBackup")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EnableHourlyBackup")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FooterSale")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FooterSaleReturn")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FooterVoucher")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FooterZReport")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("LabelPrinterName")
                         .HasMaxLength(256)
@@ -3220,61 +3262,6 @@ namespace Pos.Persistence.Migrations
                     b.Property<string>("PrinterName")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CounterId")
-                        .IsUnique();
-
-                    b.HasIndex("UpdatedAtUtc");
-
-                    b.ToTable("InvoiceSettingsLocals", (string)null);
-                });
-
-            modelBuilder.Entity("Pos.Domain.Settings.InvoiceSettingsScoped", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("AskBeforePrint")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("AutoPrintOnSave")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("CashDrawerKickEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("DefaultBarcodeType")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("DisplayTimeZoneId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("EnableDailyBackup")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("EnableHourlyBackup")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("FooterSale")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FooterSaleReturn")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FooterVoucher")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FooterZReport")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("OutletId")
-                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("PurchaseBankAccountId")
                         .HasColumnType("INTEGER");
@@ -3290,7 +3277,12 @@ namespace Pos.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InvoiceSettingsScoped", (string)null);
+                    b.HasIndex("CounterId")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedAtUtc");
+
+                    b.ToTable("InvoiceSettingsLocals", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Persistence.Sync.SyncCursor", b =>

@@ -6,6 +6,8 @@ using Pos.Client.Wpf.Models;
 using Pos.Domain.Accounting;
 using Pos.Domain.Entities;
 using Pos.Domain.Models.Settings;
+using Pos.Domain.Services;
+using Pos.Domain.Settings;
 using static Pos.Client.Wpf.Windows.Sales.SaleInvoiceView; // CartLine
 
 namespace Pos.Client.Wpf.Printing
@@ -16,6 +18,8 @@ namespace Pos.Client.Wpf.Printing
         public static string DefaultPrinterName = "POS80";
         public static string DefaultStoreName = "My Store";
         private static IRawPrinterService Raw => App.Services.GetRequiredService<IRawPrinterService>();
+        private static IInvoiceSettingsScopedService Scoped
+    => App.Services.GetRequiredService<IInvoiceSettingsScopedService>();
 
         // ---------------- Back-compat overloads (sync) ----------------
         // ---------- SYNC helper (so existing callers can stay sync if needed) ----------
@@ -80,23 +84,15 @@ namespace Pos.Client.Wpf.Printing
         // ---------------- New async overload using InvoiceSettingsDto ----------------
 
         public static async Task PrintSaleAsync(
-            Sale sale,
-            IEnumerable<CartLine> cart,
-            TillSession? till,
-            string cashierName,
-            string? salesmanName,
-            InvoiceSettingsDto settings)
+    Sale sale,
+    IEnumerable<CartLine> cart,
+    TillSession? till,
+    string cashierName,
+    string? salesmanName)
         {
-            // Map settings → values used by the builder/printer
-            var printerName = settings?.PrinterName ?? DefaultPrinterName;
-            var storeName = string.IsNullOrWhiteSpace(settings?.FooterText)
-                ? // if you store footer as footer only, keep the old display name fallback:
-                  (string.IsNullOrWhiteSpace(settings?.PrinterName) ? DefaultStoreName : DefaultStoreName)
-                : // you may prefer to keep OutletDisplayName in DTO later; for now keep old behavior:
-                  DefaultStoreName;
+            // Resolve from Local + Scoped + Identity
+            var (storeName, printerName, footer) = await ResolveRuntimeAsync();
 
-            // NOTE: If your EscPosReceiptBuilder supports paper width or footer,
-            // extend its Build(...) to accept them. For now we keep current signature.
             var bytes = EscPosReceiptBuilder.Build(
                 sale,
                 cart,
@@ -107,14 +103,9 @@ namespace Pos.Client.Wpf.Printing
                 eReceiptBaseUrl: null
             );
 
-            // If you need to inject footer text into the ticket, add it inside EscPosReceiptBuilder.Build(...)
-            // using the 'settings.FooterText' value.
-
-            SendEscPos(bytes);
-
-            // match async signature
-            await Task.CompletedTask;
+            await Raw.SendEscPosAsync(printerName, bytes, CancellationToken.None);
         }
+
 
         // ---------------- Optional specialized stubs ----------------
 
@@ -161,7 +152,48 @@ namespace Pos.Client.Wpf.Printing
             return Task.CompletedTask;
         }
 
-        public static Task PrintAsync(
+
+        
+        private static IInvoiceSettingsLocalService InvoiceLocal
+            => App.Services.GetRequiredService<IInvoiceSettingsLocalService>();
+
+        private static IIdentitySettingsService Identity
+            => App.Services.GetRequiredService<IIdentitySettingsService>();
+
+        private static ITerminalContext Ctx
+            => App.Services.GetRequiredService<ITerminalContext>();
+
+        private static async Task<(string storeName, string printerName, string footer)> ResolveRuntimeAsync()
+        {
+            var outletId = Ctx.OutletId;
+            var counterId = Ctx.CounterId;
+
+            var identity = await Identity.GetAsync(outletId, CancellationToken.None);
+
+            // LOCAL --> printer only
+            var local = await InvoiceLocal.GetForCounterWithFallbackAsync(counterId, CancellationToken.None);
+
+            // SCOPED --> footer
+            var scoped = await Scoped.GetForOutletAsync(outletId, CancellationToken.None);
+
+            string store = string.IsNullOrWhiteSpace(identity?.OutletDisplayName)
+                                ? DefaultStoreName
+                                : identity!.OutletDisplayName!;
+
+            string printer = string.IsNullOrWhiteSpace(local?.PrinterName)
+                                ? DefaultPrinterName
+                                : local!.PrinterName!;
+
+            string footer = string.IsNullOrWhiteSpace(scoped?.FooterSale)
+                                ? "Thank you for shopping with us!"
+                                : scoped!.FooterSale!;
+
+            return (store, printer, footer);
+        }
+
+
+
+        public static async Task PrintAsync(
     ReceiptDocType docType,
     ReceiptTemplate tpl,
     Sale? sale = null,
@@ -173,38 +205,43 @@ namespace Pos.Client.Wpf.Printing
     string? cashierName = null,
     string? salesmanName = null)
         {
-            // Choose builder based on docType
+            // Resolve runtime store/printer/footer from Identity & Invoice Settings
+            var (storeResolved, printerResolved, footerResolved) = await ResolveRuntimeAsync();
+
+            // Apply override for store name if provided
+            var storeName = storeNameOverride ?? storeResolved;
+
+            // Build ESC/POS bytes per document type
             byte[] bytes = docType switch
             {
+                // Use Sale builder for both Sale and SaleReturn for now (layout compatible)
                 ReceiptDocType.Sale => EscPosReceiptBuilder.Build(
                     sale!, cart!, till,
-                    storeName: storeNameOverride ?? (tpl.OutletDisplayName ?? DefaultStoreName),
-                    cashierName: cashierName,
+                    storeName: storeName,
+                    cashierName: cashierName ?? "",
                     salesmanName: salesmanName,
                     eReceiptBaseUrl: null
                 ),
 
-                // BEFORE (causing CS7036)
-                // ReceiptDocType.SaleReturn => SaleReturnReceiptBuilder.Build(/* same pattern */),
-
-                // AFTER: reuse sale builder for now
                 ReceiptDocType.SaleReturn => EscPosReceiptBuilder.Build(
                     sale!, cart!, till,
-                    storeName: storeNameOverride ?? (tpl.OutletDisplayName ?? DefaultStoreName),
-                    cashierName: cashierName,
+                    storeName: storeName,
+                    cashierName: cashierName ?? "",
                     salesmanName: salesmanName,
                     eReceiptBaseUrl: null
                 ),
 
+                // These builders still accept tpl (template holds only builder flags now)
                 ReceiptDocType.Voucher => VoucherReceiptBuilder.Build(voucher!, tpl),
                 ReceiptDocType.ZReport => ZReportReceiptBuilder.Build(z!, tpl),
+
                 _ => throw new NotSupportedException(docType.ToString())
             };
 
-
-            SendEscPos(bytes);
-            return Task.CompletedTask;
+            // IMPORTANT: send to the resolved printer (not the default)
+            await Raw.SendEscPosAsync(printerResolved, bytes, CancellationToken.None);
         }
+
 
     }
 }

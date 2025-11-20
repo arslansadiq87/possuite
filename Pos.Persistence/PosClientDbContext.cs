@@ -73,6 +73,9 @@ namespace Pos.Persistence
         public DbSet<IdentitySettings> IdentitySettings { get; set; } = default!;
         //public DbSet<InvoiceSettingsLocal> InvoiceSettingsLocals => Set<InvoiceSettingsLocal>();
         public DbSet<InvoiceSettingsLocal> InvoiceSettingsLocals { get; set; } = default!;
+        // in AppDbContext.cs
+        public DbSet<InvoiceSettingsScoped> InvoiceSettingsScoped { get; set; } = null!;
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -707,15 +710,8 @@ namespace Pos.Persistence
                  .HasForeignKey(x => x.OutletId)
                  .OnDelete(DeleteBehavior.Restrict);
                 // Basic property sizing
-                e.Property(x => x.PrinterName).HasMaxLength(128);
-                e.Property(x => x.OutletDisplayName).HasMaxLength(128);
-                e.Property(x => x.AddressLine1).HasMaxLength(256);
-                e.Property(x => x.AddressLine2).HasMaxLength(256);
-                e.Property(x => x.Phone).HasMaxLength(64);
                 e.Property(x => x.LogoAlignment).HasMaxLength(16);
-                e.Property(x => x.HeaderText).HasMaxLength(1024);
-                e.Property(x => x.FooterText).HasMaxLength(1024);
-
+           
                 e.HasIndex(x => new { x.DocType, x.OutletId });
             });
 
@@ -749,27 +745,14 @@ namespace Pos.Persistence
 
                 e.Property(x => x.PrinterName).HasMaxLength(256);
                 e.Property(x => x.LabelPrinterName).HasMaxLength(256);
-                e.Property(x => x.DisplayTimeZoneId).HasMaxLength(128);
-
-                e.Property(x => x.FooterSale).HasMaxLength(2000);
-                e.Property(x => x.FooterSaleReturn).HasMaxLength(2000);
-                e.Property(x => x.FooterVoucher).HasMaxLength(2000);
-                e.Property(x => x.FooterZReport).HasMaxLength(2000);
-
-                // Optional: persist enum as string (nice for debugging);
-                // remove this line if you prefer default int storage
-                e.Property(x => x.DefaultBarcodeType).HasConversion<string>();
-
-                // Booleans (by convention; no extra config needed)
-                // e.Property(x => x.EnableDailyBackup);
-                // e.Property(x => x.EnableHourlyBackup);
-                // e.Property(x => x.UseTillMethod); // or UseTill if you kept that name
-
+               
+            
                 // If you want the DB to set UpdatedAtUtc automatically (optional):
                 // e.Property(x => x.UpdatedAtUtc)
                 //  .HasDefaultValueSql("CURRENT_TIMESTAMP");  // SQLite
             });
 
+            b.Entity<InvoiceSettingsScoped>().ToTable("InvoiceSettingsScoped");
 
 
 

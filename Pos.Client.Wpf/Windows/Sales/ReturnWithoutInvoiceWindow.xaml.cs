@@ -24,7 +24,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly ISalesService _sales;
         private readonly IInventoryReadService _invRead;
         private readonly IItemsReadService _items;
-        private readonly IInvoiceSettingsLocalService _invSettings; // NEW
+        private readonly IInvoiceSettingsScopedService _invSettings; // NEW
         private bool _useTill; // NEW
 
         private readonly AppState _state;
@@ -56,7 +56,7 @@ namespace Pos.Client.Wpf.Windows.Sales
             _pay = App.Services.GetRequiredService<IPaymentDialogService>();
             _invRead = App.Services.GetRequiredService<IInventoryReadService>();
             _items = App.Services.GetRequiredService<IItemsReadService>();
-            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsLocalService>(); // NEW
+            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsScopedService>(); // NEW
 
             this.PreviewKeyDown += (s, e) =>
             {
@@ -78,7 +78,7 @@ namespace Pos.Client.Wpf.Windows.Sales
                 await LoadSalesmenAsync();
                 //var (settings, _) = await _invSettings.GetAsync(_outletId, "en");
                 //var (settings, _) = await _invSettings.GetAsync(_orig.OutletId, "en");
-                var settings = await _invSettings.GetForCounterWithFallbackAsync(_counterId, default);
+                var settings = await _invSettings.GetForOutletAsync(_outletId, default);
 
                 _useTill = settings.UseTill;
                 await UpdateTillStatusUiAsync();

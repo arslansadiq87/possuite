@@ -21,7 +21,8 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly int _origSaleId;
         private readonly ISalesService _sales;
         private readonly AppState _state;
-        private readonly IInvoiceSettingsLocalService _invSettings; // NEW
+        private readonly IInvoiceSettingsScopedService _scopedSettings;
+
         private bool _useTill; // NEW
 
         public bool Confirmed { get; private set; }
@@ -73,7 +74,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         {
             InitializeComponent();
             _origSaleId = saleId;
-            _invSettings = App.Services.GetRequiredService<IInvoiceSettingsLocalService>(); // NEW
+            _scopedSettings = App.Services.GetRequiredService<IInvoiceSettingsScopedService>(); // NEW
 
             _sales = App.Services.GetRequiredService<ISalesService>();
             _state = App.Services.GetRequiredService<AppState>();
@@ -83,10 +84,10 @@ namespace Pos.Client.Wpf.Windows.Sales
             Loaded += async (_, __) =>
             {
                 var dto = await _sales.GetReturnFromInvoiceAsync(_origSaleId);
-                var counterId = AppState.Current.CurrentCounterId;
-                var settings = await _invSettings.GetForCounterWithFallbackAsync(counterId, default);
+                //var counterId = AppState.Current.CurrentCounterId;
+                var sett = await _scopedSettings.GetForOutletAsync(dto.OutletId, default);
 
-                _useTill = settings.UseTill;
+                _useTill = sett.UseTill;
 
                 HeaderText.Text = dto.HeaderHuman;
                 _rows.Clear();

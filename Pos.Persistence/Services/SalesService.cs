@@ -25,16 +25,18 @@ namespace Pos.Persistence.Services
         private readonly IOutboxWriter _outbox;
         private readonly IGlPostingService _gl;
         private readonly IStockGuard _guard;
-        private readonly IInvoiceSettingsLocalService _invSettings;   // <-- add
+        private readonly IInvoiceSettingsScopedService _scopedSettings;
+        private readonly IInvoiceSettingsLocalService _localSettings;
         private readonly IInventoryReadService _in = null!; // <-- add
 
-        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard, IInvoiceSettingsLocalService invSettings, IInventoryReadService @in)
+        public SalesService(PosClientDbContext db, IOutboxWriter outbox, IGlPostingService gl, IStockGuard guard, IInvoiceSettingsScopedService scoped, IInvoiceSettingsLocalService local, IInventoryReadService @in)
         {
             _db = db;
             _outbox = outbox;
             _gl = gl;
             _guard = guard;
-            _invSettings = invSettings;
+            _scopedSettings = scoped;
+            _localSettings = local;
             _in = @in;
         }
 
@@ -251,7 +253,8 @@ namespace Pos.Persistence.Services
             // READ outlet settings
             // Read per-outlet preference for till usage
             //var counterId = AppState.Current.CurrentCounterId; // or pass the known counter
-            var settings = await _invSettings.GetForCounterWithFallbackAsync(req.CounterId, ct);
+            var settings = await _scopedSettings.GetForOutletAsync(req.OutletId, ct);
+
 
             //var (settings, _) = await _invSettings.GetAsync(req.OutletId, "en", ct);
 
@@ -612,22 +615,23 @@ namespace Pos.Persistence.Services
     int counterId,
     CancellationToken ct = default)
         {
-            // New API returns a single model (no localization tuple)
-            var s = await _invSettings.GetForCounterWithFallbackAsync(counterId, ct);
+            // 1) Load LOCAL: printer info
+            var local = await _localSettings.GetForCounterAsync(counterId, ct);
 
-            // If you don’t store paper width in local settings, keep 80mm default
-            var width = 80;
+            // 2) Get outletId for scoped settings
+            var outletId = await _db.Counters
+                .Where(c => c.Id == counterId)
+                .Select(c => c.OutletId)
+                .FirstAsync(ct);
 
-            // Map old DTO fields to new properties
+            // 3) Load SCOPED: includes behavior + footer + width
+            var scoped = await _scopedSettings.GetForOutletAsync(outletId, ct);
+
+            // 4) Build dto
             return new InvoiceSettingsDto(
-                PrintOnSave: s.AutoPrintOnSave,
-                AskToPrintOnSave: s.AskBeforePrint,
-                PaperWidthMm: width,
-                SalesCardClearingAccountId: s.SalesCardClearingAccountId,
-                PrinterName: s.PrinterName,
-                FooterText: string.IsNullOrWhiteSpace(s.FooterSale)
-                                        ? "Thank you for shopping with us!"
-                                        : s.FooterSale!
+                PrintOnSave: scoped.AutoPrintOnSave,
+                AskToPrintOnSave: scoped.AskBeforePrint
+            
             );
         }
 

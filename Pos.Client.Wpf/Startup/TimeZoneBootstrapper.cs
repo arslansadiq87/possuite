@@ -15,11 +15,11 @@ namespace Pos.Client.Wpf.Startup
             // If a counter is already known, prefer invoice settings
             try
             {
-                var counterId = AppState.Current?.CurrentCounterId ?? 0;
-                if (counterId > 0)
+                var outletId = AppState.Current?.CurrentOutletId ?? 0;
+                if (outletId > 0)
                 {
-                    var inv = sp.GetRequiredService<IInvoiceSettingsLocalService>()
-                        .GetForCounterAsync(counterId).GetAwaiter().GetResult();
+                    var inv = sp.GetRequiredService<IInvoiceSettingsScopedService>()
+                        .GetForOutletAsync(outletId).GetAwaiter().GetResult();
 
                     SetTz(inv?.DisplayTimeZoneId);
                     return;
@@ -38,11 +38,11 @@ namespace Pos.Client.Wpf.Startup
         {
             try
             {
-                var counterId = AppState.Current?.CurrentCounterId ?? 0;
-                if (counterId <= 0) return;
+                var outletId = AppState.Current?.CurrentOutletId ?? 0;
+                if (outletId <= 0) return;
 
-                var inv = sp.GetRequiredService<IInvoiceSettingsLocalService>()
-                    .GetForCounterAsync(counterId).GetAwaiter().GetResult();
+                var inv = sp.GetRequiredService<IInvoiceSettingsScopedService>()
+                    .GetForOutletAsync(outletId).GetAwaiter().GetResult();
 
                 SetTz(inv?.DisplayTimeZoneId);
             }

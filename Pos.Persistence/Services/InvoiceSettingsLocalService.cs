@@ -19,9 +19,8 @@ public class InvoiceSettingsLocalService : IInvoiceSettingsLocalService
         return row ?? new InvoiceSettingsLocal
         {
             CounterId = counterId,
-            AutoPrintOnSave = false,
-            AskBeforePrint = true, // safer default
-            CashDrawerKickEnabled = false,
+            PrinterName = null,
+            LabelPrinterName = null,
             UpdatedAtUtc = DateTime.UtcNow
         };
     }
@@ -29,40 +28,25 @@ public class InvoiceSettingsLocalService : IInvoiceSettingsLocalService
     public async Task<InvoiceSettingsLocal> UpsertAsync(InvoiceSettingsLocal model, CancellationToken ct = default)
     {
         await using var db = await _dbf.CreateDbContextAsync(ct);
-        var existing = await db.InvoiceSettingsLocals.FirstOrDefaultAsync(x => x.CounterId == model.CounterId, ct);
+        var existing = await db.InvoiceSettingsLocals
+            .FirstOrDefaultAsync(x => x.CounterId == model.CounterId, ct);
 
         if (existing is null)
         {
             model.UpdatedAtUtc = DateTime.UtcNow;
             db.InvoiceSettingsLocals.Add(model);
+            await db.SaveChangesAsync(ct);
+            return model;
         }
-        else
-        {
-            existing.PrinterName = model.PrinterName;
-            existing.CashDrawerKickEnabled = model.CashDrawerKickEnabled;
-            existing.AutoPrintOnSave = model.AutoPrintOnSave;
-            existing.AskBeforePrint = model.AskBeforePrint;
 
-            existing.LabelPrinterName = model.LabelPrinterName;
-            existing.DisplayTimeZoneId = model.DisplayTimeZoneId;
-            existing.SalesCardClearingAccountId = model.SalesCardClearingAccountId;
-            existing.PurchaseBankAccountId = model.PurchaseBankAccountId;
-            existing.DefaultBarcodeType = model.DefaultBarcodeType;
-
-            existing.FooterSale = model.FooterSale;
-            existing.FooterSaleReturn = model.FooterSaleReturn;
-            existing.FooterVoucher = model.FooterVoucher;
-            existing.FooterZReport = model.FooterZReport;
-            existing.EnableDailyBackup = model.EnableDailyBackup;     // NEW
-            existing.EnableHourlyBackup = model.EnableHourlyBackup;    // NEW
-            existing.UseTill = model.UseTill;   // ← add this
-
-            existing.UpdatedAtUtc = DateTime.UtcNow;
-        }
+        existing.PrinterName = model.PrinterName;
+        existing.LabelPrinterName = model.LabelPrinterName;
+        existing.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
-        return existing ?? model;
+        return existing;
     }
+
 
     public async Task<InvoiceSettingsLocal> GetForCounterWithFallbackAsync(int? counterId, CancellationToken ct = default)
     {
@@ -105,7 +89,7 @@ public class InvoiceSettingsLocalService : IInvoiceSettingsLocalService
         return any ?? new InvoiceSettingsLocal
         {
             CounterId = counterId ?? 0,
-            FooterSale = "Thank you for shopping with us!"
+            
         };
     }
 }
