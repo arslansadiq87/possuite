@@ -34,6 +34,8 @@ namespace Pos.Client.Wpf.Printing
         public string? CashierName { get; set; }   // NEW
         public string? CustomerName { get; set; }   // NEW
 
+        public Boolean IsReturn { get; set; } = false;
+
         // Optional barcode/QR demo payloads
         public string? BarcodeText { get; set; }
         public string? QrText { get; set; }

@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Windows.Documents;
+using System.Windows;
 
 namespace Pos.Client.Wpf.Printing
 {
@@ -16,6 +18,8 @@ namespace Pos.Client.Wpf.Printing
         /// - Discount appears on a separate left-indented line under the item name
         /// - Totals section uses two right-anchored columns: [Label][space][Value]
         /// </summary>
+        /// var fd = new FlowDocument();
+
         public static string BuildText(
             int width,
             string? businessName,
@@ -243,15 +247,14 @@ namespace Pos.Client.Wpf.Printing
                 }
             }
 
-
-
-            // ---------------- generic barcode / QR (non-FBR) ----------------
+            //----------------generic barcode / QR(non - FBR)----------------
             if (showBarcodeOnReceipt && !string.IsNullOrWhiteSpace(sale.BarcodeText))
             {
                 sb.Append(Center("[BARCODE]"));
                 sb.Append(Center(sale.BarcodeText!));
                 sb.Append("\n");
             }
+            // --- BARCODE PRINT ---
             if (showGenericQr && !string.IsNullOrWhiteSpace(sale.QrText))
             {
                 sb.Append(Center("[QR]"));

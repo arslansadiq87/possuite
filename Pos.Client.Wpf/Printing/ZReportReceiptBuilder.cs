@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Pos.Domain.Entities;
 
 namespace Pos.Client.Wpf.Printing
@@ -25,10 +23,24 @@ namespace Pos.Client.Wpf.Printing
         public static byte[] Build(ZReportModel z, ReceiptTemplate tpl)
         {
             var bytes = new List<byte>();
-            // Title: "Z REPORT — TILL CLOSE"
-            // Show session id, open/close times, OpeningFloat, Sales, ReturnsAbs, Net, CashCounted, Over/Short
+            var sb = new StringBuilder();
+
+            sb.AppendLine("*** Z REPORT — TILL CLOSE ***");
+            sb.AppendLine($"Session:       {z.TillSessionId}");
+            sb.AppendLine($"Opened (UTC):  {z.OpenedAtUtc:yyyy-MM-dd HH:mm}");
+            sb.AppendLine($"Closed (UTC):  {z.ClosedAtUtc:yyyy-MM-dd HH:mm}");
+            sb.AppendLine("----------------------------");
+            sb.AppendLine($"Opening Float: {z.OpeningFloat:0.00}");
+            sb.AppendLine($"Sales:         {z.SalesTotal:0.00}");
+            sb.AppendLine($"Returns:       {z.ReturnsTotalAbs:0.00}");
+            sb.AppendLine($"Net:           {z.NetTotal:0.00}");
+            sb.AppendLine($"Cash Counted:  {z.CashCounted:0.00}");
+            sb.AppendLine($"Over/Short:    {z.OverShort:0.00}");
+            sb.AppendLine("----------------------------");
+            sb.AppendLine("Thank you.");
+
+            bytes.AddRange(Encoding.ASCII.GetBytes(sb.ToString()));
             return bytes.ToArray();
         }
     }
-
 }
