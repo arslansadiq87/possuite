@@ -37,7 +37,7 @@ namespace Pos.Client.Wpf.Controls
         public static readonly DependencyProperty QueryProperty =
             DependencyProperty.Register(nameof(Query), typeof(string), typeof(ItemSearchBox),
                 new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
-        private IItemsReadService _lookup;
+        private IItemsReadService? _lookup;
         private readonly ObservableCollection<ItemIndexDto> _index = new();
         private ICollectionView? _view;
         // Scanner-burst handling
@@ -49,23 +49,36 @@ namespace Pos.Client.Wpf.Controls
         public ItemSearchBox()
         {
             InitializeComponent();
-            _lookup = App.Services.GetRequiredService<IItemsReadService>();
-            Loaded += OnLoaded;            // ✅ new method below
-            _burstReset.Tick += (_, __) => { _suppressDropdown = false; _burstCount = 0; _burstReset.Stop(); };
+
+            // 🔹 Don’t touch DI / services in the designer
+            if (DesignerProperties.GetIsInDesignMode(this))
+                return;
+
+            var sp = App.Services;
+            if (sp is null)
+                return; // still not ready – fail silently (designer / early runtime)
+
+            _lookup = sp.GetRequiredService<IItemsReadService>();
+
+            Loaded += OnLoaded;
+            _burstReset.Tick += (_, __) =>
+            {
+                _suppressDropdown = false;
+                _burstCount = 0;
+                _burstReset.Stop();
+            };
         }
+
 
         private async void OnLoaded(object? sender, RoutedEventArgs e)
         {
             if (DesignerProperties.GetIsInDesignMode(this)) return;
-            if (_lookup is null)
-            {
-                var sp = App.Services;
-                if (sp is null) return; // still not ready (e.g., designer) — just bail quietly
-                _lookup = sp.GetRequiredService<IItemsReadService>(); // throws if missing
-                if (_lookup is null) return;
-            }
+            if (_lookup is null) return;
+
             var list = await _lookup.BuildIndexAsync();
-            _index.Clear(); foreach (var it in list) _index.Add(it);
+            _index.Clear();
+            foreach (var it in list) _index.Add(it);
+
             _view = CollectionViewSource.GetDefaultView(_index);
             _view.Filter = o =>
             {

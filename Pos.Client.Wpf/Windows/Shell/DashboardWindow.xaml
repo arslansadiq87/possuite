@@ -107,6 +107,14 @@
                                 Source="{StaticResource Icon.PurchaseCenter}"/>
                         </Fluent:Button.Icon>
                     </Fluent:Button>
+
+                    <!-- NEW: Print Labels -->
+                    <Fluent:Button Header="Print Labels" Command="{Binding OpenLabelPrintCmd}">
+                        <Fluent:Button.Icon>
+                            <Image Style="{StaticResource Icon.Image}"
+                   Source="{StaticResource Icon.Barcode}"/>
+                        </Fluent:Button.Icon>
+                    </Fluent:Button>
                     <Fluent:Button Header="Transfer" Command="{Binding OpenTransferCmd}">
                         <Fluent:Button.Icon>
                             <Image Style="{StaticResource Icon.Image}"

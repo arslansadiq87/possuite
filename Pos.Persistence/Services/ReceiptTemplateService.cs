@@ -64,6 +64,14 @@ namespace Pos.Persistence.Services
                 LogoMaxWidthPx = 384,
                 LogoAlignment = "Center",
 
+                // NEW header options
+                TopMarginLines = 0,
+                ShowBusinessName = true,
+                BusinessNameFontSizePt = 18,  // sensible default; preview will simulate, ESC/POS will use double-height if >=20
+                BusinessNameBold = true,
+                ShowAddress = true,
+                ShowContacts = true,
+
                 RowShowProductName = true,
                 RowShowProductSku = false,
                 RowShowQty = true,
@@ -87,6 +95,7 @@ namespace Pos.Persistence.Services
                 ShowFbrOnReceipt = true
             };
         }
+
 
     }
 }

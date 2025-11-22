@@ -75,6 +75,8 @@ public sealed class DashboardVm : ObservableObject
         OpenPurchaseInvoiceCenterCmd = new RelayCommand(OpenInvoiceCenterPurchaseTab);
         OpenTransferCmd = new RelayCommand(OpenTransferTab);
         OpenTransferCenterCmd = new RelayCommand(OpenTransferCenterTab);
+        OpenLabelPrintCmd = new RelayCommand(OpenLabelPrintTab);        // NEW
+
         OpenProductsCmd = new RelayCommand(OpenProductsTab);
         OpenPartiesCmd = new RelayCommand(OpenPartiesTab);
         OpenStaffCmd = new RelayCommand(OpenStaffTab);
@@ -212,6 +214,7 @@ public sealed class DashboardVm : ObservableObject
     public IRelayCommand CloseRightCmd { get; }
 
     public IRelayCommand OpenStockCheckCmd { get; }
+    public IRelayCommand OpenLabelPrintCmd { get; }          // NEW
 
     public IRelayCommand OpenChartOfAccountsCmd { get; }
     public IRelayCommand OpenVouchersCmd { get; }
@@ -357,6 +360,15 @@ public sealed class DashboardVm : ObservableObject
         if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.AccountLedgerView>()) return;
         _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.AccountLedgerView>("Account Ledger", "Account Ledger");
     }
+
+    private void OpenLabelPrintTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Inventory.LabelPrintView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.LabelPrintView>(
+            "Print Labels",
+            "Print Labels");
+    }
+
 
 
     // ---------- Bulk tab ops ----------a

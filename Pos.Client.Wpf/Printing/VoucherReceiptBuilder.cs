@@ -15,6 +15,27 @@ namespace Pos.Client.Wpf.Printing
             var cols = (tpl?.PaperWidthMm ?? 80) <= 58 ? 32 : 42;
 
             var sb = new StringBuilder();
+            string typeCaption = voucher.Type switch
+            {
+                VoucherType.Payment => "PAYMENT VOUCHER",
+                VoucherType.Receipt => "RECEIPT VOUCHER",
+                VoucherType.Journal => "JOURNAL VOUCHER",
+                _ => "VOUCHER"
+            };
+            // top margin
+            for (int i = 0; i < (tpl?.TopMarginLines ?? 0); i++) sb.AppendLine();
+
+            // logo
+            if (tpl?.ShowLogoOnReceipt == true) sb.AppendLine(Center("[LOGO]", cols));
+
+            // business name (optional)
+            //if (tpl?.ShowBusinessName != false && !string.IsNullOrWhiteSpace(voucher?.Memo))
+            //    sb.AppendLine(Center(storeNameFromRuntimeIfAvailableOrRemove, cols)); // or skip if you prefer no header name
+
+            // ==== caption ====
+            sb.AppendLine(new string('=', cols));
+            sb.AppendLine(Center(typeCaption, cols));
+            sb.AppendLine(new string('=', cols));
 
             // Header
             sb.AppendLine(Center($"*** {voucher.Type.ToString().ToUpper()} VOUCHER ***", cols));

@@ -7,15 +7,23 @@ namespace Pos.Client.Wpf.Printing
 {
     public sealed class ZReportModel
     {
-        public int TillSessionId { get; init; }
-        public DateTime OpenedAtUtc { get; init; }
-        public DateTime ClosedAtUtc { get; init; }
-        public decimal OpeningFloat { get; init; }
-        public decimal SalesTotal { get; init; }
-        public decimal ReturnsTotalAbs { get; init; }
+        public int TillSessionId { get; set; }
+        public DateTime OpenedAtUtc { get; set; }
+        public DateTime ClosedAtUtc { get; set; }
+
+        // Inputs
+        public decimal OpeningFloat { get; set; }
+        public decimal SalesTotal { get; set; }
+        public decimal ReturnsTotalAbs { get; set; }   // absolute returns value (positive)
+
+        // Derived
         public decimal NetTotal => SalesTotal - ReturnsTotalAbs;
-        public decimal CashCounted { get; init; }
-        public decimal OverShort => CashCounted - (OpeningFloat + NetTotal);
+        public decimal CashCounted { get; set; }
+        public decimal ExpectedCash => OpeningFloat + NetTotal;
+        public decimal OverShort => CashCounted - ExpectedCash;
+
+        // New: for printing on Z-Report
+        public string? CashierName { get; set; }
     }
 
     public static class ZReportReceiptBuilder
@@ -24,6 +32,13 @@ namespace Pos.Client.Wpf.Printing
         {
             var bytes = new List<byte>();
             var sb = new StringBuilder();
+            if (!string.IsNullOrWhiteSpace(z.CashierName))
+                sb.AppendLine($"Cashier:       {z.CashierName}");
+            var cols = 42;
+            sb.AppendLine(new string('=', cols));
+            sb.AppendLine(Center("Z-REPORT", cols));
+            sb.AppendLine(new string('=', cols));
+            // avoid extra blank lines; keep a single LF between semantic groups
 
             sb.AppendLine("*** Z REPORT — TILL CLOSE ***");
             sb.AppendLine($"Session:       {z.TillSessionId}");
@@ -41,6 +56,14 @@ namespace Pos.Client.Wpf.Printing
 
             bytes.AddRange(Encoding.ASCII.GetBytes(sb.ToString()));
             return bytes.ToArray();
+        }
+
+        private static string Center(string s, int w)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return "";
+            if (s.Length >= w) return s;
+            int pad = Math.Max(0, (w - s.Length) / 2);
+            return new string(' ', pad) + s;
         }
     }
 }

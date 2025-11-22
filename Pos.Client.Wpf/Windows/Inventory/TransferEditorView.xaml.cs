@@ -498,7 +498,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             MessageBox.Show("Lines can only be deleted while in Draft. Undo Dispatch to edit.");
         }
 
-        private async void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
+        private void ItemSearch_ItemPicked(object sender, RoutedEventArgs e)
         {
             var pick = ((Pos.Client.Wpf.Controls.ItemSearchBox)sender).SelectedItem;
             if (pick is null) return;
@@ -539,23 +539,28 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private void BeginEditOn(StockDocLine line, DataGridColumn column)
         {
             if (line is null || column is null) return;
+
             LinesGrid.CommitEdit();
             LinesGrid.CommitEdit(DataGridEditingUnit.Row, true);
             LinesGrid.SelectedItem = line;
             LinesGrid.ScrollIntoView(line, column);
             LinesGrid.CurrentCell = new DataGridCellInfo(line, column);
-            Dispatcher.BeginInvoke(new Action(async () =>
-            {
-                LinesGrid.BeginEdit();
-                if (TryGetCurrentCellEditor(out var tb))
+
+            Dispatcher.BeginInvoke(
+                new Action(() =>
                 {
-                    tb.SelectAll();
-                    tb.Focus();
-                    SetAvailBadgeFor(line.ItemId);
-                    ShowAvailableBadge();
-                }
-            }), System.Windows.Threading.DispatcherPriority.Background);
+                    LinesGrid.BeginEdit();
+                    if (TryGetCurrentCellEditor(out var tb))
+                    {
+                        tb.SelectAll();
+                        tb.Focus();
+                        SetAvailBadgeFor(line.ItemId);
+                        ShowAvailableBadge();
+                    }
+                }),
+                System.Windows.Threading.DispatcherPriority.Background);
         }
+
 
         private bool TryGetCurrentCellEditor([NotNullWhen(true)] out TextBox? editor)
         {
@@ -736,7 +741,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             }
 
             // refresh badge for the current row (pure display)
-            await Dispatcher.InvokeAsync(async () =>
+            await Dispatcher.InvokeAsync(() =>
             {
                 if (LinesGrid.CurrentItem is StockDocLine cur)
                 {
@@ -745,6 +750,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 }
             }, System.Windows.Threading.DispatcherPriority.Background);
         }
+
 
 
         private void BtnClear_Click(object sender, RoutedEventArgs e)

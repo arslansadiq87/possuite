@@ -905,7 +905,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 var idx = _payments.IndexOf(row);
                 if (idx >= 0)
                 {
-                    var stagedIdx = 0;
+                    //var stagedIdx = 0;
                     for (int i = 0, s = 0; i < _payments.Count; i++)
                     {
                         if (_payments[i].Id == 0)
@@ -1642,11 +1642,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
             });
         }
 
-        private async Task ApplyUserPrefsToDestinationAsync()
+        private Task ApplyUserPrefsToDestinationAsync()
         {
             // If editing an existing doc or bound to an existing Purchase, do nothing
-            if ((_model?.Id ?? 0) > 0) return;
-            if (PurchaseId is int pid && pid > 0) return;
+            if ((_model?.Id ?? 0) > 0) return Task.CompletedTask;
+            if (PurchaseId is int pid && pid > 0) return Task.CompletedTask;
 
             try
             {
@@ -1665,22 +1665,18 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     var first = _outletResults[0];
                     try
                     {
-                        // Prefer SelectedValue when you have ValueMemberPath bound to Id
                         OutletBox.SelectedValue = first.Id;
                     }
                     catch
                     {
-                        // Fallback to object selection
                         try { OutletBox.SelectedItem = first; } catch { }
                     }
                 }
                 else
                 {
-                    // If outlets aren’t loaded yet, at least clear warehouse selection
                     try { OutletBox.SelectedIndex = -1; } catch { }
                 }
 
-                // Ensure warehouse UI is not selected
                 try { DestWarehouseRadio.IsChecked = false; } catch { }
                 try { WarehouseBox.SelectedIndex = -1; } catch { }
             }
@@ -1688,7 +1684,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 // swallow – safe defaults already applied above
             }
+
+            return Task.CompletedTask;
         }
+
 
     }
 }

@@ -8,6 +8,8 @@ using System.Threading;
 using Pos.Domain.Services;
 using Pos.Domain.Settings;               // InvoiceSettingsLocal
 using System.Windows;
+using CommunityToolkit.Mvvm.Messaging;
+using Pos.Client.Wpf.Messages;
 
 namespace Pos.Client.Wpf.Windows.Settings;
 
@@ -211,6 +213,25 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
         _labelPrinter = labelPrinter;
         _tsc = tsc;
         _ = InitAsync();
+        // in ctor after InitAsync():
+        WeakReferenceMessenger.Default.Register<InvoicePrintersChanged>(this, (_, msg) =>
+        {
+            if (msg.CounterId != _ctx.CounterId) return;
+
+            // marshal to UI thread to avoid cross-thread property set issues
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                SelectedLabelPrinter = string.IsNullOrWhiteSpace(msg.LabelPrinter)
+                    ? "(not selected in Invoice Settings)"
+                    : msg.LabelPrinter;
+
+                // ALWAYS adopt latest; no conditional
+                PrinterName = msg.LabelPrinter;
+                OnPropertyChanged(nameof(IsTscSelected));
+            });
+        });
+
+
     }
 
     // --- TSC Media / Setup (defaults matching common 38x25mm roll) ---
@@ -366,8 +387,9 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     {
         var local = await _invoiceLocal.GetForCounterWithFallbackAsync(_ctx.CounterId);
         SelectedLabelPrinter = local.LabelPrinterName ?? "(not selected in Invoice Settings)";
-
+        PrinterName = local.LabelPrinterName ?? PrinterName;       // make VM match DB at startup
         OnPropertyChanged(nameof(IsTscSelected));
+
 
         // 2) Business name from Identity settings (respect scope)
         // Prefer outlet-specific; fallback to global
@@ -414,7 +436,13 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
         _loaded = await _svc.GetAsync(outletId);
 
         // snapshot
-        PrinterName = _loaded.PrinterName;
+        // Only apply a saved override if it exists; otherwise keep the latest from Invoice Settings
+        if (!string.IsNullOrWhiteSpace(_loaded.PrinterName))
+            PrinterName = _loaded.PrinterName;
+        else if (!string.IsNullOrWhiteSpace(SelectedLabelPrinter)
+              && !string.Equals(SelectedLabelPrinter, "(not selected in Invoice Settings)", StringComparison.OrdinalIgnoreCase))
+            PrinterName = SelectedLabelPrinter;
+
         Dpi = _loaded.Dpi;
         LabelWidthMm = _loaded.LabelWidthMm;
         LabelHeightMm = _loaded.LabelHeightMm;
@@ -456,6 +484,22 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
         RefreshPreviewDebounced();
 
     }
+
+    private string ResolvePrinterNameOrThrow()
+    {
+        // Prefer the dedicated label setting if user ever saved it.
+        if (!string.IsNullOrWhiteSpace(PrinterName))
+            return PrinterName;
+
+        // Otherwise fall back to the Invoice Settings’ printer you already expose
+        // as SelectedLabelPrinter (what you show in the TextBlock).
+        if (!string.IsNullOrWhiteSpace(SelectedLabelPrinter) &&
+            !string.Equals(SelectedLabelPrinter, "(not selected in Invoice Settings)", StringComparison.OrdinalIgnoreCase))
+            return SelectedLabelPrinter;
+
+        throw new InvalidOperationException("No label printer selected in Label Settings or Invoice Settings.");
+    }
+
 
     [RelayCommand]
     private async Task SaveAsync()
@@ -513,6 +557,7 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task TestPrintAsync()
     {
+        
         if (_labelPrinter == null)
         {
             System.Windows.MessageBox.Show("Label print service not wired yet.", "Info");
@@ -553,6 +598,15 @@ public partial class BarcodeLabelSettingsViewModel : ObservableObject
             BusinessXmm = BusinessXmm,
             BusinessYmm = BusinessYmm
         };
+        // Pull the freshest value from DB to avoid any in-memory staleness
+        var latest = await _invoiceLocal.GetForCounterWithFallbackAsync(_ctx.CounterId);
+        var latestName = !string.IsNullOrWhiteSpace(PrinterName) ? PrinterName : latest?.LabelPrinterName;
+
+        if (string.IsNullOrWhiteSpace(latestName))
+            throw new InvalidOperationException("No label printer selected in Label Settings or Invoice Settings.");
+
+        s.PrinterName = latestName!;
+        s.BarcodeZoomPct = BarcodeZoomPct;
 
         await _labelPrinter.PrintSampleAsync(
             s,

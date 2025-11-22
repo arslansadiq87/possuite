@@ -45,6 +45,7 @@ namespace Pos.Persistence.Seeding
                 new("121",  "Auto vehicles",         AccountType.Asset,  "12",   true,  false, NormalSide.Debit),
                 new("1211", "Auto vehicles: Cost",   AccountType.Asset,  "121",  false, true,  NormalSide.Debit),
                 new("1212", "Auto vehicles: Depreciation", AccountType.Asset,"121", false, true, NormalSide.Credit),
+                new("2120", "Accounts payable (trade)",   AccountType.Liability, "21", false, true, NormalSide.Credit),
 
                 new("122",  "Furniture & fixture",   AccountType.Asset,  "12",   true,  false, NormalSide.Debit),
                 new("1221", "F&F: Cost",             AccountType.Asset,  "122",  false, true,  NormalSide.Debit),

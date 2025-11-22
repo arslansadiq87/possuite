@@ -156,5 +156,22 @@ namespace Pos.Client.Wpf.Diagnostics
             }
             catch { /* ignore */ }
         }
+
+        public static event Action<string>? Line;
+
+        public static void Log(string text)
+        {
+            try
+            {
+                // time stamp + thread id for quick triage
+                var msg = $"{DateTime.Now:HH:mm:ss.fff} [T{Environment.CurrentManagedThreadId}] {text}";
+                Line?.Invoke(msg);                // live UI
+                Debug.WriteLine(msg);             // VS Output
+                TryWriteLog(msg + Environment.NewLine, DateTime.Now); // optional: append
+            }
+            catch { /* ignore */ }
+        }
+
+
     }
 }

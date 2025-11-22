@@ -53,7 +53,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
 
         private readonly System.Timers.Timer _supplierDebounce = new(250) { AutoReset = false };
         private List<Party> _supplierResults = new();
-        private bool _suppressSupplierSearch = false;
+        //private bool _suppressSupplierSearch = false;
         private readonly System.Timers.Timer _itemDebounce = new(250) { AutoReset = false };
         private List<ItemPick> _itemResults = new();
         private int? _colUnitCostIndex;
@@ -99,6 +99,7 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     or nameof(ReturnVM.WarehouseId))
                 {
                     await CapReturnWithAgainstOnHandAsync();
+                    await RefreshBankPaymentsConfigAsync();   // 🔹 NEW
                 }
                 if (AvailablePanel.Visibility == Visibility.Visible && GridLines.CurrentItem is LineVM l)
                     await UpdateAvailablePanelAsync(l);
@@ -108,7 +109,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
             {
                 await InitFreeFormAsync();
                 await LoadSourcesAsync();                 // now via _lookup
-                //await Dispatcher.InvokeAsync(() => SupplierText.Focus());
+                                                          //await Dispatcher.InvokeAsync(() => SupplierText.Focus());
+                await RefreshBankPaymentsConfigAsync();   // optional, usually redundant
                 await Dispatcher.BeginInvoke(() => SupplierSearch.Focus());
             };
         }
@@ -181,10 +183,10 @@ namespace Pos.Client.Wpf.Windows.Purchases
         private void ApplySupplier(Party p)
         {
             if (p == null) return;
-            _suppressSupplierSearch = true;      // prevent popup reopening due to TextChanged
+            //_suppressSupplierSearch = true;      // prevent popup reopening due to TextChanged
             VM.SupplierId = p.Id;
             VM.SupplierDisplay = p.Name ?? $"Supplier #{p.Id}";
-            _suppressSupplierSearch = false;
+            //_suppressSupplierSearch = false;
             //SupplierPopup.IsOpen = false;
             //SupplierText.CaretIndex = SupplierText.Text.Length;
             MoveFocusToItemSearch();
@@ -203,23 +205,11 @@ namespace Pos.Client.Wpf.Windows.Purchases
             }), System.Windows.Threading.DispatcherPriority.Input);
         }
 
-        private async Task LoadBanksForCurrentOutletAsync()
-        {
-            BankAccountBox.ItemsSource = null;
-            _bankAccounts.Clear();
-            //var outletId = GetCurrentOutletIdForHeader() ?? 0;
-            //if (outletId == 0) { _bankPaymentsAllowed = false; return; }
-            //_bankPaymentsAllowed = await _purSvc.IsPurchaseBankConfiguredAsync(outletId);
-            //var banks = await _purSvc.ListBankAccountsForOutletAsync(outletId);
-            //foreach (var b in banks) _bankAccounts.Add(b);
-            //BankAccountBox.ItemsSource = _bankAccounts;
-            //var defId = await _purSvc.GetConfiguredPurchaseBankAccountIdAsync(outletId);
-            //if (defId is int id)
-            //{
-            //    var match = _bankAccounts.FirstOrDefault(x => x.Id == id);
-            //    if (match != null) BankAccountBox.SelectedItem = match;
-            //}
-        }
+        //private async Task LoadBanksForCurrentOutletAsync()
+        //{
+        //    BankAccountBox.ItemsSource = null;
+        //    _bankAccounts.Clear();
+        //       }
         private void ApplyBankConfigToUi()
         {
             if (!_bankPaymentsAllowed)
@@ -239,8 +229,28 @@ namespace Pos.Client.Wpf.Windows.Purchases
                 try { RefundMethodBankItem.IsEnabled = true; } catch { }
             }
         }
-                
-       
+
+        private async Task RefreshBankPaymentsConfigAsync()
+        {
+            _bankPaymentsAllowed = false;
+
+            try
+            {
+                // Bank payments are only meaningful for outlet-based returns
+                if (VM.TargetType == InventoryLocationType.Outlet && VM.OutletId is int oid && oid > 0)
+                {
+                    _bankPaymentsAllowed = await IsPurchaseBankConfiguredAsync(oid);
+                }
+            }
+            catch
+            {
+                _bankPaymentsAllowed = false;
+            }
+
+            ApplyBankConfigToUi();
+        }
+
+
         private async Task<bool> IsPurchaseBankConfiguredAsync(int outletId)
   => await _purSvc.IsPurchaseBankConfiguredAsync(outletId);
 
@@ -1137,6 +1147,8 @@ namespace Pos.Client.Wpf.Windows.Purchases
                     }
                 }
             }
+            await RefreshBankPaymentsConfigAsync();
+
         }
 
         private async Task UpdateAvailablePanelAsync(LineVM? line, bool forceHideIfNoSource = true)

@@ -37,7 +37,10 @@ namespace Pos.Client.Wpf.Printing
         public Boolean IsReturn { get; set; } = false;
 
         // Optional barcode/QR demo payloads
+        public string? SalesmanName { get; set; }   // <— NEW
+
         public string? BarcodeText { get; set; }
         public string? QrText { get; set; }
+
     }
 }

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Pos.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class initialreceipt3 : Migration
+    public partial class init1 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -48,6 +48,7 @@ namespace Pos.Persistence.Migrations
                     BusinessName = table.Column<string>(type: "TEXT", nullable: true),
                     BusinessXmm = table.Column<double>(type: "REAL", nullable: false),
                     BusinessYmm = table.Column<double>(type: "REAL", nullable: false),
+                    BarcodeZoomPct = table.Column<double>(type: "REAL", nullable: true, defaultValue: 100.0),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -139,6 +140,51 @@ namespace Pos.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_CounterSequences", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "InvoiceSettingsLocals",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    CounterId = table.Column<int>(type: "INTEGER", nullable: false),
+                    MachineName = table.Column<string>(type: "TEXT", nullable: false),
+                    PrinterName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    LabelPrinterName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_InvoiceSettingsLocals", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "InvoiceSettingsScoped",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    OutletId = table.Column<int>(type: "INTEGER", nullable: true),
+                    CashDrawerKickEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    AutoPrintOnSave = table.Column<bool>(type: "INTEGER", nullable: false),
+                    AskBeforePrint = table.Column<bool>(type: "INTEGER", nullable: false),
+                    DisplayTimeZoneId = table.Column<string>(type: "TEXT", nullable: true),
+                    SalesCardClearingAccountId = table.Column<int>(type: "INTEGER", nullable: true),
+                    PurchaseBankAccountId = table.Column<int>(type: "INTEGER", nullable: true),
+                    DefaultBarcodeType = table.Column<int>(type: "INTEGER", nullable: false),
+                    FooterSale = table.Column<string>(type: "TEXT", nullable: true),
+                    FooterSaleReturn = table.Column<string>(type: "TEXT", nullable: true),
+                    FooterVoucher = table.Column<string>(type: "TEXT", nullable: true),
+                    FooterZReport = table.Column<string>(type: "TEXT", nullable: true),
+                    EnableDailyBackup = table.Column<bool>(type: "INTEGER", nullable: false),
+                    EnableHourlyBackup = table.Column<bool>(type: "INTEGER", nullable: false),
+                    UseTill = table.Column<bool>(type: "INTEGER", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_InvoiceSettingsScoped", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -498,29 +544,6 @@ namespace Pos.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "UserPreferences",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    MachineName = table.Column<string>(type: "TEXT", nullable: false),
-                    PurchaseDestinationScope = table.Column<string>(type: "TEXT", nullable: false),
-                    PurchaseDestinationId = table.Column<int>(type: "INTEGER", nullable: true),
-                    DefaultBarcodeType = table.Column<string>(type: "TEXT", nullable: false),
-                    DisplayTimeZoneId = table.Column<string>(type: "TEXT", nullable: true),
-                    PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_UserPreferences", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Users",
                 columns: table => new
                 {
@@ -735,7 +758,7 @@ namespace Pos.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "InvoiceSettings",
+                name: "IdentitySettings",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
@@ -748,49 +771,23 @@ namespace Pos.Persistence.Migrations
                     BusinessNtn = table.Column<string>(type: "TEXT", nullable: true),
                     ShowBusinessNtn = table.Column<bool>(type: "INTEGER", nullable: false),
                     EnableFbr = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowFbrQr = table.Column<bool>(type: "INTEGER", nullable: false),
                     FbrPosId = table.Column<string>(type: "TEXT", nullable: true),
-                    FbrApiBaseUrl = table.Column<string>(type: "TEXT", nullable: true),
-                    FbrAuthKey = table.Column<string>(type: "TEXT", nullable: true),
-                    PrinterName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    PaperWidthMm = table.Column<int>(type: "INTEGER", nullable: false),
-                    EnableDrawerKick = table.Column<bool>(type: "INTEGER", nullable: false),
-                    RowShowProductName = table.Column<bool>(type: "INTEGER", nullable: false),
-                    RowShowProductSku = table.Column<bool>(type: "INTEGER", nullable: false),
-                    RowShowQty = table.Column<bool>(type: "INTEGER", nullable: false),
-                    RowShowUnitPrice = table.Column<bool>(type: "INTEGER", nullable: false),
-                    RowShowLineDiscount = table.Column<bool>(type: "INTEGER", nullable: false),
-                    RowShowLineTotal = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowBusinessName = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowAddress = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowContacts = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowLogo = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TotalsShowTaxes = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TotalsShowDiscounts = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TotalsShowOtherExpenses = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TotalsShowGrandTotal = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TotalsShowPaymentRecv = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TotalsShowBalance = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowFooter = table.Column<bool>(type: "INTEGER", nullable: false),
-                    PrintOnSave = table.Column<bool>(type: "INTEGER", nullable: false),
-                    AskToPrintOnSave = table.Column<bool>(type: "INTEGER", nullable: false),
                     LogoPng = table.Column<byte[]>(type: "BLOB", nullable: true),
-                    LogoMaxWidthPx = table.Column<int>(type: "INTEGER", nullable: false),
-                    LogoAlignment = table.Column<string>(type: "TEXT", nullable: true),
-                    ShowQr = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowCustomerOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ShowCashierOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
-                    PrintBarcodeOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    PurchaseBankAccountId = table.Column<int>(type: "INTEGER", nullable: true),
-                    SalesCardClearingAccountId = table.Column<int>(type: "INTEGER", nullable: true),
-                    UseTill = table.Column<bool>(type: "INTEGER", nullable: false)
+                    CurrencyEnabled = table.Column<bool>(type: "INTEGER", nullable: false, defaultValue: false),
+                    CurrencyCode = table.Column<string>(type: "TEXT", nullable: true),
+                    CurrencySymbol = table.Column<string>(type: "TEXT", nullable: true),
+                    PublicId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CreatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "TEXT", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "BLOB", nullable: false, defaultValueSql: "randomblob(8)")
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_InvoiceSettings", x => x.Id);
+                    table.PrimaryKey("PK_IdentitySettings", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_InvoiceSettings_Outlets_OutletId",
+                        name: "FK_IdentitySettings_Outlets_OutletId",
                         column: x => x.OutletId,
                         principalTable: "Outlets",
                         principalColumn: "Id");
@@ -832,14 +829,9 @@ namespace Pos.Persistence.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     OutletId = table.Column<int>(type: "INTEGER", nullable: true),
                     DocType = table.Column<int>(type: "INTEGER", nullable: false),
-                    PrinterName = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
                     PaperWidthMm = table.Column<int>(type: "INTEGER", nullable: false),
                     EnableDrawerKick = table.Column<bool>(type: "INTEGER", nullable: false),
-                    OutletDisplayName = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
-                    AddressLine1 = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    AddressLine2 = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    Phone = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
-                    LogoPng = table.Column<byte[]>(type: "BLOB", nullable: true),
+                    ShowLogoOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
                     LogoMaxWidthPx = table.Column<int>(type: "INTEGER", nullable: false),
                     LogoAlignment = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
                     RowShowProductName = table.Column<bool>(type: "INTEGER", nullable: false),
@@ -858,8 +850,15 @@ namespace Pos.Persistence.Migrations
                     ShowCustomerOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
                     ShowCashierOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
                     PrintBarcodeOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
-                    HeaderText = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
-                    FooterText = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
+                    ShowNtnOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ShowFbrOnReceipt = table.Column<bool>(type: "INTEGER", nullable: false),
+                    TopMarginLines = table.Column<int>(type: "INTEGER", nullable: false),
+                    ShowBusinessName = table.Column<bool>(type: "INTEGER", nullable: false),
+                    BusinessNameFontSizePt = table.Column<int>(type: "INTEGER", nullable: true),
+                    BusinessNameBold = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ShowAddress = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ShowContacts = table.Column<bool>(type: "INTEGER", nullable: false),
+                    MakeAllTextBold = table.Column<bool>(type: "INTEGER", nullable: false),
                     UpdatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -1421,29 +1420,6 @@ namespace Pos.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "InvoiceLocalizations",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    InvoiceSettingsId = table.Column<int>(type: "INTEGER", nullable: false),
-                    Lang = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    Header = table.Column<string>(type: "TEXT", nullable: true),
-                    Footer = table.Column<string>(type: "TEXT", nullable: true),
-                    SaleReturnNote = table.Column<string>(type: "TEXT", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_InvoiceLocalizations", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_InvoiceLocalizations_InvoiceSettings_InvoiceSettingsId",
-                        column: x => x.InvoiceSettingsId,
-                        principalTable: "InvoiceSettings",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "ItemBarcodes",
                 columns: table => new
                 {
@@ -1932,15 +1908,21 @@ namespace Pos.Persistence.Migrations
                 column: "PartyId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_InvoiceLocalizations_InvoiceSettingsId_Lang",
-                table: "InvoiceLocalizations",
-                columns: new[] { "InvoiceSettingsId", "Lang" },
+                name: "IX_IdentitySettings_OutletId",
+                table: "IdentitySettings",
+                column: "OutletId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_InvoiceSettings_OutletId",
-                table: "InvoiceSettings",
-                column: "OutletId");
+                name: "IX_InvoiceSettingsLocals_CounterId",
+                table: "InvoiceSettingsLocals",
+                column: "CounterId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InvoiceSettingsLocals_UpdatedAtUtc",
+                table: "InvoiceSettingsLocals",
+                column: "UpdatedAtUtc");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ItemBarcodes_Code",
@@ -2284,12 +2266,6 @@ namespace Pos.Persistence.Migrations
                 column: "OutletId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_UserPreferences_MachineName",
-                table: "UserPreferences",
-                column: "MachineName",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Users_Username",
                 table: "Users",
                 column: "Username",
@@ -2351,7 +2327,13 @@ namespace Pos.Persistence.Migrations
                 name: "GlEntries");
 
             migrationBuilder.DropTable(
-                name: "InvoiceLocalizations");
+                name: "IdentitySettings");
+
+            migrationBuilder.DropTable(
+                name: "InvoiceSettingsLocals");
+
+            migrationBuilder.DropTable(
+                name: "InvoiceSettingsScoped");
 
             migrationBuilder.DropTable(
                 name: "ItemBarcodes");
@@ -2432,16 +2414,10 @@ namespace Pos.Persistence.Migrations
                 name: "UserOutlets");
 
             migrationBuilder.DropTable(
-                name: "UserPreferences");
-
-            migrationBuilder.DropTable(
                 name: "VoucherLines");
 
             migrationBuilder.DropTable(
                 name: "Counters");
-
-            migrationBuilder.DropTable(
-                name: "InvoiceSettings");
 
             migrationBuilder.DropTable(
                 name: "Journals");

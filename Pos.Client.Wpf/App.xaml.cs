@@ -144,6 +144,7 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.StockReportView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Sales.InvoiceCenterView>();
             sc.AddTransient<Pos.Client.Wpf.Windows.Common.ViewHostWindow>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Inventory.LabelPrintView>();
 
             sc.AddTransient<TillSessionSummaryWindow>();
             sc.AddTransient<OtherAccountsView>();
@@ -445,7 +446,7 @@ namespace Pos.Client.Wpf
                 {
                     break; // shutting down
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     //Debug.WriteLine("[SYNC] Error in loop: " + ex.Message);
                     // keep going

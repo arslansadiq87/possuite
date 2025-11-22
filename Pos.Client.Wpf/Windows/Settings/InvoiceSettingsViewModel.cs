@@ -8,7 +8,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Messages;
 using Pos.Client.Wpf.Services;
 using Pos.Domain.Entities; // Outlet
 using Pos.Domain.Services; // IInvoiceSettingsLocalService, IInvoiceSettingsScopedService, IBankAccountService, IOutletService, ITerminalContext
@@ -234,6 +236,13 @@ namespace Pos.Client.Wpf.Windows.Settings
                     UpdatedAtUtc = DateTime.UtcNow
                 };
                 await _localSvc.UpsertAsync(local, ct);
+                WeakReferenceMessenger.Default.Send(
+    new InvoicePrintersChanged(
+        CounterId: _ctx.CounterId,
+        OutletId: _ctx.OutletId,
+        ReceiptPrinter: local.PrinterName,        // ESC/POS invoice printer
+        LabelPrinter: local.LabelPrinterName    // Label/TSC printer
+    ));
             }
 
             MessageBox.Show("Invoice settings saved.", "Saved",

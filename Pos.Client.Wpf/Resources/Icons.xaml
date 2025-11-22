@@ -182,6 +182,44 @@ V41h-2V26.899z M9,43h46v18h-2V45h-6v2h4v14H13V47h4v-2h-6v16H9V43z"/>
         </DrawingImage.Drawing>
     </DrawingImage>
 
+    <DrawingImage x:Key="Icon.Barcode">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <DrawingGroup.Transform>
+                    <ScaleTransform ScaleX="1.3888889" ScaleY="1.3888889"/>
+                </DrawingGroup.Transform>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
+               Thickness="{DynamicResource Icon.OutlineThickness}"
+               LineJoin="Miter"
+               StartLineCap="Square"
+               EndLineCap="Square"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <PathGeometry Figures="M8,7h7V42H8Z
+                                 M18.5,7H22V42H18.5Z
+                                 M25.5,7H29V42H25.5Z
+                                 M36,7h3.5V42H36Z
+                                 M50,7h3.5V42H50Z
+                                 M60.5,7H64V42H60.5Z
+                                 M43,7h1.75V42H43Z
+                                 M32.5,7h1.75V42H32.5Z
+                                 M55.25,7H57V42H55.25Z
+                                 M8,45.5h3.5V49H8Z
+                                 M18.5,45.5H22V49H18.5Z
+                                 M25.5,45.5H29V49H25.5Z
+                                 M43,45.5h3.5V49H43Z
+                                 M60.5,45.5H64V49H60.5Z
+                                 M50,45.5h7V49H50Z
+                                 M32.5,45.5h7V49h-7Z"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+
     <DrawingImage x:Key="Icon.Transfer">
         <DrawingImage.Drawing>
             <DrawingGroup>

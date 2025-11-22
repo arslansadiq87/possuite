@@ -38,7 +38,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private readonly IItemsReadService _items;
 
         //private Pos.Domain.Models.Settings.InvoiceSettingsDto? _settings; // cache
-        private InvoiceSettingsLocal? _settingsLocal; // cache new model
+        //private InvoiceSettingsLocal? _settingsLocal; // cache new model
         private bool _useTill;
         private bool _printOnSave;
         private bool _askBeforePrintOnSave;
@@ -158,17 +158,17 @@ namespace Pos.Client.Wpf.Windows.Sales
                 ProductNameComposer.Compose(ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
         }
 
-        private InvoiceSettingsDto BuildPrintDtoShim()
-        {
-            // We no longer want printing to depend on this DTO.
-            // Until ReceiptPrinter is refactored, provide just what it needs.
-            var s = _settingsLocal;
+        //private InvoiceSettingsDto BuildPrintDtoShim()
+        //{
+        //    // We no longer want printing to depend on this DTO.
+        //    // Until ReceiptPrinter is refactored, provide just what it needs.
+        //    var s = _settingsLocal;
 
-            return new InvoiceSettingsDto(
-                PrintOnSave: _printOnSave,
-                AskToPrintOnSave: _askBeforePrintOnSave
-            );
-        }
+        //    return new InvoiceSettingsDto(
+        //        PrintOnSave: _printOnSave,
+        //        AskToPrintOnSave: _askBeforePrintOnSave
+        //    );
+        //}
 
 
         private async Task MaybePrintReceiptAsync(Sale sale, TillSession? open)
@@ -184,21 +184,22 @@ namespace Pos.Client.Wpf.Windows.Sales
 
             try
             {
-                // TEMP: build DTO for the current printer API
-                //var printDto = BuildPrintDtoShim();
+                // Resolve display names (fallbacks are harmless)
+                var cashierDisplay = AppState.Current?.CurrentUser?.DisplayName ?? "Cashier";
+                var salesmanDisplay = _selectedSalesmanName; // can be null
 
+                // IMPORTANT: _cart should be the exact cart lines you just saved with the sale
                 await ReceiptPrinter.PrintSaleAsync(
                     sale: sale,
-                    cart: _cart,
-                    till: open,
+                    cart: _cart,                  // IEnumerable<CartLine>
+                    till: open,                   // TillSession? (null is fine)
                     cashierName: cashierDisplay,
-                    salesmanName: _selectedSalesmanName
-                    
+                    salesmanName: salesmanDisplay
                 );
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Print failed: " + ex.Message, "Receipt Print");
+                MessageBox.Show("Print failed: " + ex.Message, "Receipt Print", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

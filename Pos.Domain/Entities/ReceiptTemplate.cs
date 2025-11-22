@@ -46,6 +46,19 @@ namespace Pos.Domain.Entities
         public bool ShowNtnOnReceipt { get; set; } = true;        // Render NTN if it exists in Identity/General settings
         public bool ShowFbrOnReceipt { get; set; } = true;        // Render FBR QR/logo if FBR mode is enabled in General settings
 
+        // ---------- Header spacing ----------
+        public int TopMarginLines { get; set; } = 0;   // NEW: blank lines before header
+
+        // ---------- Business name display ----------
+        public bool ShowBusinessName { get; set; } = true;   // NEW
+        public int? BusinessNameFontSizePt { get; set; }     // NEW: null => default
+        public bool BusinessNameBold { get; set; } = true;   // NEW
+
+        // ---------- Address / Contacts visibility ----------
+        public bool ShowAddress { get; set; } = true;  // NEW (multi-line address block)
+        public bool ShowContacts { get; set; } = true; // NEW (phone, email)
+        public bool MakeAllTextBold { get; set; } = false;
+
         public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
         // Nav

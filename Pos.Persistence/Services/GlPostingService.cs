@@ -270,10 +270,17 @@ namespace Pos.Persistence.Services
             return id;
         }
 
-        private static async Task<int> ResolveApAsync(PosClientDbContext db, Party party, CancellationToken ct)
+        // Replace existing method
+        private async Task<int> ResolveApAsync(PosClientDbContext db, Party party, CancellationToken ct)
         {
-            if (party.AccountId is int pid && pid != 0) return pid;
-            return await RequireAccountByCodeAsync(db, "6100", ct); // AP root
+            // Prefer the supplier’s own ledger account if already linked
+            if (party.AccountId is int pid && pid != 0)
+                return pid;
+
+            // Create (or fetch) a supplier ledger under Parties and return it
+            // This matches your seeding/CoaService approach and avoids using a non-existent "6100".
+            var id = await _coa.EnsureSupplierAccountIdAsync(party.Id, ct);
+            return id;
         }
 
         public async Task PostOpeningStockAsync(StockDoc doc, IEnumerable<StockEntry> openingEntries, int offsetAccountId, CancellationToken ct = default)
@@ -365,8 +372,8 @@ namespace Pos.Persistence.Services
             var outletId = p.OutletId;
             // Resolve Inventory account with THIS db (no CoA calls that open new contexts)
             var inventoryAccId = await db.Accounts.AsNoTracking()
-                .Where(a => a.OutletId == null && !a.IsHeader && a.AllowPosting
-                            && a.Type == AccountType.Asset && a.Code == "1140")
+                .Where(a => a.OutletId == null && !a.IsHeader
+                            && a.Type == AccountType.Asset && a.Code == "11421")
                 .Select(a => a.Id)
                 .FirstOrDefaultAsync(ct);
             if (inventoryAccId == 0)
@@ -408,7 +415,7 @@ namespace Pos.Persistence.Services
             var eff = amended.UpdatedAtUtc ?? tsUtc;
             var outletId = amended.OutletId;
             var inventoryAccId = await db.Accounts.AsNoTracking()
-                .Where(a => a.OutletId == null && !a.IsHeader && a.AllowPosting
+                .Where(a => a.OutletId == null && !a.IsHeader 
                             && a.Type == AccountType.Asset && a.Name == "Inventory")
                 .Select(a => a.Id)
                 .FirstOrDefaultAsync(ct);
@@ -524,7 +531,7 @@ namespace Pos.Persistence.Services
             var chainId = p.PublicId;
             var docNo = Pos.Domain.Formatting.DocNoComposer.FromPurchase(p);
             var gross = Math.Round(p.GrandTotal, 2);
-            var invAccId = await RequireAccountByCodeAsync(db, "1140", ct);              // Inventory
+            var invAccId = await RequireAccountByCodeAsync(db, "11422", ct);              // Inventory
             var apAccId = await ResolveApAsync(db, party, ct);                           // Supplier(AP)
             // Invalidate any effective rows for this chain first (gross + prior payments)
             await InvalidateChainAsync(db, chainId, ct);
@@ -828,20 +835,20 @@ namespace Pos.Persistence.Services
                 await db.SaveChangesAsync(ct);
                 return;
             }
-            // Inventory account (same 1140 used for purchases)
+            
             var inventoryAccId = await db.Accounts.AsNoTracking()
-                .Where(a => a.Code == "1140" && !a.IsHeader && a.AllowPosting)
+                .Where(a => a.Code == "1141" && !a.IsHeader && a.AllowPosting)
                 .Select(a => a.Id)
                 .FirstOrDefaultAsync(ct);
             if (inventoryAccId == 0)
                 throw new InvalidOperationException(
-                    "Inventory account '1140' not found. Create it before posting Opening Stock.");
+                    "Inventory account '1141' not found. Create it before posting Opening Stock.");
             var chainId = doc.PublicId;
             var docId = doc.Id;
             var docNo = Pos.Domain.Formatting.DocNoComposer.FromStockDoc(doc);
             var rows = new[]
             {
-                // DR Inventory (1140)
+                // DR Inventory (11421)
                 Row(tsUtc, eff, outletId, inventoryAccId,
                     debit: totalValue,
                     credit: 0m,
@@ -978,7 +985,7 @@ namespace Pos.Persistence.Services
             if (cogs > 0m)
             {
                 var cogsId = await ResolveAccountByCodeAsync(db, "5111", ct); // Actual cost of sold stock
-                var inventoryId = await ResolveAccountByCodeAsync(db, "1140", ct);
+                var inventoryId = await ResolveAccountByCodeAsync(db, "11431", ct);
                 // DR COGS
                 var eCogs = Row(tsUtc, eff, outletId, cogsId, debit: cogs, credit: 0m,
                                 GlDocType.Sale, GlDocSubType.Sale_COGS, s, memo: memo);
@@ -1063,7 +1070,7 @@ namespace Pos.Persistence.Services
                 .SumAsync(ct);
             if (invIn > 0m)
             {
-                var inventoryId = await ResolveAccountByCodeAsync(db, "1140", ct);
+                var inventoryId = await ResolveAccountByCodeAsync(db, "11432", ct);
                 var cogsReturnId = await ResolveAccountByCodeAsync(db, "5112", ct); // Actual cost of returned stock
                 // DR Inventory
                 debits.Add(Row(tsUtc, eff, outletId, inventoryId, debit: invIn, credit: 0m,
@@ -1174,7 +1181,7 @@ namespace Pos.Persistence.Services
             if (cogsDelta != 0m)
             {
                 var cogsId = await ResolveAccountByCodeAsync(db, "5111", ct);
-                var inventoryId = await ResolveAccountByCodeAsync(db, "1140", ct);
+                var inventoryId = await ResolveAccountByCodeAsync(db, "11431", ct);
                 if (cogsDelta > 0m)
                 {
                     lines.Add(Row(tsUtc, eff, outletId, cogsId, debit: cogsDelta, credit: 0m, docType, GlDocSubType.Sale_COGS, amended, memo: memo));

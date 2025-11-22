@@ -2,7 +2,12 @@
 
   <ItemGroup>
     <Compile Remove="Contracts\IScanFocusable.cs" />
+    <Compile Remove="Printing\EscPosReceiptBuilder.cs" />
+    <Compile Remove="Printing\LabelTestPrinter.cs" />
+    <Compile Remove="Printing\Preview\SkiaPreviewRenderer.cs" />
     <Compile Remove="Printing\RawPrinterHelper.cs" />
+    <Compile Remove="Printing\SaleReceiptBuilder.cs" />
+    <Compile Remove="Printing\SaleReturnReceiptBuilder.cs" />
     <Compile Remove="Services\ArApQueryService.cs" />
     <Compile Remove="Services\AttendanceService.cs" />
     <Compile Remove="Services\AuthService.cs" />
@@ -79,10 +84,7 @@
   <ItemGroup>
     <Folder Include="Resources\Icons\" />
   </ItemGroup>
-	<ItemGroup>
-		<Reference Include="ReachFramework" />
-	</ItemGroup>
-
+	
 
 	<PropertyGroup>
     <OutputType>WinExe</OutputType>

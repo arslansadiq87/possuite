@@ -11,6 +11,8 @@ public interface IOutboxWriter
 {
     Task EnqueueUpsertAsync(PosClientDbContext db, object entity, CancellationToken ct = default);
     Task EnqueueDeleteAsync(PosClientDbContext db, string entityName, Guid publicId, CancellationToken ct = default);
+    Task EnqueueUpsertAsync(PosClientDbContext db, string entityName, Guid publicId, object payload, CancellationToken ct = default);
+
 }
 
 public sealed class OutboxWriter : IOutboxWriter
@@ -62,7 +64,35 @@ public sealed class OutboxWriter : IOutboxWriter
         throw new InvalidOperationException("Outbox token generation failed after 3 retries.");
     }
 
+    public async Task EnqueueUpsertAsync(PosClientDbContext db, string entityName, Guid publicId, object payload, CancellationToken ct = default)
+    {
+        var payloadJson = JsonSerializer.Serialize(payload, payload.GetType(), _syncJson);
 
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                var token = await _tokens.NextTokenAsync(db, ct);
+                db.SyncOutbox.Add(new SyncOutbox
+                {
+                    Entity = entityName,
+                    PublicId = publicId,
+                    Op = (int)SyncOp.Upsert,
+                    PayloadJson = payloadJson,
+                    TsUtc = DateTime.UtcNow,
+                    Token = token
+                });
+                return; // queued
+            }
+            catch (DbUpdateException ex)
+                when (ex.InnerException?.Message.Contains("UNIQUE constraint failed") == true)
+            {
+                await Task.Delay(10, ct); // retry on token collision
+            }
+        }
+
+        throw new InvalidOperationException("Outbox token generation failed after 3 retries.");
+    }
     public async Task EnqueueDeleteAsync(PosClientDbContext db, string entityName, Guid publicId, CancellationToken ct = default)
     {
         for (int attempt = 0; attempt < 3; attempt++)

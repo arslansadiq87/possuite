@@ -7,6 +7,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Pos.Domain.Utils; // add at top for GuidUtility
 
 namespace Pos.Persistence.Services
 {
@@ -62,7 +63,10 @@ namespace Pos.Persistence.Services
 
             // Persist first to ensure Ids exist for outbox payloads
             await db.SaveChangesAsync(ct);
-
+            // Outbox for sync (deterministic key per outlet/global)
+            var key = GuidUtility.FromString($"{nameof(BarcodeLabelSettings)}:{s.OutletId ?? 0}");
+            await _outbox.EnqueueUpsertAsync(db, nameof(BarcodeLabelSettings), key, s, ct);
+            await db.SaveChangesAsync(ct);
             // Outbox for sync (enqueue, then final save)
             //await _outbox.EnqueueUpsertAsync(db, s, ct);
             //await db.SaveChangesAsync(ct);

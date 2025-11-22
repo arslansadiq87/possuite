@@ -15,6 +15,37 @@ namespace Pos.Client.Wpf.Printing
 {
     public sealed class LabelPrintService : ILabelPrintService
     {
+        private static PrintQueue ResolveQueueOrThrow(string printerName)
+        {
+            if (string.IsNullOrWhiteSpace(printerName))
+                throw new InvalidOperationException("No label printer selected. Please select a label printer in Barcode Label Settings.");
+
+            // Try exact match among local + connected printers
+            var lps = new LocalPrintServer(); // “local” also enumerates user’s connected queues
+            var queues = lps.GetPrintQueues(new[]
+            {
+                EnumeratedPrintQueueTypes.Local,
+                EnumeratedPrintQueueTypes.Connections
+            });
+
+            // exact (case-insensitive)
+            var q = queues.FirstOrDefault(p =>
+                string.Equals(p.FullName, printerName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.Name, printerName, StringComparison.OrdinalIgnoreCase));
+
+            if (q != null) return q;
+
+            // relaxed contains (helps when UI shows trimmed or friendly names)
+            q = queues.FirstOrDefault(p =>
+                p.FullName.IndexOf(printerName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                p.Name.IndexOf(printerName, StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (q != null) return q;
+
+            var available = string.Join(", ", queues.Select(p => p.FullName));
+            throw new InvalidOperationException(
+                $"Label printer \"{printerName}\" not found. Available: {available}");
+        }
         // 1) Simple version (interface #1)
         public async Task PrintSampleAsync(BarcodeLabelSettings s, CancellationToken ct = default)
         {
@@ -22,9 +53,9 @@ namespace Pos.Client.Wpf.Printing
                 s,
                 sampleCode: s.CodeType?.ToUpperInvariant() switch
                 {
-                    "EAN8" or "EAN-8" => "5512345",        // 7 digits -> preview adds check
-                    "EAN13" or "EAN-13" => "590123412345",   // 12 digits -> preview adds check
-                    "UPCA" or "UPC-A" => "04210000526",    // 11 digits -> preview adds check
+                    "EAN8" or "EAN-8" => "5512345",
+                    "EAN13" or "EAN-13" => "590123412345",
+                    "UPCA" or "UPC-A" => "04210000526",
                     _ => "123456789012"
                 },
                 sampleName: "Sample Item",
@@ -46,7 +77,9 @@ namespace Pos.Client.Wpf.Printing
             string businessName,
             CancellationToken ct = default)
         {
-            // Build preview image (exactly what we will print)
+            double zoom = s.BarcodeZoomPct.HasValue
+    ? Math.Clamp(s.BarcodeZoomPct.Value / 100.0, 0.3, 2.0)
+    : 1.0;
             var img = BarcodePreviewBuilder.Build(
                 labelWidthMm: s.LabelWidthMm,
                 labelHeightMm: s.LabelHeightMm,
@@ -74,12 +107,13 @@ namespace Pos.Client.Wpf.Printing
                 businessName: businessName,
                 businessXmm: s.BusinessXmm,
                 businessYmm: s.BusinessYmm,
-                // Alignments – use defaults for now (no persistence required)
                 nameAlign: "Left",
                 priceAlign: "Left",
                 skuAlign: "Left",
-                businessAlign: "Left"
+                businessAlign: "Left",
+                barcodeZoom: zoom
             );
+
 
             // Snap page size to device dots to avoid driver rounding
             int wPx = (int)Math.Round(s.LabelWidthMm * s.Dpi / 25.4);
@@ -111,28 +145,28 @@ namespace Pos.Client.Wpf.Printing
             doc.DocumentPaginator.PageSize = new Size(pageWdip, pageHdip);
             doc.Pages.Add(pc);
 
-            // Print dialog & queue
-            var pd = new PrintDialog();
-            if (!string.IsNullOrWhiteSpace(s.PrinterName))
-            {
-                try { pd.PrintQueue = new LocalPrintServer().GetPrintQueue(s.PrinterName); }
-                catch { /* fallback to default printer */ }
-            }
 
-            // Ticket close to device media
-            var baseTicket = pd.PrintQueue?.UserPrintTicket ?? pd.PrintTicket ?? new PrintTicket();
+
+            // ---------- CHANGED: resolve the exact queue or throw ----------
+            var queue = ResolveQueueOrThrow(s.PrinterName);
+
+            var pd = new PrintDialog
+            {
+                PrintQueue = queue
+            };
+            // Build PrintTicket against THIS queue (no fallback/defaults)
+            var baseTicket = queue.UserPrintTicket ?? pd.PrintTicket ?? new PrintTicket();
             var ticket = new PrintTicket
             {
                 CopyCount = 1,
                 PageOrientation = PageOrientation.Portrait
             };
 
-            // Try choose exact media size (in DIPs)
-            var caps = pd.PrintQueue?.GetPrintCapabilities();
+            var caps = queue.GetPrintCapabilities();
             PageMediaSize? chosen = null;
             if (caps?.PageMediaSizeCapability != null)
             {
-                const double tolDip = 2.0; // ~0.5 mm
+                const double tolDip = 2.0;
                 foreach (var ms in caps.PageMediaSizeCapability)
                 {
                     if (ms.Width.HasValue && ms.Height.HasValue &&
@@ -148,9 +182,11 @@ namespace Pos.Client.Wpf.Printing
             if (caps?.PageMediaTypeCapability?.Contains(PageMediaType.Label) == true)
                 ticket.PageMediaType = PageMediaType.Label;
 
-            var result = pd.PrintQueue?.MergeAndValidatePrintTicket(baseTicket, ticket);
-            pd.PrintTicket = result?.ValidatedPrintTicket ?? ticket;
+            // AFTER
+            var result = queue.MergeAndValidatePrintTicket(baseTicket, ticket);
+            pd.PrintTicket = result.ValidatedPrintTicket ?? ticket;
 
+            // Print directly (no dialog UI)
             pd.PrintDocument(doc.DocumentPaginator, "POS Label – Sample");
             return Task.CompletedTask;
         }

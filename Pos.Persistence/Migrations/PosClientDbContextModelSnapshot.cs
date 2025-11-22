@@ -2044,6 +2044,12 @@ namespace Pos.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("BusinessNameBold")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("BusinessNameFontSizePt")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("DocType")
                         .HasColumnType("INTEGER");
 
@@ -2056,6 +2062,9 @@ namespace Pos.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("LogoMaxWidthPx")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MakeAllTextBold")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("OutletId")
@@ -2085,7 +2094,16 @@ namespace Pos.Persistence.Migrations
                     b.Property<bool>("RowShowUnitPrice")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("ShowAddress")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowBusinessName")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("ShowCashierOnReceipt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowContacts")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("ShowCustomerOnReceipt")
@@ -2101,6 +2119,9 @@ namespace Pos.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("ShowQr")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TopMarginLines")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("TotalsShowBalance")

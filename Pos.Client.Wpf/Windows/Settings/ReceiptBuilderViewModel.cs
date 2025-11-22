@@ -16,6 +16,14 @@ using Pos.Client.Wpf.Services;                 // IDialogService
 using Pos.Domain.Entities;                     // ReceiptTemplate, Outlet, Sale, IdentitySettings, ReceiptDocType
 using Pos.Domain.Services;                     // IReceiptTemplateService, IOutletService, IIdentitySettingsService, IInvoiceSettingsLocalService, ITerminalContext, IInvoiceSettingsScopedService
 using Pos.Domain.Settings;                     // InvoiceSettingsLocal
+using CommunityToolkit.Mvvm.Messaging;
+using Pos.Client.Wpf.Messages;
+using Pos.Client.Wpf.Diagnostics;
+using System.Windows;
+using System.Windows.Media; // <-- add
+using System.Windows.Media.Imaging;
+using Pos.Client.Wpf.Printing.Preview; // WpfTextPreviewRenderer
+
 
 namespace Pos.Client.Wpf.Windows.Settings
 {
@@ -29,13 +37,17 @@ namespace Pos.Client.Wpf.Windows.Settings
         private readonly IDialogService _dialogs;
         private readonly IServiceProvider _sp;
         private readonly IInvoiceSettingsScopedService _invoiceScopedSvc;
+        public IReadOnlyList<string> LogoAlignChoices { get; } = new[] { "Left", "Center", "Right" };
 
         private CancellationTokenSource? _previewCts;
+        public ObservableCollection<string> LiveLog { get; } = new();
+        
 
         // cached settings for preview/print
         private IdentitySettings? _identity;
         private InvoiceSettingsLocal? _invoiceLocal;
         private InvoiceSettingsScoped? _invoiceScoped;
+        
 
         public ReceiptBuilderViewModel(
             IReceiptTemplateService tplSvc,
@@ -56,11 +68,35 @@ namespace Pos.Client.Wpf.Windows.Settings
             _dialogs = dialogs;
             _sp = sp;
             _invoiceScopedSvc = invoiceScopedSvc;
+            CrashReporter.Line += OnLine;   // subscribe
 
             InstalledPrinters = new ObservableCollection<string>(
                 PrinterSettings.InstalledPrinters.Cast<string>());
-        }
 
+            WeakReferenceMessenger.Default.Register<InvoicePrintersChanged>(this, (_, msg) =>
+            {
+                if (msg.CounterId != _ctx.CounterId) return;
+
+                // Refresh your cached runtime settings (ensures consistency)
+                _ = App.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    await LoadRuntimeSettingsAsync(CancellationToken.None);
+                    // And/or set directly from the message:
+                    InvoicePrinterName = string.IsNullOrWhiteSpace(msg.ReceiptPrinter)
+                        ? "(not set)"
+                        : msg.ReceiptPrinter;
+                });
+            });
+        }
+        private void OnLine(string text)
+        {
+            App.Current.Dispatcher.Invoke(() =>
+            {
+                LiveLog.Add(text);
+                if (LiveLog.Count > 1000) LiveLog.RemoveAt(0);
+            });
+        }
+        [ObservableProperty] private ImageSource? previewBitmap;
         // ----- UI State -----
         [ObservableProperty] private ObservableCollection<string> installedPrinters = new();
         [ObservableProperty] private ObservableCollection<Outlet> outletChoices = new();
@@ -92,6 +128,17 @@ namespace Pos.Client.Wpf.Windows.Settings
         // Optional: if XAML binds to selected tab
         [ObservableProperty] private int selectedTabIndex; // 0 Sale, 1 Sale Return, 2 Voucher, 3 Z Report
 
+        private static string GetCashierDisplayNameFromAppState()
+        {
+            var s = Pos.Client.Wpf.Services.AppState.Current;
+
+            // Prefer the User entity (if loaded), then the username string
+           
+            var fromEntity = s.CurrentUser?.DisplayName ?? s.CurrentUser?.Username;
+            var fromFields = !string.IsNullOrWhiteSpace(s.CurrentUserName) ? s.CurrentUserName : null;
+
+            return fromEntity ?? fromFields ?? "Cashier";
+        }
 
 
         // ----- Init -----
@@ -113,6 +160,19 @@ namespace Pos.Client.Wpf.Windows.Settings
             await BuildVoucherPreviewAsync(ct);
             await BuildZReportPreviewAsync(ct);
         }
+
+        private async Task<string> ResolveLatestReceiptPrinterAsync(CancellationToken ct)
+        {
+            // Always pull fresh from DB (don’t trust cached field)
+            var latest = await _invoiceLocalSvc.GetForCounterWithFallbackAsync(_ctx.CounterId, ct);
+            var name = latest?.PrinterName;
+            if (string.IsNullOrWhiteSpace(name))
+                throw new InvalidOperationException("No receipt printer selected in Invoice Settings.");
+            // Keep the read-only label in the UI up to date, too
+            InvoicePrinterName = name!;
+            return name!;
+        }
+
 
         private async Task LoadAllTemplatesAsync(CancellationToken ct)
         {
@@ -152,27 +212,6 @@ namespace Pos.Client.Wpf.Windows.Settings
         }
 
 
-
-        // ----- Commands (existing + new) -----
-
-        // EXISTING: Save Sale only
-        [RelayCommand]
-        private async Task SaveSaleAsync()
-        {
-            try
-            {
-                SaleTemplate.DocType = ReceiptDocType.Sale;
-                SaleTemplate.OutletId = SelectedOutlet?.Id ?? _ctx.OutletId;
-                SaleTemplate.UpdatedAtUtc = DateTime.UtcNow;
-                await _tplSvc.SaveAsync(SaleTemplate);
-                await _dialogs.AlertAsync("Sale receipt saved.", "Receipt Builder");
-            }
-            catch (Exception ex)
-            {
-                await _dialogs.AlertAsync("Save failed: " + ex.Message, "Receipt Builder");
-            }
-        }
-
         // NEW: Save all four in one go
         [RelayCommand]
         private async Task SaveAllAsync()
@@ -199,11 +238,11 @@ namespace Pos.Client.Wpf.Windows.Settings
                 await _tplSvc.SaveAsync(VoucherTemplate);
                 await _tplSvc.SaveAsync(ZReportTemplate);
 
-                await _dialogs.AlertAsync("Saved templates for Sale, Sale Return, Voucher, and Z Report.", "Receipt Builder");
+                MessageBox.Show("Saved templates for Sale, Sale Return, Voucher, and Z Report.", "Receipt Builder");
             }
             catch (Exception ex)
             {
-                await _dialogs.AlertAsync("Save All failed: " + ex.Message, "Receipt Builder");
+                MessageBox.Show("Save All failed: " + ex.Message, "Receipt Builder");
             }
         }
 
@@ -224,74 +263,187 @@ namespace Pos.Client.Wpf.Windows.Settings
         private async Task PreviewZReportAsync() => await BuildZReportPreviewAsync();
 
         // Optional: Print current tab (you can wire real print later)
-        [RelayCommand]
+        [RelayCommand(AllowConcurrentExecutions = true)]
         private async Task PrintCurrentAsync()
         {
-            try
+            await LoadRuntimeSettingsAsync(CancellationToken.None);
+
+            switch (SelectedTabIndex)
             {
-                switch (SelectedTabIndex)
-                {
-                    case 0:
-                        await PrintSaleAsync(); // your existing print stays intact
+                case 0: // Sale
+                    {
+                        var scoped = _invoiceScoped ?? new InvoiceSettingsScoped();
+                        var (sale, cart) = BuildSampleSaleAndCart(SaleTemplate, scoped);
+                        sale.IsReturn = false;
+
+                        await ReceiptPrinter.PrintAsync(
+                            ReceiptDocType.Sale,
+                            SaleTemplate!,
+                            sale: sale,
+                            cart: cart,
+                            till: null,
+                            cashierName: "Cashier",
+                            salesmanName: null);
                         break;
-                    case 1:
-                        await _dialogs.AlertAsync("Hook PrintSaleReturnAsync here.", "Receipt Builder");
+                    }
+                case 1: // Sale Return
+                    {
+                        var scoped = _invoiceScoped ?? new InvoiceSettingsScoped();
+                        var (sale, cart) = BuildSampleSaleAndCart(SaleReturnTemplate, scoped);
+                        sale.IsReturn = true;
+
+                        await ReceiptPrinter.PrintAsync(
+                            ReceiptDocType.SaleReturn,
+                            SaleReturnTemplate!,
+                            sale: sale,
+                            cart: cart,
+                            till: null,
+                            cashierName: "Cashier",
+                            salesmanName: null);
                         break;
-                    case 2:
-                        await _dialogs.AlertAsync("Hook PrintVoucherAsync here.", "Receipt Builder");
+                    }
+                case 2: // Voucher
+                    {
+                        var v = BuildSampleVoucher();
+                        await ReceiptPrinter.PrintAsync(
+                            ReceiptDocType.Voucher,
+                            VoucherTemplate!,
+                            voucher: v);
                         break;
-                    case 3:
-                        await _dialogs.AlertAsync("Hook PrintZReportAsync here.", "Receipt Builder");
+                    }
+                case 3: // Z Report
+                    {
+                        var z = BuildSampleZ();
+                        await ReceiptPrinter.PrintAsync(
+                            ReceiptDocType.ZReport,
+                            ZReportTemplate!,
+                            z: z);
                         break;
-                }
-            }
-            catch (Exception ex)
-            {
-                await _dialogs.AlertAsync("Print failed: " + ex.Message, "Receipt Builder");
+                    }
             }
         }
 
-        [RelayCommand]
-        private async Task PrintSaleAsync()
+
+        [RelayCommand(AllowConcurrentExecutions = true)]
+        private async Task PrintSaleReturnAsync()
         {
-            try
-            {
-                // Ensure we have up-to-date runtime settings
-                await LoadRuntimeSettingsAsync(CancellationToken.None);
+            await LoadRuntimeSettingsAsync(CancellationToken.None);
+            var scoped = _invoiceScoped ?? new InvoiceSettingsScoped();
+            var (sale, cart) = BuildSampleSaleAndCart(SaleReturnTemplate, scoped);
+            sale.IsReturn = true; // mark it as return after building the sample
 
-                var identity = _identity ?? new IdentitySettings();
-                var invoice = _invoiceLocal ?? new InvoiceSettingsLocal();
-                var inoiceScoped = _invoiceScoped ?? new InvoiceSettingsScoped();
 
-                var (sale, cart) = BuildSampleSaleAndCart(SaleTemplate, inoiceScoped);
-
-                // EscPos builder currently uses a fixed layout – pass identity strings to mimic header,
-                // but the real content/logo is handled in your ESC/POS builder as you evolve it.
-                var bytes = EscPosReceiptBuilder.Build(
-                    sale,
-                    cart,
-                    till: null,
-                    storeName: identity.OutletDisplayName ?? "My Store",
-                    cashierName: "Cashier",
-                    salesmanName: null,
-                    eReceiptBaseUrl: null
-                );
-
-                var printerName = string.IsNullOrWhiteSpace(invoice.PrinterName)
-                    ? ReceiptPrinter.DefaultPrinterName
-                    : invoice.PrinterName!;
-
-                var raw = _sp.GetRequiredService<IRawPrinterService>();
-                await raw.SendEscPosAsync(printerName, bytes);
-
-                await _dialogs.AlertAsync($"Test receipt sent to “{printerName}”.", "Receipt Builder");
-            }
-            catch (Exception ex)
-            {
-                await _dialogs.AlertAsync("Print failed: " + ex.Message, "Receipt Builder");
-            }
+            await ReceiptPrinter.PrintAsync(
+                ReceiptDocType.SaleReturn,
+                SaleReturnTemplate,
+                sale: sale,
+                cart: cart
+            );
         }
 
+
+        [RelayCommand(AllowConcurrentExecutions = true)]
+        private async Task PrintVoucherAsync()
+        {
+            await LoadRuntimeSettingsAsync(CancellationToken.None);
+            var v = BuildSampleVoucher();
+
+            await ReceiptPrinter.PrintAsync(
+                ReceiptDocType.Voucher,
+                VoucherTemplate,
+                voucher: v
+            );
+        }
+
+        [RelayCommand(AllowConcurrentExecutions = true)]
+        private async Task PrintZReportAsync()
+        {
+            await LoadRuntimeSettingsAsync(CancellationToken.None);
+            var z = BuildSampleZ();
+
+            await ReceiptPrinter.PrintAsync(
+                ReceiptDocType.ZReport,
+                ZReportTemplate,
+                z: z
+            );
+        }
+
+
+
+
+        // 1) Replace your updater with this parameterless version
+        private void UpdatePreviewBitmapForActiveTab()
+        {
+            // pick text + template + dots per tab
+            string text;
+            ReceiptTemplate? tpl;
+            int paperDots;
+
+            switch (SelectedTabIndex)
+            {
+                case 0: // Sale
+                    text = PreviewText ?? string.Empty;
+                    tpl = SaleTemplate;
+                    paperDots = (tpl?.PaperWidthMm ?? 80) <= 58 ? 384 : 576;
+                    break;
+
+                case 1: // Sale Return
+                    text = SaleReturnPreviewText ?? string.Empty;
+                    tpl = SaleReturnTemplate;
+                    paperDots = (tpl?.PaperWidthMm ?? 80) <= 58 ? 384 : 576;
+                    break;
+
+                case 2: // Voucher
+                    text = VoucherPreviewText ?? string.Empty;
+                    tpl = VoucherTemplate;
+                    paperDots = (tpl?.PaperWidthMm ?? 80) <= 58 ? 384 : 576;
+                    break;
+
+                case 3: // Z Report
+                    text = ZReportPreviewText ?? string.Empty;
+                    tpl = ZReportTemplate;
+                    paperDots = (tpl?.PaperWidthMm ?? 80) <= 58 ? 384 : 576;
+                    break;
+
+                default:
+                    text = PreviewText ?? string.Empty;
+                    tpl = SaleTemplate;
+                    paperDots = (tpl?.PaperWidthMm ?? 80) <= 58 ? 384 : 576;
+                    break;
+            }
+
+            byte[]? logoBytes =
+    (tpl?.ShowLogoOnReceipt == true && _identity?.LogoPng is { Length: > 0 })
+        ? _identity!.LogoPng
+        : null;
+
+            int logoCapDots =
+                (tpl?.LogoMaxWidthPx > 0)
+                    ? tpl!.LogoMaxWidthPx
+                    : ((tpl?.PaperWidthMm ?? 80) <= 58 ? 280 : 460);
+
+            PreviewBitmap = WpfTextPreviewRenderer.RenderFromTextWithLogo(
+                text,
+                logoBytes,
+                paperDots,
+                logoCapDots,
+                topMarginLines: tpl?.TopMarginLines ?? 0,
+                businessNameFontSizePt: tpl?.BusinessNameFontSizePt,
+                businessNameBold: tpl?.BusinessNameBold ?? false,
+                logoAlignment: tpl?.LogoAlignment,    // NEW
+                allTextBold: tpl?.MakeAllTextBold ?? false,      // NEW
+                dpi: 96,
+                baseFontSize: 14
+            );
+
+        }
+
+
+        // 2) Keep the toolkit partial exactly like this (it now compiles)
+        partial void OnSelectedTabIndexChanged(int value)
+        {
+            UpdatePreviewBitmapForActiveTab();
+        }
 
 
         // ----- Preview builders -----
@@ -305,14 +457,19 @@ namespace Pos.Client.Wpf.Windows.Settings
             await LoadRuntimeSettingsAsync(ct);
 
             var identity = _identity ?? new IdentitySettings();
+            var outlet = SelectedOutlet;
             var invoice = _invoiceLocal ?? new InvoiceSettingsLocal();
-
             int widthCols = SaleTemplate.PaperWidthMm <= 58 ? 32 : 42;
 
+            // ✅ Strong fallbacks so text is never empty
+            string businessName = FallbackBusinessName(identity, outlet, _ctx);
+            string address = BuildAddressBlock(identity);
+            string? contacts = FallbackContacts(identity);
+
             // Identity & Branding text (NOT from template)
-            string businessName = identity.OutletDisplayName ?? "";
-            string address = JoinNonEmpty("\n", identity.AddressLine1, identity.AddressLine2);
-            string contacts = JoinNonEmpty("  ", identity.Phone);
+            //string businessName = identity.OutletDisplayName ?? "";
+            //string address = JoinNonEmpty("\n", identity.AddressLine1, identity.AddressLine2);
+            //string contacts = JoinNonEmpty("  ", identity.Phone);
 
             // NTN show rule: if provided in general settings AND template says to show
             string? ntnToShow = (SaleTemplate.ShowNtnOnReceipt && !string.IsNullOrWhiteSpace(identity.BusinessNtn))
@@ -334,9 +491,16 @@ namespace Pos.Client.Wpf.Windows.Settings
 
             PreviewText = ReceiptPreviewBuilder.BuildText(
                 width: widthCols,
+                topMarginLines: SaleTemplate.TopMarginLines,                  // NEW
                 businessName: businessName,
+                showBusinessName: SaleTemplate.ShowBusinessName,              // NEW
+                businessNameBold: SaleTemplate.BusinessNameBold,              // NEW (preview sim)
+                businessNameFontSizePt: SaleTemplate.BusinessNameFontSizePt,  // NEW (preview sim)
                 addressBlock: address,
+                showAddress: SaleTemplate.ShowAddress,                        // NEW
                 contacts: contacts,
+                showContacts: SaleTemplate.ShowContacts,                      // NEW
+                receiptTypeCaption: "SALE INVOICE",                           // per tab: SALE RETURN / VOUCHER / Z-REPORT
                 businessNtn: ntnToShow,                 // still pass explicitly if builder uses it
                 showLogo: SaleTemplate.ShowLogoOnReceipt,
                 showCustomer: SaleTemplate.ShowCustomerOnReceipt,
@@ -368,6 +532,11 @@ namespace Pos.Client.Wpf.Windows.Settings
                 showBarcodeOnReceipt: SaleTemplate.PrintBarcodeOnReceipt,
                 showGenericQr: SaleTemplate.ShowQr
             );
+            int paperDots = SaleTemplate.PaperWidthMm <= 58 ? 384 : 576;
+            // render to bitmap
+            UpdatePreviewBitmapForActiveTab();
+            //PreviewBitmap = Pos.Client.Wpf.Printing.Preview.WpfTextPreviewRenderer
+            //                  .RenderFromText(PreviewText, paperWidthDots: paperDots, dpi: 96, fontSize: 14);
         }
 
         // NEW: Sale Return preview (same look, different template & footer slot if needed)
@@ -377,10 +546,16 @@ namespace Pos.Client.Wpf.Windows.Settings
 
             var identity = _identity ?? new IdentitySettings();
             int widthCols = SaleReturnTemplate.PaperWidthMm <= 58 ? 32 : 42;
+            var outlet = SelectedOutlet;
 
-            string businessName = identity.OutletDisplayName ?? "";
-            string address = JoinNonEmpty("\n", identity.AddressLine1, identity.AddressLine2);
-            string contacts = JoinNonEmpty("  ", identity.Phone);
+            // ✅ Strong fallbacks so text is never empty
+            string businessName = FallbackBusinessName(identity, outlet, _ctx);
+            string address = BuildAddressBlock(identity);
+            string? contacts = FallbackContacts(identity);
+
+            //string businessName = identity.OutletDisplayName ?? "";
+            //string address = JoinNonEmpty("\n", identity.AddressLine1, identity.AddressLine2);
+            //string contacts = JoinNonEmpty("  ", identity.Phone);
 
             string? ntnToShow = (SaleReturnTemplate.ShowNtnOnReceipt && !string.IsNullOrWhiteSpace(identity.BusinessNtn))
                 ? identity.BusinessNtn!
@@ -401,11 +576,18 @@ namespace Pos.Client.Wpf.Windows.Settings
 
             SaleReturnPreviewText = ReceiptPreviewBuilder.BuildText(
                 width: widthCols,
+                topMarginLines: SaleReturnTemplate.TopMarginLines,                  // NEW
                 businessName: businessName,
+                showBusinessName: SaleReturnTemplate.ShowBusinessName,              // NEW
+                businessNameBold: SaleReturnTemplate.BusinessNameBold,              // NEW (preview sim)
+                businessNameFontSizePt: SaleReturnTemplate.BusinessNameFontSizePt,  // NEW (preview sim)
                 addressBlock: address,
+                showAddress: SaleReturnTemplate.ShowAddress,                        // NEW
                 contacts: contacts,
+                showContacts: SaleReturnTemplate.ShowContacts,                      // NEW
                 businessNtn: ntnToShow,
                 showLogo: SaleReturnTemplate.ShowLogoOnReceipt,
+                receiptTypeCaption: "SALE RETURN",                           // per tab: SALE RETURN / VOUCHER / Z-REPORT
                 showCustomer: SaleReturnTemplate.ShowCustomerOnReceipt,
                 showCashier: SaleReturnTemplate.ShowCashierOnReceipt,
                 // items
@@ -431,9 +613,13 @@ namespace Pos.Client.Wpf.Windows.Settings
                 showBarcodeOnReceipt: SaleReturnTemplate.PrintBarcodeOnReceipt,
                 showGenericQr: SaleReturnTemplate.ShowQr
             );
+            int paperDots = SaleReturnTemplate.PaperWidthMm <= 58 ? 384 : 576;
+            // render to bitmap
+            UpdatePreviewBitmapForActiveTab();
+            //PreviewBitmap = Pos.Client.Wpf.Printing.Preview.WpfTextPreviewRenderer
+            //                  .RenderFromText(SaleReturnPreviewText, paperWidthDots: paperDots, dpi: 96, fontSize: 14);
         }
 
-        // NEW: Voucher preview (same preview surface)
         // ===== VOUCHER PREVIEW (account DR/CR, no product rows) =====
         private async Task BuildVoucherPreviewAsync(CancellationToken ct = default)
         {
@@ -442,13 +628,66 @@ namespace Pos.Client.Wpf.Windows.Settings
             var identity = _identity ?? new IdentitySettings();
             int cols = VoucherTemplate.PaperWidthMm <= 58 ? 32 : 42;
 
-            // Sample voucher (for preview only) — replace with live data if you wire it
+            // Sample voucher (preview only)
             var v = BuildSampleVoucher();
 
-            var sb = new StringBuilder();
+            // Caption by voucher type
+            static string Caption(Pos.Domain.Accounting.VoucherType t) => t switch
+            {
+                Pos.Domain.Accounting.VoucherType.Payment => "PAYMENT VOUCHER",
+                Pos.Domain.Accounting.VoucherType.Receipt => "RECEIPT VOUCHER",
+                Pos.Domain.Accounting.VoucherType.Journal => "JOURNAL VOUCHER",
+                _ => "VOUCHER"
+            };
 
-            // Header
-            sb.AppendLine(Center($"*** {v.Type.ToString().ToUpper()} VOUCHER ***", cols));
+            // Resolve identity text blocks
+            var business = identity.OutletDisplayName ?? "STORE";
+            var address = JoinNonEmpty(" ", identity.AddressLine1, identity.AddressLine2);
+            var contacts = identity.Phone;
+
+            // 1) Build the common header (top margin, logo, business name styling, type caption, address/contacts)
+            var header = ReceiptPreviewBuilder.BuildText(
+                width: cols,
+                topMarginLines: VoucherTemplate.TopMarginLines,
+                businessName: business,
+                showBusinessName: VoucherTemplate.ShowBusinessName,
+                businessNameBold: VoucherTemplate.BusinessNameBold,
+                businessNameFontSizePt: VoucherTemplate.BusinessNameFontSizePt,
+                addressBlock: address,
+                showAddress: VoucherTemplate.ShowAddress,
+                contacts: contacts,
+                showContacts: VoucherTemplate.ShowContacts,
+                businessNtn: null,                                  // keep as needed
+                showCustomer: false,                               // no customer on voucher
+                showCashier: false,                                // no cashier on voucher
+                showBalance: false,                                 // no balance on voucher
+                showName: false,                                    // no product rows on voucher
+                showSku: false,
+                showQty: false,
+                showUnit: false,
+                showLineDisc: false,
+                showLineTotal: false,
+                showTax: false,
+                showInvDisc: false,
+                showOtherExp: false,
+                showGrand: false,
+                showPaid: false,
+                footer: null,                                      // no footer on voucher
+                enableFbr: false,                                  // no FBR on voucher
+                fbrPosId: null,
+                showFbrQr: false,
+                receiptTypeCaption: Caption(v.Type),
+                showLogo: VoucherTemplate.ShowLogoOnReceipt,
+                showBarcodeOnReceipt: false,                        // normally no barcode on voucher preview footer
+                lines: null,
+                sale: null,
+                showGenericQr: false
+            );
+
+            var sb = new StringBuilder();
+            sb.Append(header);
+
+            // 2) Voucher meta (compact; no double-blank lines)
             sb.AppendLine(Line("No:", string.IsNullOrWhiteSpace(v.RefNo) ? v.Id.ToString() : v.RefNo!, cols));
             sb.AppendLine(Line("Date (UTC):", v.TsUtc.ToString("yyyy-MM-dd HH:mm"), cols));
             sb.AppendLine(Line("Status:", v.Status.ToString(), cols));
@@ -456,18 +695,9 @@ namespace Pos.Client.Wpf.Windows.Settings
             if (!string.IsNullOrWhiteSpace(v.Memo))
                 sb.AppendLine(Line("Memo:", v.Memo!, cols));
 
-            // Identity header (same style as others, but not producty)
-            var business = identity.OutletDisplayName ?? "STORE";
-            var address = JoinNonEmpty(" ", identity.AddressLine1, identity.AddressLine2);
-            var phone = identity.Phone;
-
-            sb.AppendLine(new string('=', cols));
-            sb.AppendLine(Center(business, cols));
-            if (!string.IsNullOrWhiteSpace(address)) sb.AppendLine(Center(address, cols));
-            if (!string.IsNullOrWhiteSpace(phone)) sb.AppendLine(Center(phone!, cols));
             sb.AppendLine(new string('-', cols));
 
-            // Lines table
+            // 3) Lines table (no extra spacing)
             sb.AppendLine(FixedColumns("Account / Description", "DR", "CR", cols));
 
             decimal dr = 0m, cr = 0m;
@@ -475,8 +705,11 @@ namespace Pos.Client.Wpf.Windows.Settings
             {
                 if (ln.Debit == 0m && ln.Credit == 0m) continue;
                 var left = $"Acc {ln.AccountId}" + (string.IsNullOrWhiteSpace(ln.Description) ? "" : $" - {ln.Description}");
-                sb.AppendLine(FixedColumns(left, ln.Debit == 0 ? "" : ln.Debit.ToString("0.00"),
-                                                ln.Credit == 0 ? "" : ln.Credit.ToString("0.00"), cols));
+                sb.AppendLine(FixedColumns(
+                    left,
+                    ln.Debit == 0 ? "" : ln.Debit.ToString("0.00"),
+                    ln.Credit == 0 ? "" : ln.Credit.ToString("0.00"),
+                    cols));
                 dr += ln.Debit;
                 cr += ln.Credit;
             }
@@ -488,39 +721,105 @@ namespace Pos.Client.Wpf.Windows.Settings
             var balanceTxt = diff == 0 ? "Balanced" : (diff > 0 ? $"DR>CR by {diff:0.00}" : $"CR>DR by {Math.Abs(diff):0.00}");
             sb.AppendLine(Line("Check:", balanceTxt, cols));
 
+            // As per requirement: no company name/address/phone at the bottom for vouchers (so no footer here)
+            // Keep a single friendly line
             sb.AppendLine(new string('-', cols));
             sb.AppendLine(Center("Thank you.", cols));
 
             VoucherPreviewText = sb.ToString();
+            UpdatePreviewBitmapForActiveTab();
         }
+
 
         // ===== Z REPORT PREVIEW (till totals, no product rows) =====
         private async Task BuildZReportPreviewAsync(CancellationToken ct = default)
         {
             await LoadRuntimeSettingsAsync(ct);
 
+            var identity = _identity ?? new IdentitySettings();
             int cols = ZReportTemplate.PaperWidthMm <= 58 ? 32 : 42;
 
-            // Sample Z data (for preview only)
+            // Sample Z data (preview only)
             var z = BuildSampleZ();
 
+            // Try to get a username/cashier for preview context; fallbacks are fine for preview
+            // ⬇️ Use AppState for the currently signed-in user
+            var cashierName = GetCashierDisplayNameFromAppState();
+            z.CashierName ??= cashierName;
+
+            // If your BuildSampleZ() has a property, keep both:
+            z.CashierName ??= cashierName;
+
+            string businessName = string.IsNullOrWhiteSpace(identity.OutletDisplayName)
+                 ? (SelectedOutlet?.Name ?? "STORE")
+                 : identity.OutletDisplayName!;
+            var address = JoinNonEmpty(" ", identity.AddressLine1, identity.AddressLine2);
+            var contacts = identity.Phone;
+
+            // 1) Common header (TopMargin, Logo, Business Name style, Type caption, Address/Contacts)
+            var header = ReceiptPreviewBuilder.BuildText(
+                width: cols,
+                topMarginLines: ZReportTemplate.TopMarginLines,
+                businessName: businessName,
+                showBusinessName: ZReportTemplate.ShowBusinessName,
+                businessNameBold: ZReportTemplate.BusinessNameBold,
+                businessNameFontSizePt: ZReportTemplate.BusinessNameFontSizePt,
+                addressBlock: address,
+                showAddress: ZReportTemplate.ShowAddress,
+                contacts: contacts,
+                showContacts: ZReportTemplate.ShowContacts,
+                businessNtn: null,
+                showCustomer: false,                               // no customer on voucher
+                showCashier: false,                                // no cashier on voucher
+                showBalance: false,                                 // no balance on voucher
+                showName: false,                                    // no product rows on voucher
+                showSku: false,
+                showQty: false,
+                showUnit: false,
+                showLineDisc: false,
+                showLineTotal: false,
+                showTax: false,
+                showInvDisc: false,
+                showOtherExp: false,
+                showGrand: false,
+                showPaid: false,
+                footer: null,                                      // no footer on voucher
+                enableFbr: false,                                  // no FBR on voucher
+                fbrPosId: null,
+                showFbrQr: false,
+
+                receiptTypeCaption: "Z-REPORT",
+                showLogo: ZReportTemplate.ShowLogoOnReceipt,
+                showBarcodeOnReceipt: false,
+                lines: null,
+                sale: null,
+                showGenericQr: false
+            );
+
             var sb = new StringBuilder();
-            sb.AppendLine(Center("*** Z REPORT — TILL CLOSE ***", cols));
+            sb.Append(header);
+
+            // 2) Z body (compact lines; includes cashier/username)
             sb.AppendLine(Line("Session:", z.TillSessionId.ToString(), cols));
             sb.AppendLine(Line("Opened (UTC):", z.OpenedAtUtc.ToString("yyyy-MM-dd HH:mm"), cols));
             sb.AppendLine(Line("Closed (UTC):", z.ClosedAtUtc.ToString("yyyy-MM-dd HH:mm"), cols));
+            sb.AppendLine(Line("Cashier:", z.CashierName ?? cashierName, cols));   // <-- username/cashier
             sb.AppendLine(new string('-', cols));
+
             sb.AppendLine(Line("Opening Float:", z.OpeningFloat.ToString("0.00"), cols));
             sb.AppendLine(Line("Sales:", z.SalesTotal.ToString("0.00"), cols));
             sb.AppendLine(Line("Returns:", z.ReturnsTotalAbs.ToString("0.00"), cols));
             sb.AppendLine(Line("Net:", z.NetTotal.ToString("0.00"), cols));
             sb.AppendLine(Line("Cash Counted:", z.CashCounted.ToString("0.00"), cols));
             sb.AppendLine(Line("Over/Short:", z.OverShort.ToString("0.00"), cols));
+
             sb.AppendLine(new string('-', cols));
             sb.AppendLine(Center("Shift closed.", cols));
 
             ZReportPreviewText = sb.ToString();
+            UpdatePreviewBitmapForActiveTab();
         }
+
 
         // Sample voucher for preview surface (no products)
         private static Pos.Domain.Accounting.Voucher BuildSampleVoucher()
@@ -548,6 +847,7 @@ namespace Pos.Client.Wpf.Windows.Settings
             var now = DateTime.UtcNow;
             return new Pos.Client.Wpf.Printing.ZReportModel
             {
+
                 TillSessionId = 42,
                 OpenedAtUtc = now.AddHours(-8),
                 ClosedAtUtc = now,
@@ -685,5 +985,29 @@ namespace Pos.Client.Wpf.Windows.Settings
                 await _dialogs.AlertAsync("Failed to load outlet template: " + ex.Message, "Receipt Builder");
             }
         }
+
+        private static string FallbackBusinessName(IdentitySettings? id, Outlet? outlet, ITerminalContext ctx)
+        {
+            // Try identity/branding first, then outlet, then terminal context, then a safe default
+            return
+                (!string.IsNullOrWhiteSpace(id?.OutletDisplayName) ? id!.OutletDisplayName! :
+                !string.IsNullOrWhiteSpace(outlet?.Name) ? outlet!.Name :
+                "STORE");
+        }
+
+        private static string BuildAddressBlock(IdentitySettings? id)
+        {
+            var parts = new[] { id?.AddressLine1, id?.AddressLine2 }
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s!.Trim());
+            return string.Join("\n", parts);
+        }
+
+        private static string? FallbackContacts(IdentitySettings? id)
+        {
+            // You can add more fallbacks (e.g., identity.Email) if desired
+            return string.IsNullOrWhiteSpace(id?.Phone) ? null : id!.Phone!.Trim();
+        }
+
     }
 }

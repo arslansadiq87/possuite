@@ -21,28 +21,34 @@ namespace Pos.Client.Wpf.Printing
         /// var fd = new FlowDocument();
 
         public static string BuildText(
-            int width,
-            string? businessName,
-            string? addressBlock,
-            string? contacts,
-            string? businessNtn,
-            bool showLogo,
-            bool showCustomer,                 // <-- add this
-            bool showCashier,                              // item flags
-            bool showName, bool showSku, bool showQty, bool showUnit, bool showLineDisc, bool showLineTotal,
-            // totals flags
-            bool showTax, bool showInvDisc, bool showOtherExp, bool showGrand, bool showPaid, bool showBalance,
-            // footer
-            string? footer,
-            // FBR
-            bool enableFbr, bool showFbrQr, string? fbrPosId,
-            // data
-            IReadOnlyList<ReceiptPreviewLine> lines,
-            ReceiptPreviewSale sale,
-            // generic barcode / QR preview
-            bool showBarcodeOnReceipt,
-            bool showGenericQr)
-
+    int width,
+    int topMarginLines,                  // NEW
+    string? businessName,
+    bool showBusinessName,               // NEW
+    bool businessNameBold,               // NEW
+    int? businessNameFontSizePt,         // NEW (text preview sim only)
+    string? addressBlock,
+    bool showAddress,                    // NEW
+    string? contacts,
+    bool showContacts,                   // NEW
+    string? businessNtn,
+    string receiptTypeCaption,           // NEW: "SALE INVOICE", etc. (non-nullable)
+    bool showLogo,
+    bool showCustomer,                   // toggles
+    bool showCashier,
+    bool showName, bool showSku, bool showQty, bool showUnit, bool showLineDisc, bool showLineTotal,
+    // totals flags
+    bool showTax, bool showInvDisc, bool showOtherExp, bool showGrand, bool showPaid, bool showBalance,
+    // footer
+    string? footer,
+    // FBR
+    bool enableFbr, bool showFbrQr, string? fbrPosId,
+    // data
+    IReadOnlyList<ReceiptPreviewLine>? lines,   // nullable
+    ReceiptPreviewSale? sale,                   // nullable
+                                                // generic barcode / QR preview
+    bool showBarcodeOnReceipt,
+    bool showGenericQr)
         {
             var sb = new StringBuilder();
 
@@ -72,62 +78,92 @@ namespace Pos.Client.Wpf.Printing
             bool noDecimals = width <= 34;
             string Money(decimal d) => noDecimals ? Math.Round(d).ToString("0") : d.ToString("0.00");
 
-            // ---------------- header ----------------
-            if (showLogo) sb.Append(Center("[LOGO]"));
+            // Normalize nullable inputs
+            lines ??= Array.Empty<ReceiptPreviewLine>();
+            bool hasSale = sale is not null;
 
-            if (!string.IsNullOrWhiteSpace(businessName))
+            string Safe(string? s) => string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
+            var business = Safe(businessName);
+            var address = Safe(addressBlock);
+            var contact = Safe(contacts);
+            var ntn = Safe(businessNtn);
+            var typeCap = Safe(receiptTypeCaption); // receiptTypeCaption is non-nullable by signature; Safe stops accidental spaces
+
+            // Top margin
+            if (topMarginLines > 0) sb.Append(new string('\n', topMarginLines));
+
+            // ---------------- header ----------------
+            //if (showLogo) sb.Append(Center("[LOGO]"));
+
+            // Business name
+            if (showBusinessName && business.Length > 0)
             {
-                var title = businessName.Trim().ToUpperInvariant();
-                sb.Append(Center(title));
-                // double rule to simulate bold/bigger
-                sb.Append(Repeat('='));
-                sb.Append(Repeat('='));
+                var text = business;
+                // Simulate bold/size for preview (ESC/POS does real styling)
+                if (businessNameBold) text = text.ToUpperInvariant();
+                sb.Append(Center(text));
             }
 
-            if (!string.IsNullOrWhiteSpace(addressBlock))
+            // Address / contacts
+            if (showAddress && address.Length > 0)
             {
-                foreach (var ln in addressBlock.Split('\n').Where(x => !string.IsNullOrWhiteSpace(x)))
+                foreach (var ln in address.Split('\n').Where(x => !string.IsNullOrWhiteSpace(x)))
                     sb.Append(Center(ln.Trim()));
             }
-            if (!string.IsNullOrWhiteSpace(contacts)) sb.Append(Center(contacts.Trim()));
-            if (!string.IsNullOrWhiteSpace(businessNtn)) sb.Append(Center("NTN: " + businessNtn.Trim()));
+            if (showContacts && contact.Length > 0)
+                sb.Append(Center(contact));
+            if (ntn.Length > 0)
+                sb.Append(Center("NTN: " + ntn));
 
-            // ---------------- meta ----------------
-            sb.Append(Repeat('-'));
-
-            // Invoice (left)  Date (right)
-            var invLeft = sale.InvoiceNumber.HasValue ? $"Invoice: {sale.InvoiceNumber}" : "Invoice: N/A";
-            sb.Append(Line(invLeft, sale.Ts.ToString("yyyy-MM-dd HH:mm")));
-
-            // Counter name (left)  Outlet code (right)
-            var counterLabel = !string.IsNullOrWhiteSpace(sale.CounterName)
-                ? sale.CounterName!
-                : (sale.CounterId.HasValue ? $"Counter {sale.CounterId}" : "Counter N/A");
-
-            var outletRight = !string.IsNullOrWhiteSpace(sale.OutletCode)
-                ? sale.OutletCode!
-                : (sale.OutletId.HasValue ? $"Outlet {sale.OutletId}" : "Outlet N/A");
-
-            sb.Append(Line($"Counter: {counterLabel}", outletRight));
-
-
-            // Cashier (left) | Customer (right) — each independently controlled by its toggle
-            if ((showCashier && !string.IsNullOrWhiteSpace(sale.CashierName)) ||
-                (showCustomer && !string.IsNullOrWhiteSpace(sale.CustomerName)))
+            // ==== RECEIPT TYPE ====
+            if (!string.IsNullOrWhiteSpace(typeCap))
             {
-                var left = (showCashier && !string.IsNullOrWhiteSpace(sale.CashierName))
-                    ? $"Cashier: {sale.CashierName!.Trim()}"
-                    : "";
-                var right = (showCustomer && !string.IsNullOrWhiteSpace(sale.CustomerName))
-                    ? sale.CustomerName!.Trim()
-                    : "";
-                sb.Append(Line(left, right));
+                sb.Append(Repeat('='));
+                sb.Append(Center(typeCap));
+                sb.Append(Repeat('='));
             }
 
+            // ---------------- sale-only header bits ----------------
+            if (hasSale)
+            {
+                // Invoice (left)  Date (right)
+                // Invoice (left)  Date (right)
+                string invLeft;
+                {
+                    // Convert.ToString handles nullable numerics
+                    var invNum = Convert.ToString(sale!.InvoiceNumber);
+                    invLeft = !string.IsNullOrWhiteSpace(invNum) ? $"Invoice: {invNum}" : "Invoice: N/A";
+                }
+                var dateRight = sale!.Ts.ToString("yyyy-MM-dd HH:mm");
+                sb.Append(Line(invLeft, dateRight));
+
+                
+
+                // Counter (left)  Outlet (right)
+                var counterLabel = !string.IsNullOrWhiteSpace(sale.CounterName)
+                    ? sale.CounterName!
+                    : (sale.CounterId.HasValue ? $"Counter {sale.CounterId}" : "Counter N/A");
+
+                var outletRight = !string.IsNullOrWhiteSpace(sale.OutletCode)
+                    ? sale.OutletCode!
+                    : (sale.OutletId.HasValue ? $"Outlet {sale.OutletId}" : "Outlet N/A");
+
+                sb.Append(Line($"Counter: {counterLabel}", outletRight));
+
+                // Cashier (left) | Customer (right) — each independently controlled by its toggle
+                if ((showCashier && !string.IsNullOrWhiteSpace(sale.CashierName)) ||
+                    (showCustomer && !string.IsNullOrWhiteSpace(sale.CustomerName)))
+                {
+                    var left = (showCashier && !string.IsNullOrWhiteSpace(sale.CashierName)) ? $"Cashier: {sale.CashierName!.Trim()}" : "";
+                    var right = (showCustomer && !string.IsNullOrWhiteSpace(sale.CustomerName)) ? sale.CustomerName!.Trim() : "";
+                    sb.Append(Line(left, right));
+                }
+            }
 
             sb.Append(Repeat('-'));
 
-            // ---------------- items: fixed table ----------------
+            // ---------------- items: fixed table (sale only, and only if we have lines) ----------------
+            if (hasSale && lines.Count > 0)
             {
                 int nameW = (width >= 42) ? 20 : 14;
                 int qtyW = 3;
@@ -202,15 +238,14 @@ namespace Pos.Client.Wpf.Printing
                 sb.Append(Repeat('-'));
             }
 
-
-            // ---------------- totals: right-anchored two columns ----------------
+            // ---------------- totals: right-anchored two columns (sale only) ----------------
+            if (hasSale)
             {
-                decimal paid = sale.Paid;
+                decimal paid = sale!.Paid;
                 decimal invDisc = sale.InvoiceDiscount;
                 decimal total = sale.Total;
                 decimal tax = sale.Tax;
                 decimal other = sale.OtherExpenses;
-
                 decimal balance = sale.Balance != 0m ? sale.Balance : Math.Max(0m, total - paid);
 
                 var rows = new List<(string Label, string Value)>();
@@ -247,15 +282,14 @@ namespace Pos.Client.Wpf.Printing
                 }
             }
 
-            //----------------generic barcode / QR(non - FBR)----------------
-            if (showBarcodeOnReceipt && !string.IsNullOrWhiteSpace(sale.BarcodeText))
+            //---------------- generic barcode / QR (sale only) ----------------
+            if (showBarcodeOnReceipt && hasSale && !string.IsNullOrWhiteSpace(sale!.BarcodeText))
             {
-                sb.Append(Center("[BARCODE]"));
-                sb.Append(Center(sale.BarcodeText!));
-                sb.Append("\n");
+                var payload = sale.BarcodeText!;
+                sb.Append(Center($"[BARCODE: {payload}]"));
             }
-            // --- BARCODE PRINT ---
-            if (showGenericQr && !string.IsNullOrWhiteSpace(sale.QrText))
+
+            if (showGenericQr && hasSale && !string.IsNullOrWhiteSpace(sale!.QrText))
             {
                 sb.Append(Center("[QR]"));
                 sb.Append(Center(sale.QrText!));
@@ -275,5 +309,6 @@ namespace Pos.Client.Wpf.Printing
 
             return sb.ToString();
         }
+
     }
 }

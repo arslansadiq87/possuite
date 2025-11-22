@@ -1,14 +1,21 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Services;
 using Pos.Domain.Settings;
-
+using Pos.Domain.Utils;         // add
+using Pos.Persistence.Sync;     // add
 namespace Pos.Persistence.Services;
 
 public class InvoiceSettingsLocalService : IInvoiceSettingsLocalService
 {
     private readonly IDbContextFactory<PosClientDbContext> _dbf;
+    private readonly IOutboxWriter _outbox; // add
 
-    public InvoiceSettingsLocalService(IDbContextFactory<PosClientDbContext> dbf) => _dbf = dbf;
+
+    public InvoiceSettingsLocalService(IDbContextFactory<PosClientDbContext> dbf, IOutboxWriter outbox)
+    {
+        _dbf = dbf;
+        _outbox = outbox;
+    }
 
     public async Task<InvoiceSettingsLocal> GetForCounterAsync(int counterId, CancellationToken ct = default)
     {
@@ -91,5 +98,35 @@ public class InvoiceSettingsLocalService : IInvoiceSettingsLocalService
             CounterId = counterId ?? 0,
             
         };
+    }
+
+    public async Task<InvoiceSettingsLocal> SaveForCounterAsync(InvoiceSettingsLocal model, CancellationToken ct = default)
+    {
+        await using var db = await _dbf.CreateDbContextAsync(ct);
+        var existing = await db.InvoiceSettingsLocals
+            .FirstOrDefaultAsync(x => x.CounterId == model.CounterId, ct);
+
+        if (existing is null)
+        {
+            model.UpdatedAtUtc = DateTime.UtcNow;
+            db.InvoiceSettingsLocals.Add(model);
+            await db.SaveChangesAsync(ct);
+        }
+        else
+        {
+            existing.PrinterName = model.PrinterName;
+            existing.LabelPrinterName = model.LabelPrinterName;
+            existing.UpdatedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+            model = existing;
+        }
+
+        // Enqueue per-counter settings so that the assigned machine for this counter (and server) stay consistent
+        var counterId = model.CounterId;
+        var key = GuidUtility.FromString($"{nameof(InvoiceSettingsLocal)}:{counterId}");
+        await _outbox.EnqueueUpsertAsync(db, nameof(InvoiceSettingsLocal), key, model, ct);
+        await db.SaveChangesAsync(ct);
+
+        return model;
     }
 }

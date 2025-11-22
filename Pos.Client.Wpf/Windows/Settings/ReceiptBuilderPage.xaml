@@ -8,6 +8,8 @@
     <UserControl.Resources>
         <conv:NegateBooleanConverter x:Key="NegateBool"/>
         <conv:BytesToBitmapConverter x:Key="BytesToBitmap"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:NullableIntConverter x:Key="NullableIntConverter"/>
     </UserControl.Resources>
 
     <Grid Margin="10">
@@ -17,37 +19,29 @@
             <RowDefinition Height="Auto"/>
             <!-- Scope -->
             <RowDefinition Height="*"/>
-            <!-- Main (Tabs) -->
+            <!-- Main (Tabs + ONE Preview) -->
             <RowDefinition Height="Auto"/>
             <!-- Actions -->
         </Grid.RowDefinitions>
 
-        <!-- HEADER (unchanged) -->
+        <!-- HEADER -->
         <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,16">
             <StackPanel Orientation="Vertical" DockPanel.Dock="Left">
-                <TextBlock Text="Receipt Builder"
-                           FontSize="18"
-                           FontWeight="SemiBold"/>
-                <TextBlock Text="Configure sales receipt layout per outlet: paper width, logo, row/totals visibility, QR/barcode, NTN/FBR. Printer and footer come from Invoice Settings."
-                           FontSize="12"
-                           Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                           Margin="0,2,0,0"/>
+                <TextBlock Text="Receipt Builder" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock
+                    Text="Configure receipt layout per outlet. Printer &amp; footer come from Invoice Settings. Layout is saved per outlet (or globally)."
+                    FontSize="12"
+                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                    Margin="0,2,0,0"/>
             </StackPanel>
         </DockPanel>
 
-        <!-- SCOPE SELECTOR (unchanged) -->
+        <!-- SCOPE SELECTOR -->
         <Border Grid.Row="1"
-                CornerRadius="4"
-                Padding="0,6"
-                Margin="0,0,0,16"
-                Background="#0F000000"
-                BorderBrush="#22000000"
-                BorderThickness="1">
+                CornerRadius="4" Padding="0,6" Margin="0,0,0,16"
+                Background="#0F000000" BorderBrush="#22000000" BorderThickness="1">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Scope:"
-                           VerticalAlignment="Center"
-                           Margin="8,0,16,0"
-                           FontWeight="SemiBold"/>
+                <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="8,0,16,0" FontWeight="SemiBold"/>
 
                 <RadioButton Content="Global"
                              Margin="0,0,8,0"
@@ -74,59 +68,38 @@
             </StackPanel>
         </Border>
 
-        <!-- MAIN TABS -->
-        <TabControl Grid.Row="2" Margin="0,0,0,0">
-            <!-- =============== TAB 1: SALE (your original, unchanged) =============== -->
-            <TabItem Header="Sale">
-                <Grid IsEnabled="{Binding CanEdit}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+        <!-- MAIN: LEFT = Tabs (controls only), RIGHT = ONE preview -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-                    <!-- LEFT CARD: Controls (UNCHANGED) -->
-                    <Border Grid.Column="0"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="14"
-                            Margin="0,0,12,0">
+            <!-- LEFT: TABS -->
+            <TabControl Grid.Column="0" Margin="0,0,12,0"
+                        SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+                <!-- =================== TAB 1: SALE =================== -->
+                <TabItem Header="Sale">
+                    <Border Background="#06000000" BorderBrush="#22000000" BorderThickness="1" CornerRadius="4" Padding="14">
                         <StackPanel>
-
-                            <!-- Printer & Paper width -->
-                            <TextBlock Text="Printer &amp; paper"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
+                            <!-- Printer & Paper -->
+                            <TextBlock Text="Printer &amp; paper" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <Grid Margin="0,0,12,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Column="0"
-                                           Text="Printer"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
-                                <TextBlock Grid.Column="1"
-                                           VerticalAlignment="Center"
-                                           FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="Printer" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold"
                                            Text="{Binding InvoicePrinterName}"/>
                             </Grid>
-
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Column="0"
-                                           Text="Paper width"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
-                                <ComboBox Grid.Column="1"
-                                          Width="140" Height="26"
-                                          VerticalContentAlignment="Center"
+                                <TextBlock Grid.Column="0" Text="Paper width" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox Grid.Column="1" Width="140" Height="26" VerticalContentAlignment="Center"
                                           SelectedValue="{Binding SaleTemplate.PaperWidthMm, Mode=TwoWay}"
                                           SelectedValuePath="Tag">
                                     <ComboBoxItem Content="58 mm" Tag="58"/>
@@ -142,32 +115,21 @@
                             <Separator Margin="0,0,0,10"/>
 
                             <!-- Logo -->
-                            <TextBlock Text="Logo"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
+                            <TextBlock Text="Logo" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Preview -->
-                                <Border Grid.Column="0"
-                                        BorderBrush="#33000000"
-                                        BorderThickness="1"
-                                        CornerRadius="4"
-                                        Padding="6"
-                                        Height="100"
-                                        Background="#05000000"
-                                        Margin="0,0,8,0">
+                                <Border Grid.Column="0" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="6"
+                                        Height="100" Background="#05000000" Margin="0,0,8,0">
                                     <Image Stretch="Uniform"
                                            Source="{Binding IdentityLogoBytes, Converter={StaticResource BytesToBitmap}}"/>
                                 </Border>
 
-                                <!-- Controls -->
                                 <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                    <CheckBox Content="Show logo"
-                                              IsChecked="{Binding SaleTemplate.ShowLogoOnReceipt}">
+                                    <CheckBox Content="Show logo" IsChecked="{Binding SaleTemplate.ShowLogoOnReceipt}">
                                         <i:Interaction.Triggers>
                                             <i:EventTrigger EventName="Checked">
                                                 <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
@@ -180,8 +142,7 @@
 
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Max width (px):" VerticalAlignment="Center"/>
-                                        <TextBox Width="90" Height="26" Margin="8,0,0,0"
-                                                 VerticalContentAlignment="Center"
+                                        <TextBox Width="90" Height="26" Margin="8,0,0,0" VerticalContentAlignment="Center"
                                                  Text="{Binding SaleTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}">
                                             <i:Interaction.Triggers>
                                                 <i:EventTrigger EventName="TextChanged">
@@ -193,13 +154,12 @@
 
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Alignment:" VerticalAlignment="Center"/>
-                                        <ComboBox Width="140" Height="26" Margin="8,0,0,0"
-                                                  VerticalContentAlignment="Center"
-                                                  SelectedItem="{Binding SaleTemplate.LogoAlignment, UpdateSourceTrigger=PropertyChanged}">
-                                            <ComboBoxItem Content="Left"/>
-                                            <ComboBoxItem Content="Center"/>
-                                            <ComboBoxItem Content="Right"/>
-                                        </ComboBox>
+                                        <!-- Example ComboBox for logo alignment -->
+                                        <ComboBox Width="140" Height="26" SelectedItem="{Binding DataContext.SaleTemplate.LogoAlignment,
+                                 RelativeSource={RelativeSource AncestorType=UserControl},
+                                 Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+          ItemsSource="{Binding LogoAlignChoices}" />
+
                                         <i:Interaction.Triggers>
                                             <i:EventTrigger EventName="SelectionChanged">
                                                 <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
@@ -212,295 +172,156 @@
                             <Separator Margin="0,0,0,10"/>
 
                             <!-- Row visibility -->
-                            <TextBlock Text="Row visibility (items)"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
+                            <TextBlock Text="Row visibility (items)" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <WrapPanel Margin="0,0,0,12">
-                                <CheckBox Content="Product name"   IsChecked="{Binding SaleTemplate.RowShowProductName}"  Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Product SKU"    IsChecked="{Binding SaleTemplate.RowShowProductSku}"   Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Quantity"       IsChecked="{Binding SaleTemplate.RowShowQty}"          Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Unit price"     IsChecked="{Binding SaleTemplate.RowShowUnitPrice}"    Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Line discount"  IsChecked="{Binding SaleTemplate.RowShowLineDiscount}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Line total"     IsChecked="{Binding SaleTemplate.RowShowLineTotal}"    Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Product name"  IsChecked="{Binding SaleTemplate.RowShowProductName}"  Margin="0,0,16,6"/>
+                                <CheckBox Content="Product SKU"   IsChecked="{Binding SaleTemplate.RowShowProductSku}"   Margin="0,0,16,6"/>
+                                <CheckBox Content="Quantity"      IsChecked="{Binding SaleTemplate.RowShowQty}"          Margin="0,0,16,6"/>
+                                <CheckBox Content="Unit price"    IsChecked="{Binding SaleTemplate.RowShowUnitPrice}"    Margin="0,0,16,6"/>
+                                <CheckBox Content="Line discount" IsChecked="{Binding SaleTemplate.RowShowLineDiscount}" Margin="0,0,16,6"/>
+                                <CheckBox Content="Line total"    IsChecked="{Binding SaleTemplate.RowShowLineTotal}"    Margin="0,0,16,6"/>
                             </WrapPanel>
 
                             <Separator Margin="0,0,0,10"/>
 
                             <!-- Totals -->
-                            <TextBlock Text="Totals"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
+                            <TextBlock Text="Totals" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <WrapPanel Margin="0,0,0,12">
-                                <CheckBox Content="Taxes"            IsChecked="{Binding SaleTemplate.TotalsShowTaxes}"          Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Discounts"        IsChecked="{Binding SaleTemplate.TotalsShowDiscounts}"      Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Other expenses"   IsChecked="{Binding SaleTemplate.TotalsShowOtherExpenses}"  Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Grand total"      IsChecked="{Binding SaleTemplate.TotalsShowGrandTotal}"     Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Payment received" IsChecked="{Binding SaleTemplate.TotalsShowPaymentRecv}"    Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Balance"          IsChecked="{Binding SaleTemplate.TotalsShowBalance}"        Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Taxes"             IsChecked="{Binding SaleTemplate.TotalsShowTaxes}"         Margin="0,0,16,6"/>
+                                <CheckBox Content="Discounts"         IsChecked="{Binding SaleTemplate.TotalsShowDiscounts}"     Margin="0,0,16,6"/>
+                                <CheckBox Content="Other expenses"    IsChecked="{Binding SaleTemplate.TotalsShowOtherExpenses}" Margin="0,0,16,6"/>
+                                <CheckBox Content="Grand total"       IsChecked="{Binding SaleTemplate.TotalsShowGrandTotal}"    Margin="0,0,16,6"/>
+                                <CheckBox Content="Payment received"  IsChecked="{Binding SaleTemplate.TotalsShowPaymentRecv}"   Margin="0,0,16,6"/>
+                                <CheckBox Content="Balance"           IsChecked="{Binding SaleTemplate.TotalsShowBalance}"       Margin="0,0,16,6"/>
                             </WrapPanel>
 
                             <Separator Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Vertical" Margin="0,8,0,0">
+                                <!-- Top margin -->
+                                <DockPanel>
+                                    <TextBlock Text="Top margin (lines)" Width="160"/>
+                                    <TextBox Width="60"
+         Text="{Binding DataContext.SaleTemplate.TopMarginLines,
+                        RelativeSource={RelativeSource AncestorType=UserControl},
+                        Mode=TwoWay,
+                        UpdateSourceTrigger=PropertyChanged}">
+                                        <i:Interaction.Triggers>
+                                            <i:EventTrigger EventName="TextChanged">
+                                                <i:InvokeCommandAction Command="{Binding DataContext.PreviewSaleCommand,
+                                       RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                            </i:EventTrigger>
+                                        </i:Interaction.Triggers>
+                                    </TextBox>
 
-                            <!-- Common (Sales) -->
-                            <TextBlock Text="Common (sales)"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
-                            <StackPanel>
-                                <CheckBox Content="Show QR (e-receipt/other)" IsChecked="{Binding SaleTemplate.ShowQr}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                </DockPanel>
 
-                                <CheckBox Content="Show customer" IsChecked="{Binding SaleTemplate.ShowCustomerOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <!-- Business name -->
+                                <DockPanel Margin="0,6,0,0">
+                                    <CheckBox
+                                    Content="Show business name"
+                                    IsChecked="{Binding DataContext.SaleTemplate.ShowBusinessName,
+                                                        RelativeSource={RelativeSource AncestorType=UserControl},
+                                                        Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            
+                                    <TextBlock Text="Business font size (pt)" Width="160" Margin="10,0,0,0"/>
+                                    <TextBox Width="60"
+         Text="{Binding DataContext.SaleTemplate.BusinessNameFontSizePt,
+                        RelativeSource={RelativeSource AncestorType=UserControl},
+                        Mode=TwoWay,
+                        UpdateSourceTrigger=PropertyChanged,
+                        Converter={StaticResource NullableIntConverter}}">
+                                        <i:Interaction.Triggers>
+                                            <i:EventTrigger EventName="TextChanged">
+                                                <i:InvokeCommandAction Command="{Binding DataContext.PreviewSaleCommand,
+                                       RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                            </i:EventTrigger>
+                                        </i:Interaction.Triggers>
+                                    </TextBox>
+                                    <CheckBox Content="Business name bold"
+          IsChecked="{Binding DataContext.SaleTemplate.BusinessNameBold,
+                              RelativeSource={RelativeSource AncestorType=UserControl},
+                              Mode=TwoWay,
+                              UpdateSourceTrigger=PropertyChanged}">
+                                        <i:Interaction.Triggers>
+                                            <i:EventTrigger EventName="Checked">
+                                                <i:InvokeCommandAction Command="{Binding DataContext.PreviewSaleCommand,
+                                       RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                            </i:EventTrigger>
+                                            <i:EventTrigger EventName="Unchecked">
+                                                <i:InvokeCommandAction Command="{Binding DataContext.PreviewSaleCommand,
+                                       RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                            </i:EventTrigger>
+                                        </i:Interaction.Triggers>
+                                    </CheckBox>
+                                </DockPanel>
 
-                                <CheckBox Content="Show cashier" IsChecked="{Binding SaleTemplate.ShowCashierOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-
-                                <CheckBox Content="Print barcode" IsChecked="{Binding SaleTemplate.PrintBarcodeOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-
-                                <CheckBox Content="Show NTN number"
-                                          IsChecked="{Binding SaleTemplate.ShowNtnOnReceipt}"
-                                          IsEnabled="{Binding RuntimeHasNtn}"
-                                          ToolTip="Disabled because NTN is not set in General Settings">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-
-                                <CheckBox Content="Show FBR data (QR &amp; logo)"
-                                          IsChecked="{Binding SaleTemplate.ShowFbrOnReceipt}"
-                                          IsEnabled="{Binding RuntimeEnableFbr}"
-                                          ToolTip="Disabled because FBR mode is not enabled in General Settings">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <!-- Address / Contacts -->
+                                <DockPanel Margin="0,8,0,0">
+                                    <CheckBox
+    Content="Show address"
+    IsChecked="{Binding DataContext.SaleTemplate.ShowAddress,
+                        RelativeSource={RelativeSource AncestorType=UserControl},
+                        Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <CheckBox
+    Content="Show phone"
+    IsChecked="{Binding DataContext.SaleTemplate.ShowContacts,
+                        RelativeSource={RelativeSource AncestorType=UserControl},
+                        Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
                             </StackPanel>
+                            <Separator Margin="0,0,0,10"/>
+                            <!-- Common -->
+                            <TextBlock Text="Common (sales)" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <StackPanel>
+                                <CheckBox Content="Show QR"        IsChecked="{Binding SaleTemplate.ShowQr}"/>
+                                <CheckBox Content="Show customer"  IsChecked="{Binding SaleTemplate.ShowCustomerOnReceipt}"/>
+                                <CheckBox Content="Show cashier"   IsChecked="{Binding SaleTemplate.ShowCashierOnReceipt}"/>
+                                <CheckBox Content="Print barcode"  IsChecked="{Binding SaleTemplate.PrintBarcodeOnReceipt}"/>
+                                <CheckBox Content="Show NTN number" IsChecked="{Binding SaleTemplate.ShowNtnOnReceipt}" IsEnabled="{Binding RuntimeHasNtn}"/>
+                                <CheckBox Content="Show FBR data (QR &amp; logo)" IsChecked="{Binding SaleTemplate.ShowFbrOnReceipt}" IsEnabled="{Binding RuntimeEnableFbr}"/>
+                                <!-- Make entire invoice bold -->
+                                <CheckBox Content="Make invoice bold"
+          IsChecked="{Binding DataContext.ActiveTemplate.MakeAllTextBold,
+                              RelativeSource={RelativeSource AncestorType=UserControl},
+                              Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                    <i:Interaction.Triggers>
+                                        <i:EventTrigger EventName="Checked">
+                                            <i:InvokeCommandAction Command="{Binding DataContext.PreviewSaleCommand,
+                                             RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                        </i:EventTrigger>
+                                        <i:EventTrigger EventName="Unchecked">
+                                            <i:InvokeCommandAction Command="{Binding DataContext.PreviewSaleCommand,
+                                             RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                        </i:EventTrigger>
+                                    </i:Interaction.Triggers>
+                                </CheckBox>
 
+                            </StackPanel>
                         </StackPanel>
                     </Border>
+                </TabItem>
 
-                    <!-- RIGHT CARD: Live Preview (UNCHANGED binding to Sale PreviewText) -->
-                    <Border Grid.Column="1"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="4">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="Receipt preview"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
-
-                            <ScrollViewer Grid.Row="1"
-                                          Margin="0,4,0,0"
-                                          Background="#111"
-                                          Padding="6">
-                                <TextBlock Text="{Binding PreviewText}"
-                                           FontFamily="Consolas"
-                                           Foreground="White"
-                                           TextWrapping="Wrap"/>
-                            </ScrollViewer>
-                        </Grid>
-                    </Border>
-                </Grid>
-            </TabItem>
-
-            <!-- =============== TAB 2: SALE RETURN (same UI, different bindings) =============== -->
-            <TabItem Header="Sale Return">
-                <Grid IsEnabled="{Binding CanEdit}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- LEFT (copy with SaleReturnTemplate + PreviewSaleReturnCommand) -->
-                    <Border Grid.Column="0"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="14"
-                            Margin="0,0,12,0">
+                <!-- =================== TAB 2: SALE RETURN =================== -->
+                <TabItem Header="Sale Return">
+                    <Border Background="#06000000" BorderBrush="#22000000" BorderThickness="1" CornerRadius="4" Padding="14">
                         <StackPanel>
-
-                            <TextBlock Text="Printer &amp; paper"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
+                            <!-- Bindings mirror Sale but target SaleReturnTemplate and PreviewSaleReturnCommand as needed -->
+                            <TextBlock Text="Printer &amp; paper" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <Grid Margin="0,0,12,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-
                                 <TextBlock Grid.Column="0" Text="Printer" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBlock Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding InvoicePrinterName}"/>
                             </Grid>
-
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="Paper width" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox Grid.Column="1"
-                                          Width="140" Height="26"
-                                          VerticalContentAlignment="Center"
+                                <ComboBox Grid.Column="1" Width="140" Height="26" VerticalContentAlignment="Center"
                                           SelectedValue="{Binding SaleReturnTemplate.PaperWidthMm, Mode=TwoWay}"
                                           SelectedValuePath="Tag">
                                     <ComboBoxItem Content="58 mm" Tag="58"/>
@@ -522,49 +343,27 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="6" Height="100" Background="#05000000" Margin="0,0,8,0">
-                                    <Image Stretch="Uniform" Source="{Binding IdentityLogoBytes, Converter={StaticResource BytesToBitmap}}"/>
+                                <Border Grid.Column="0" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="6"
+                                        Height="100" Background="#05000000" Margin="0,0,8,0">
+                                    <Image Stretch="Uniform"
+                                           Source="{Binding IdentityLogoBytes, Converter={StaticResource BytesToBitmap}}"/>
                                 </Border>
 
                                 <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                    <CheckBox Content="Show logo" IsChecked="{Binding SaleReturnTemplate.ShowLogoOnReceipt}">
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="Checked">
-                                                <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                            </i:EventTrigger>
-                                            <i:EventTrigger EventName="Unchecked">
-                                                <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
-                                    </CheckBox>
-
+                                    <CheckBox Content="Show logo" IsChecked="{Binding SaleReturnTemplate.ShowLogoOnReceipt}"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Max width (px):" VerticalAlignment="Center"/>
-                                        <TextBox Width="90" Height="26" Margin="8,0,0,0"
-                                                 VerticalContentAlignment="Center"
-                                                 Text="{Binding SaleReturnTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}">
-                                            <i:Interaction.Triggers>
-                                                <i:EventTrigger EventName="TextChanged">
-                                                    <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                                </i:EventTrigger>
-                                            </i:Interaction.Triggers>
-                                        </TextBox>
+                                        <TextBox Width="90" Height="26" Margin="8,0,0,0" VerticalContentAlignment="Center"
+                                                 Text="{Binding SaleReturnTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
-
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Alignment:" VerticalAlignment="Center"/>
-                                        <ComboBox Width="140" Height="26" Margin="8,0,0,0"
-                                                  VerticalContentAlignment="Center"
+                                        <ComboBox Width="140" Height="26" Margin="8,0,0,0" VerticalContentAlignment="Center"
                                                   SelectedItem="{Binding SaleReturnTemplate.LogoAlignment, UpdateSourceTrigger=PropertyChanged}">
                                             <ComboBoxItem Content="Left"/>
                                             <ComboBoxItem Content="Center"/>
                                             <ComboBoxItem Content="Right"/>
                                         </ComboBox>
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="SelectionChanged">
-                                                <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>
@@ -573,256 +372,72 @@
 
                             <TextBlock Text="Row visibility (items)" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <WrapPanel Margin="0,0,0,12">
-                                <!-- same checkboxes; bind to SaleReturnTemplate.* and PreviewSaleReturnCommand -->
-                                <CheckBox Content="Product name" IsChecked="{Binding SaleReturnTemplate.RowShowProductName}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Product SKU" IsChecked="{Binding SaleReturnTemplate.RowShowProductSku}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Quantity" IsChecked="{Binding SaleReturnTemplate.RowShowQty}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Unit price" IsChecked="{Binding SaleReturnTemplate.RowShowUnitPrice}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Line discount" IsChecked="{Binding SaleReturnTemplate.RowShowLineDiscount}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Line total" IsChecked="{Binding SaleReturnTemplate.RowShowLineTotal}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Product name"  IsChecked="{Binding SaleReturnTemplate.RowShowProductName}"  Margin="0,0,16,6"/>
+                                <CheckBox Content="Product SKU"   IsChecked="{Binding SaleReturnTemplate.RowShowProductSku}"   Margin="0,0,16,6"/>
+                                <CheckBox Content="Quantity"      IsChecked="{Binding SaleReturnTemplate.RowShowQty}"          Margin="0,0,16,6"/>
+                                <CheckBox Content="Unit price"    IsChecked="{Binding SaleReturnTemplate.RowShowUnitPrice}"    Margin="0,0,16,6"/>
+                                <CheckBox Content="Line discount" IsChecked="{Binding SaleReturnTemplate.RowShowLineDiscount}" Margin="0,0,16,6"/>
+                                <CheckBox Content="Line total"    IsChecked="{Binding SaleReturnTemplate.RowShowLineTotal}"    Margin="0,0,16,6"/>
                             </WrapPanel>
 
                             <Separator Margin="0,0,0,10"/>
 
                             <TextBlock Text="Totals" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <WrapPanel Margin="0,0,0,12">
-                                <CheckBox Content="Taxes" IsChecked="{Binding SaleReturnTemplate.TotalsShowTaxes}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Discounts" IsChecked="{Binding SaleReturnTemplate.TotalsShowDiscounts}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Other expenses" IsChecked="{Binding SaleReturnTemplate.TotalsShowOtherExpenses}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Grand total" IsChecked="{Binding SaleReturnTemplate.TotalsShowGrandTotal}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Payment received" IsChecked="{Binding SaleReturnTemplate.TotalsShowPaymentRecv}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Balance" IsChecked="{Binding SaleReturnTemplate.TotalsShowBalance}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Taxes"            IsChecked="{Binding SaleReturnTemplate.TotalsShowTaxes}"          Margin="0,0,16,6"/>
+                                <CheckBox Content="Discounts"        IsChecked="{Binding SaleReturnTemplate.TotalsShowDiscounts}"      Margin="0,0,16,6"/>
+                                <CheckBox Content="Other expenses"   IsChecked="{Binding SaleReturnTemplate.TotalsShowOtherExpenses}"  Margin="0,0,16,6"/>
+                                <CheckBox Content="Grand total"      IsChecked="{Binding SaleReturnTemplate.TotalsShowGrandTotal}"     Margin="0,0,16,6"/>
+                                <CheckBox Content="Payment received" IsChecked="{Binding SaleReturnTemplate.TotalsShowPaymentRecv}"    Margin="0,0,16,6"/>
+                                <CheckBox Content="Balance"          IsChecked="{Binding SaleReturnTemplate.TotalsShowBalance}"        Margin="0,0,16,6"/>
                             </WrapPanel>
 
                             <Separator Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Vertical" Margin="0,8,0,0">
+                                <!-- Top margin -->
+                                <DockPanel>
+                                    <TextBlock Text="Top margin (lines)" Width="160"/>
+                                    <TextBox Width="60" Text="{Binding ActiveTemplate.TopMarginLines, UpdateSourceTrigger=PropertyChanged}"/>
+                                </DockPanel>
 
+                                <!-- Business name -->
+                                <DockPanel>
+                                    <CheckBox Content="Show business name"
+IsChecked="{Binding ActiveTemplate.ShowBusinessName}"/>
+                                </DockPanel>
+
+                                <DockPanel>
+                                    <TextBlock Text="Business font size (pt)" Width="160"/>
+                                    <TextBox Width="60" Text="{Binding ActiveTemplate.BusinessNameFontSizePt, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <CheckBox Content="Bold" Margin="12,0,0,0"
+IsChecked="{Binding ActiveTemplate.BusinessNameBold}"/>
+                                </DockPanel>
+
+                                <!-- Address / Contacts -->
+                                <DockPanel>
+                                    <CheckBox Content="Show address" IsChecked="{Binding ActiveTemplate.ShowAddress}"/>
+                                    <CheckBox Content="Show phone" Margin="12,0,0,0" IsChecked="{Binding ActiveTemplate.ShowContacts}"/>
+                                </DockPanel>
+                            </StackPanel>
+                            <Separator Margin="0,0,0,10"/>
                             <TextBlock Text="Common (sales)" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <StackPanel>
-                                <CheckBox Content="Show QR (e-receipt/other)" IsChecked="{Binding SaleReturnTemplate.ShowQr}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Show customer" IsChecked="{Binding SaleReturnTemplate.ShowCustomerOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Show cashier" IsChecked="{Binding SaleReturnTemplate.ShowCashierOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Print barcode" IsChecked="{Binding SaleReturnTemplate.PrintBarcodeOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Show NTN number" IsChecked="{Binding SaleReturnTemplate.ShowNtnOnReceipt}" IsEnabled="{Binding RuntimeHasNtn}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Show FBR data (QR &amp; logo)" IsChecked="{Binding SaleReturnTemplate.ShowFbrOnReceipt}" IsEnabled="{Binding RuntimeEnableFbr}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewSaleReturnCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Show QR"        IsChecked="{Binding SaleReturnTemplate.ShowQr}"/>
+                                <CheckBox Content="Show customer"  IsChecked="{Binding SaleReturnTemplate.ShowCustomerOnReceipt}"/>
+                                <CheckBox Content="Show cashier"   IsChecked="{Binding SaleReturnTemplate.ShowCashierOnReceipt}"/>
+                                <CheckBox Content="Print barcode"  IsChecked="{Binding SaleReturnTemplate.PrintBarcodeOnReceipt}"/>
+                                <CheckBox Content="Show NTN number" IsChecked="{Binding SaleReturnTemplate.ShowNtnOnReceipt}" IsEnabled="{Binding RuntimeHasNtn}"/>
+                                <CheckBox Content="Show FBR data (QR &amp; logo)" IsChecked="{Binding SaleReturnTemplate.ShowFbrOnReceipt}" IsEnabled="{Binding RuntimeEnableFbr}"/>
                             </StackPanel>
-
                         </StackPanel>
                     </Border>
+                </TabItem>
 
-                    <!-- RIGHT CARD: Preview text for Sale Return -->
-                    <Border Grid.Column="1"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="4">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="Receipt preview"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
-
-                            <ScrollViewer Grid.Row="1"
-                                          Margin="0,4,0,0"
-                                          Background="#111"
-                                          Padding="6">
-                                <TextBlock Text="{Binding SaleReturnPreviewText}"
-                                           FontFamily="Consolas"
-                                           Foreground="White"
-                                           TextWrapping="Wrap"/>
-                            </ScrollViewer>
-                        </Grid>
-                    </Border>
-                </Grid>
-            </TabItem>
-
-            <!-- =============== TAB 3: VOUCHER (same UI, Voucher bindings) =============== -->
-            <TabItem Header="Voucher">
-                <!-- Keep it simple: same controls, bind to VoucherTemplate and PreviewVoucherCommand, preview binds to VoucherPreviewText -->
-                <!-- For brevity, you can copy the Sale Return tab and replace bindings: SaleReturnTemplate -> VoucherTemplate,
-                     PreviewSaleReturnCommand -> PreviewVoucherCommand, SaleReturnPreviewText -> VoucherPreviewText -->
-                <Grid IsEnabled="{Binding CanEdit}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- LEFT -->
-                    <Border Grid.Column="0"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="14"
-                            Margin="0,0,12,0">
+                <!-- =================== TAB 3: VOUCHER =================== -->
+                <TabItem Header="Voucher">
+                    <Border Background="#06000000" BorderBrush="#22000000" BorderThickness="1" CornerRadius="4" Padding="14">
                         <StackPanel>
-
+                            <!-- Mirror bindings to VoucherTemplate -->
                             <TextBlock Text="Printer &amp; paper" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <Grid Margin="0,0,12,8">
                                 <Grid.ColumnDefinitions>
@@ -832,7 +447,6 @@
                                 <TextBlock Grid.Column="0" Text="Printer" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBlock Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding InvoicePrinterName}"/>
                             </Grid>
-
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="140"/>
@@ -861,35 +475,19 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="6" Height="100" Background="#05000000" Margin="0,0,8,0">
-                                    <Image Stretch="Uniform" Source="{Binding IdentityLogoBytes, Converter={StaticResource BytesToBitmap}}"/>
+                                <Border Grid.Column="0" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="6"
+                                        Height="100" Background="#05000000" Margin="0,0,8,0">
+                                    <Image Stretch="Uniform"
+                                           Source="{Binding IdentityLogoBytes, Converter={StaticResource BytesToBitmap}}"/>
                                 </Border>
 
                                 <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                    <CheckBox Content="Show logo" IsChecked="{Binding VoucherTemplate.ShowLogoOnReceipt}">
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="Checked">
-                                                <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                            </i:EventTrigger>
-                                            <i:EventTrigger EventName="Unchecked">
-                                                <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
-                                    </CheckBox>
-
+                                    <CheckBox Content="Show logo" IsChecked="{Binding VoucherTemplate.ShowLogoOnReceipt}"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Max width (px):" VerticalAlignment="Center"/>
-                                        <TextBox Width="90" Height="26" Margin="8,0,0,0"
-                                                 VerticalContentAlignment="Center"
-                                                 Text="{Binding VoucherTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}">
-                                            <i:Interaction.Triggers>
-                                                <i:EventTrigger EventName="TextChanged">
-                                                    <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                                </i:EventTrigger>
-                                            </i:Interaction.Triggers>
-                                        </TextBox>
+                                        <TextBox Width="90" Height="26" Margin="8,0,0,0" VerticalContentAlignment="Center"
+                                                 Text="{Binding VoucherTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
-
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Alignment:" VerticalAlignment="Center"/>
                                         <ComboBox Width="140" Height="26" Margin="8,0,0,0" VerticalContentAlignment="Center"
@@ -898,209 +496,74 @@
                                             <ComboBoxItem Content="Center"/>
                                             <ComboBoxItem Content="Right"/>
                                         </ComboBox>
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="SelectionChanged">
-                                                <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>
 
                             <Separator Margin="0,0,0,10"/>
 
-                            <TextBlock Text="Row visibility (items)" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="Row visibility" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <WrapPanel Margin="0,0,0,12">
-                                <CheckBox Content="Product name"   IsChecked="{Binding VoucherTemplate.RowShowProductName}"  Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Product SKU"    IsChecked="{Binding VoucherTemplate.RowShowProductSku}"   Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Quantity"       IsChecked="{Binding VoucherTemplate.RowShowQty}"          Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Unit price"     IsChecked="{Binding VoucherTemplate.RowShowUnitPrice}"    Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Line discount"  IsChecked="{Binding VoucherTemplate.RowShowLineDiscount}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Line total"     IsChecked="{Binding VoucherTemplate.RowShowLineTotal}"    Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Product name"  IsChecked="{Binding VoucherTemplate.RowShowProductName}"  Margin="0,0,16,6"/>
+                                <CheckBox Content="Product SKU"   IsChecked="{Binding VoucherTemplate.RowShowProductSku}"   Margin="0,0,16,6"/>
+                                <CheckBox Content="Quantity"      IsChecked="{Binding VoucherTemplate.RowShowQty}"          Margin="0,0,16,6"/>
+                                <CheckBox Content="Unit price"    IsChecked="{Binding VoucherTemplate.RowShowUnitPrice}"    Margin="0,0,16,6"/>
+                                <CheckBox Content="Line discount" IsChecked="{Binding VoucherTemplate.RowShowLineDiscount}" Margin="0,0,16,6"/>
+                                <CheckBox Content="Line total"    IsChecked="{Binding VoucherTemplate.RowShowLineTotal}"    Margin="0,0,16,6"/>
                             </WrapPanel>
 
                             <Separator Margin="0,0,0,10"/>
 
                             <TextBlock Text="Totals" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <WrapPanel Margin="0,0,0,12">
-                                <CheckBox Content="Taxes" IsChecked="{Binding VoucherTemplate.TotalsShowTaxes}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Discounts" IsChecked="{Binding VoucherTemplate.TotalsShowDiscounts}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Other expenses" IsChecked="{Binding VoucherTemplate.TotalsShowOtherExpenses}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Grand total" IsChecked="{Binding VoucherTemplate.TotalsShowGrandTotal}" Margin="0,0,16,6">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Taxes"          IsChecked="{Binding VoucherTemplate.TotalsShowTaxes}"         Margin="0,0,16,6"/>
+                                <CheckBox Content="Discounts"      IsChecked="{Binding VoucherTemplate.TotalsShowDiscounts}"     Margin="0,0,16,6"/>
+                                <CheckBox Content="Other expenses" IsChecked="{Binding VoucherTemplate.TotalsShowOtherExpenses}" Margin="0,0,16,6"/>
+                                <CheckBox Content="Grand total"    IsChecked="{Binding VoucherTemplate.TotalsShowGrandTotal}"    Margin="0,0,16,6"/>
                             </WrapPanel>
 
                             <Separator Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Vertical" Margin="0,8,0,0">
+                                <!-- Top margin -->
+                                <DockPanel>
+                                    <TextBlock Text="Top margin (lines)" Width="160"/>
+                                    <TextBox Width="60" Text="{Binding ActiveTemplate.TopMarginLines, UpdateSourceTrigger=PropertyChanged}"/>
+                                </DockPanel>
 
+                                <!-- Business name -->
+                                <DockPanel>
+                                    <CheckBox Content="Show business name"
+IsChecked="{Binding ActiveTemplate.ShowBusinessName}"/>
+                                </DockPanel>
+
+                                <DockPanel>
+                                    <TextBlock Text="Business font size (pt)" Width="160"/>
+                                    <TextBox Width="60" Text="{Binding ActiveTemplate.BusinessNameFontSizePt, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <CheckBox Content="Bold" Margin="12,0,0,0"
+IsChecked="{Binding ActiveTemplate.BusinessNameBold}"/>
+                                </DockPanel>
+
+                                <!-- Address / Contacts -->
+                                <DockPanel>
+                                    <CheckBox Content="Show address" IsChecked="{Binding ActiveTemplate.ShowAddress}"/>
+                                    <CheckBox Content="Show phone" Margin="12,0,0,0" IsChecked="{Binding ActiveTemplate.ShowContacts}"/>
+                                </DockPanel>
+                            </StackPanel>
+                            <Separator Margin="0,0,0,10"/>
                             <TextBlock Text="Common" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <StackPanel>
-                                <CheckBox Content="Show QR" IsChecked="{Binding VoucherTemplate.ShowQr}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Show cashier" IsChecked="{Binding VoucherTemplate.ShowCashierOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Print barcode" IsChecked="{Binding VoucherTemplate.PrintBarcodeOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewVoucherCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Show QR"       IsChecked="{Binding VoucherTemplate.ShowQr}"/>
+                                <CheckBox Content="Show cashier"  IsChecked="{Binding VoucherTemplate.ShowCashierOnReceipt}"/>
+                                <CheckBox Content="Print barcode" IsChecked="{Binding VoucherTemplate.PrintBarcodeOnReceipt}"/>
                             </StackPanel>
-
                         </StackPanel>
                     </Border>
+                </TabItem>
 
-                    <!-- RIGHT: Preview -->
-                    <Border Grid.Column="1"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="4">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="Receipt preview"
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
-
-                            <ScrollViewer Grid.Row="1" Margin="0,4,0,0" Background="#111" Padding="6">
-                                <TextBlock Text="{Binding VoucherPreviewText}" FontFamily="Consolas" Foreground="White" TextWrapping="Wrap"/>
-                            </ScrollViewer>
-                        </Grid>
-                    </Border>
-                </Grid>
-            </TabItem>
-
-            <!-- =============== TAB 4: Z REPORT (same UI, ZReport bindings) =============== -->
-            <TabItem Header="Z Report">
-                <Grid IsEnabled="{Binding CanEdit}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- LEFT -->
-                    <Border Grid.Column="0"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="14"
-                            Margin="0,0,12,0">
+                <!-- =================== TAB 4: Z REPORT =================== -->
+                <TabItem Header="Z Report">
+                    <Border Background="#06000000" BorderBrush="#22000000" BorderThickness="1" CornerRadius="4" Padding="14">
                         <StackPanel>
-
                             <TextBlock Text="Printer &amp; paper" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <Grid Margin="0,0,12,8">
                                 <Grid.ColumnDefinitions>
@@ -1110,7 +573,6 @@
                                 <TextBlock Grid.Column="0" Text="Printer" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBlock Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding InvoicePrinterName}"/>
                             </Grid>
-
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="140"/>
@@ -1139,35 +601,19 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="6" Height="100" Background="#05000000" Margin="0,0,8,0">
-                                    <Image Stretch="Uniform" Source="{Binding IdentityLogoBytes, Converter={StaticResource BytesToBitmap}}"/>
+                                <Border Grid.Column="0" BorderBrush="#33000000" BorderThickness="1" CornerRadius="4" Padding="6"
+                                        Height="100" Background="#05000000" Margin="0,0,8,0">
+                                    <Image Stretch="Uniform"
+                                           Source="{Binding IdentityLogoBytes, Converter={StaticResource BytesToBitmap}}"/>
                                 </Border>
 
                                 <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                    <CheckBox Content="Show logo" IsChecked="{Binding ZReportTemplate.ShowLogoOnReceipt}">
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="Checked">
-                                                <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                            </i:EventTrigger>
-                                            <i:EventTrigger EventName="Unchecked">
-                                                <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
-                                    </CheckBox>
-
+                                    <CheckBox Content="Show logo" IsChecked="{Binding ZReportTemplate.ShowLogoOnReceipt}"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Max width (px):" VerticalAlignment="Center"/>
-                                        <TextBox Width="90" Height="26" Margin="8,0,0,0"
-                                                 VerticalContentAlignment="Center"
-                                                 Text="{Binding ZReportTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}">
-                                            <i:Interaction.Triggers>
-                                                <i:EventTrigger EventName="TextChanged">
-                                                    <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                                </i:EventTrigger>
-                                            </i:Interaction.Triggers>
-                                        </TextBox>
+                                        <TextBox Width="90" Height="26" Margin="8,0,0,0" VerticalContentAlignment="Center"
+                                                 Text="{Binding ZReportTemplate.LogoMaxWidthPx, UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
-
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Alignment:" VerticalAlignment="Center"/>
                                         <ComboBox Width="140" Height="26" Margin="8,0,0,0" VerticalContentAlignment="Center"
@@ -1176,77 +622,81 @@
                                             <ComboBoxItem Content="Center"/>
                                             <ComboBoxItem Content="Right"/>
                                         </ComboBox>
-                                        <i:Interaction.Triggers>
-                                            <i:EventTrigger EventName="SelectionChanged">
-                                                <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                            </i:EventTrigger>
-                                        </i:Interaction.Triggers>
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>
 
                             <Separator Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Vertical" Margin="0,8,0,0">
+                                <!-- Top margin -->
+                                <DockPanel>
+                                    <TextBlock Text="Top margin (lines)" Width="160"/>
+                                    <TextBox Width="60" Text="{Binding ActiveTemplate.TopMarginLines, UpdateSourceTrigger=PropertyChanged}"/>
+                                </DockPanel>
 
+                                <!-- Business name -->
+                                <DockPanel>
+                                    <CheckBox Content="Show business name" IsChecked="{Binding ActiveTemplate.ShowBusinessName}"/>
+                                </DockPanel>
+
+                                <DockPanel>
+                                    <TextBlock Text="Business font size (pt)" Width="160"/>
+                                    <TextBox Width="60" Text="{Binding ActiveTemplate.BusinessNameFontSizePt, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <CheckBox Content="Bold" Margin="12,0,0,0"
+IsChecked="{Binding ActiveTemplate.BusinessNameBold}"/>
+                                </DockPanel>
+
+                                <!-- Address / Contacts -->
+                                <DockPanel>
+                                    <CheckBox Content="Show address" IsChecked="{Binding ActiveTemplate.ShowAddress}"/>
+                                    <CheckBox Content="Show phone" Margin="12,0,0,0" IsChecked="{Binding ActiveTemplate.ShowContacts}"/>
+                                </DockPanel>
+                            </StackPanel>
+                            <Separator Margin="0,0,0,10"/>
                             <TextBlock Text="Common (Z Report)" FontWeight="SemiBold" Margin="0,0,0,8"/>
                             <StackPanel>
-                                <CheckBox Content="Show QR" IsChecked="{Binding ZReportTemplate.ShowQr}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Show cashier" IsChecked="{Binding ZReportTemplate.ShowCashierOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
-                                <CheckBox Content="Print barcode" IsChecked="{Binding ZReportTemplate.PrintBarcodeOnReceipt}">
-                                    <i:Interaction.Triggers>
-                                        <i:EventTrigger EventName="Checked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                        </i:EventTrigger>
-                                        <i:EventTrigger EventName="Unchecked">
-                                            <i:InvokeCommandAction Command="{Binding PreviewZReportCommand}"/>
-                                        </i:EventTrigger>
-                                    </i:Interaction.Triggers>
-                                </CheckBox>
+                                <CheckBox Content="Show QR"       IsChecked="{Binding ZReportTemplate.ShowQr}"/>
+                                <CheckBox Content="Show cashier"  IsChecked="{Binding ZReportTemplate.ShowCashierOnReceipt}"/>
+                                <CheckBox Content="Print barcode" IsChecked="{Binding ZReportTemplate.PrintBarcodeOnReceipt}"/>
                             </StackPanel>
-
                         </StackPanel>
                     </Border>
+                </TabItem>
+            </TabControl>
 
-                    <!-- RIGHT: Preview -->
-                    <Border Grid.Column="1"
-                            Background="#06000000"
-                            BorderBrush="#22000000"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="4">
+            <!-- RIGHT: ONE PREVIEW ONLY -->
+            <Border Grid.Column="1"
+                    Background="#06000000"
+                    BorderBrush="#22000000"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="4" Margin="0,24,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="Receipt preview" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                    <!-- Single shared preview: binds to PreviewBitmap -->
+                    <ScrollViewer Grid.Row="1"
+                                  Margin="0,4,0,0"
+                                  Padding="0"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
                         <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="Receipt preview" FontWeight="SemiBold" Margin="0,0,0,8"/>
-
-                            <ScrollViewer Grid.Row="1" Margin="0,4,0,0" Background="#111" Padding="6">
-                                <TextBlock Text="{Binding ZReportPreviewText}" FontFamily="Consolas" Foreground="White" TextWrapping="Wrap"/>
-                            </ScrollViewer>
+                            <!-- Uniform keeps the proportions correct; it will fit to the available width -->
+                            <Image Source="{Binding PreviewBitmap}"
+                                   Stretch="Uniform"
+                                   SnapsToDevicePixels="True"
+                                   UseLayoutRounding="True"
+                                   HorizontalAlignment="Center"/>
                         </Grid>
-                    </Border>
+                    </ScrollViewer>
                 </Grid>
-            </TabItem>
-        </TabControl>
+            </Border>
+        </Grid>
 
         <!-- ACTIONS -->
         <DockPanel Grid.Row="3" Margin="0,16,0,0">
@@ -1256,19 +706,8 @@
                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                        Text="Printer and footer come from Invoice Settings. Layout is saved per outlet (or globally)."/>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-
-                <!-- Your original Sale commands are kept to avoid breaking existing flows -->
-                <Button Content="Save (Sale)" Height="26" MinWidth="90"
-                        Command="{Binding SaveSaleCommand}"
-                        Margin="0,0,8,0"/>
-                <Button Content="Print Test (Sale)" Height="26" MinWidth="110"
-                        Command="{Binding PrintSaleCommand}"
-                        Margin="0,0,16,0"/>
-
-                <!-- New: single save-all + print-current-tab -->
                 <Button Content="Save All" Height="26" MinWidth="100"
-                        Command="{Binding SaveAllCommand}"
-                        Margin="0,0,8,0"/>
+                        Command="{Binding SaveAllCommand}" Margin="0,0,8,0"/>
                 <Button Content="Print Test (Current Tab)" Height="26" MinWidth="150"
                         Command="{Binding PrintCurrentCommand}"/>
             </StackPanel>
