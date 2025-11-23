@@ -1,7 +1,15 @@
 ﻿// Pos.Client.Wpf/Services/Sync/SyncService.cs
+using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Pos.Domain.Abstractions;
 using Pos.Domain.Sync;
+using Pos.Domain.Services.System;
 using Pos.Persistence;
 using Pos.Persistence.Sync;
 
@@ -15,64 +23,139 @@ public interface ISyncService
 
 public sealed class SyncService : ISyncService
 {
-    private readonly PosClientDbContext _db;
-    private readonly ISyncHttp _http;
-
-    public string TerminalId { get; } // e.g., OutletCode + CounterCode
-    public SyncService(PosClientDbContext db, ISyncHttp http)
+    private static readonly JsonSerializerOptions JsonOpts = new()
     {
-        _db = db; _http = http;
-        // You likely already have outlet/counter bindings; reuse them:
-        TerminalId = "OUTLET-01/COUNTER-01"; // TODO: get from your binding service
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private readonly IDbContextFactory<PosClientDbContext> _dbFactory;
+    private readonly ISyncHttp _http;
+    private readonly IMachineIdentityService _machine;
+
+    public SyncService(
+        IDbContextFactory<PosClientDbContext> dbFactory,
+        ISyncHttp http,
+        IMachineIdentityService machine)
+    {
+        _dbFactory = dbFactory;
+        _http = http;
+        _machine = machine;
     }
 
+    // ---------------- PUSH: local → server ----------------
     public async Task PushAsync(CancellationToken ct = default)
     {
-        var lastToken = await _db.SyncCursors.Select(c => c.LastToken).FirstOrDefaultAsync(ct);
-        var pending = await _db.SyncOutbox.OrderBy(x => x.Token).Take(500).ToListAsync(ct);
-        if (pending.Count == 0) return;
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        // single cursor row for server watermark
+        var cursor = await db.SyncCursors
+            .SingleOrDefaultAsync(c => c.Name == "server", ct);
+
+        if (cursor == null)
+        {
+            cursor = new SyncCursor { Name = "server", LastToken = 0 };
+            db.SyncCursors.Add(cursor);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // pending outbox rows ordered by local token
+        const int maxBatchSize = 500;
+        var pending = await db.SyncOutbox
+            .OrderBy(o => o.Token)
+            .Take(maxBatchSize)
+            .ToListAsync(ct);
+
+        if (pending.Count == 0)
+            return;
+
+        var terminalId = await _machine.GetMachineIdAsync(ct);
 
         var batch = new SyncBatch
         {
-            TerminalId = TerminalId,
-            FromToken = lastToken,
-            Changes = pending.Select(p => new SyncEnvelope
-            {
-                Entity = p.Entity,
-                Op = (SyncOp)p.Op,
-                PublicId = p.PublicId,
-                PayloadJson = p.PayloadJson,
-                TsUtc = p.TsUtc
-            }).ToList()
+            TerminalId = terminalId,
+            FromToken = cursor.LastToken,
+            Changes = new List<SyncEnvelope>(pending.Count)
         };
+
+        foreach (var o in pending)
+        {
+            batch.Changes.Add(new SyncEnvelope
+            {
+                Entity = o.Entity,
+                Op = (SyncOp)o.Op,
+                PublicId = o.PublicId,
+                PayloadJson = o.PayloadJson,
+                TsUtc = o.TsUtc
+            });
+        }
 
         var (accepted, serverToken) = await _http.PushAsync(batch, ct);
 
-        // On success, remove pushed rows (idempotency: only remove those we sent)
-        _db.SyncOutbox.RemoveRange(pending);
-        await _db.SaveChangesAsync(ct);
+        if (accepted > 0)
+        {
+            // delete successfully pushed rows from outbox
+            var pushedTokens = pending
+                .OrderBy(o => o.Token)
+                .Take(accepted)
+                .Select(o => o.Token)
+                .ToList();
 
-        await EnsureCursorAsync(serverToken, ct);
+            var toRemove = await db.SyncOutbox
+                .Where(o => pushedTokens.Contains(o.Token))
+                .ToListAsync(ct);
+
+            db.SyncOutbox.RemoveRange(toRemove);
+        }
+
+        if (serverToken > cursor.LastToken)
+        {
+            cursor.LastToken = serverToken;
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
+    // ---------------- PULL: server → local ----------------
     public async Task PullAsync(CancellationToken ct = default)
     {
-        var cursor = await _db.SyncCursors.FirstOrDefaultAsync(ct) ?? new SyncCursor { LastToken = 0 };
-        if (cursor.Id == 0) _db.SyncCursors.Add(cursor);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        var (changes, serverToken) = await _http.PullAsync(TerminalId, cursor.LastToken, 500, ct);
+        var cursor = await db.SyncCursors
+            .SingleOrDefaultAsync(c => c.Name == "server", ct);
+
+        if (cursor == null)
+        {
+            cursor = new SyncCursor { Name = "server", LastToken = 0 };
+            db.SyncCursors.Add(cursor);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var terminalId = await _machine.GetMachineIdAsync(ct);
+
+        const int maxBatchSize = 500;
+        var (changes, serverToken) = await _http.PullAsync(terminalId, cursor.LastToken, maxBatchSize, ct);
+
         if (changes.Count == 0)
         {
-            await EnsureCursorAsync(serverToken, ct);
+            // still move cursor to latest server watermark
+            if (serverToken > cursor.LastToken)
+            {
+                cursor.LastToken = serverToken;
+                await db.SaveChangesAsync(ct);
+            }
+
             return;
         }
 
-        // 1) Write to local inbox (audit/trace)
         long localToken = cursor.LastToken;
+
         foreach (var ch in changes)
         {
             localToken = checked(localToken + 1);
-            _db.SyncInbox.Add(new SyncInbox
+
+            // 1) write into local inbox (audit)
+            db.SyncInbox.Add(new SyncInbox
             {
                 Entity = ch.Entity,
                 PublicId = ch.PublicId,
@@ -81,35 +164,108 @@ public sealed class SyncService : ISyncService
                 TsUtc = ch.TsUtc,
                 Token = localToken
             });
-            // 2) Apply to local tables (simple LWW for master, append-only for docs)
-            await ApplyAsync(ch, ct);
+
+            // 2) apply to real tables
+            await ApplyAsync(db, ch, ct);
         }
 
-        cursor.LastToken = serverToken; // move to server watermark
-        await _db.SaveChangesAsync(ct);
-    }
-
-    private async Task EnsureCursorAsync(long serverToken, CancellationToken ct)
-    {
-        var cursor = await _db.SyncCursors.FirstOrDefaultAsync(ct) ?? new SyncCursor { LastToken = 0 };
-        if (cursor.Id == 0) _db.SyncCursors.Add(cursor);
         cursor.LastToken = serverToken;
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
-    private Task ApplyAsync(SyncEnvelope ch, CancellationToken ct)
+    // ---------------- APPLY: envelope → local entities ----------------
+    // IMPORTANT:
+    // - Posted docs (Sale, Purchase, Voucher, StockDoc): upsert by PublicId (append-only).
+    // - Master data (Item, Product, Party, Warehouse, Outlet, InvoiceSettings*, IdentitySettings, ReceiptTemplate, etc.):
+    //   last-writer-wins by PublicId; we rely on server as source of truth.
+
+    private static readonly string[] EntityNamespaces =
     {
-        // IMPORTANT: keep it simple first.
-        // - For immutable posted docs (Sale, Voucher, Purchase): Upsert by PublicId. No delete.
-        // - For master data (Item, Price, Customer, Supplier): last-writer-wins based on ch.TsUtc.
-        // You can deserialize ch.PayloadJson into your entity type by name via reflection or a map.
+        "Pos.Domain.Entities",
+        "Pos.Domain.Settings",
+        "Pos.Domain.Accounting",
+        "Pos.Domain.Hr"
+    };
 
-        // Pseudocode (fill out with your real types):
-        // var type = Type.GetType("Pos.Domain.Entities." + ch.Entity + ", Pos.Domain");
-        // var entity = (BaseEntity)JsonSerializer.Deserialize(ch.PayloadJson, type)!;
-        // _db.Update(entity); // EF upsert-ish (or track by PublicId via natural key)
-        // return Task.CompletedTask;
+    private static async Task ApplyAsync(PosClientDbContext db, SyncEnvelope ch, CancellationToken ct)
+    {
+        // Resolve CLR type from entity name + known namespaces
+        Type? clrType = null;
+        foreach (var ns in EntityNamespaces)
+        {
+            clrType = Type.GetType($"{ns}.{ch.Entity}, Pos.Domain");
+            if (clrType != null) break;
+        }
 
-        return Task.CompletedTask;
+        if (clrType == null)
+        {
+            // Unknown entity type – safely ignore
+            return;
+        }
+
+        var entityObj = JsonSerializer.Deserialize(ch.PayloadJson, clrType, JsonOpts);
+        if (entityObj is not BaseEntity baseEntity)
+            return;
+
+        if (ch.Op == SyncOp.Delete)
+        {
+            await DeleteByPublicIdAsync(db, baseEntity, ct);
+        }
+        else
+        {
+            await UpsertByPublicIdAsync(db, baseEntity, ct);
+        }
+    }
+
+    // Generic upsert by PublicId using reflection → Set<TEntity>()
+    private static Task UpsertByPublicIdAsync(PosClientDbContext db, BaseEntity entity, CancellationToken ct)
+    {
+        var method = typeof(SyncService)
+            .GetMethod(nameof(UpsertGeneric), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var generic = method.MakeGenericMethod(entity.GetType());
+        return (Task)generic.Invoke(null, new object[] { db, entity, ct })!;
+    }
+
+    private static async Task UpsertGeneric<TEntity>(PosClientDbContext db, BaseEntity entityBase, CancellationToken ct)
+        where TEntity : BaseEntity
+    {
+        var entity = (TEntity)entityBase;
+
+        var existing = await db.Set<TEntity>()
+            .FirstOrDefaultAsync(e => e.PublicId == entity.PublicId, ct);
+
+        if (existing == null)
+        {
+            db.Set<TEntity>().Add(entity);
+        }
+        else
+        {
+            db.Entry(existing).CurrentValues.SetValues(entity);
+        }
+    }
+
+    // Generic hard delete by PublicId (only used if you ever emit SyncOp.Delete)
+    private static Task DeleteByPublicIdAsync(PosClientDbContext db, BaseEntity entity, CancellationToken ct)
+    {
+        var method = typeof(SyncService)
+            .GetMethod(nameof(DeleteGeneric), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var generic = method.MakeGenericMethod(entity.GetType());
+        return (Task)generic.Invoke(null, new object[] { db, entity, ct })!;
+    }
+
+    private static async Task DeleteGeneric<TEntity>(PosClientDbContext db, BaseEntity entityBase, CancellationToken ct)
+        where TEntity : BaseEntity
+    {
+        var entity = (TEntity)entityBase;
+
+        var existing = await db.Set<TEntity>()
+            .FirstOrDefaultAsync(e => e.PublicId == entity.PublicId, ct);
+
+        if (existing != null)
+        {
+            db.Set<TEntity>().Remove(existing);
+        }
     }
 }

@@ -105,11 +105,10 @@ namespace Pos.Client.Wpf.Windows.Settings
         [ObservableProperty] private string? footerZReport;
 
         // ===== Backups (scoped) =====
-        [ObservableProperty] private bool enableDailyBackup;
-        [ObservableProperty] private bool enableHourlyBackup;
-
+        
         // ===== Till requirement (scoped) =====
         [ObservableProperty] private bool useTill = true;
+        private InvoiceSettingsScoped? _loadedScoped;
 
         // ===== Lifecycle =====
         private async Task InitAsync(CancellationToken ct = default)
@@ -163,6 +162,8 @@ namespace Pos.Client.Wpf.Windows.Settings
                 ? await _scopedSvc.GetGlobalAsync(ct)
                 : await _scopedSvc.GetForOutletAsync(SelectedOutlet!.Id, ct);
 
+            _loadedScoped = scoped;
+
             CashDrawerKickEnabled = scoped.CashDrawerKickEnabled;
             AutoPrintOnSave = scoped.AutoPrintOnSave;
             AskBeforePrint = scoped.AskBeforePrint;
@@ -181,11 +182,10 @@ namespace Pos.Client.Wpf.Windows.Settings
             FooterVoucher = scoped.FooterVoucher;
             FooterZReport = scoped.FooterZReport;
 
-            EnableDailyBackup = scoped.EnableDailyBackup;
-            EnableHourlyBackup = scoped.EnableHourlyBackup;
-
+            // Backup fields and BackupBaseFolder / UseServerForBackupRestore are NOT touched here.
             UseTill = scoped.UseTill;
         }
+
 
         private static string? FallbackPick(string? current, ObservableCollection<string> list)
             => string.IsNullOrWhiteSpace(current) ? list.FirstOrDefault() : current;
@@ -215,9 +215,7 @@ namespace Pos.Client.Wpf.Windows.Settings
                 FooterVoucher = FooterVoucher,
                 FooterZReport = FooterZReport,
 
-                EnableDailyBackup = EnableDailyBackup,
-                EnableHourlyBackup = EnableHourlyBackup,
-
+              
                 UseTill = UseTill,
 
                 UpdatedAtUtc = DateTime.UtcNow

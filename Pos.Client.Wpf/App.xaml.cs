@@ -64,6 +64,7 @@ namespace Pos.Client.Wpf
 
         public static IServiceProvider Services { get; private set; } = null!;
         private CancellationTokenSource? _syncCts;
+        private System.Windows.Threading.DispatcherTimer? _backupTimer;  // NEW
 
         protected override async void OnStartup(StartupEventArgs e)
         {
@@ -110,6 +111,8 @@ namespace Pos.Client.Wpf
             sc.AddScoped<IInventoryReadService, InventoryReadService>();
             sc.AddTransient<BarcodeLabelSettingsViewModel>();
             sc.AddSingleton<ResetStockService>();
+            sc.AddSingleton<IBackupService, BackupService>();   // << NEW
+
             // 3) App state
             sc.AddSingleton<AppState>(AppState.Current);
             // NEW: machine/counter DI (you added these earlier)
@@ -181,6 +184,10 @@ namespace Pos.Client.Wpf
             sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.AttendancePunchWindow>();
             sc.AddTransient<InvoiceSettingsViewModel>();
             sc.AddTransient<InvoiceSettingsPage>();
+            sc.AddTransient<BackupSettingsViewModel>();          // << NEW
+            sc.AddTransient<BackupSettingsPage>();               // << NEW
+
+            sc.AddTransient<IServerSettingsService, ServerSettingsService>(); // NEW
 
             //sc.AddSingleton<ILabelPrintService, LabelPrintServiceStub>();
             sc.AddScoped<IPurchaseCenterReadService, PurchaseCenterReadService>();
@@ -339,6 +346,35 @@ namespace Pos.Client.Wpf
                 return;
             }
 
+            // ---- BACKUP: daily + hourly (after binding, before sync / shell) ----
+            try
+            {
+                var backupSvc = Services.GetRequiredService<IBackupService>();
+                await backupSvc.RunDailyBackupIfNeededAsync(CancellationToken.None);
+
+                _backupTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromHours(1)
+                };
+                _backupTimer.Tick += async (_, __) =>
+                {
+                    try
+                    {
+                        await backupSvc.RunHourlyBackupIfDueAsync(CancellationToken.None);
+                    }
+                    catch
+                    {
+                        // ignore backup errors in timer
+                    }
+                };
+                _backupTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[BACKUP] Could not start backup scheduler: " + ex);
+            }
+
+
             // ---- START PERIODIC SYNC (after login + binding, before showing shell) ----
             try
             {
@@ -427,6 +463,9 @@ namespace Pos.Client.Wpf
         {
             try { _syncCts?.Cancel(); } catch { /* ignore */ }
             _syncCts?.Dispose();
+            try { _backupTimer?.Stop(); } catch { /* ignore */ }
+            _backupTimer = null;
+
             base.OnExit(e);
         }
 

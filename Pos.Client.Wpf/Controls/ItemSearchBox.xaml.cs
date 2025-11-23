@@ -8,6 +8,8 @@ using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Pos.Domain.DTO;
 using Pos.Domain.Services;
+using Pos.Domain.Entities;      // <-- for InventoryLocationType
+
 using System.Threading.Tasks;
 
 namespace Pos.Client.Wpf.Controls
@@ -37,14 +39,48 @@ namespace Pos.Client.Wpf.Controls
         public static readonly DependencyProperty QueryProperty =
             DependencyProperty.Register(nameof(Query), typeof(string), typeof(ItemSearchBox),
                 new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+        // If not set, we fall back to ITerminalContext.OutletId (Outlet)
+        public InventoryLocationType? LocationType
+        {
+            get => (InventoryLocationType?)GetValue(LocationTypeProperty);
+            set => SetValue(LocationTypeProperty, value);
+        }
+
+        public static readonly DependencyProperty LocationTypeProperty =
+            DependencyProperty.Register(
+                nameof(LocationType),
+                typeof(InventoryLocationType?),
+                typeof(ItemSearchBox),
+                new PropertyMetadata(null, OnScopeChanged));
+
+        public int? LocationId
+        {
+            get => (int?)GetValue(LocationIdProperty);
+            set => SetValue(LocationIdProperty, value);
+        }
+
+        public static readonly DependencyProperty LocationIdProperty =
+            DependencyProperty.Register(
+                nameof(LocationId),
+                typeof(int?),
+                typeof(ItemSearchBox),
+                new PropertyMetadata(null, OnScopeChanged));
+
+        // ----- Services & state -----
         private IItemsReadService? _lookup;
+        private IInventoryReadService? _invRead;
+        private ITerminalContext? _terminal;
+
         private readonly ObservableCollection<ItemIndexDto> _index = new();
         private ICollectionView? _view;
+
         // Scanner-burst handling
         private DateTime _lastAt = DateTime.MinValue;
         private int _burstCount = 0;
         private bool _suppressDropdown = false;
-        private readonly DispatcherTimer _burstReset = new() { Interval = TimeSpan.FromMilliseconds(220) };
+        private readonly DispatcherTimer _burstReset =
+            new() { Interval = TimeSpan.FromMilliseconds(220) };
 
         public ItemSearchBox()
         {
@@ -59,6 +95,9 @@ namespace Pos.Client.Wpf.Controls
                 return; // still not ready – fail silently (designer / early runtime)
 
             _lookup = sp.GetRequiredService<IItemsReadService>();
+            _invRead = sp.GetService<IInventoryReadService>();
+            _terminal = sp.GetService<ITerminalContext>();
+
 
             Loaded += OnLoaded;
             _burstReset.Tick += (_, __) =>
@@ -76,8 +115,13 @@ namespace Pos.Client.Wpf.Controls
             if (_lookup is null) return;
 
             var list = await _lookup.BuildIndexAsync();
+
             _index.Clear();
-            foreach (var it in list) _index.Add(it);
+            foreach (var it in list)
+                _index.Add(it);
+
+            // Load on-hand stock for current scope
+            await RefreshOnHandAsync();
 
             _view = CollectionViewSource.GetDefaultView(_index);
             _view.Filter = o =>
@@ -85,11 +129,79 @@ namespace Pos.Client.Wpf.Controls
                 if (o is not ItemIndexDto i) return false;
                 var term = (SearchBox.Text ?? "").Trim();
                 if (term.Length == 0) return true;
+
                 return (i.DisplayName?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
                     || (i.Sku?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
                     || (i.Barcode?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
             };
+
             List.ItemsSource = _view;
+        }
+
+        private async Task RefreshOnHandAsync()
+        {
+            if (!IsLoaded) return;
+            if (_invRead is null) return;
+            if (_index.Count == 0) return;
+
+            // Resolve scope: explicit (LocationType/LocationId) or fallback to current outlet
+            InventoryLocationType? locType = LocationType;
+            int? locId = LocationId;
+
+            if (!locType.HasValue || !locId.HasValue || locId.GetValueOrDefault() <= 0)
+            {
+                if (_terminal is null || _terminal.OutletId <= 0)
+                    return;
+
+                locType = InventoryLocationType.Outlet;
+                locId = _terminal.OutletId;
+            }
+
+            var ids = _index.Select(x => x.Id).Distinct().ToArray();
+            if (ids.Length == 0) return;
+
+            Dictionary<int, decimal> map;
+            try
+            {
+                // atUtc: null => uses DateTime.UtcNow internally
+                map = await _invRead.GetOnHandBulkAsync(
+                    ids,
+                    locType.Value,
+                    locId.Value,
+                    atUtc: null,
+                    ct: CancellationToken.None);
+            }
+            catch
+            {
+                // fail silently; leave old values if any
+                return;
+            }
+
+            // rewrite records with updated OnHand (record 'with' syntax)
+            for (int i = 0; i < _index.Count; i++)
+            {
+                var row = _index[i];
+                if (!map.TryGetValue(row.Id, out var qty))
+                    qty = 0m;
+
+                _index[i] = row with { OnHand = qty };
+            }
+
+            _view?.Refresh();
+        }
+
+        private static async void OnScopeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ItemSearchBox box) return;
+
+            try
+            {
+                await box.RefreshOnHandAsync();
+            }
+            catch
+            {
+                // ignore UI-level failures
+            }
         }
 
         public void FocusSearch()

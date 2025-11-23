@@ -170,10 +170,8 @@
                     <Separator Margin="0,10,0,10"/>
 
                     <!-- Backups / Till -->
-                    <TextBlock Text="Backups &amp; tills" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <TextBlock Text="Till" FontWeight="SemiBold" Margin="0,0,0,8"/>
                     <StackPanel Orientation="Horizontal">
-                        <CheckBox Content="Enable daily backup"  IsChecked="{Binding EnableDailyBackup}"  Margin="0,0,16,0"/>
-                        <CheckBox Content="Enable hourly backup" IsChecked="{Binding EnableHourlyBackup}" Margin="0,0,16,0"/>
                         <CheckBox Content="Require open till"    IsChecked="{Binding UseTill}"/>
                     </StackPanel>
                 </StackPanel>

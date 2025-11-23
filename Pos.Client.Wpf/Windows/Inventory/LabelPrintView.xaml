@@ -315,6 +315,112 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- TAB 3: CUSTOM TEXT -->
+            <TabItem Header="Custom Text">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,8,0,0">
+
+                        <!-- Text input -->
+                        <TextBlock Text="Label text:" Margin="0,0,0,4"/>
+                        <TextBox x:Name="CustomTextBox"
+                         AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto"
+                         Height="80"
+                         TextChanged="CustomTextBox_TextChanged"/>
+                        <!-- Font family (style) -->
+                        <!-- Font family (style) -->
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="Font family:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CustomFontFamilyBox"
+              Width="220"
+              Height="26"
+              DisplayMemberPath="Source"
+              SelectionChanged="CustomFontFamilyBox_SelectionChanged" />
+                        </StackPanel>
+
+
+                        <!-- Formatting -->
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="Font size:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CustomFontSizeBox"
+                             Width="60"
+                             Height="26"
+                             VerticalContentAlignment="Center"
+                             Text="10"
+                             TextChanged="CustomFontSizeBox_TextChanged"/>
+                            <CheckBox x:Name="CustomBoldCheck"
+                              Content="Bold"
+                              Margin="12,0,0,0"
+                              VerticalAlignment="Center"
+                              Click="CustomFormatCheckBox_Click"/>
+                            <CheckBox x:Name="CustomItalicCheck"
+                              Content="Italic"
+                              Margin="8,0,0,0"
+                              VerticalAlignment="Center"
+                              Click="CustomFormatCheckBox_Click"/>
+                        </StackPanel>
+
+                        <!-- Position -->
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="Position:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CustomPositionBox"
+                              Width="180"
+                              Height="26"
+                              SelectedIndex="4"
+                              SelectionChanged="CustomPositionBox_SelectionChanged">
+                                <ComboBoxItem Content="Top Left"/>
+                                <ComboBoxItem Content="Top Center"/>
+                                <ComboBoxItem Content="Top Right"/>
+                                <ComboBoxItem Content="Middle Left"/>
+                                <ComboBoxItem Content="Middle Center"/>
+                                <ComboBoxItem Content="Middle Right"/>
+                                <ComboBoxItem Content="Bottom Left"/>
+                                <ComboBoxItem Content="Bottom Center"/>
+                                <ComboBoxItem Content="Bottom Right"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Print quantity + button -->
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <TextBlock Text="Print Qty:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CustomPrintQtyBox"
+                             Width="80"
+                             Height="26"
+                             VerticalContentAlignment="Center"
+                             Text="1"/>
+                            <Button x:Name="BtnPrintCustom"
+                            Content="Print Labels"
+                            Width="120"
+                            Margin="12,0,0,0"
+                            Click="PrintCustomLabel_Click"/>
+                        </StackPanel>
+
+                        <!-- Label preview -->
+                        <Border BorderBrush="#DDDDDD"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="8"
+                        Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Label preview"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,4"/>
+                                <Border Background="#F9F9F9"
+                                BorderBrush="#EEEEEE"
+                                BorderThickness="1"
+                                Padding="8"
+                                HorizontalAlignment="Left">
+                                    <Image x:Name="CustomLabelPreview"
+                                   Height="80"
+                                   Stretch="Uniform"/>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
 
         </TabControl>
 

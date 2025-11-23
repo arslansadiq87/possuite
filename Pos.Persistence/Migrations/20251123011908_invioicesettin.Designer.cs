@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pos.Persistence;
 
@@ -10,9 +11,11 @@ using Pos.Persistence;
 namespace Pos.Persistence.Migrations
 {
     [DbContext(typeof(PosClientDbContext))]
-    partial class PosClientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251123011908_invioicesettin")]
+    partial class invioicesettin
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
@@ -3283,6 +3286,9 @@ namespace Pos.Persistence.Migrations
                     b.Property<bool>("AutoPrintOnSave")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("BackupBaseFolder")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("CashDrawerKickEnabled")
                         .HasColumnType("INTEGER");
 
@@ -3291,6 +3297,12 @@ namespace Pos.Persistence.Migrations
 
                     b.Property<string>("DisplayTimeZoneId")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("EnableDailyBackup")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EnableHourlyBackup")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("FooterSale")
                         .HasColumnType("TEXT");
@@ -3316,72 +3328,15 @@ namespace Pos.Persistence.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("UseServerForBackupRestore")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("UseTill")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
                     b.ToTable("InvoiceSettingsScoped", (string)null);
-                });
-
-            modelBuilder.Entity("Pos.Domain.Settings.ServerSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ApiKey")
-                        .HasMaxLength(400)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("AutoSyncEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("BackupBaseFolder")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BaseUrl")
-                        .HasMaxLength(400)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CounterCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("EnableDailyBackup")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("EnableHourlyBackup")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("OutletCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("PullIntervalSec")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("PushIntervalSec")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("UseServerForBackupRestore")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ServerSettings", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            AutoSyncEnabled = true,
-                            EnableDailyBackup = false,
-                            EnableHourlyBackup = false,
-                            PullIntervalSec = 15,
-                            PushIntervalSec = 15,
-                            UseServerForBackupRestore = false
-                        });
                 });
 
             modelBuilder.Entity("Pos.Persistence.Sync.SyncCursor", b =>

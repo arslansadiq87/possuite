@@ -17,6 +17,9 @@ using Pos.Client.Wpf.Services;
 using Pos.Domain.DTO;
 using Pos.Domain.Entities;
 using Pos.Domain.Services;
+using System.Globalization;
+using System.Windows.Media.Imaging;
+
 
 
 namespace Pos.Client.Wpf.Windows.Inventory
@@ -50,6 +53,19 @@ namespace Pos.Client.Wpf.Windows.Inventory
             public int PrintQty { get; set; }
         }
 
+        // Custom text label positioning (9 positions)
+        private enum CustomTextPosition
+        {
+            TopLeft,
+            TopCenter,
+            TopRight,
+            MiddleLeft,
+            MiddleCenter,
+            MiddleRight,
+            BottomLeft,
+            BottomCenter,
+            BottomRight
+        }
 
 
         // Single label payload
@@ -60,6 +76,15 @@ namespace Pos.Client.Wpf.Windows.Inventory
             public string PriceText { get; init; } = "";
             public string Sku { get; init; } = "";
             public string Barcode { get; set; } = "";
+
+            public bool IsCustomText { get; init; }
+            public string CustomText { get; init; } = "";
+            public CustomTextPosition CustomPosition { get; init; } = CustomTextPosition.MiddleCenter;
+            public double CustomFontSizePt { get; init; } = 0.0;
+            public bool CustomBold { get; init; }
+            public bool CustomItalic { get; init; }
+            // NEW: Font family name for custom text
+            public string? CustomFontFamilyName { get; init; }
         }
 
         private readonly ObservableCollection<UiPurchaseRow> _purchases = new();
@@ -90,9 +115,30 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
             FromDate.SelectedDate = DateTime.Today.AddDays(-30);
             ToDate.SelectedDate = DateTime.Today;
+            LoadSystemFonts();
 
             Loaded += async (_, __) => await LoadPurchasesAsync();
         }
+
+        private void LoadSystemFonts()
+        {
+            // Get all installed system font families, sorted by name
+            var fonts = Fonts.SystemFontFamilies
+                             .OrderBy(ff => ff.Source)
+                             .ToList();
+
+            CustomFontFamilyBox.ItemsSource = fonts;
+
+            // Try to select the default Windows UI font if present; fallback to first
+            var defaultFamily = SystemFonts.MessageFontFamily;
+            var match = fonts.FirstOrDefault(f => string.Equals(f.Source, defaultFamily.Source, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null)
+                CustomFontFamilyBox.SelectedItem = match;
+            else if (fonts.Count > 0)
+                CustomFontFamilyBox.SelectedIndex = 0;
+        }
+
 
         // --------- TAB 1: BY PURCHASE ---------
 
@@ -314,6 +360,265 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
 
+        // --------- TAB 3: CUSTOM TEXT ---------
+
+        private async void PrintCustomLabel_Click(object sender, RoutedEventArgs e)
+        {
+            var text = (CustomTextBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(text))
+            {
+                MessageBox.Show("Enter label text before printing.", "Labels",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (!int.TryParse(CustomPrintQtyBox.Text, out var qty) || qty <= 0)
+            {
+                MessageBox.Show("Enter a valid Print Qty (positive integer).", "Labels",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            double fontSize;
+            if (!double.TryParse(CustomFontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out fontSize) || fontSize <= 0)
+            {
+                fontSize = 10.0; // fallback
+            }
+
+            var position = GetCustomPosition();
+            bool bold = CustomBoldCheck.IsChecked == true;
+            bool italic = CustomItalicCheck.IsChecked == true;
+            string fontFamilyName = GetCustomFontFamilyName();
+
+            var labels = new List<LabelPrintItem>();
+            for (int i = 0; i < qty; i++)
+            {
+                labels.Add(new LabelPrintItem
+                {
+                    IsCustomText = true,
+                    CustomText = text,
+                    CustomPosition = position,
+                    CustomFontSizePt = fontSize,
+                    CustomBold = bold,
+                    CustomItalic = italic,
+                    CustomFontFamilyName = fontFamilyName   // ⬅ NEW
+                });
+            }
+
+            try
+            {
+                await PrintLabelsAsync(labels, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Label print failed:\n" + ex.Message, "Labels",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private string GetCustomFontFamilyName()
+        {
+            if (CustomFontFamilyBox?.SelectedItem is FontFamily ff)
+                return ff.Source;
+
+            // Fallback to system UI font
+            return SystemFonts.MessageFontFamily.Source;
+        }
+
+
+
+        private CustomTextPosition GetCustomPosition()
+        {
+            return CustomPositionBox.SelectedIndex switch
+            {
+                0 => CustomTextPosition.TopLeft,
+                1 => CustomTextPosition.TopCenter,
+                2 => CustomTextPosition.TopRight,
+                3 => CustomTextPosition.MiddleLeft,
+                4 => CustomTextPosition.MiddleCenter,
+                5 => CustomTextPosition.MiddleRight,
+                6 => CustomTextPosition.BottomLeft,
+                7 => CustomTextPosition.BottomCenter,
+                8 => CustomTextPosition.BottomRight,
+                _ => CustomTextPosition.MiddleCenter
+            };
+        }
+
+        private async void CustomTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            await RefreshCustomPreviewAsync(CancellationToken.None);
+        }
+
+        private async void CustomFontSizeBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            await RefreshCustomPreviewAsync(CancellationToken.None);
+        }
+
+        private async void CustomPositionBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            await RefreshCustomPreviewAsync(CancellationToken.None);
+        }
+
+        private async void CustomFormatCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            await RefreshCustomPreviewAsync(CancellationToken.None);
+        }
+
+        private async Task RefreshCustomPreviewAsync(CancellationToken ct)
+        {
+            if (!IsLoaded) return;
+
+            var text = (CustomTextBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(text))
+            {
+                CustomLabelPreview.Source = null;
+                return;
+            }
+
+            double fontSize;
+            if (!double.TryParse(CustomFontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out fontSize) || fontSize <= 0)
+            {
+                fontSize = 10.0;
+            }
+
+            var position = GetCustomPosition();
+            bool bold = CustomBoldCheck.IsChecked == true;
+            bool italic = CustomItalicCheck.IsChecked == true;
+            string fontFamilyName = GetCustomFontFamilyName();
+
+
+            try
+            {
+                var settings = await _labelSettings.GetAsync(_terminal.OutletId, ct);
+
+                var item = new LabelPrintItem
+                {
+                    IsCustomText = true,
+                    CustomText = text,
+                    CustomPosition = position,
+                    CustomFontSizePt = fontSize,
+                    CustomBold = bold,
+                    CustomItalic = italic,
+                    CustomFontFamilyName = fontFamilyName   // ⬅ NEW
+
+                };
+
+                var img = BuildCustomLabelImage(settings, item);
+                CustomLabelPreview.Source = img;
+            }
+            catch
+            {
+                CustomLabelPreview.Source = null;
+            }
+        }
+
+        private async void CustomFontFamilyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            await RefreshCustomPreviewAsync(CancellationToken.None);
+        }
+
+
+        private ImageSource BuildCustomLabelImage(BarcodeLabelSettings s, LabelPrintItem item)
+        {
+            double dipPerMm = 96.0 / 25.4;
+            double widthDip = Math.Max(32, s.LabelWidthMm * dipPerMm);
+            double heightDip = Math.Max(32, s.LabelHeightMm * dipPerMm);
+
+            double pxPerDip = s.Dpi / 96.0;
+            int widthPx = Math.Max(32, (int)Math.Round(widthDip * pxPerDip));
+            int heightPx = Math.Max(32, (int)Math.Round(heightDip * pxPerDip));
+
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+            {
+                // Background
+                var rect = new Rect(0, 0, widthDip, heightDip);
+                dc.DrawRectangle(Brushes.White, new Pen(Brushes.LightGray, 1), rect);
+
+                double fontSizePt = item.CustomFontSizePt > 0 ? item.CustomFontSizePt : s.FontSizePt;
+                double fontSizeDip = fontSizePt * 96.0 / 72.0;
+                var fontFamilyName = string.IsNullOrWhiteSpace(item.CustomFontFamilyName)
+                    ? SystemFonts.MessageFontFamily.Source
+                    : item.CustomFontFamilyName;
+
+                var typeface = new Typeface(
+                    new FontFamily(fontFamilyName),
+                    item.CustomItalic ? FontStyles.Italic : FontStyles.Normal,
+                    item.CustomBold ? FontWeights.Bold : FontWeights.Normal,
+                    FontStretches.Normal);
+
+
+                double pixelsPerDip = s.Dpi / 96.0;
+
+                var ft = new FormattedText(
+                    item.CustomText ?? string.Empty,
+                    CultureInfo.CurrentUICulture,
+                    FlowDirection.LeftToRight,
+                    typeface,
+                    fontSizeDip,
+                    Brushes.Black,
+                    pixelsPerDip)
+                {
+                    MaxTextWidth = Math.Max(0, widthDip - 4.0),
+                    TextAlignment = TextAlignment.Left
+                };
+
+                double textWidth = Math.Min(ft.Width, widthDip - 4.0);
+                double textHeight = Math.Min(ft.Height, heightDip - 4.0);
+
+                double x = 2.0;
+                double y = 2.0;
+
+                switch (item.CustomPosition)
+                {
+                    case CustomTextPosition.TopLeft:
+                        x = 2.0;
+                        y = 2.0;
+                        break;
+                    case CustomTextPosition.TopCenter:
+                        x = (widthDip - textWidth) / 2.0;
+                        y = 2.0;
+                        break;
+                    case CustomTextPosition.TopRight:
+                        x = widthDip - textWidth - 2.0;
+                        y = 2.0;
+                        break;
+                    case CustomTextPosition.MiddleLeft:
+                        x = 2.0;
+                        y = (heightDip - textHeight) / 2.0;
+                        break;
+                    case CustomTextPosition.MiddleCenter:
+                        x = (widthDip - textWidth) / 2.0;
+                        y = (heightDip - textHeight) / 2.0;
+                        break;
+                    case CustomTextPosition.MiddleRight:
+                        x = widthDip - textWidth - 2.0;
+                        y = (heightDip - textHeight) / 2.0;
+                        break;
+                    case CustomTextPosition.BottomLeft:
+                        x = 2.0;
+                        y = heightDip - textHeight - 2.0;
+                        break;
+                    case CustomTextPosition.BottomCenter:
+                        x = (widthDip - textWidth) / 2.0;
+                        y = heightDip - textHeight - 2.0;
+                        break;
+                    case CustomTextPosition.BottomRight:
+                        x = widthDip - textWidth - 2.0;
+                        y = heightDip - textHeight - 2.0;
+                        break;
+                }
+
+                dc.DrawText(ft, new Point(x, y));
+            }
+
+            var bmp = new RenderTargetBitmap(widthPx, heightPx, s.Dpi, s.Dpi, PixelFormats.Pbgra32);
+            bmp.Render(dv);
+            bmp.Freeze();
+            return bmp;
+        }
 
         // --------- CORE PRINTING (shared) ---------
 
@@ -410,8 +715,14 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     for (int c = 0; c < columns && idx < items.Count; c++)
                     {
                         var item = items[idx++];
-
-                        var imgSrc = BarcodePreviewBuilder.Build(
+                        ImageSource imgSrc;
+                        if (item.IsCustomText)
+                        {
+                            imgSrc = BuildCustomLabelImage(s, item);
+                        }
+                        else
+                        { 
+                            imgSrc = BarcodePreviewBuilder.Build(
                             labelWidthMm: s.LabelWidthMm,
                             labelHeightMm: s.LabelHeightMm,
                             marginLeftMm: s.MarginLeftMm,
@@ -444,7 +755,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                             // alignments – we’re using defaults in builder for now
                             barcodeZoom: zoom   // ✅ exact zoom from settings
                         );
-
+                    }
                         var img = new Image
                         {
                             Source = imgSrc,

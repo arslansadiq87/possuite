@@ -41,9 +41,94 @@
             <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
               Padding="4" Width="{Binding ElementName=SearchBox, Path=ActualWidth}">
                 <ListBox x:Name="List"
-                 MouseDoubleClick="List_MouseDoubleClick"
-                 PreviewKeyDown="List_PreviewKeyDown"
-                 DisplayMemberPath="DisplayName"/>
+         MouseDoubleClick="List_MouseDoubleClick"
+         PreviewKeyDown="List_PreviewKeyDown"
+         BorderThickness="0"
+         ScrollViewer.VerticalScrollBarVisibility="Auto"
+         IsTextSearchEnabled="True"
+         TextSearch.TextPath="DisplayName">
+                    <!-- Keep keyboard behaviour by NOT disabling focus -->
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="4"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="SnapsToDevicePixels" Value="True"/>
+                            <!-- IMPORTANT: no Focusable=False here -->
+
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Root"
+                                        Property="Background"
+                                        Value="#F3F6FF"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Root"
+                                        Property="Background"
+                                        Value="#E3ECFF"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+
+                    <!-- Visual template with stock badge -->
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Left: name + SKU / Barcode -->
+                                <StackPanel Orientation="Vertical"
+                            Grid.Column="0"
+                            Margin="0,0,8,0">
+                                    <TextBlock Text="{Binding DisplayName}"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Sku}"
+                                   Foreground="#777"
+                                   FontSize="11"
+                                   Margin="0,0,6,0"/>
+                                        <TextBlock Text="{Binding Barcode}"
+                                   Foreground="#AAA"
+                                   FontSize="11"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Right: stock badge -->
+                                <!-- Change OnHand to your actual stock property if different -->
+                                <Border Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Padding="8,2"
+                        CornerRadius="10"
+                        Background="#EEF7FF"
+                        BorderBrush="#B5D4FF"
+                        BorderThickness="1">
+                                    <TextBlock Text="{Binding OnHand, StringFormat='{}{0:#,0} in stock'}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#1A5A9E"/>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
             </Border>
         </Popup>
     </Grid>

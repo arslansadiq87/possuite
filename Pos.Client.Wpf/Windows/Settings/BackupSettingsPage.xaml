@@ -1,0 +1,222 @@
+﻿ <UserControl x:Class="Pos.Client.Wpf.Windows.Settings.BackupSettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             Width="800"
+             MaxWidth="1000">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Header -->
+            <RowDefinition Height="*"/>
+            <!-- Main -->
+            <RowDefinition Height="Auto"/>
+            <!-- Actions -->
+        </Grid.RowDefinitions>
+
+        <!-- HEADER -->
+        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,16">
+            <StackPanel Orientation="Vertical" DockPanel.Dock="Left">
+                <TextBlock Text="Date &amp; Server"
+                           FontSize="18"
+                           FontWeight="SemiBold"/>
+                <TextBlock Text="Configure automatic daily/hourly backups and restore the local database."
+                           FontSize="12"
+                           Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                           Margin="0,2,0,0"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- MAIN -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.8*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- LEFT: Mode + schedule -->
+            <!-- LEFT: Server + Backup -->
+            <Border Grid.Column="0"
+        Background="#06000000"
+        BorderBrush="#22000000"
+        BorderThickness="1"
+        CornerRadius="4"
+        Padding="14"
+        Margin="0,0,12,0">
+                <StackPanel>
+
+                    <!-- Server Settings -->
+                    <TextBlock Text="Server Settings" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <Grid Margin="0,0,0,12">
+                        <!-- define rows for every Grid.Row you use -->
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <!-- 0: Base URL -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 1: API Key -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 2: Outlet Code -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 3: Counter Code -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 4: Auto Sync -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 5: Push Interval -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 6: Pull Interval -->
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 0: Base URL -->
+                        <TextBlock Text="Base URL" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding BaseUrl}" Grid.Row="0" Grid.Column="1" Margin="8,0,0,4"/>
+
+                        <!-- 1: API Key -->
+                        <TextBlock Text="API Key" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
+                        <PasswordBox Grid.Row="1" Grid.Column="1" Margin="8,0,0,4" x:Name="ApiKeyBox" PasswordChar="●">
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="PasswordChanged">
+                                    <i:InvokeCommandAction Command="{Binding SetApiKeyFromPasswordBoxCommand}"
+                                       CommandParameter="{Binding ElementName=ApiKeyBox}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                        </PasswordBox>
+
+                        <!-- 2: Outlet Code (read-only) -->
+                        <TextBlock Text="Outlet Code" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding OutletCode}" Grid.Row="2" Grid.Column="1" Margin="8,0,0,4"
+                         IsReadOnly="True" IsEnabled="False"/>
+
+                        <!-- 3: Counter Code (read-only) -->
+                        <TextBlock Text="Counter Code" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding CounterCode}" Grid.Row="3" Grid.Column="1" Margin="8,0,0,4"
+                            IsReadOnly="True" IsEnabled="False"/>
+
+                        <!-- 4: Auto Sync -->
+                        <TextBlock Text="Auto Sync" Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"/>
+                        <CheckBox IsChecked="{Binding AutoSyncEnabled}" Content="Enabled" Grid.Row="4" Grid.Column="1" Margin="8,0,0,4"/>
+
+                        <!-- 5: Push Interval -->
+                        <TextBlock Text="Push Interval (sec)" Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding PushIntervalSec}" Grid.Row="5" Grid.Column="1" Margin="8,0,0,4"/>
+
+                        <!-- 6: Pull Interval -->
+                        <TextBlock Text="Pull Interval (sec)" Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding PullIntervalSec}" Grid.Row="6" Grid.Column="1" Margin="8,0,0,0"/>
+                    </Grid>
+
+
+                    <Separator Margin="0,0,0,12"/>
+
+                    <!-- Mode -->
+                    <TextBlock Text="Mode" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <RadioButton Content="Offline / local database" IsChecked="{Binding IsOfflineMode}" Margin="0,0,16,0"/>
+                        <RadioButton Content="Server-based" IsChecked="{Binding IsServerMode}"/>
+                    </StackPanel>
+
+                    <!-- Backup location -->
+                    <TextBlock Text="Backup location" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <TextBox Text="{Binding BackupBaseFolder}" Width="320" IsReadOnly="True" Margin="0,0,8,0"/>
+                        <Button Content="Browse..." Width="100" Command="{Binding BrowseForFolderCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="(Daily and Hourly subfolders will be created automatically)"
+               FontSize="11"
+               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+               Margin="0,0,0,12"/>
+
+                    <!-- Schedule -->
+                    <TextBlock Text="Schedule" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Vertical">
+                        <CheckBox Content="Enable daily backup (once per day on first start)"
+                IsChecked="{Binding EnableDailyBackup}"
+                IsEnabled="{Binding HasBackupFolder}"
+                Margin="0,0,0,4"/>
+                        <CheckBox Content="Enable hourly backup (while program is running)"
+                IsChecked="{Binding EnableHourlyBackup}"
+                IsEnabled="{Binding HasBackupFolder}"/>
+                        <TextBlock Text="Select a Backup Location to enable backup options."
+                 Foreground="IndianRed"
+                 FontSize="11"
+                 Margin="0,6,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasBackupFolder}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+
+                </StackPanel>
+            </Border>
+
+
+            <!-- RIGHT: Restore -->
+            <Border Grid.Column="1"
+                    Background="#06000000"
+                    BorderBrush="#22000000"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="14">
+                <StackPanel>
+
+                    <TextBlock Text="Restore"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,8"/>
+
+                    <TextBlock Text="Offline mode: restore from a local daily/hourly backup file."
+                               TextWrapping="Wrap"
+                               FontSize="11"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               Margin="0,0,0,8"/>
+
+                    <StackPanel Orientation="Vertical"
+                                Margin="0,0,0,12">
+                        <Button Content="Restore from daily backup..."
+                                Command="{Binding RestoreFromDailyCommand}"
+                                Margin="0,0,0,4"
+                                HorizontalAlignment="Left"
+                                Width="220"/>
+                        <Button Content="Restore from hourly backup..."
+                                Command="{Binding RestoreFromHourlyCommand}"
+                                HorizontalAlignment="Left"
+                                Width="220"/>
+                    </StackPanel>
+
+                    <Separator Margin="0,4,0,8"/>
+
+                    <TextBlock Text="Server mode: restore is performed from the server."
+                               TextWrapping="Wrap"
+                               FontSize="11"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="(Server-side restore can be wired later via API; currently local restore only.)"
+                               TextWrapping="Wrap"
+                               FontSize="10"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ACTIONS -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="Save"
+                    Width="100"
+                    Margin="0,0,8,0"
+                    Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

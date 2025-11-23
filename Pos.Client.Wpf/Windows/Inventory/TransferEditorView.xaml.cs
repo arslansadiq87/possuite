@@ -103,6 +103,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
             _lookupsReady = true;
             EffectiveDate.SelectedDate = DateTime.Today;
+            UpdateItemSearchScopeFromHeader();
 
             LinesGrid.ItemsSource = _lines;
             LinesCountText.Text = "0";
@@ -295,12 +296,16 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             RebindPickerForType(FromTypeBox, FromPicker, true);
             EnforceNotSameLocation();
+            UpdateItemSearchScopeFromHeader();
+
         }
 
         private void ToTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             RebindPickerForType(ToTypeBox, ToPicker, true);
             EnforceNotSameLocation();
+            UpdateItemSearchScopeFromHeader();
+
         }
 
 
@@ -308,6 +313,8 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             if (!_lookupsReady) return;
             EnforceNotSameLocation();
+            UpdateItemSearchScopeFromHeader();
+
         }
 
         private (InventoryLocationType fromType, int fromId, InventoryLocationType toType, int toId) GetHeader()
@@ -323,6 +330,22 @@ namespace Pos.Client.Wpf.Windows.Inventory
             return (fromType, fromId, toType, toId);
         }
 
+        private void UpdateItemSearchScopeFromHeader()
+        {
+            try
+            {
+                var (fromType, fromId, _, _) = GetHeader();
+
+                ItemSearch.LocationType = fromType;
+                ItemSearch.LocationId = fromId;
+            }
+            catch
+            {
+                // Header incomplete => clear override so ItemSearch falls back to default outlet
+                ItemSearch.LocationType = null;
+                ItemSearch.LocationId = null;
+            }
+        }
 
         private async Task EnsureDraftAsync()
         {

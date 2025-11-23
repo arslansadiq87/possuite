@@ -1,0 +1,43 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    container_name: pos-postgres
+    environment:
+      POSTGRES_USER: posapp
+      POSTGRES_PASSWORD: Strong#Pass1
+      POSTGRES_DB: posserver
+    volumes:
+      - pos_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./Pos.Server.Api
+      dockerfile: Dockerfile
+    container_name: pos-api
+    depends_on:
+      - postgres
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Optionally supply secrets via env instead of file:
+      # ConnectionStrings__ServerDb: Host=postgres;Port=5432;Database=posserver;Username=posapp;Password=Strong#Pass1;Pooling=true
+      # Security__ApiKey: REPLACE_WITH_A_LONG_RANDOM_VALUE
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: pos-nginx
+    depends_on:
+      - api
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
+volumes:
+  pos_pgdata:

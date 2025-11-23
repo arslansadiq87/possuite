@@ -25,15 +25,34 @@ namespace Pos.Persistence.Services
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly ICoaService _coa;
+        private readonly IOutboxWriter _outbox;
 
         public GlPostingService(
             IDbContextFactory<PosClientDbContext> dbf,
             ICoaService coa,
             IInvoiceSettingsLocalService _ignore,
-            IOutboxWriter _ignore2)
+            IOutboxWriter outbox)
         {
             _dbf = dbf;
             _coa = coa;
+            _outbox = outbox;
+        }
+
+        private async Task SyncNewGlEntriesAsync(PosClientDbContext db, CancellationToken ct)
+        {
+            // Pick up all GL rows that are about to be inserted in this SaveChanges
+            var pending = db.ChangeTracker
+                .Entries<GlEntry>()
+                .Where(e => e.State == EntityState.Added)
+                .Select(e => e.Entity)
+                .ToList();
+            if (pending.Count == 0)
+                return;
+            foreach (var entry in pending)
+            {
+                // This writes to SyncOutbox (entity name + PublicId + JSON)
+                await _outbox.EnqueueUpsertAsync(db, entry, ct);
+            }
         }
 
         // -------------------- helpers --------------------
@@ -106,21 +125,6 @@ namespace Pos.Persistence.Services
                 Memo = memo
             };
         }
-
-        //private GlEntry Row(
-        //    int accountId,
-        //    decimal debit,
-        //    decimal credit,
-        //    GlDocType docType,
-        //    GlDocSubType subType,
-        //    Sale s,
-        //    DateTime tsUtc,
-        //    DateTime effectiveDate,
-        //    int? outletId,
-        //    int? partyId = null,
-        //    string? memo = null)
-        //    => Row(tsUtc, effectiveDate, outletId, accountId, debit, credit, docType, subType, s, partyId, memo);
-             
 
         private static IEnumerable<GlEntry> PaymentRows(
             DateTime tsUtc,
@@ -233,12 +237,12 @@ namespace Pos.Persistence.Services
             return fallbackId;
         }
 
-        private static async Task InvalidateChainAsync(PosClientDbContext db, Guid chainId, CancellationToken ct)
-        {
-            await db.GlEntries
-                .Where(g => g.ChainId == chainId && g.IsEffective)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
-        }
+        //private static async Task InvalidateChainAsync(PosClientDbContext db, Guid chainId, CancellationToken ct)
+        //{
+        //    await db.GlEntries
+        //        .Where(g => g.ChainId == chainId && g.IsEffective)
+        //        .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
+        //}
 
         private static (decimal cash, decimal bank, decimal other) SumPayments(IEnumerable<PurchasePayment>? pays)
         {
@@ -310,8 +314,9 @@ namespace Pos.Persistence.Services
         public async Task PostPurchasePaymentAddedAsync(Purchase p, PurchasePayment pay, CancellationToken ct)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            await PostPurchasePaymentAddedAsync(p, pay, ct);
+            await PostPurchasePaymentAddedAsync(db, p, pay, ct);   // call DB overload
         }
+
 
         public async Task PostPurchasePaymentReversalAsync(Purchase p, PurchasePayment oldPay, CancellationToken ct)
         {
@@ -361,8 +366,11 @@ namespace Pos.Persistence.Services
         public async Task PostPurchaseAsync(Purchase p, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            await PostPurchaseAsync(db, p, ct);
+            await PostPurchaseAsync(db, p, ct);          // builds GlEntry rows
+            await SyncNewGlEntriesAsync(db, ct);         // pushes to Outbox
+            await db.SaveChangesAsync(ct);               // commits GL + Outbox
         }
+
 
         // -------------------- Purchases (DB overloads) --------------------
         public async Task PostPurchaseAsync(PosClientDbContext db, Purchase p, CancellationToken ct = default)
@@ -370,7 +378,7 @@ namespace Pos.Persistence.Services
             var tsUtc = DateTime.UtcNow;
             var eff = p.ReceivedAtUtc ?? tsUtc;
             var outletId = p.OutletId;
-            // Resolve Inventory account with THIS db (no CoA calls that open new contexts)
+
             var inventoryAccId = await db.Accounts.AsNoTracking()
                 .Where(a => a.OutletId == null && !a.IsHeader
                             && a.Type == AccountType.Asset && a.Code == "11421")
@@ -378,34 +386,30 @@ namespace Pos.Persistence.Services
                 .FirstOrDefaultAsync(ct);
             if (inventoryAccId == 0)
                 throw new InvalidOperationException("Inventory account not found. Create a company-level posting account named 'Inventory'.");
-            // Resolve Supplier account from Party.AccountId with THIS db
+
             var supplierAccId = await db.Parties.AsNoTracking()
                 .Where(x => x.Id == p.PartyId)
                 .Select(x => x.AccountId)
                 .FirstOrDefaultAsync(ct);
             if (!supplierAccId.HasValue)
                 throw new InvalidOperationException("Supplier Party.AccountId is missing. Link supplier to an account before posting.");
-            // Re-write gross snapshot: inactivate previous gross for this chain, then write current 2 rows
+
+            // Inactivate previous gross snapshot for this chain (and sync those updates)
             await InactivateEffectiveAsync(db, p.PublicId, GlDocType.Purchase, GlDocSubType.Purchase_Gross, ct);
-            // Inactivate previous GROSS snapshot by ChainId OR DocId (belt & suspenders)
-            await db.GlEntries
-                .Where(e =>
-                    e.IsEffective &&
-                    e.DocType == GlDocType.Purchase &&
-                    e.DocSubType == GlDocSubType.Purchase_Gross &&
-                    (
-                        e.ChainId == p.PublicId ||            // preferred path (stable chain)
-                        e.DocId == p.Id                     // fallback if chain ever drifted
-                    ))
-                .ExecuteUpdateAsync(u => u.SetProperty(x => x.IsEffective, false), ct);
+
+            // Now add the fresh gross rows
             await db.GlEntries.AddRangeAsync(new[]
             {
-                Row(tsUtc, eff, outletId, inventoryAccId,
-                    debit: p.GrandTotal, credit: 0m, GlDocType.Purchase, GlDocSubType.Purchase_Gross, p),
-                Row(tsUtc, eff, outletId, supplierAccId.Value,
-                    debit: 0m, credit: p.GrandTotal, GlDocType.Purchase, GlDocSubType.Purchase_Gross, p, partyId: p.PartyId),
-            }, ct);
+        Row(tsUtc, eff, outletId, inventoryAccId,
+            debit: p.GrandTotal, credit: 0m,
+            GlDocType.Purchase, GlDocSubType.Purchase_Gross, p),
+
+        Row(tsUtc, eff, outletId, supplierAccId.Value,
+            debit: 0m, credit: p.GrandTotal,
+            GlDocType.Purchase, GlDocSubType.Purchase_Gross, p, partyId: p.PartyId),
+    }, ct);
         }
+
 
         // ======= REPLACE THIS METHOD =======
         public async Task PostPurchaseRevisionAsync(PosClientDbContext db, Purchase amended, decimal deltaGrand, CancellationToken ct = default)
@@ -467,7 +471,7 @@ namespace Pos.Persistence.Services
         Row(tsUtc, eff, outletId, counterAccountId,
             debit: 0m, credit: amount, GlDocType.Purchase, GlDocSubType.Purchase_Payment, p, partyId: partyId),
     }, ct);
-
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -475,7 +479,10 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await PostPurchaseRevisionAsync(db, amended, deltaGrand, ct);
+            await SyncNewGlEntriesAsync(db, ct);
+            await db.SaveChangesAsync(ct);
         }
+
 
         public async Task PostPurchaseVoidAsync(PosClientDbContext db, Purchase p, CancellationToken ct = default)
         {
@@ -489,13 +496,32 @@ namespace Pos.Persistence.Services
             await db.SaveChangesAsync(ct);
         }
 
-        private async Task InactivateEffectiveAsync(PosClientDbContext db, Guid chainId, GlDocType? type, GlDocSubType? sub, CancellationToken ct)
+        private async Task InactivateEffectiveAsync(
+            PosClientDbContext db,
+            Guid chainId,
+            GlDocType? type,
+            GlDocSubType? sub,
+            CancellationToken ct)
         {
             var q = db.GlEntries.Where(x => x.ChainId == chainId && x.IsEffective);
             if (type.HasValue) q = q.Where(x => x.DocType == type);
             if (sub.HasValue) q = q.Where(x => x.DocSubType == sub.Value);
-            await q.ExecuteUpdateAsync(setters => setters.SetProperty(e => e.IsEffective, false), ct);
+
+            // Load rows into memory so they are tracked
+            var rows = await q.ToListAsync(ct);
+            if (rows.Count == 0) return;
+
+            foreach (var r in rows)
+            {
+                r.IsEffective = false; // mark as inactive
+
+                // enqueue updated version for sync
+                await _outbox.EnqueueUpsertAsync(db, r, ct);
+            }
+
+            // caller will call SaveChangesAsync
         }
+
 
         private GlEntry Row(DateTime tsUtc, DateTime effectiveDate, int? outletId, int accountId,
             decimal debit, decimal credit, GlDocType docType, GlDocSubType subType, Purchase p, int? partyId = null)
@@ -534,7 +560,7 @@ namespace Pos.Persistence.Services
             var invAccId = await RequireAccountByCodeAsync(db, "11422", ct);              // Inventory
             var apAccId = await ResolveApAsync(db, party, ct);                           // Supplier(AP)
             // Invalidate any effective rows for this chain first (gross + prior payments)
-            await InvalidateChainAsync(db, chainId, ct);
+            await InactivateEffectiveAsync(db, chainId, null, null, ct);
             var rows = new List<GlEntry>
             {
         // Inventory out (CR) on return
@@ -581,12 +607,13 @@ namespace Pos.Persistence.Services
                     throw new InvalidOperationException("Refund method 'Other' requires an explicit posting account; header 113 cannot be used.");
             }
             await db.GlEntries.AddRangeAsync(rows, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
         public async Task PostPurchaseReturnVoidAsync(PosClientDbContext db, Purchase p, CancellationToken ct = default)
         {
-            await InvalidateChainAsync(db, p.PublicId, ct);
+            await InactivateEffectiveAsync(db, p.PublicId, null, null, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -594,7 +621,7 @@ namespace Pos.Persistence.Services
         public async Task VoidChainAsync(Guid chainId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            await InvalidateChainAsync(db, chainId, ct);
+            await InactivateEffectiveAsync(db, chainId, null, null, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -622,15 +649,12 @@ namespace Pos.Persistence.Services
                 PartyId = e.PartyId,
                 Memo = (e.Memo == null) ? "VOID" : $"VOID · {e.Memo}"
             }).ToList();
-            await db.GlEntries.AddRangeAsync(reversals, ct);
+
             if (invalidateOriginalsAfter)
-            {
-                await db.GlEntries
-                    .Where(g => g.ChainId == chainId && g.IsEffective)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
-                // re-enable reversals as effective
-                var reversalIds = reversals.Select(r => r.Id).ToList(); // Ids assigned after SaveChanges; leave as simple flow:
-            }
+                await InactivateAllForChainAsync(db, chainId, ct);
+
+            await db.GlEntries.AddRangeAsync(reversals, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
         
@@ -746,11 +770,14 @@ namespace Pos.Persistence.Services
                 }
             }
             // Make this session's GL an “image” post: inactivate prior rows in the same chain
-            await db.GlEntries
-                .Where(g => g.ChainId == chainId && g.IsEffective)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
+            // First inactivate via helper (with Outbox)
+            await InactivateAllForChainAsync(db, chainId, ct);
+
+            // Then add new snapshot rows
             await db.GlEntries.AddRangeAsync(rows, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
+
         }
 
         public async Task PostPurchasePaymentAddedAsync(PosClientDbContext db, Purchase p, PurchasePayment pay, CancellationToken ct)
@@ -777,6 +804,7 @@ namespace Pos.Persistence.Services
                 throw new InvalidOperationException("Only Cash and Bank are supported for Purchase payments.");
             }
             await db.GlEntries.AddRangeAsync(rows, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -794,6 +822,7 @@ namespace Pos.Persistence.Services
             var otherAccId = bankAccId;
             var rows = PaymentRows(ts, ed, outletId, apAccId, cashAccId, bankAccId, otherAccId, p, oldPay, -1).ToList();
             await db.GlEntries.AddRangeAsync(rows, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -872,6 +901,7 @@ namespace Pos.Persistence.Services
                     memo: "Opening stock offset")
             };
             await db.GlEntries.AddRangeAsync(rows, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -892,6 +922,7 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await PostSaleAsync(db, s, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);   // <-- persist the rows we just added
         }
 
@@ -899,6 +930,7 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await PostSaleReturnAsync(db, s, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -1206,6 +1238,7 @@ namespace Pos.Persistence.Services
             if (lines.Count > 0)
             {
                 await db.GlEntries.AddRangeAsync(lines, ct);
+                await SyncNewGlEntriesAsync(db, ct);
                 await db.SaveChangesAsync(ct);
             }
         }
@@ -1257,15 +1290,25 @@ namespace Pos.Persistence.Services
             return id ?? 0;
         }
 
-        private static async Task InactivateAllForChainAsync(PosClientDbContext db, Guid chainId, CancellationToken ct)
+        private async Task InactivateAllForChainAsync(PosClientDbContext db, Guid chainId, CancellationToken ct)
         {
             var rows = await db.GlEntries
-                .Where(e => e.ChainId == chainId && e.IsEffective)   // ChainId: Guid; IsEffective: bool
+                .Where(e => e.ChainId == chainId && e.IsEffective)
                 .ToListAsync(ct);
+
             if (rows.Count == 0) return;
+
             foreach (var r in rows)
+            {
                 r.IsEffective = false;
+
+                // Send updated GL row to outbox
+                await _outbox.EnqueueUpsertAsync(db, r, ct);
+            }
+
+            // caller will SaveChangesAsync
         }
+
 
         public async Task VoidSaleAsync(Sale s, CancellationToken ct = default)
         {
@@ -1278,6 +1321,7 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await PostVoucherAsync(db, v, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -1285,6 +1329,7 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
             await PostVoucherRevisionAsync(db, newVoucher, oldLines, ct);
+            await SyncNewGlEntriesAsync(db, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -1314,8 +1359,8 @@ namespace Pos.Persistence.Services
             if (lines.Count == 0) return;
             if (docType == GlDocType.JournalVoucher)
             {
-                await db.GlEntries.Where(g => g.ChainId == chainId && g.IsEffective && g.DocType == GlDocType.JournalVoucher)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
+                await InactivateEffectiveAsync(db, chainId, GlDocType.JournalVoucher, null, ct);
+
                 var rows = new List<GlEntry>(lines.Count);
                 foreach (var ln in lines)
                 {
@@ -1330,8 +1375,8 @@ namespace Pos.Persistence.Services
                 throw new InvalidOperationException("Outlet is required for Cash vouchers.");
             var outletId = v.OutletId!.Value;
             var cashAccId = await ResolveCashInHandForOutletAsync(db, outletId, ct);
-            await db.GlEntries.Where(g => g.ChainId == chainId && g.IsEffective && g.DocType == docType)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
+            await InactivateEffectiveAsync(db, chainId, docType, null, ct);
+
             var list = new List<GlEntry>();
             if (docType == GlDocType.CashPayment)
             {
@@ -1423,9 +1468,7 @@ namespace Pos.Persistence.Services
 
         public async Task PostVoucherVoidAsync(PosClientDbContext db, Voucher voucherToVoid, CancellationToken ct = default)
         {
-            await db.GlEntries
-                .Where(g => g.ChainId == voucherToVoid.PublicId && g.IsEffective)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsEffective, false), ct);
+            await InactivateAllForChainAsync(db, voucherToVoid.PublicId, ct);
         }
     }
 }

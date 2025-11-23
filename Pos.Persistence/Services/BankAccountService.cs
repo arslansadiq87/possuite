@@ -8,6 +8,7 @@ using Pos.Domain.Entities;
 using Pos.Domain.Models;
 using Pos.Domain.Services;
 using static Pos.Domain.Services.IBankAccountService;
+using Pos.Persistence.Sync;
 
 namespace Pos.Persistence.Services
 {
@@ -15,11 +16,14 @@ namespace Pos.Persistence.Services
     {
         private readonly IDbContextFactory<PosClientDbContext> _dbf;
         private readonly ICoaService _coa;
+        private readonly IOutboxWriter _outbox;   // ← ADD THIS
 
-        public BankAccountService(IDbContextFactory<PosClientDbContext> dbf, ICoaService coa)
+
+        public BankAccountService(IDbContextFactory<PosClientDbContext> dbf, ICoaService coa, IOutboxWriter outbox)
         {
             _dbf = dbf;
             _coa = coa;
+            _outbox = outbox;
         }
 
         public async Task<BankAccountViewDto?> GetByAccountIdAsync(int accountId, CancellationToken ct = default)
@@ -100,6 +104,8 @@ namespace Pos.Persistence.Services
                 };
                 db.BankAccounts.Add(row);
                 await db.SaveChangesAsync(ct);
+                await _outbox.EnqueueUpsertAsync(db, row, ct);
+                await db.SaveChangesAsync(ct);                  // persist SyncOutbox row
                 return row.Id;
             }
             catch
@@ -133,6 +139,7 @@ namespace Pos.Persistence.Services
             row.SwiftBic = dto.SwiftBic?.Trim();
             row.Notes = dto.Notes?.Trim();
             row.IsActive = dto.IsActive;
+            await _outbox.EnqueueUpsertAsync(db, row, ct);
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);

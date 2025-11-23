@@ -21,4 +21,11 @@ public sealed record ItemIndexDto(
     public string DisplayName =>
         Pos.Domain.Formatting.ProductNameComposer.Compose(
             ProductName, Name, Variant1Name, Variant1Value, Variant2Name, Variant2Value);
+
+    // NEW: stock at source location
+    public decimal OnHand { get; init; }
+
+    // NEW: brand/category display
+    public string? Brand { get; init; }
+    public string? Category { get; init; }
 }

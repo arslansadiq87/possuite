@@ -188,8 +188,10 @@ namespace Pos.Persistence.Sync
             var publicId = CreateDeterministicGuid(entityName, intId);
 
             // Wrap as a lightweight envelope so new writer can accept it
-            var envelope = new LegacyEnvelope(entityName, publicId, payload);
-            return outbox.EnqueueUpsertAsync(db, envelope, ct);
+            //var envelope = new LegacyEnvelope(entityName, publicId, payload);
+            //return outbox.EnqueueUpsertAsync(db, envelope, ct);
+            return outbox.EnqueueUpsertAsync(db, entityName, publicId, payload, ct);
+
         }
 
         public static Task EnqueueDeleteAsync(

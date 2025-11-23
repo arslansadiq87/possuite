@@ -75,6 +75,7 @@ namespace Pos.Persistence
         public DbSet<InvoiceSettingsLocal> InvoiceSettingsLocals { get; set; } = default!;
         // in AppDbContext.cs
         public DbSet<InvoiceSettingsScoped> InvoiceSettingsScoped { get; set; } = null!;
+        public DbSet<Pos.Domain.Settings.ServerSettings> ServerSettings => Set<Pos.Domain.Settings.ServerSettings>();
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -758,6 +759,28 @@ namespace Pos.Persistence
 
             b.Entity<InvoiceSettingsScoped>().ToTable("InvoiceSettingsScoped");
 
+            b.Entity<Pos.Domain.Settings.ServerSettings>(e =>
+            {
+                e.ToTable("ServerSettings");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.BaseUrl).HasMaxLength(400);
+                e.Property(x => x.ApiKey).HasMaxLength(400);
+                e.Property(x => x.OutletCode).HasMaxLength(100);
+                e.Property(x => x.CounterCode).HasMaxLength(100);
+            });
+
+            // Optional: seed a single row (Id = 1)
+            b.Entity<Pos.Domain.Settings.ServerSettings>().HasData(new Pos.Domain.Settings.ServerSettings
+            {
+                Id = 1,
+                AutoSyncEnabled = true,
+                PushIntervalSec = 15,
+                PullIntervalSec = 15,
+                EnableDailyBackup = false,
+                EnableHourlyBackup = false,
+                BackupBaseFolder = null,
+                UseServerForBackupRestore = false
+            });
 
 
 

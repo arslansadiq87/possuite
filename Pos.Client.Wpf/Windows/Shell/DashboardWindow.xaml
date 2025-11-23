@@ -50,6 +50,12 @@
                         <Fluent:BackstageTabItem Header="Security">
                             <views:SecurityPage/>
                         </Fluent:BackstageTabItem>
+                        <!-- NEW: Backup & Restore -->
+                        <Fluent:BackstageTabItem Header="Date &amp; Server">
+                            <views:BackupSettingsPage/>
+                        </Fluent:BackstageTabItem>
+
+
                         <Fluent:BackstageTabItem Header="About" KeyTip="A">
                             <StackPanel Margin="16">
                                 <TextBlock Text="PosSuite" FontSize="18" FontWeight="SemiBold"/>

@@ -10,7 +10,7 @@ using Pos.Persistence.Sync;
 using System.Security.Cryptography;
 using System.IO;
 using System.Linq;
-using Pos.Persistence.Outbox;
+//using Pos.Persistence.Outbox;
 
 namespace Pos.Persistence.Services
 {
@@ -82,15 +82,10 @@ namespace Pos.Persistence.Services
             db.ProductImages.Add(img);
             await db.SaveChangesAsync(ct);
 
-            await _outbox.WriteAsync("ProductImage", img.Id, "UPSERT", new
-            {
-                img.PublicId,
-                img.ProductId,
-                img.IsPrimary,
-                img.SortOrder,
-                img.ContentHashSha1
-            }, ct);
+            // SYNC: new primary image
+            await _outbox.EnqueueUpsertAsync(db, img, ct);
 
+            // SYNC: demoted primaries
             if (oldPrimaryIds.Count > 0)
             {
                 var demoted = await db.ProductImages
@@ -99,29 +94,36 @@ namespace Pos.Persistence.Services
 
                 foreach (var d in demoted)
                 {
-                    await _outbox.WriteAsync("ProductImage", d.Id, "UPSERT", new
-                    {
-                        d.PublicId,
-                        d.ProductId,
-                        d.IsPrimary,
-                        d.SortOrder,
-                        d.ContentHashSha1
-                    }, ct);
+                    await _outbox.EnqueueUpsertAsync(db, d, ct);
                 }
             }
 
             await db.SaveChangesAsync(ct);
             return img;
+
         }
 
         public async Task ClearProductGalleryImagesAsync(int productId, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
-            var imgs = await db.ProductImages.Where(pi => pi.ProductId == productId).ToListAsync(ct);
+            var imgs = await db.ProductImages
+                .Where(pi => pi.ProductId == productId)
+                .ToListAsync(ct);
+
+            if (imgs.Count == 0)
+                return;
+
             db.ProductImages.RemoveRange(imgs);
+
+            // SYNC: publish deletes for each image
+            foreach (var img in imgs)
+            {
+                await _outbox.EnqueueDeleteAsync(db, "ProductImage", img.PublicId, ct);
+            }
+
             await db.SaveChangesAsync(ct);
-            // if you publish deletes to outbox, emit here for each imageId
         }
+
 
         public async Task<ItemImage> SetItemPrimaryImageAsync(
             int itemId, string originalLocalPath, Func<string, string> createThumbAt, CancellationToken ct = default)
@@ -164,15 +166,10 @@ namespace Pos.Persistence.Services
             db.ItemImages.Add(img);
             await db.SaveChangesAsync(ct);
 
-            await _outbox.WriteAsync("ItemImage", img.Id, "UPSERT", new
-            {
-                img.PublicId,
-                img.ItemId,
-                img.IsPrimary,
-                img.SortOrder,
-                img.ContentHashSha1
-            }, ct);
+            // SYNC: new primary item image
+            await _outbox.EnqueueUpsertAsync(db, img, ct);
 
+            // SYNC: demoted item images (if any)
             if (oldPrimaryIds.Count > 0)
             {
                 var demoted = await db.ItemImages
@@ -181,19 +178,13 @@ namespace Pos.Persistence.Services
 
                 foreach (var d in demoted)
                 {
-                    await _outbox.WriteAsync("ItemImage", d.Id, "UPSERT", new
-                    {
-                        d.PublicId,
-                        d.ItemId,
-                        d.IsPrimary,
-                        d.SortOrder,
-                        d.ContentHashSha1
-                    }, ct);
+                    await _outbox.EnqueueUpsertAsync(db, d, ct);
                 }
             }
 
             await db.SaveChangesAsync(ct);
             return img;
+
         }
 
         public async Task<ProductImage> AddProductGalleryImageAsync(
@@ -229,17 +220,12 @@ namespace Pos.Persistence.Services
             db.ProductImages.Add(img);
             await db.SaveChangesAsync(ct);
 
-            await _outbox.WriteAsync("ProductImage", img.Id, "UPSERT", new
-            {
-                img.PublicId,
-                img.ProductId,
-                img.IsPrimary,
-                img.SortOrder,
-                img.ContentHashSha1
-            }, ct);
+            // SYNC: new gallery image
+            await _outbox.EnqueueUpsertAsync(db, img, ct);
 
             await db.SaveChangesAsync(ct);
             return img;
+
         }
 
         public async Task<ItemImage> AddItemGalleryImageAsync(
@@ -278,17 +264,12 @@ namespace Pos.Persistence.Services
             db.ItemImages.Add(img);
             await db.SaveChangesAsync(ct);
 
-            await _outbox.WriteAsync("ItemImage", img.Id, "UPSERT", new
-            {
-                img.PublicId,
-                img.ItemId,
-                img.IsPrimary,
-                img.SortOrder,
-                img.ContentHashSha1
-            }, ct);
+            // SYNC: new item gallery image
+            await _outbox.EnqueueUpsertAsync(db, img, ct);
 
             await db.SaveChangesAsync(ct);
             return img;
+
         }
 
         public async Task DeleteImageAsync(string kind, int imageId, bool deleteFiles = false, CancellationToken ct = default)
@@ -299,28 +280,36 @@ namespace Pos.Persistence.Services
             {
                 var img = await db.ProductImages.FindAsync(new object?[] { imageId }, ct);
                 if (img is null) return;
+
                 if (deleteFiles)
                 {
                     TryDelete(img.LocalOriginalPath);
                     TryDelete(img.LocalThumbPath);
                 }
+
                 db.ProductImages.Remove(img);
-                await db.SaveChangesAsync(ct);
-                await _outbox.WriteAsync("ProductImage", imageId, "DELETE", new { }, ct);
+
+                // SYNC: delete product image
+                await _outbox.EnqueueDeleteAsync(db, "ProductImage", img.PublicId, ct);
+
                 await db.SaveChangesAsync(ct);
             }
             else if (kind == "item")
             {
                 var img = await db.ItemImages.FindAsync(new object?[] { imageId }, ct);
                 if (img is null) return;
+
                 if (deleteFiles)
                 {
                     TryDelete(img.LocalOriginalPath);
                     TryDelete(img.LocalThumbPath);
                 }
+
                 db.ItemImages.Remove(img);
-                await db.SaveChangesAsync(ct);
-                await _outbox.WriteAsync("ItemImage", imageId, "DELETE", new { }, ct);
+
+                // SYNC: delete item image
+                await _outbox.EnqueueDeleteAsync(db, "ItemImage", img.PublicId, ct);
+
                 await db.SaveChangesAsync(ct);
             }
         }

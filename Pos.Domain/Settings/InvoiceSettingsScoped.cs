@@ -30,11 +30,7 @@ public class InvoiceSettingsScoped
     public string? FooterSaleReturn { get; set; }
     public string? FooterVoucher { get; set; }
     public string? FooterZReport { get; set; }
-
-    // Backups (scoped)
-    public bool EnableDailyBackup { get; set; }
-    public bool EnableHourlyBackup { get; set; }
-
+    
     // Till requirement (scoped)
     public bool UseTill { get; set; } = true;
 
