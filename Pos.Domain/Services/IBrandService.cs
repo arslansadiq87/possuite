@@ -12,5 +12,6 @@ namespace Pos.Domain.Services
         Task SetActiveAsync(int brandId, bool active, CancellationToken ct = default);
         Task<Brand> SaveBrandAsync(int? id, string name, bool isActive, CancellationToken ct = default);
         Task<Brand?> GetBrandAsync(int id, CancellationToken ct = default);
+        Task<Brand?> GetOrCreateAsync(string name, bool createIfMissing, CancellationToken ct = default);
     }
 }

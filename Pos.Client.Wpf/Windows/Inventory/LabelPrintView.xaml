@@ -316,7 +316,7 @@
             </TabItem>
 
             <!-- TAB 3: CUSTOM TEXT -->
-            <TabItem Header="Custom Text">
+            <TabItem Header="Custom Label">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="0,8,0,0">
 

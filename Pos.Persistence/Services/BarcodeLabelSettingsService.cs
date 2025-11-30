@@ -28,14 +28,11 @@ namespace Pos.Persistence.Services
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
-            // Prefer outlet-specific; fall back to global; otherwise defaults
             var outletRow = await db.BarcodeLabelSettings
                 .AsNoTracking()
                 .Where(x => x.OutletId == outletId)
                 .OrderByDescending(x => x.UpdatedAtUtc)
                 .FirstOrDefaultAsync(ct);
-
-            if (outletRow is not null) return outletRow;
 
             var globalRow = await db.BarcodeLabelSettings
                 .AsNoTracking()
@@ -43,8 +40,28 @@ namespace Pos.Persistence.Services
                 .OrderByDescending(x => x.UpdatedAtUtc)
                 .FirstOrDefaultAsync(ct);
 
-            return globalRow ?? new BarcodeLabelSettings { OutletId = outletId };
+            // ✅ choose the NEWER of the two if both exist
+            var chosen =
+                (outletRow, globalRow) switch
+                {
+                    (null, null) => null,
+                    (null, var g) => g,
+                    (var o, null) => o,
+                    (var o, var g) => (o.UpdatedAtUtc >= g.UpdatedAtUtc) ? o : g
+                };
+
+            if (chosen == null)
+            {
+                // First-time defaults
+                chosen = new BarcodeLabelSettings { OutletId = outletId, Dpi = 203 };
+            }
+
+            // ✅ normalize before returning so callers never get Dpi <= 0
+            if (chosen.Dpi <= 0) chosen.Dpi = 203;
+
+            return chosen;
         }
+
 
         public async Task SaveAsync(BarcodeLabelSettings s, CancellationToken ct = default)
         {

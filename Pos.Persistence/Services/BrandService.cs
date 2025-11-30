@@ -152,5 +152,20 @@ namespace Pos.Persistence.Services
             await using var db = await _dbf.CreateDbContextAsync(ct);
             return await db.Brands.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
         }
+
+        public async Task<Brand?> GetOrCreateAsync(string name, bool createIfMissing, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var existing = await db.Brands.FirstOrDefaultAsync(b => b.Name == name, ct);
+            if (existing != null) return existing;
+            if (!createIfMissing) return null;
+            var b = new Brand { Name = name, IsActive = true };
+            db.Brands.Add(b);
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, b, ct);
+            await db.SaveChangesAsync(ct);
+            return b;
+        }
+
     }
 }

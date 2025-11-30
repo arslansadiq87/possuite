@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Client.Wpf.Security;
 using Pos.Client.Wpf.Services;
 using Pos.Domain;
 using Pos.Domain.Entities;
@@ -69,7 +70,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             InitializeComponent();
             _svc = App.Services.GetRequiredService<IUserAdminService>(); // interface, not concrete
             var currentUser = state.CurrentUser;
-            _currentIsGlobalAdmin = currentUser?.IsGlobalAdmin == true;
+            _currentIsGlobalAdmin = AuthZ.IsAdminCached();
             _currentRole = currentUser?.Role ?? UserRole.Cashier;
             DataContext = this;
             Loaded += async (_, __) => await LoadUsersAsync();

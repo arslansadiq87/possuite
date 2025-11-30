@@ -1035,7 +1035,8 @@ namespace Pos.Persistence.Services
             return fresh.Select(ToRow).ToList();
         }
 
-        public async Task<(Item item, string? primaryCode)> ReplaceBarcodesAsync(int itemId, IEnumerable<ItemBarcode> newBarcodes, CancellationToken ct = default)
+        public async Task<(Item item, string? primaryCode)> ReplaceBarcodesAsync(
+    int itemId, IEnumerable<ItemBarcode> newBarcodes, CancellationToken ct = default)
         {
             await using var db = await _dbf.CreateDbContextAsync(ct);
 
@@ -1043,56 +1044,11 @@ namespace Pos.Persistence.Services
                 .Include(i => i.Barcodes)
                 .FirstAsync(i => i.Id == itemId, ct);
 
-            var codes = newBarcodes
-                .Select(b => b.Code?.Trim())
-                .Where(c => !string.IsNullOrEmpty(c))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (codes.Count != newBarcodes.Count())
-                throw new InvalidOperationException("Duplicate barcodes detected in the edited list.");
-
-            var conflict = await db.ItemBarcodes
-                .AnyAsync(b => codes.Contains(b.Code) && b.ItemId != dbItem.Id, ct);
-
-            if (conflict)
-                throw new InvalidOperationException("One or more barcodes are already used by another item.");
-
-            db.ItemBarcodes.RemoveRange(dbItem.Barcodes);
-            dbItem.Barcodes.Clear();
-
-            foreach (var b in newBarcodes)
-            {
-                var code = b.Code?.Trim();
-                if (string.IsNullOrEmpty(code)) continue;
-
-                dbItem.Barcodes.Add(new ItemBarcode
-                {
-                    ItemId = dbItem.Id,
-                    Code = code,
-                    Symbology = b.Symbology,
-                    QuantityPerScan = Math.Max(1, b.QuantityPerScan),
-                    IsPrimary = b.IsPrimary,
-                    Label = string.IsNullOrWhiteSpace(b.Label) ? null : b.Label,
-                    CreatedAt = b.CreatedAt == default ? DateTime.UtcNow : b.CreatedAt,
-                    UpdatedAt = DateTime.UtcNow
-                });
-            }
-
-            if (dbItem.Barcodes.Any() && !dbItem.Barcodes.Any(x => x.IsPrimary))
-                dbItem.Barcodes.First().IsPrimary = true;
-
-            dbItem.UpdatedAt = DateTime.UtcNow;
-
+            var result = await ReplaceBarcodesCoreAsync(db, dbItem, newBarcodes, ct);
             await db.SaveChangesAsync(ct);
-            await _outbox.EnqueueUpsertAsync(db, dbItem, ct);
-            await db.SaveChangesAsync(ct);
-
-            var primary = dbItem.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
-                          ?? dbItem.Barcodes?.FirstOrDefault()?.Code;
-
-            return (dbItem, primary);
+            return result;
         }
+
 
         public async Task<ItemVariantRow> EditSingleItemAsync(Item editedWithBarcodes, CancellationToken ct = default)
         {
@@ -1107,7 +1063,7 @@ namespace Pos.Persistence.Services
                 .Include(i => i.Category)
                 .FirstAsync(i => i.Id == editedWithBarcodes.Id, ct);
 
-
+            // ---- map scalar fields ----
             dbItem.Sku = editedWithBarcodes.Sku ?? dbItem.Sku;
             if (!string.IsNullOrWhiteSpace(editedWithBarcodes.Name)) dbItem.Name = editedWithBarcodes.Name!;
             dbItem.Price = editedWithBarcodes.Price;
@@ -1123,14 +1079,19 @@ namespace Pos.Persistence.Services
             dbItem.IsActive = editedWithBarcodes.IsActive;
             dbItem.UpdatedAt = DateTime.UtcNow;
 
+            // ---- replace barcodes using the SAME db/tx (no second context) ----
+            if (editedWithBarcodes.Barcodes != null)
+            {
+                // This helper must exist in the same CatalogService class, as provided earlier.
+                await ReplaceBarcodesCoreAsync(db, dbItem, editedWithBarcodes.Barcodes, ct);
+            }
+
+            // ---- single save + commit ----
             await db.SaveChangesAsync(ct);
-
-            await ReplaceBarcodesAsync(dbItem.Id, editedWithBarcodes.Barcodes ?? Enumerable.Empty<ItemBarcode>(), ct);
-
             await tx.CommitAsync(ct);
 
-            var fresh = await GetItemWithBarcodesAsync(dbItem.Id, ct);
-            return ToRow(fresh!);
+            // No need to re-query; dbItem has all includes (Brand/Category) and updated Barcodes
+            return ToRow(dbItem);
         }
 
         // ---------- Images (read helpers for UI strip) ----------
@@ -1267,6 +1228,71 @@ namespace Pos.Persistence.Services
                 .Where(i => excludeItemId == null || i.Id != excludeItemId.Value)
                 .AnyAsync(i => i.Sku == sku, ct);
         }
+
+        // Pos.Persistence/Services/CatalogService.cs  (inside CatalogService)
+        private static List<string> NormalizeCodes(IEnumerable<ItemBarcode> newBarcodes)
+            => newBarcodes
+                .Select(b => b.Code?.Trim())
+                .Where(c => !string.IsNullOrEmpty(c))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+        // Core routine that replaces barcodes using the SAME DbContext/transaction
+        private async Task<(Item item, string? primaryCode)> ReplaceBarcodesCoreAsync(
+            PosClientDbContext db,
+            Item dbItem,
+            IEnumerable<ItemBarcode> newBarcodes,
+            CancellationToken ct)
+        {
+            var codes = NormalizeCodes(newBarcodes);
+            if (codes.Count != newBarcodes.Count())
+                throw new InvalidOperationException("Duplicate barcodes detected in the edited list.");
+
+            // Conflict check excluding the current item
+            var conflict = await db.ItemBarcodes
+                .AnyAsync(b => codes.Contains(b.Code) && b.ItemId != dbItem.Id, ct);
+
+            if (conflict)
+                throw new InvalidOperationException("One or more barcodes are already used by another item.");
+
+            // Remove old barcodes (no second context!)
+            db.ItemBarcodes.RemoveRange(dbItem.Barcodes);
+            dbItem.Barcodes.Clear();
+
+            // Add new barcodes
+            foreach (var b in newBarcodes)
+            {
+                var code = b.Code?.Trim();
+                if (string.IsNullOrEmpty(code)) continue;
+
+                dbItem.Barcodes.Add(new ItemBarcode
+                {
+                    ItemId = dbItem.Id,
+                    Code = code,
+                    Symbology = b.Symbology,
+                    QuantityPerScan = Math.Max(1, b.QuantityPerScan),
+                    IsPrimary = b.IsPrimary,
+                    Label = string.IsNullOrWhiteSpace(b.Label) ? null : b.Label,
+                    CreatedAt = b.CreatedAt == default ? DateTime.UtcNow : b.CreatedAt,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+
+            if (dbItem.Barcodes.Any() && !dbItem.Barcodes.Any(x => x.IsPrimary))
+                dbItem.Barcodes.First().IsPrimary = true;
+
+            dbItem.UpdatedAt = DateTime.UtcNow;
+
+            // Outbox upsert for the item with its new barcodes
+            await _outbox.EnqueueUpsertAsync(db, dbItem, ct);
+
+            // Return primary code
+            var primary = dbItem.Barcodes?.FirstOrDefault(b => b.IsPrimary)?.Code
+                          ?? dbItem.Barcodes?.FirstOrDefault()?.Code;
+
+            return (dbItem, primary);
+        }
+
 
     }
 }

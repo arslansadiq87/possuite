@@ -12,5 +12,6 @@ namespace Pos.Domain.Services
         Task SetActiveAsync(int categoryId, bool active, CancellationToken ct = default);
         Task<Category> SaveCategoryAsync(int? id, string name, bool isActive, CancellationToken ct = default);
         Task<Category?> GetCategoryAsync(int id, CancellationToken ct = default);
+        Task<Category?> GetOrCreateAsync(string name, bool createIfMissing, CancellationToken ct = default);
     }
 }

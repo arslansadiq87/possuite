@@ -169,5 +169,20 @@ namespace Pos.Persistence.Services
                     ct);
         }
 
+        public async Task<Category?> GetOrCreateAsync(string name, bool createIfMissing, CancellationToken ct = default)
+        {
+            await using var db = await _dbf.CreateDbContextAsync(ct);
+            var existing = await db.Categories.FirstOrDefaultAsync(c => c.Name == name, ct);
+            if (existing != null) return existing;
+            if (!createIfMissing) return null;
+            var c = new Category { Name = name, IsActive = true };
+            db.Categories.Add(c);
+            await db.SaveChangesAsync(ct);
+            await _outbox.EnqueueUpsertAsync(db, c, ct);
+            await db.SaveChangesAsync(ct);
+            return c;
+        }
+
+
     }
 }

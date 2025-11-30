@@ -24,7 +24,7 @@ namespace Pos.Client.Wpf.Windows.Sales
         private bool _suppressScopeEvents = false;  // don't react while we set up UI
         private bool _scopeUiReady = false;         // only reload after first init
 
-        
+        private bool _wasVisible;
 
         private ViewMode _mode = ViewMode.ByItem;
         private List<ItemRow> _itemRows = new();
@@ -176,6 +176,16 @@ namespace Pos.Client.Wpf.Windows.Sales
             SearchBox.Focus();
         }
 
+        private void Root_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            // Only trigger when transitioning from not visible -> visible
+            if (IsVisible && !_wasVisible)
+            {
+                // This already throttles internally via _lastRefreshUtc
+                OnActivated();
+            }
+            _wasVisible = IsVisible;
+        }
         // ===== Column builders =====
         private void ConfigureColumnsForItem()
         {

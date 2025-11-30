@@ -22,6 +22,8 @@
                 ToolBarTray.IsLocked="True">
                 <Button Content="Brands" Click="Brands_Click" ToolBar.OverflowMode="Never" Margin="6,0,0,0"/>
                 <Button Content="Categories" Click="Categories_Click" ToolBar.OverflowMode="Never" Margin="6,0,0,0"/>
+                <Button Content="Download Sample CSV" Click="DownloadSampleCsv_Click"/>
+                <Button Content="Import CSV" Click="ImportCsv_Click"/>
             </ToolBar>
             <Grid>
                 <Grid.ColumnDefinitions>

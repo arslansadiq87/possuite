@@ -12,6 +12,9 @@ using System.Windows.Input;
 using System.Globalization;
 using Pos.Client.Wpf.Services;   // ThumbnailService
 using Pos.Domain.Services;
+using System.IO;
+using Microsoft.Win32;
+
 
 namespace Pos.Client.Wpf.Windows.Admin
 {
@@ -1195,6 +1198,45 @@ namespace Pos.Client.Wpf.Windows.Admin
             {
                 MessageBox.Show("Variant images could not be saved: " + ex.Message);
             }
+        }
+
+        private void DownloadSampleCsv_Click(object sender, RoutedEventArgs e)
+        {
+            var sfd = new SaveFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv",
+                FileName = "pos-catalog-sample.csv"
+            };
+            if (sfd.ShowDialog() == true)
+            {
+                // Embedded sample (same headers used by parser)
+                var sample = string.Join("\r\n", new[]
+                {
+            "Type,ProductName,ItemName,SKU,Barcode,Price,TaxCode,TaxRatePct,TaxInclusive,Brand,Category,Variant1Name,Variant1Value,Variant2Name,Variant2Value",
+            "Standalone,,USB-C Cable 1m,USB-C-1M,1234567890123,499,STD,18,false,WirePro,Cables,,,,",
+            "Standalone,,AA Alkaline Battery 4-Pack,AA-ALK-4,9901234567890,299,RED,8,true,PowerMax,Batteries,,,,",
+            "Variant,T-Shirt Classic,T-Shirt Classic Blue S,TS-CL-BLU-S,1112223334445,1499,STD,18,false,UrbanWear,Apparel,Color,Blue,Size,S",
+            "Variant,T-Shirt Classic,T-Shirt Classic Blue M,TS-CL-BLU-M,1112223334446,1499,STD,18,false,UrbanWear,Apparel,Color,Blue,Size,M"
+        });
+                File.WriteAllText(sfd.FileName, sample);
+                MessageBox.Show("Sample saved.");
+            }
+        }
+
+        private void ImportCsv_Click(object sender, RoutedEventArgs e)
+        {
+            var win = new Window
+            {
+                Title = "Import Products & Items (CSV)",
+                Content = new ImportCatalogCsvDialog(),
+                Width = 1200,
+                Height = 700,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this)
+            };
+            win.ShowDialog();
+            // Optional: refresh lists after closing
+            _ = RefreshAsync();
         }
     }
 }

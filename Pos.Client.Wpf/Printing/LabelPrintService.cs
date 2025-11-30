@@ -1,10 +1,12 @@
-﻿using System;
+﻿// Pos.Client.Wpf/Printing/LabelPrintService.cs
+using System;
+using System.Linq;
 using System.Printing;                // ReachFramework
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;        // FixedPage, PageContent
+using System.Windows.Documents;        // FixedDocument, FixedPage, PageContent
 using System.Windows.Markup;           // IAddChild
 using System.Windows.Media;
 using Pos.Client.Wpf.Windows.Settings; // BarcodePreviewBuilder
@@ -18,27 +20,17 @@ namespace Pos.Client.Wpf.Printing
         private static PrintQueue ResolveQueueOrThrow(string printerName)
         {
             if (string.IsNullOrWhiteSpace(printerName))
-                throw new InvalidOperationException("No label printer selected. Please select a label printer in Barcode Label Settings.");
+                throw new InvalidOperationException("No label printer selected. Please select a label printer in Label Settings or Invoice Settings.");
 
-            // Try exact match among local + connected printers
-            var lps = new LocalPrintServer(); // “local” also enumerates user’s connected queues
-            var queues = lps.GetPrintQueues(new[]
-            {
-                EnumeratedPrintQueueTypes.Local,
-                EnumeratedPrintQueueTypes.Connections
-            });
+            using var server = new LocalPrintServer();
+            var queues = server.GetPrintQueues();
 
-            // exact (case-insensitive)
             var q = queues.FirstOrDefault(p =>
                 string.Equals(p.FullName, printerName, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(p.Name, printerName, StringComparison.OrdinalIgnoreCase));
-
-            if (q != null) return q;
-
-            // relaxed contains (helps when UI shows trimmed or friendly names)
-            q = queues.FirstOrDefault(p =>
-                p.FullName.IndexOf(printerName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                p.Name.IndexOf(printerName, StringComparison.OrdinalIgnoreCase) >= 0);
+                string.Equals(p.Name, printerName, StringComparison.OrdinalIgnoreCase))
+                ?? queues.FirstOrDefault(p =>
+                    p.FullName.IndexOf(printerName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    p.Name.IndexOf(printerName, StringComparison.OrdinalIgnoreCase) >= 0);
 
             if (q != null) return q;
 
@@ -46,27 +38,161 @@ namespace Pos.Client.Wpf.Printing
             throw new InvalidOperationException(
                 $"Label printer \"{printerName}\" not found. Available: {available}");
         }
-        // 1) Simple version (interface #1)
-        public async Task PrintSampleAsync(BarcodeLabelSettings s, CancellationToken ct = default)
+
+        // --- NEW: shared grid builder (snaps page to device dots to avoid scaling/clipping) ---
+        private static FixedDocument BuildTiledDocument(
+    BarcodeLabelSettings s,
+    Func<int, ImageSource> buildImage)
         {
-            await PrintSampleAsync(
-                s,
-                sampleCode: s.CodeType?.ToUpperInvariant() switch
+            int columns = Math.Max(1, s.Columns);
+            int rows = Math.Max(1, s.Rows);
+            int dpi = Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi);
+
+            // Page mm = labels + gaps
+            double pageWidthMm = columns * s.LabelWidthMm + (columns - 1) * s.HorizontalGapMm;
+            double pageHeightMm = rows * s.LabelHeightMm + (rows - 1) * s.VerticalGapMm;
+
+            // Snap to device pixels: pagePx = round(mm * dpi / 25.4)
+            int pageWPx = (int)Math.Round(pageWidthMm * dpi / 25.4);
+            int pageHPx = (int)Math.Round(pageHeightMm * dpi / 25.4);
+
+            // DIPs for WPF page (96 dpi)
+            double pageWdip = pageWPx * (96.0 / dpi);
+            double pageHdip = pageHPx * (96.0 / dpi);
+
+            // Per-label DIP sizes (mm -> DIP; relative layout correct)
+            double mmToDip = 96.0 / 25.4;
+            double labelW = s.LabelWidthMm * mmToDip;
+            double labelH = s.LabelHeightMm * mmToDip;
+            double gapW = s.HorizontalGapMm * mmToDip;
+            double gapH = s.VerticalGapMm * mmToDip;
+
+            var doc = new FixedDocument();
+            doc.DocumentPaginator.PageSize = new Size(pageWdip, pageHdip);
+
+            var page = new FixedPage
+            {
+                Width = pageWdip,
+                Height = pageHdip,
+                Background = Brushes.White
+            };
+
+            // --- Anti-blank anchor (prevents first-label skip on some thermal drivers) ---
+            var anchorBrush = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+            anchorBrush.Freeze();
+            var anchor = new Border
+            {
+                Width = pageWdip,
+                Height = 0.6,                 // ~1 scanline at common DPIs
+                Background = anchorBrush,
+                SnapsToDevicePixels = true,
+                UseLayoutRounding = true
+            };
+            FixedPage.SetLeft(anchor, 0);
+            FixedPage.SetTop(anchor, 0);
+            page.Children.Add(anchor);
+
+            // Tile labels
+            int idx = 0;
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < columns; c++)
                 {
-                    "EAN8" or "EAN-8" => "5512345",
-                    "EAN13" or "EAN-13" => "590123412345",
-                    "UPCA" or "UPC-A" => "04210000526",
-                    _ => "123456789012"
-                },
-                sampleName: "Sample Item",
-                samplePrice: "Rs 999",
-                sampleSku: "SKU-001",
-                showBusinessName: s.ShowBusinessName,
-                businessName: string.IsNullOrWhiteSpace(s.BusinessName) ? "My Business" : s.BusinessName,
-                ct: ct);
+                    var src = buildImage(idx++);
+                    var img = new Image
+                    {
+                        Source = src,
+                        Width = labelW,
+                        Height = labelH,
+                        Stretch = Stretch.None,
+                        SnapsToDevicePixels = true,
+                        UseLayoutRounding = true
+                    };
+
+                    double x = c * (labelW + gapW);
+                    double y = r * (labelH + gapH);
+                    FixedPage.SetLeft(img, x);
+                    FixedPage.SetTop(img, y);
+                    page.Children.Add(img);
+                }
+            }
+
+            // Force layout
+            page.Measure(new Size(pageWdip, pageHdip));
+            page.Arrange(new Rect(0, 0, pageWdip, pageHdip));
+            page.UpdateLayout();
+
+            var pc = new PageContent();
+            ((IAddChild)pc).AddChild(page);
+            doc.Pages.Add(pc);
+            return doc;
         }
 
-        // 2) Extended version (interface #2)
+        // Simple version: print from settings (no live sample fields)
+        public Task PrintSampleAsync(BarcodeLabelSettings s, CancellationToken ct = default)
+        {
+            double zoom = s.BarcodeZoomPct.HasValue
+                ? Math.Clamp(s.BarcodeZoomPct.Value / 100.0, 0.3, 2.0)
+                : 1.0;
+
+            var doc = BuildTiledDocument(
+                s,
+                _ => BarcodePreviewBuilder.Build(
+                        labelWidthMm: s.LabelWidthMm,
+                        labelHeightMm: s.LabelHeightMm,
+                        marginLeftMm: s.MarginLeftMm,
+                        marginTopMm: s.MarginTopMm,
+                        dpi: Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi),
+                        codeType: s.CodeType,
+                        payload: "123456789012", // generic
+                        showName: s.ShowName,
+                        showPrice: s.ShowPrice,
+                        showSku: s.ShowSku,
+                        nameText: "Sample Item",
+                        priceText: "0.00",
+                        skuText: "SKU-001",
+                        fontSizePt: s.FontSizePt,
+                        nameXmm: s.NameXmm,
+                        nameYmm: s.NameYmm,
+                        priceXmm: s.PriceXmm,
+                        priceYmm: s.PriceYmm,
+                        skuXmm: s.SkuXmm,
+                        skuYmm: s.SkuYmm,
+                        barcodeMarginLeftMm: s.BarcodeMarginLeftMm,
+                        barcodeMarginTopMm: s.BarcodeMarginTopMm,
+                        barcodeMarginRightMm: s.BarcodeMarginRightMm,
+                        barcodeMarginBottomMm: s.BarcodeMarginBottomMm,
+                        barcodeHeightMm: s.BarcodeHeightMm,
+                        showBusinessName: s.ShowBusinessName,
+                        businessName: s.BusinessName ?? string.Empty,
+                        businessXmm: s.BusinessXmm,
+                        businessYmm: s.BusinessYmm,
+                        nameAlign: "Left",
+                        priceAlign: "Left",
+                        skuAlign: "Left",
+                        businessAlign: "Left",
+                        barcodeZoom: zoom
+                )
+            );
+
+            var queue = ResolveQueueOrThrow(s.PrinterName ?? "");
+            var pd = new PrintDialog { PrintQueue = queue };
+
+            // lock page size into the ticket (Unknown + exact WPF DIPs)
+            var pageSize = doc.DocumentPaginator.PageSize;
+            var baseTicket = queue.DefaultPrintTicket ?? new PrintTicket();
+            var ticket = new PrintTicket
+            {
+                PageMediaSize = new PageMediaSize(PageMediaSizeName.Unknown, pageSize.Width, pageSize.Height)
+            };
+            var result = queue.MergeAndValidatePrintTicket(baseTicket, ticket);
+            pd.PrintTicket = result.ValidatedPrintTicket ?? ticket;
+
+            pd.PrintDocument(doc.DocumentPaginator, "POS Label – Sample");
+            return Task.CompletedTask;
+        }
+
+        // Extended: print exactly what the preview shows (live sample fields)
         public Task PrintSampleAsync(
             BarcodeLabelSettings s,
             string sampleCode,
@@ -78,115 +204,62 @@ namespace Pos.Client.Wpf.Printing
             CancellationToken ct = default)
         {
             double zoom = s.BarcodeZoomPct.HasValue
-    ? Math.Clamp(s.BarcodeZoomPct.Value / 100.0, 0.3, 2.0)
-    : 1.0;
-            var img = BarcodePreviewBuilder.Build(
-                labelWidthMm: s.LabelWidthMm,
-                labelHeightMm: s.LabelHeightMm,
-                marginLeftMm: s.MarginLeftMm,
-                marginTopMm: s.MarginTopMm,
-                dpi: s.Dpi,
-                codeType: s.CodeType,
-                payload: sampleCode,
-                showName: s.ShowName,
-                showPrice: s.ShowPrice,
-                showSku: s.ShowSku,
-                nameText: sampleName,
-                priceText: samplePrice,
-                skuText: sampleSku,
-                fontSizePt: s.FontSizePt,
-                nameXmm: s.NameXmm, nameYmm: s.NameYmm,
-                priceXmm: s.PriceXmm, priceYmm: s.PriceYmm,
-                skuXmm: s.SkuXmm, skuYmm: s.SkuYmm,
-                barcodeMarginLeftMm: s.BarcodeMarginLeftMm,
-                barcodeMarginTopMm: s.BarcodeMarginTopMm,
-                barcodeMarginRightMm: s.BarcodeMarginRightMm,
-                barcodeMarginBottomMm: s.BarcodeMarginBottomMm,
-                barcodeHeightMm: s.BarcodeHeightMm,
-                showBusinessName: showBusinessName,
-                businessName: businessName,
-                businessXmm: s.BusinessXmm,
-                businessYmm: s.BusinessYmm,
-                nameAlign: "Left",
-                priceAlign: "Left",
-                skuAlign: "Left",
-                businessAlign: "Left",
-                barcodeZoom: zoom
+                ? Math.Clamp(s.BarcodeZoomPct.Value / 100.0, 0.3, 2.0)
+                : 1.0;
+
+            var doc = BuildTiledDocument(
+                s,
+                _ => BarcodePreviewBuilder.Build(
+                        labelWidthMm: s.LabelWidthMm,
+                        labelHeightMm: s.LabelHeightMm,
+                        marginLeftMm: s.MarginLeftMm,
+                        marginTopMm: s.MarginTopMm,
+                        dpi: Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi),
+                        codeType: s.CodeType,
+                        payload: string.IsNullOrWhiteSpace(sampleCode) ? sampleSku : sampleCode,
+                        showName: s.ShowName,
+                        showPrice: s.ShowPrice,
+                        showSku: s.ShowSku,
+                        nameText: sampleName,
+                        priceText: samplePrice,
+                        skuText: sampleSku,
+                        fontSizePt: s.FontSizePt,
+                        nameXmm: s.NameXmm,
+                        nameYmm: s.NameYmm,
+                        priceXmm: s.PriceXmm,
+                        priceYmm: s.PriceYmm,
+                        skuXmm: s.SkuXmm,
+                        skuYmm: s.SkuYmm,
+                        barcodeMarginLeftMm: s.BarcodeMarginLeftMm,
+                        barcodeMarginTopMm: s.BarcodeMarginTopMm,
+                        barcodeMarginRightMm: s.BarcodeMarginRightMm,
+                        barcodeMarginBottomMm: s.BarcodeMarginBottomMm,
+                        barcodeHeightMm: s.BarcodeHeightMm,
+                        showBusinessName: showBusinessName,
+                        businessName: businessName ?? string.Empty,
+                        businessXmm: s.BusinessXmm,
+                        businessYmm: s.BusinessYmm,
+                        nameAlign: "Left",
+                        priceAlign: "Left",
+                        skuAlign: "Left",
+                        businessAlign: "Left",
+                        barcodeZoom: zoom
+                )
             );
 
+            var queue = ResolveQueueOrThrow(s.PrinterName ?? "");
+            var pd = new PrintDialog { PrintQueue = queue };
 
-            // Snap page size to device dots to avoid driver rounding
-            int wPx = (int)Math.Round(s.LabelWidthMm * s.Dpi / 25.4);
-            int hPx = (int)Math.Round(s.LabelHeightMm * s.Dpi / 25.4);
-            double pageWdip = wPx * (96.0 / s.Dpi);
-            double pageHdip = hPx * (96.0 / s.Dpi);
-
-            // FixedPage sized to exact DIPs (no scaling)
-            var page = new FixedPage { Width = pageWdip, Height = pageHdip, Background = Brushes.White };
-            var imgCtrl = new Image
-            {
-                Source = img,
-                Width = pageWdip,
-                Height = pageHdip,
-                Stretch = Stretch.None,
-                SnapsToDevicePixels = true,
-                UseLayoutRounding = true
-            };
-            FixedPage.SetLeft(imgCtrl, 0);
-            FixedPage.SetTop(imgCtrl, 0);
-            page.Children.Add(imgCtrl);
-            page.Measure(new Size(pageWdip, pageHdip));
-            page.Arrange(new Rect(0, 0, pageWdip, pageHdip));
-            page.UpdateLayout();
-
-            var pc = new PageContent();
-            ((IAddChild)pc).AddChild(page);
-            var doc = new FixedDocument();
-            doc.DocumentPaginator.PageSize = new Size(pageWdip, pageHdip);
-            doc.Pages.Add(pc);
-
-
-
-            // ---------- CHANGED: resolve the exact queue or throw ----------
-            var queue = ResolveQueueOrThrow(s.PrinterName);
-
-            var pd = new PrintDialog
-            {
-                PrintQueue = queue
-            };
-            // Build PrintTicket against THIS queue (no fallback/defaults)
-            var baseTicket = queue.UserPrintTicket ?? pd.PrintTicket ?? new PrintTicket();
+            // lock page size into the ticket (Unknown + exact WPF DIPs)
+            var pageSize = doc.DocumentPaginator.PageSize;
+            var baseTicket = queue.DefaultPrintTicket ?? new PrintTicket();
             var ticket = new PrintTicket
             {
-                CopyCount = 1,
-                PageOrientation = PageOrientation.Portrait
+                PageMediaSize = new PageMediaSize(PageMediaSizeName.Unknown, pageSize.Width, pageSize.Height)
             };
-
-            var caps = queue.GetPrintCapabilities();
-            PageMediaSize? chosen = null;
-            if (caps?.PageMediaSizeCapability != null)
-            {
-                const double tolDip = 2.0;
-                foreach (var ms in caps.PageMediaSizeCapability)
-                {
-                    if (ms.Width.HasValue && ms.Height.HasValue &&
-                        Math.Abs(ms.Width.Value - pageWdip) <= tolDip &&
-                        Math.Abs(ms.Height.Value - pageHdip) <= tolDip)
-                    {
-                        chosen = ms; break;
-                    }
-                }
-            }
-
-            ticket.PageMediaSize = chosen ?? new PageMediaSize(PageMediaSizeName.Unknown, pageWdip, pageHdip);
-            if (caps?.PageMediaTypeCapability?.Contains(PageMediaType.Label) == true)
-                ticket.PageMediaType = PageMediaType.Label;
-
-            // AFTER
             var result = queue.MergeAndValidatePrintTicket(baseTicket, ticket);
             pd.PrintTicket = result.ValidatedPrintTicket ?? ticket;
 
-            // Print directly (no dialog UI)
             pd.PrintDocument(doc.DocumentPaginator, "POS Label – Sample");
             return Task.CompletedTask;
         }

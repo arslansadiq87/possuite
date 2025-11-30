@@ -26,24 +26,18 @@ namespace Pos.Persistence
         public static void Ensure(PosClientDbContext db)
         {
             var now = DateTime.UtcNow;
-            FixDuplicateProducts(db);
-
+            //FixDuplicateProducts(db);
             EnsureUsers(db);
             // Ensure Chart of Accounts exists (idempotent)
             CoATemplateSeeder.SeedFromTemplateAsync(db).GetAwaiter().GetResult();
-
             EnsureSuppliers(db);
-
             // create locations first
             EnsureOutlets(db);
-            EnsureWarehouse(db);
-
+            //EnsureWarehouse(db);
             // then items/products
-            EnsureBasicItems(db, now);
-            EnsureProductWithVariants(db, now);
-            EnsureProductWithVariants_Jeans(db, now);
-            
-            
+            //EnsureBasicItems(db, now);
+            //EnsureProductWithVariants(db, now);
+            //EnsureProductWithVariants_Jeans(db, now);
             // finally opening stock (uses new header+lines model)
             //EnsureOpeningStock_UsingHeader(db, outletId: 1, openingQty: 50m, now);
         }

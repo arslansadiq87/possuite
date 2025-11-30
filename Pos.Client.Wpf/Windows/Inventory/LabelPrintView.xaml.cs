@@ -522,11 +522,14 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private ImageSource BuildCustomLabelImage(BarcodeLabelSettings s, LabelPrintItem item)
         {
+            // ✅ normalize DPI once for all pixel math below
+            int dpiNorm = Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi);
+
             double dipPerMm = 96.0 / 25.4;
             double widthDip = Math.Max(32, s.LabelWidthMm * dipPerMm);
             double heightDip = Math.Max(32, s.LabelHeightMm * dipPerMm);
 
-            double pxPerDip = s.Dpi / 96.0;
+            double pxPerDip = dpiNorm / 96.0;         // ✅ use dpiNorm
             int widthPx = Math.Max(32, (int)Math.Round(widthDip * pxPerDip));
             int heightPx = Math.Max(32, (int)Math.Round(heightDip * pxPerDip));
 
@@ -535,11 +538,19 @@ namespace Pos.Client.Wpf.Windows.Inventory
             {
                 // Background
                 var rect = new Rect(0, 0, widthDip, heightDip);
-                dc.DrawRectangle(Brushes.White, new Pen(Brushes.LightGray, 1), rect);
+                dc.DrawRectangle(Brushes.White, null, rect);
 
-                double fontSizePt = item.CustomFontSizePt > 0 ? item.CustomFontSizePt : s.FontSizePt;
-                double fontSizeDip = fontSizePt * 96.0 / 72.0;
-                var fontFamilyName = string.IsNullOrWhiteSpace(item.CustomFontFamilyName)
+                // **ANTI-BLANK ANCHOR**
+                // Prevent some label drivers from treating the first page as "blank" and auto-feeding.
+                // This draws a near-invisible 1-alpha black line on the very top scanline.
+                // It's not perceptible on thermal media but guarantees non-blank raster content
+                // from the first printed label.
+                var almostTransparentBlack = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+                almostTransparentBlack.Freeze();
+                dc.DrawRectangle(almostTransparentBlack, null, new Rect(0, 0, widthDip, 0.5));
+
+                // ---- existing text drawing code follows unchanged ----
+                string fontFamilyName = string.IsNullOrWhiteSpace(item.CustomFontFamilyName)
                     ? SystemFonts.MessageFontFamily.Source
                     : item.CustomFontFamilyName;
 
@@ -549,76 +560,77 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     item.CustomBold ? FontWeights.Bold : FontWeights.Normal,
                     FontStretches.Normal);
 
+                double pixelsPerDip = dpiNorm / 96.0;
+                double padding = 2.0;
 
-                double pixelsPerDip = s.Dpi / 96.0;
+                double textAreaWidth;
+                switch (item.CustomPosition)
+                {
+                    case CustomTextPosition.TopLeft:
+                    case CustomTextPosition.MiddleLeft:
+                    case CustomTextPosition.BottomLeft:
+                    case CustomTextPosition.TopRight:
+                    case CustomTextPosition.MiddleRight:
+                    case CustomTextPosition.BottomRight:
+                        textAreaWidth = (widthDip / 2.0) - 2.0 * padding;
+                        break;
+                    default:
+                        textAreaWidth = widthDip - 2.0 * padding;
+                        break;
+                }
+
+                textAreaWidth = Math.Max(0, textAreaWidth);
 
                 var ft = new FormattedText(
                     item.CustomText ?? string.Empty,
                     CultureInfo.CurrentUICulture,
                     FlowDirection.LeftToRight,
                     typeface,
-                    fontSizeDip,
+                    /* fontSizeDip: */ (item.CustomFontSizePt <= 0 ? 10.0 : item.CustomFontSizePt) * (96.0 / 72.0),
                     Brushes.Black,
                     pixelsPerDip)
                 {
-                    MaxTextWidth = Math.Max(0, widthDip - 4.0),
-                    TextAlignment = TextAlignment.Left
+                    MaxTextWidth = textAreaWidth,
+                    TextAlignment = TextAlignment.Center
                 };
 
-                double textWidth = Math.Min(ft.Width, widthDip - 4.0);
-                double textHeight = Math.Min(ft.Height, heightDip - 4.0);
-
-                double x = 2.0;
-                double y = 2.0;
+                double textHeight = Math.Min(ft.Height, heightDip - 2.0 * padding);
+                double x = padding;
+                double y = padding;
 
                 switch (item.CustomPosition)
                 {
                     case CustomTextPosition.TopLeft:
-                        x = 2.0;
-                        y = 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Left; x = padding; y = padding; break;
                     case CustomTextPosition.TopCenter:
-                        x = (widthDip - textWidth) / 2.0;
-                        y = 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Center; x = (widthDip - textAreaWidth) / 2.0; y = padding; break;
                     case CustomTextPosition.TopRight:
-                        x = widthDip - textWidth - 2.0;
-                        y = 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Right; x = widthDip - textAreaWidth - padding; y = padding; break;
+
                     case CustomTextPosition.MiddleLeft:
-                        x = 2.0;
-                        y = (heightDip - textHeight) / 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Left; x = padding; y = (heightDip - textHeight) / 2.0; break;
                     case CustomTextPosition.MiddleCenter:
-                        x = (widthDip - textWidth) / 2.0;
-                        y = (heightDip - textHeight) / 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Center; x = (widthDip - textAreaWidth) / 2.0; y = (heightDip - textHeight) / 2.0; break;
                     case CustomTextPosition.MiddleRight:
-                        x = widthDip - textWidth - 2.0;
-                        y = (heightDip - textHeight) / 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Right; x = widthDip - textAreaWidth - padding; y = (heightDip - textHeight) / 2.0; break;
+
                     case CustomTextPosition.BottomLeft:
-                        x = 2.0;
-                        y = heightDip - textHeight - 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Left; x = padding; y = heightDip - textHeight - padding; break;
                     case CustomTextPosition.BottomCenter:
-                        x = (widthDip - textWidth) / 2.0;
-                        y = heightDip - textHeight - 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Center; x = (widthDip - textAreaWidth) / 2.0; y = heightDip - textHeight - padding; break;
                     case CustomTextPosition.BottomRight:
-                        x = widthDip - textWidth - 2.0;
-                        y = heightDip - textHeight - 2.0;
-                        break;
+                        ft.TextAlignment = TextAlignment.Right; x = widthDip - textAreaWidth - padding; y = heightDip - textHeight - padding; break;
                 }
 
                 dc.DrawText(ft, new Point(x, y));
             }
 
-            var bmp = new RenderTargetBitmap(widthPx, heightPx, s.Dpi, s.Dpi, PixelFormats.Pbgra32);
+            var bmp = new RenderTargetBitmap(widthPx, heightPx, dpiNorm, dpiNorm, PixelFormats.Pbgra32);
             bmp.Render(dv);
             bmp.Freeze();
             return bmp;
         }
+
 
         // --------- CORE PRINTING (shared) ---------
 
@@ -677,26 +689,37 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
         private FixedDocument BuildLabelsDocument(
-    BarcodeLabelSettings s,
-    IReadOnlyList<LabelPrintItem> items)
+     BarcodeLabelSettings s,
+     IReadOnlyList<LabelPrintItem> items)
         {
-            double mmToDip = 96.0 / 25.4;
-
+            // --- constants & guards ---
             int columns = Math.Max(1, s.Columns);
             int rows = Math.Max(1, s.Rows);
+            int dpi = Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi); // common thermal default: 203 dpi
 
-            double labelWidthDip = s.LabelWidthMm * mmToDip;
-            double labelHeightDip = s.LabelHeightMm * mmToDip;
-            double hGapDip = s.HorizontalGapMm * mmToDip;
-            double vGapDip = s.VerticalGapMm * mmToDip;
+            // --- convert mm -> DIPs (WPF is 96 dpi world) ---
+            const double DipPerMm = 96.0 / 25.4;
 
-            double pageWidthDip = columns * labelWidthDip + (columns - 1) * hGapDip;
-            double pageHeightDip = rows * labelHeightDip + (rows - 1) * vGapDip;
+            double labelWidthDip = s.LabelWidthMm * DipPerMm;
+            double labelHeightDip = s.LabelHeightMm * DipPerMm;
+            double hGapDip = s.HorizontalGapMm * DipPerMm;
+            double vGapDip = s.VerticalGapMm * DipPerMm;
 
+            // --- snap page size to whole device dots at printer DPI ---
+            double pageWidthMm = columns * s.LabelWidthMm + (columns - 1) * s.HorizontalGapMm;
+            double pageHeightMm = rows * s.LabelHeightMm + (rows - 1) * s.VerticalGapMm;
+
+            int pageWPx = (int)Math.Round(pageWidthMm * dpi / 25.4);
+            int pageHPx = (int)Math.Round(pageHeightMm * dpi / 25.4);
+
+            double pageWidthDip = pageWPx * (96.0 / dpi);
+            double pageHeightDip = pageHPx * (96.0 / dpi);
+
+            // --- document ---
             var doc = new FixedDocument();
             doc.DocumentPaginator.PageSize = new Size(pageWidthDip, pageHeightDip);
 
-            // 🔴 EXACT SAME ZOOM LOGIC AS SETTINGS + SAMPLE PRINT
+            // --- barcode zoom from settings (same logic as Settings/Test Print) ---
             double zoom = s.BarcodeZoomPct.HasValue
                 ? Math.Clamp(s.BarcodeZoomPct.Value / 100.0, 0.3, 2.0)
                 : 1.0;
@@ -707,60 +730,74 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 var page = new FixedPage
                 {
                     Width = pageWidthDip,
-                    Height = pageHeightDip
+                    Height = pageHeightDip,
+                    Background = Brushes.White
                 };
+
+                // --- Anti-blank anchor (prevents first-row skip on some thermal drivers) ---
+                var anchorBrush = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+                anchorBrush.Freeze();
+                var anchor = new Border
+                {
+                    Width = pageWidthDip,
+                    Height = 0.6,                 // ~1 device scanline at common DPIs
+                    Background = anchorBrush,
+                    SnapsToDevicePixels = true,
+                    UseLayoutRounding = true
+                };
+                FixedPage.SetLeft(anchor, 0);
+                FixedPage.SetTop(anchor, 0);
+                page.Children.Add(anchor);
 
                 for (int r = 0; r < rows && idx < items.Count; r++)
                 {
                     for (int c = 0; c < columns && idx < items.Count; c++)
                     {
                         var item = items[idx++];
-                        ImageSource imgSrc;
-                        if (item.IsCustomText)
-                        {
-                            imgSrc = BuildCustomLabelImage(s, item);
-                        }
-                        else
-                        { 
-                            imgSrc = BarcodePreviewBuilder.Build(
-                            labelWidthMm: s.LabelWidthMm,
-                            labelHeightMm: s.LabelHeightMm,
-                            marginLeftMm: s.MarginLeftMm,
-                            marginTopMm: s.MarginTopMm,
-                            dpi: s.Dpi,
-                            codeType: s.CodeType,
-                            payload: item.Code,
-                            showName: s.ShowName,
-                            showPrice: s.ShowPrice,
-                            showSku: s.ShowSku,
-                            nameText: item.Name,
-                            priceText: item.PriceText,
-                            skuText: item.Sku,
-                            fontSizePt: s.FontSizePt,
-                            nameXmm: s.NameXmm,
-                            nameYmm: s.NameYmm,
-                            priceXmm: s.PriceXmm,
-                            priceYmm: s.PriceYmm,
-                            skuXmm: s.SkuXmm,
-                            skuYmm: s.SkuYmm,
-                            barcodeMarginLeftMm: s.BarcodeMarginLeftMm,
-                            barcodeMarginTopMm: s.BarcodeMarginTopMm,
-                            barcodeMarginRightMm: s.BarcodeMarginRightMm,
-                            barcodeMarginBottomMm: s.BarcodeMarginBottomMm,
-                            barcodeHeightMm: s.BarcodeHeightMm,
-                            showBusinessName: s.ShowBusinessName,
-                            businessName: s.BusinessName ?? string.Empty,
-                            businessXmm: s.BusinessXmm,
-                            businessYmm: s.BusinessYmm,
-                            // alignments – we’re using defaults in builder for now
-                            barcodeZoom: zoom   // ✅ exact zoom from settings
-                        );
-                    }
+
+                        ImageSource imgSrc = item.IsCustomText
+                            ? BuildCustomLabelImage(s, item)
+                            : BarcodePreviewBuilder.Build(
+                                labelWidthMm: s.LabelWidthMm,
+                                labelHeightMm: s.LabelHeightMm,
+                                marginLeftMm: s.MarginLeftMm,
+                                marginTopMm: s.MarginTopMm,
+                                dpi: dpi,
+                                codeType: s.CodeType,
+                                payload: item.Code,
+                                showName: s.ShowName,
+                                showPrice: s.ShowPrice,
+                                showSku: s.ShowSku,
+                                nameText: item.Name,
+                                priceText: item.PriceText,
+                                skuText: item.Sku,
+                                fontSizePt: s.FontSizePt,
+                                nameXmm: s.NameXmm,
+                                nameYmm: s.NameYmm,
+                                priceXmm: s.PriceXmm,
+                                priceYmm: s.PriceYmm,
+                                skuXmm: s.SkuXmm,
+                                skuYmm: s.SkuYmm,
+                                barcodeMarginLeftMm: s.BarcodeMarginLeftMm,
+                                barcodeMarginTopMm: s.BarcodeMarginTopMm,
+                                barcodeMarginRightMm: s.BarcodeMarginRightMm,
+                                barcodeMarginBottomMm: s.BarcodeMarginBottomMm,
+                                barcodeHeightMm: s.BarcodeHeightMm,
+                                showBusinessName: s.ShowBusinessName,
+                                businessName: s.BusinessName ?? string.Empty,
+                                businessXmm: s.BusinessXmm,
+                                businessYmm: s.BusinessYmm,
+                                barcodeZoom: zoom
+                            );
+
                         var img = new Image
                         {
                             Source = imgSrc,
                             Width = labelWidthDip,
-                            Height = labelHeightDip
+                            Height = labelHeightDip,
+                            Stretch = Stretch.None,
+                            SnapsToDevicePixels = true,
+                            UseLayoutRounding = true
                         };
 
                         double x = c * (labelWidthDip + hGapDip);
@@ -772,13 +809,19 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     }
                 }
 
+                // Force layout for drivers that are picky about first-page visuals
+                page.Measure(new Size(pageWidthDip, pageHeightDip));
+                page.Arrange(new Rect(0, 0, pageWidthDip, pageHeightDip));
+                page.UpdateLayout();
+
                 var pc = new PageContent();
-                ((IAddChild)pc).AddChild(page);
+                ((System.Windows.Markup.IAddChild)pc).AddChild(page);
                 doc.Pages.Add(pc);
             }
 
             return doc;
         }
+
 
         private static PrintQueue ResolvePrintQueue(string printerName)
         {
@@ -845,16 +888,20 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 var settings = await _labelSettings.GetAsync(_terminal.OutletId, ct);
 
                 // SAME ZOOM as settings page
+                // SAME ZOOM as settings page
                 double zoom = settings.BarcodeZoomPct.HasValue
                     ? Math.Clamp(settings.BarcodeZoomPct.Value / 100.0, 0.3, 2.0)
                     : 1.0;
+
+                // ✅ Normalize DPI (protect against 0/null/too-low on client machines)
+                int dpiNorm = Math.Max(96, settings.Dpi <= 0 ? 203 : settings.Dpi);
 
                 var imgSrc = BarcodePreviewBuilder.Build(
                     labelWidthMm: settings.LabelWidthMm,
                     labelHeightMm: settings.LabelHeightMm,
                     marginLeftMm: settings.MarginLeftMm,
                     marginTopMm: settings.MarginTopMm,
-                    dpi: settings.Dpi,
+                    dpi: dpiNorm,                     // ✅ use normalized DPI here
                     codeType: settings.CodeType,
                     payload: code,
                     showName: settings.ShowName,
@@ -881,6 +928,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     businessYmm: settings.BusinessYmm,
                     barcodeZoom: zoom
                 );
+
 
                 ItemBarcodePreview.Source = imgSrc;
             }

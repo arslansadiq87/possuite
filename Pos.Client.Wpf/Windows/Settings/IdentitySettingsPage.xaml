@@ -12,6 +12,7 @@
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <!-- Header + scope -->
             <RowDefinition Height="*"/>
             <!-- Main -->
@@ -33,46 +34,46 @@
             </StackPanel>
 
             <!-- Scope selector card (right) -->
-            <Border DockPanel.Dock="Right"
-              CornerRadius="4"
-              Padding="0,6"
-              Background="#0F000000"
-              BorderBrush="#22000000"
-              BorderThickness="1">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" >
-                    <TextBlock Text="Scope:"
-                     VerticalAlignment="Center"
-                     Margin="8,0,16,0"
-                     FontWeight="SemiBold"/>
-
-                    <RadioButton Content="Global"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0"
-                       IsChecked="{Binding IsGlobal}"
-                       GroupName="Scope"
-                       IsEnabled="{Binding CanEditGlobal}"/>
-
-                    <RadioButton Content="Specific outlet"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0"
-                       IsChecked="{Binding IsGlobal, Converter={StaticResource NegateBool}}"
-                       GroupName="Scope"
-                       IsEnabled="{Binding CanEditGlobal}"/>
-
-                    <ComboBox Width="220"
-                    Height="26"
-                    VerticalContentAlignment="Center"
-                    ItemsSource="{Binding Outlets}"
-                    SelectedItem="{Binding SelectedOutlet}"
-                    DisplayMemberPath="Name"
-                    IsEnabled="{Binding CanEditGlobal}"
-                    Margin="8,0,8,0"/>
-                </StackPanel>
-            </Border>
+            
         </DockPanel>
+        <Border DockPanel.Dock="Right" Grid.Row="1"
+  CornerRadius="4"
+  Padding="0,6"
+  Background="#0F000000"
+  BorderBrush="#22000000"
+  BorderThickness="1">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" >
+                <TextBlock Text="Scope:"
+         VerticalAlignment="Center"
+         Margin="8,0,16,0"
+         FontWeight="SemiBold"/>
 
+                <RadioButton Content="Global"
+           VerticalAlignment="Center"
+           Margin="0,0,8,0"
+           IsChecked="{Binding IsGlobal}"
+           GroupName="Scope"
+           IsEnabled="{Binding CanEditGlobal}"/>
+
+                <RadioButton Content="Specific outlet"
+           VerticalAlignment="Center"
+           Margin="0,0,8,0"
+           IsChecked="{Binding IsGlobal, Converter={StaticResource NegateBool}}"
+           GroupName="Scope"
+           IsEnabled="{Binding CanEditGlobal}"/>
+
+                <ComboBox Width="220"
+        Height="26"
+        VerticalContentAlignment="Center"
+        ItemsSource="{Binding Outlets}"
+        SelectedItem="{Binding SelectedOutlet}"
+        DisplayMemberPath="Name"
+        IsEnabled="{Binding CanEditGlobal}"
+        Margin="8,0,8,0"/>
+            </StackPanel>
+        </Border>
         <!-- MAIN CONTENT -->
-        <Grid Grid.Row="1" IsEnabled="{Binding CanEdit}">
+        <Grid Grid.Row="2" IsEnabled="{Binding CanEdit}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*"/>
                 <ColumnDefinition Width="*"/>
@@ -326,7 +327,7 @@
         </Grid>
 
         <!-- ACTIONS -->
-        <DockPanel Grid.Row="2" Margin="0,16,0,0">
+        <DockPanel Grid.Row="3" Margin="0,16,0,0">
             <TextBlock DockPanel.Dock="Left"
                  VerticalAlignment="Center"
                  FontSize="11"

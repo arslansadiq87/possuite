@@ -34,6 +34,7 @@ using Pos.Domain.Services.Accounting;
 using Pos.Persistence.Services.Accounting;
 using Pos.Persistence.Services.Hr;
 using Pos.Client.Wpf.Startup;
+using Pos.Persistence.Features.Catalog;
 
 namespace Pos.Client.Wpf
 {
@@ -200,6 +201,8 @@ namespace Pos.Client.Wpf
             
             sc.AddScoped<ISalesService, SalesService>();
             sc.AddScoped<IInvoiceService, InvoiceService>();
+            sc.AddScoped<ICsvCatalogImportService, CsvCatalogImportService>();
+
             //Manged services
             sc.AddScoped<IReceiptTemplateService, ReceiptTemplateService>();
             sc.AddTransient<ReceiptBuilderViewModel>();

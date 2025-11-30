@@ -29,7 +29,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         private BarcodeRow? _newlyAddedRow;        // track the just-added manual row
         private bool _justRemovedRow;              // suppress one validation cycle after removal
         private bool _isClosing;  // NEW: avoid validation popups during window close
-        public bool IsStandaloneMode { get; private set; }
+        public bool IsStandaloneMode { get; private set; } = false;
         public Func<Item, System.Threading.Tasks.Task<bool>>? SaveOneAsync { get; set; }
         public bool SaveImmediately { get; set; } = true;
         private readonly Mode _mode;
@@ -45,6 +45,7 @@ namespace Pos.Client.Wpf.Windows.Admin
         public sealed record PendingVariantImages(string? PrimaryPath, List<string> GalleryPaths);
         private string? _pendingVariantPrimaryPath;
         private readonly List<string> _pendingVariantGallery = new();
+      
         public PendingVariantImages PopPendingVariantImages()
         {
             var pack = new PendingVariantImages(_pendingVariantPrimaryPath, _pendingVariantGallery.ToList());
@@ -631,7 +632,7 @@ namespace Pos.Client.Wpf.Windows.Admin
             if (_mode == Mode.EditSingle)
             {
                 // Edit one existing item/variant
-                AxesGroup.Visibility = Visibility.Collapsed;
+                AxesGroup.Visibility = IsStandaloneMode ? Visibility.Collapsed : Visibility.Visible;
                 AxesGroup.IsEnabled = true;
                 HideBatchValuesRows(); // keep AxisSingleValuesPanel visible
                 SaveBtn.Content = "Save";
