@@ -1,11 +1,12 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib" 
-                    xmlns:media="clr-namespace:System.Windows.Media;assembly=PresentationCore">
+﻿<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:media="clr-namespace:System.Windows.Media;assembly=PresentationCore"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
 
 
-    <SolidColorBrush x:Key="Icon.FillBrush" Color="{StaticResource Theme.PrimaryAccentColor}"/>
+    <SolidColorBrush x:Key="Icon.FillBrush" Color="{StaticResource Theme.PrimaryAccentColor}" />
     <sys:Double x:Key="Icon.Size">20</sys:Double>
     <sys:Double x:Key="Icon.StrokeThickness">8</sys:Double>
     <sys:Double x:Key="Icon.OutlineThickness">1</sys:Double>
@@ -16,54 +17,45 @@
     <sys:Double x:Key="Icon.OutlineThickness0_6">0.6</sys:Double>
     <sys:Double x:Key="Icon.OutlineThickness4">0.8</sys:Double>
     <sys:Double x:Key="Icon.OutlineThickness9">9</sys:Double>
-    <SolidColorBrush x:Key="Icon.StrokeBrush" Color="{StaticResource Theme.PrimaryAccentColor}"/>
-   
-    <!-- Image style driven by your Icon.Size -->
+    <SolidColorBrush x:Key="Icon.StrokeBrush" Color="{StaticResource Theme.PrimaryAccentColor}" />
+
+    <!--  Image style driven by your Icon.Size  -->
     <Style x:Key="Icon.Image" TargetType="Image">
-        <Setter Property="Width"  Value="{DynamicResource Icon.Size}"/>
-        <Setter Property="Height" Value="{DynamicResource Icon.Size}"/>
-        <Setter Property="Stretch" Value="Uniform"/>
-        <Setter Property="SnapsToDevicePixels" Value="True"/>
-        <Setter Property="UseLayoutRounding" Value="True"/>
-        <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality"/>
+        <Setter Property="Width" Value="{DynamicResource Icon.Size}" />
+        <Setter Property="Height" Value="{DynamicResource Icon.Size}" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
     </Style>
 
     <!-- Implicit templates to wrap ANY DrawingImage/ImageSource as a sized <Image> -->
     <DataTemplate DataType="{x:Type media:DrawingImage}">
-        <Image Style="{StaticResource Icon.Image}" Source="{Binding}"/>
+        <Image Source="{Binding}" Style="{StaticResource Icon.Image}" />
     </DataTemplate>
 
     <DataTemplate DataType="{x:Type media:ImageSource}">
-        <Image Style="{StaticResource Icon.Image}" Source="{Binding}"/>
+        <Image Source="{Binding}" Style="{StaticResource Icon.Image}" />
     </DataTemplate>
-    
+
     <DrawingImage x:Key="Icon.SaleRegister">
         <DrawingImage.Drawing>
             <DrawingGroup>
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="0.2016129" ScaleY="0.2016129"/>
+                    <ScaleTransform ScaleX="0.2016129" ScaleY="0.2016129" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.StrokeThickness}"
-               LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.StrokeThickness}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M472,96c13.232,0,24-10.768,24-24V24c0-13.232-10.768-24-24-24H312c-13.232,0-24,10.768-24,24v48
-c0,13.232,10.768,24,24,24h48v240h-16V152c0-22.056-17.944-40-40-40H192V0H48v112h-8c-22.056,0-40,17.944-40,40v184v8v152h496
-V336h-72V96H472z M64,16h16v16h16V16h16v16h16V16h16v16h16V16h16v144H64V16z M16,152c0-13.232,10.768-24,24-24h8v32H32v16h176
-v-16h-16v-32h112c13.232,0,24,10.768,24,24v184H16V152z M480,352v128H16V352H480z M376,336V96h32v240H376z M312,80
-c-4.416,0-8-3.584-8-8V24c0-4.416,3.584-8,8-8h160c4.416,0,8,3.584,8,8v48c0,4.416-3.584,8-8,8H312z
-M448,48h16v16h-16V48z M360,48h72v16h-72V48z M80,48h80v16H80V48z M80,80h80v16H80V80z M128,112h32v16h-32V112z
-M240,256h48v-48h-48V256z M256,224h16v16h-16V224z M176,256h48v-48h-48V256z M192,224h16v16h-16V224z
-M112,256h48v-48h-48V256z M128,224h16v16h-16V224z M48,256h48v-48H48V256z M64,224h16v16H64V224z
-M240,320h48v-48h-48V320z M256,288h16v16h-16V288z M176,320h48v-48h-48V320z M192,288h16v16h-16V288z
-M112,320h48v-48h-48V320z M128,288h16v16h-16V288z M48,320h48v-48H48V320z M64,288h16v16H64V288z
-M248,464c23.736,0,43.448-17.336,47.28-40H376v-16h-80.72c-3.824-22.664-23.544-40-47.28-40
-c-23.736,0-43.448,17.336-47.28,40H120v16h80.72C204.552,446.664,224.264,464,248,464z
-M248,384c17.648,0,32,14.352,32,32s-14.352,32-32,32s-32-14.352-32-32S230.352,384,248,384z"/>
+                        <PathGeometry Figures="M472,96c13.232,0,24-10.768,24-24V24c0-13.232-10.768-24-24-24H312c-13.232,0-24,10.768-24,24v48 c0,13.232,10.768,24,24,24h48v240h-16V152c0-22.056-17.944-40-40-40H192V0H48v112h-8c-22.056,0-40,17.944-40,40v184v8v152h496 V336h-72V96H472z M64,16h16v16h16V16h16v16h16V16h16v16h16V16h16v144H64V16z M16,152c0-13.232,10.768-24,24-24h8v32H32v16h176 v-16h-16v-32h112c13.232,0,24,10.768,24,24v184H16V152z M480,352v128H16V352H480z M376,336V96h32v240H376z M312,80 c-4.416,0-8-3.584-8-8V24c0-4.416,3.584-8,8-8h160c4.416,0,8,3.584,8,8v48c0,4.416-3.584,8-8,8H312z M448,48h16v16h-16V48z M360,48h72v16h-72V48z M80,48h80v16H80V48z M80,80h80v16H80V80z M128,112h32v16h-32V112z M240,256h48v-48h-48V256z M256,224h16v16h-16V224z M176,256h48v-48h-48V256z M192,224h16v16h-16V224z M112,256h48v-48h-48V256z M128,224h16v16h-16V224z M48,256h48v-48H48V256z M64,224h16v16H64V224z M240,320h48v-48h-48V320z M256,288h16v16h-16V288z M176,320h48v-48h-48V320z M192,288h16v16h-16V288z M112,320h48v-48h-48V320z M128,288h16v16h-16V288z M48,320h48v-48H48V320z M64,288h16v16H64V288z M248,464c23.736,0,43.448-17.336,47.28-40H376v-16h-80.72c-3.824-22.664-23.544-40-47.28-40 c-23.736,0-43.448,17.336-47.28,40H120v16h80.72C204.552,446.664,224.264,464,248,464z M248,384c17.648,0,32,14.352,32,32s-14.352,32-32,32s-32-14.352-32-32S230.352,384,248,384z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
@@ -74,73 +66,52 @@ M248,384c17.648,0,32,14.352,32,32s-14.352,32-32,32s-32-14.352-32-32S230.352,384,
         <DrawingImage.Drawing>
             <DrawingGroup>
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="1.5625" ScaleY="1.5625"/>
+                    <ScaleTransform ScaleX="1.5625" ScaleY="1.5625" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness}"
-               LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
-                            <PathGeometry Figures="M57,41h-2V26h-0.031C56.194,25.088,57,23.641,57,22v-4.236L50.618,5H49V1H15v4h-1.618L7,17.764V22
-c0,1.641,0.806,3.088,2.031,4H9v15H7v20H5v2h54v-2h-2V41z M53,41h-2V26.892C51.324,26.958,51.657,27,52,27
-c0.342,0,0.677-0.035,1-0.101V41z M17,19h6.01L23,22c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M24.82,7l-1.667,10h-5.766L20.72,7
-H24.82z M43.28,7l3.333,10h-5.778L39.179,7H43.28z M25,19h6v3c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M33,19h6v3
-c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M41,19h6v3c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M37.153,7l1.667,10H33V7H37.153z M31,17
-h-5.82l1.667-10H31V17z M16,24.997C16.913,26.212,18.366,27,20,27s3.087-0.788,4-2.003C24.913,26.212,26.366,27,28,27
-s3.087-0.788,4-2.003C32.913,26.212,34.366,27,36,27s3.087-0.788,4-2.003C40.913,26.212,42.366,27,44,27s3.087-0.788,4-2.003
-c0.287,0.383,0.633,0.716,1.017,1.003H49v15H15V26h-0.017C15.367,25.713,15.713,25.38,16,24.997z M52,25c-1.654,0-3-1.346-3-3v-3h6
-v3C55,23.654,53.654,25,52,25z M54.382,17h-5.661L45.387,7h3.995L54.382,17z M17,3h30v2H17V3z M14.618,7h3.995l-3.334,10H9.618
-L14.618,7z M9,19h6v3c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M11,26.899C11.323,26.965,11.658,27,12,27c0.343,0,0.676-0.042,1-0.108
-V41h-2V26.899z M9,43h46v18h-2V45h-6v2h4v14H13V47h4v-2h-6v16H9V43z"/>
-                            <!-- tiny rectangles converted to geometry -->
-                            <RectangleGeometry Rect="19,45,26,2"/>
-                            <RectangleGeometry Rect="61,61,2,2"/>
-                            <RectangleGeometry Rect="1,61,2,2"/>
+                            <PathGeometry Figures="M57,41h-2V26h-0.031C56.194,25.088,57,23.641,57,22v-4.236L50.618,5H49V1H15v4h-1.618L7,17.764V22 c0,1.641,0.806,3.088,2.031,4H9v15H7v20H5v2h54v-2h-2V41z M53,41h-2V26.892C51.324,26.958,51.657,27,52,27 c0.342,0,0.677-0.035,1-0.101V41z M17,19h6.01L23,22c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M24.82,7l-1.667,10h-5.766L20.72,7 H24.82z M43.28,7l3.333,10h-5.778L39.179,7H43.28z M25,19h6v3c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M33,19h6v3 c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M41,19h6v3c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M37.153,7l1.667,10H33V7H37.153z M31,17 h-5.82l1.667-10H31V17z M16,24.997C16.913,26.212,18.366,27,20,27s3.087-0.788,4-2.003C24.913,26.212,26.366,27,28,27 s3.087-0.788,4-2.003C32.913,26.212,34.366,27,36,27s3.087-0.788,4-2.003C40.913,26.212,42.366,27,44,27s3.087-0.788,4-2.003 c0.287,0.383,0.633,0.716,1.017,1.003H49v15H15V26h-0.017C15.367,25.713,15.713,25.38,16,24.997z M52,25c-1.654,0-3-1.346-3-3v-3h6 v3C55,23.654,53.654,25,52,25z M54.382,17h-5.661L45.387,7h3.995L54.382,17z M17,3h30v2H17V3z M14.618,7h3.995l-3.334,10H9.618 L14.618,7z M9,19h6v3c0,1.654-1.346,3-3,3s-3-1.346-3-3V19z M11,26.899C11.323,26.965,11.658,27,12,27c0.343,0,0.676-0.042,1-0.108 V41h-2V26.899z M9,43h46v18h-2V45h-6v2h4v14H13V47h4v-2h-6v16H9V43z" />
+                            <!--  tiny rectangles converted to geometry  -->
+                            <RectangleGeometry Rect="19,45,26,2" />
+                            <RectangleGeometry Rect="61,61,2,2" />
+                            <RectangleGeometry Rect="1,61,2,2" />
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>
-    
+
     <DrawingImage x:Key="Icon.Purchase">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize original 490×490 to 100×100 -->
+                <!--  Normalize original 490×490 to 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="0.20408163" ScaleY="0.20408163"/>
+                    <ScaleTransform ScaleX="0.20408163" ScaleY="0.20408163" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-                         Thickness="{DynamicResource Icon.StrokeThickness}"
-                         LineJoin="Round"
-                         StartLineCap="Round"
-                         EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.StrokeThickness}" />
                     </GeometryDrawing.Pen>
 
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M224.777,305.082H405.12c3.99,0,7.599-2.372,9.181-6.036l74.88-173.406
-                        c1.335-3.09,1.024-6.644-0.825-9.457c-1.849-2.814-4.989-4.507-8.355-4.507H129.393l-20.676-63.188
-                        c-1.345-4.11-5.179-6.891-9.504-6.891H10c-5.523,0-10,4.478-10,10c0,5.522,4.477,10,10,10h81.964l77.413,236.595
-                        c1.345,4.11,5.18,6.891,9.504,6.891h23.403l-28.482,54.688c-3.65-0.958-7.48-1.473-11.428-1.473
-                        c-24.841,0-45.051,20.21-45.051,45.052c0,24.843,20.21,45.055,45.051,45.055c21.402,0,39.356-15.011,43.916-35.055h176.654
-                        c4.561,20.044,22.511,35.055,43.912,35.055c24.845,0,45.058-20.212,45.058-45.055c0-24.842-20.213-45.052-45.058-45.052
-                        c-21.4,0-39.352,15.009-43.912,35.052H206.29c-2.193-9.639-7.481-18.108-14.766-24.309L224.356,306
-                        C224.514,305.698,224.653,305.391,224.777,305.082z M266.737,131.675h53.877l-28.801,66.698h-53.877L266.737,131.675z
-                        M216.152,198.374h-53.871l28.794-66.698h53.877L216.152,198.374z M313.599,198.374l28.801-66.698h53.873l-28.801,66.698
-                        H313.599z M358.835,218.374l-28.805,66.708h-53.873l28.805-66.708H358.835z M283.177,218.374l-28.805,66.708h-53.875
-                        l28.804-66.708H283.177z M398.546,285.082h-46.73l28.805-66.708h46.731L398.546,285.082z M435.987,198.374h-46.73
-                        l28.801-66.698h46.731L435.987,198.374z M169.292,131.675l-18.975,43.951l-14.381-43.951H169.292z M164.304,218.374h43.213
-                        l-24.584,56.934L164.304,218.374z M162.374,428.404c-13.813,0-25.051-11.239-25.051-25.055c0-13.813,11.237-25.052,
-                        25.051-25.052c13.812,0,25.049,11.238,25.049,25.052C187.423,417.165,176.186,428.404,162.374,428.404z M426.856,378.297
-                        c13.816,0,25.058,11.238,25.058,25.052c0,13.815-11.241,25.055-25.058,25.055c-13.81,0-25.045-11.239-25.045-25.055
-                        C401.811,389.536,413.047,378.297,426.856,378.297z"/>
+                        <PathGeometry Figures="M224.777,305.082H405.12c3.99,0,7.599-2.372,9.181-6.036l74.88-173.406                         c1.335-3.09,1.024-6.644-0.825-9.457c-1.849-2.814-4.989-4.507-8.355-4.507H129.393l-20.676-63.188                         c-1.345-4.11-5.179-6.891-9.504-6.891H10c-5.523,0-10,4.478-10,10c0,5.522,4.477,10,10,10h81.964l77.413,236.595                         c1.345,4.11,5.18,6.891,9.504,6.891h23.403l-28.482,54.688c-3.65-0.958-7.48-1.473-11.428-1.473                         c-24.841,0-45.051,20.21-45.051,45.052c0,24.843,20.21,45.055,45.051,45.055c21.402,0,39.356-15.011,43.916-35.055h176.654                         c4.561,20.044,22.511,35.055,43.912,35.055c24.845,0,45.058-20.212,45.058-45.055c0-24.842-20.213-45.052-45.058-45.052                         c-21.4,0-39.352,15.009-43.912,35.052H206.29c-2.193-9.639-7.481-18.108-14.766-24.309L224.356,306                         C224.514,305.698,224.653,305.391,224.777,305.082z M266.737,131.675h53.877l-28.801,66.698h-53.877L266.737,131.675z                         M216.152,198.374h-53.871l28.794-66.698h53.877L216.152,198.374z M313.599,198.374l28.801-66.698h53.873l-28.801,66.698                         H313.599z M358.835,218.374l-28.805,66.708h-53.873l28.805-66.708H358.835z M283.177,218.374l-28.805,66.708h-53.875                         l28.804-66.708H283.177z M398.546,285.082h-46.73l28.805-66.708h46.731L398.546,285.082z M435.987,198.374h-46.73                         l28.801-66.698h46.731L435.987,198.374z M169.292,131.675l-18.975,43.951l-14.381-43.951H169.292z M164.304,218.374h43.213                         l-24.584,56.934L164.304,218.374z M162.374,428.404c-13.813,0-25.051-11.239-25.051-25.055c0-13.813,11.237-25.052,                         25.051-25.052c13.812,0,25.049,11.238,25.049,25.052C187.423,417.165,176.186,428.404,162.374,428.404z M426.856,378.297                         c13.816,0,25.058,11.238,25.058,25.052c0,13.815-11.241,25.055-25.058,25.055c-13.81,0-25.045-11.239-25.045-25.055                         C401.811,389.536,413.047,378.297,426.856,378.297z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
@@ -151,31 +122,25 @@ V41h-2V26.899z M9,43h46v18h-2V45h-6v2h4v14H13V47h4v-2h-6v16H9V43z"/>
         <DrawingImage.Drawing>
             <GeometryDrawing Brush="{x:Null}">
                 <GeometryDrawing.Pen>
-                    <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-                     Thickness="{DynamicResource Icon.OutlineThickness1_5}"
-                     LineJoin="Round" StartLineCap="Round" EndLineCap="Round"/>
+                    <Pen
+                        Brush="{DynamicResource Icon.StrokeBrush}"
+                        EndLineCap="Round"
+                        LineJoin="Round"
+                        StartLineCap="Round"
+                        Thickness="{DynamicResource Icon.OutlineThickness1_5}" />
                 </GeometryDrawing.Pen>
                 <GeometryDrawing.Geometry>
                     <GeometryGroup>
-                        <PathGeometry Figures="M61.8,65.5h13.3c0.4,0,0.8-0.3,0.8-0.7l2.4-8.6c0.2-0.6-0.3-1.1-0.8-1.1H63.4H57l-0.3-1.3
-	                  c-0.2-0.6-0.7-1-1.3-1h-2.2c-0.7,0-1.4,0.6-1.4,1.3c-0.1,0.8,0.6,1.4,1.3,1.4h1.3l1.2,4l0,0l3,10.3c0.2,0.6,0.7,1,1.3,1h15.6
-	                  c0.7,0,1.4-0.6,1.4-1.3c0.1-0.8-0.6-1.4-1.3-1.4H61.8c-0.6,0-1.1-0.4-1.3-0.9v-0.1C60.3,66.3,60.9,65.5,61.8,65.5z"/>
-                        <EllipseGeometry Center="62.1,75.8" RadiusX="2.2" RadiusY="2.2"/>
-                        <EllipseGeometry Center="72.9,75.8" RadiusX="2.2" RadiusY="2.2"/>
-                        <PathGeometry Figures="M61.1,19.9h-39c-2.2,0-2.5,2.3-2.5,2.5v49.5c0.1,1.3,0.9,3.3,4.4,3.3h28.3c3.2,0,3-2.1,2.8-2.9L55,72l0,0
-	                  l0,0l-0.3-1.1l0,0l-0.2-0.6l0,0L51.4,60c-0.2-0.7-1-1-1-1c-0.5-0.3-1-0.6-1.3-1c-1-1.1-1.5-2.6-1.4-4c0.2-2.8,2.6-5,5.4-5h2.2
-	                  c1.5,0,2.8,0.6,3.8,1.6c0,0,0,0,0.1,0.1c0.2,0.2,0.6,0.5,1.2,0.5h1.4c1.3,0,1.4-1.4,1.5-1.8l0.1-10.5V23
-	                  C63.5,20.6,61.8,19.9,61.1,19.9z M32.4,67.1c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V67.1z M32.4,55.2c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3L32.4,55.2z M32.4,43.5c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V43.5z M32.4,31.7c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V31.7z M45.1,67.1c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V67.1z M45.1,55.2c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V55.2z M45.1,43.5c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V43.5z M45.1,31.7c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V31.7z M57.8,43.5c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V43.5z M57.8,31.7c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3
-	                  c1.3,0,2.3,1,2.3,2.3V31.7z"/>
+                        <PathGeometry Figures="M61.8,65.5h13.3c0.4,0,0.8-0.3,0.8-0.7l2.4-8.6c0.2-0.6-0.3-1.1-0.8-1.1H63.4H57l-0.3-1.3                    c-0.2-0.6-0.7-1-1.3-1h-2.2c-0.7,0-1.4,0.6-1.4,1.3c-0.1,0.8,0.6,1.4,1.3,1.4h1.3l1.2,4l0,0l3,10.3c0.2,0.6,0.7,1,1.3,1h15.6                    c0.7,0,1.4-0.6,1.4-1.3c0.1-0.8-0.6-1.4-1.3-1.4H61.8c-0.6,0-1.1-0.4-1.3-0.9v-0.1C60.3,66.3,60.9,65.5,61.8,65.5z" />
+                        <EllipseGeometry
+                            Center="62.1,75.8"
+                            RadiusX="2.2"
+                            RadiusY="2.2" />
+                        <EllipseGeometry
+                            Center="72.9,75.8"
+                            RadiusX="2.2"
+                            RadiusY="2.2" />
+                        <PathGeometry Figures="M61.1,19.9h-39c-2.2,0-2.5,2.3-2.5,2.5v49.5c0.1,1.3,0.9,3.3,4.4,3.3h28.3c3.2,0,3-2.1,2.8-2.9L55,72l0,0                    l0,0l-0.3-1.1l0,0l-0.2-0.6l0,0L51.4,60c-0.2-0.7-1-1-1-1c-0.5-0.3-1-0.6-1.3-1c-1-1.1-1.5-2.6-1.4-4c0.2-2.8,2.6-5,5.4-5h2.2                    c1.5,0,2.8,0.6,3.8,1.6c0,0,0,0,0.1,0.1c0.2,0.2,0.6,0.5,1.2,0.5h1.4c1.3,0,1.4-1.4,1.5-1.8l0.1-10.5V23                    C63.5,20.6,61.8,19.9,61.1,19.9z M32.4,67.1c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V67.1z M32.4,55.2c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3L32.4,55.2z M32.4,43.5c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V43.5z M32.4,31.7c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V31.7z M45.1,67.1c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V67.1z M45.1,55.2c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V55.2z M45.1,43.5c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V43.5z M45.1,31.7c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V31.7z M57.8,43.5c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V43.5z M57.8,31.7c0,1.3-1,2.3-2.3,2.3h-2.3c-1.3,0-2.3-1-2.3-2.3v-2.3c0-1.3,1-2.3,2.3-2.3h2.3                    c1.3,0,2.3,1,2.3,2.3V31.7z" />
                     </GeometryGroup>
                 </GeometryDrawing.Geometry>
             </GeometryDrawing>
@@ -186,33 +151,19 @@ V41h-2V26.899z M9,43h46v18h-2V45h-6v2h4v14H13V47h4v-2h-6v16H9V43z"/>
         <DrawingImage.Drawing>
             <DrawingGroup>
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="1.3888889" ScaleY="1.3888889"/>
+                    <ScaleTransform ScaleX="1.3888889" ScaleY="1.3888889" />
                 </DrawingGroup.Transform>
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness}"
-               LineJoin="Miter"
-               StartLineCap="Square"
-               EndLineCap="Square"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Square"
+                            LineJoin="Miter"
+                            StartLineCap="Square"
+                            Thickness="{DynamicResource Icon.OutlineThickness}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M8,7h7V42H8Z
-                                 M18.5,7H22V42H18.5Z
-                                 M25.5,7H29V42H25.5Z
-                                 M36,7h3.5V42H36Z
-                                 M50,7h3.5V42H50Z
-                                 M60.5,7H64V42H60.5Z
-                                 M43,7h1.75V42H43Z
-                                 M32.5,7h1.75V42H32.5Z
-                                 M55.25,7H57V42H55.25Z
-                                 M8,45.5h3.5V49H8Z
-                                 M18.5,45.5H22V49H18.5Z
-                                 M25.5,45.5H29V49H25.5Z
-                                 M43,45.5h3.5V49H43Z
-                                 M60.5,45.5H64V49H60.5Z
-                                 M50,45.5h7V49H50Z
-                                 M32.5,45.5h7V49h-7Z"/>
+                        <PathGeometry Figures="M8,7h7V42H8Z                                  M18.5,7H22V42H18.5Z                                  M25.5,7H29V42H25.5Z                                  M36,7h3.5V42H36Z                                  M50,7h3.5V42H50Z                                  M60.5,7H64V42H60.5Z                                  M43,7h1.75V42H43Z                                  M32.5,7h1.75V42H32.5Z                                  M55.25,7H57V42H55.25Z                                  M8,45.5h3.5V49H8Z                                  M18.5,45.5H22V49H18.5Z                                  M25.5,45.5H29V49H25.5Z                                  M43,45.5h3.5V49H43Z                                  M60.5,45.5H64V49H60.5Z                                  M50,45.5h7V49H50Z                                  M32.5,45.5h7V49h-7Z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
@@ -223,40 +174,35 @@ V41h-2V26.899z M9,43h46v18h-2V45h-6v2h4v14H13V47h4v-2h-6v16H9V43z"/>
     <DrawingImage x:Key="Icon.Transfer">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize 496×496 → 100×100 -->
+                <!--  Normalize 496×496 → 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="0.2016129" ScaleY="0.2016129"/>
+                    <ScaleTransform ScaleX="0.2016129" ScaleY="0.2016129" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness9}"
-               LineJoin="Round"
-               StartLineCap="Round"
-               EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness9}" />
                     </GeometryDrawing.Pen>
 
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Arrow hook (top-left) -->
-                            <PathGeometry Figures="M347.6,3.6c-4.8-4.8-12.5-4.8-17.3,0l-37.1,37.1c-4.8,4.8-4.8,12.5,0,17.3l37.1,37.1c2.4,2.4,5.5,3.6,8.7,3.6
-s6.3-1.2,8.7-3.6c4.8-4.8,4.8-12.5,0-17.3l-16.2-16.2h61.9c39.4,0,71.5,32.1,71.5,71.5v43.8c0,6.8,5.5,12.3,12.3,12.3
-s12.3-5.5,12.3-12.3v-43.8c0-52.9-43.1-96-96-96h-61.9l16.2-16.2C352.4,16.2,352.4,8.4,347.6,3.6z"/>
+                            <!--  Arrow hook (top-left)  -->
+                            <PathGeometry Figures="M347.6,3.6c-4.8-4.8-12.5-4.8-17.3,0l-37.1,37.1c-4.8,4.8-4.8,12.5,0,17.3l37.1,37.1c2.4,2.4,5.5,3.6,8.7,3.6 s6.3-1.2,8.7-3.6c4.8-4.8,4.8-12.5,0-17.3l-16.2-16.2h61.9c39.4,0,71.5,32.1,71.5,71.5v43.8c0,6.8,5.5,12.3,12.3,12.3 s12.3-5.5,12.3-12.3v-43.8c0-52.9-43.1-96-96-96h-61.9l16.2-16.2C352.4,16.2,352.4,8.4,347.6,3.6z" />
 
-                            <!-- Right square -->
-                            <PathGeometry Figures="M249.6,263.2v214.3c0,6.8,5.5,12.3,12.3,12.3h214.3c6.8,0,12.3-5.5,12.3-12.3V263.2c0-6.8-5.5-12.3-12.3-12.3H261.8
-C255.1,251,249.6,256.5,249.6,263.2z M274.1,275.5h189.7v189.8H274.1V275.5z"/>
+                            <!--  Right square  -->
+                            <PathGeometry Figures="M249.6,263.2v214.3c0,6.8,5.5,12.3,12.3,12.3h214.3c6.8,0,12.3-5.5,12.3-12.3V263.2c0-6.8-5.5-12.3-12.3-12.3H261.8 C255.1,251,249.6,256.5,249.6,263.2z M274.1,275.5h189.7v189.8H274.1V275.5z" />
 
-                            <!-- Arrow hook (bottom-right) -->
-                            <PathGeometry Figures="M0.3,356.7c0,52.9,43.1,96,96,96h61.9L142,468.9c-4.8,4.8-4.8,12.5,0,17.3c2.4,2.4,5.5,3.6,8.7,3.6s6.3-1.2,8.7-3.6
-l37.1-37.1c2.3-2.3,3.6-5.4,3.6-8.7s-1.3-6.4-3.6-8.7l-37.1-37.1c-4.8-4.8-12.5-4.8-17.3,0s-4.8,12.5,0,17.3l16.2,16.2H96.4
-c-39.4,0-71.5-32.1-71.5-71.5v-43.7c0-6.8-5.5-12.3-12.3-12.3s-12.3,5.5-12.3,12.3L0.3,356.7L0.3,356.7z"/>
+                            <!--  Arrow hook (bottom-right)  -->
+                            <PathGeometry Figures="M0.3,356.7c0,52.9,43.1,96,96,96h61.9L142,468.9c-4.8,4.8-4.8,12.5,0,17.3c2.4,2.4,5.5,3.6,8.7,3.6s6.3-1.2,8.7-3.6 l37.1-37.1c2.3-2.3,3.6-5.4,3.6-8.7s-1.3-6.4-3.6-8.7l-37.1-37.1c-4.8-4.8-12.5-4.8-17.3,0s-4.8,12.5,0,17.3l16.2,16.2H96.4 c-39.4,0-71.5-32.1-71.5-71.5v-43.7c0-6.8-5.5-12.3-12.3-12.3s-12.3,5.5-12.3,12.3L0.3,356.7L0.3,356.7z" />
 
-                            <!-- Left square -->
-                            <PathGeometry Figures="M227.8,0H13.5C6.7,0,1.2,5.5,1.2,12.3v214.3c0,6.8,5.5,12.3,12.3,12.3h214.3c6.8,0,12.3-5.5,12.3-12.3V12.3
-C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
+                            <!--  Left square  -->
+                            <PathGeometry Figures="M227.8,0H13.5C6.7,0,1.2,5.5,1.2,12.3v214.3c0,6.8,5.5,12.3,12.3,12.3h214.3c6.8,0,12.3-5.5,12.3-12.3V12.3 C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z" />
 
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
@@ -265,43 +211,43 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    <!-- Outline variant -->
+    <!--  Outline variant  -->
     <DrawingImage x:Key="Icon.TransferCenter">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize 60×60 → 100×100 -->
+                <!--  Normalize 60×60 → 100×100  -->
                 <DrawingGroup.Transform>
                     <ScaleTransform ScaleX="1.666667" ScaleY="1.666667" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-                         Thickness="{DynamicResource Icon.OutlineThickness}"
-                         LineJoin="Round"
-                         StartLineCap="Round"
-                         EndLineCap="Round" />
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness}" />
                     </GeometryDrawing.Pen>
 
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Left device / frame -->
+                            <!--  Left device / frame  -->
                             <PathGeometry Figures="M14,38 H2 V2 h12 v6 H7 v2 h8 h25 v14 h2 V9 c0,-0.6 -0.4,-1 -1,-1 H16 V1 c0,-0.6 -0.4,-1 -1,-1 H1 C0.4,0 0,0.4 0,1 v38 c0,0.6 0.4,1 1,1 h13 V38 z" />
 
-                            <!-- Right device / frame -->
-                            <PathGeometry Figures="M59,28 H34 v-7 c0,-0.6 -0.4,-1 -1,-1 H19 c-0.6,0 -1,0.4 -1,1 v38 c0,0.6 0.4,1 1,1 h40 c0.6,0 1,-0.4 1,-1 V29 C60,28.4 59.6,28 59,28 z
-                                              M58,58 H20 V22 h12 v6 h-7 v2 h8 h25 V58 z" />
+                            <!--  Right device / frame  -->
+                            <PathGeometry Figures="M59,28 H34 v-7 c0,-0.6 -0.4,-1 -1,-1 H19 c-0.6,0 -1,0.4 -1,1 v38 c0,0.6 0.4,1 1,1 h40 c0.6,0 1,-0.4 1,-1 V29 C60,28.4 59.6,28 59,28 z                                               M58,58 H20 V22 h12 v6 h-7 v2 h8 h25 V58 z" />
 
-                            <!-- Top-right arrow -->
+                            <!--  Top-right arrow  -->
                             <PathGeometry Figures="M48.3,15.7 l1.4,-1.4 L48.4,13 H56 v11 h2 V12 c0,-0.6 -0.4,-1 -1,-1 h-8.6 l1.3,-1.3 l-1.4,-1.4 l-3,3 c-0.4,0.4 -0.4,1 0,1.4 L48.3,15.7 z" />
 
-                            <!-- Bottom-left arrow -->
+                            <!--  Bottom-left arrow  -->
                             <PathGeometry Figures="M11.7,52.3 l-1.4,1.4 l1.3,1.3 H4 V44 H2 v12 c0,0.6 0.4,1 1,1 h8.6 l-1.3,1.3 l1.4,1.4 l3,-3 c0.4,-0.4 0.4,-1 0,-1.4 L11.7,52.3 z" />
 
-                            <!-- Dots / small rectangles -->
+                            <!--  Dots / small rectangles  -->
 
-                            <!-- Row: y = 33 (right) -->
+                            <!--  Row: y = 33 (right)  -->
                             <RectangleGeometry Rect="24,33,2,2" />
                             <RectangleGeometry Rect="28,33,2,2" />
                             <RectangleGeometry Rect="32,33,2,2" />
@@ -311,7 +257,7 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
                             <RectangleGeometry Rect="48,33,2,2" />
                             <RectangleGeometry Rect="52,33,2,2" />
 
-                            <!-- Row: y = 13 (top) -->
+                            <!--  Row: y = 13 (top)  -->
                             <RectangleGeometry Rect="6,13,2,2" />
                             <RectangleGeometry Rect="10,13,2,2" />
                             <RectangleGeometry Rect="14,13,2,2" />
@@ -321,12 +267,12 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
                             <RectangleGeometry Rect="30,13,2,2" />
                             <RectangleGeometry Rect="34,13,2,2" />
 
-                            <!-- Row: y = 33 (left) -->
+                            <!--  Row: y = 33 (left)  -->
                             <RectangleGeometry Rect="6,33,2,2" />
                             <RectangleGeometry Rect="10,33,2,2" />
                             <RectangleGeometry Rect="14,33,2,2" />
 
-                            <!-- Row: y = 53 (bottom) -->
+                            <!--  Row: y = 53 (bottom)  -->
                             <RectangleGeometry Rect="24,53,2,2" />
                             <RectangleGeometry Rect="28,53,2,2" />
                             <RectangleGeometry Rect="32,53,2,2" />
@@ -343,11 +289,11 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    <!-- Filled variant -->
+    <!--  Filled variant  -->
     <DrawingImage x:Key="Icon.Transfer.Filled">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize 60×60 → 100×100 -->
+                <!--  Normalize 60×60 → 100×100  -->
                 <DrawingGroup.Transform>
                     <ScaleTransform ScaleX="1.666667" ScaleY="1.666667" />
                 </DrawingGroup.Transform>
@@ -356,22 +302,21 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Left device / frame -->
+                            <!--  Left device / frame  -->
                             <PathGeometry Figures="M14,38 H2 V2 h12 v6 H7 v2 h8 h25 v14 h2 V9 c0,-0.6 -0.4,-1 -1,-1 H16 V1 c0,-0.6 -0.4,-1 -1,-1 H1 C0.4,0 0,0.4 0,1 v38 c0,0.6 0.4,1 1,1 h13 V38 z" />
 
-                            <!-- Right device / frame -->
-                            <PathGeometry Figures="M59,28 H34 v-7 c0,-0.6 -0.4,-1 -1,-1 H19 c-0.6,0 -1,0.4 -1,1 v38 c0,0.6 0.4,1 1,1 h40 c0.6,0 1,-0.4 1,-1 V29 C60,28.4 59.6,28 59,28 z
-                                              M58,58 H20 V22 h12 v6 h-7 v2 h8 h25 V58 z" />
+                            <!--  Right device / frame  -->
+                            <PathGeometry Figures="M59,28 H34 v-7 c0,-0.6 -0.4,-1 -1,-1 H19 c-0.6,0 -1,0.4 -1,1 v38 c0,0.6 0.4,1 1,1 h40 c0.6,0 1,-0.4 1,-1 V29 C60,28.4 59.6,28 59,28 z                                               M58,58 H20 V22 h12 v6 h-7 v2 h8 h25 V58 z" />
 
-                            <!-- Top-right arrow -->
+                            <!--  Top-right arrow  -->
                             <PathGeometry Figures="M48.3,15.7 l1.4,-1.4 L48.4,13 H56 v11 h2 V12 c0,-0.6 -0.4,-1 -1,-1 h-8.6 l1.3,-1.3 l-1.4,-1.4 l-3,3 c-0.4,0.4 -0.4,1 0,1.4 L48.3,15.7 z" />
 
-                            <!-- Bottom-left arrow -->
+                            <!--  Bottom-left arrow  -->
                             <PathGeometry Figures="M11.7,52.3 l-1.4,1.4 l1.3,1.3 H4 V44 H2 v12 c0,0.6 0.4,1 1,1 h8.6 l-1.3,1.3 l1.4,1.4 l3,-3 c0.4,-0.4 0.4,-1 0,-1.4 L11.7,52.3 z" />
 
-                            <!-- Dots / small rectangles -->
+                            <!--  Dots / small rectangles  -->
 
-                            <!-- Row: y = 33 (right) -->
+                            <!--  Row: y = 33 (right)  -->
                             <RectangleGeometry Rect="24,33,2,2" />
                             <RectangleGeometry Rect="28,33,2,2" />
                             <RectangleGeometry Rect="32,33,2,2" />
@@ -381,7 +326,7 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
                             <RectangleGeometry Rect="48,33,2,2" />
                             <RectangleGeometry Rect="52,33,2,2" />
 
-                            <!-- Row: y = 13 (top) -->
+                            <!--  Row: y = 13 (top)  -->
                             <RectangleGeometry Rect="6,13,2,2" />
                             <RectangleGeometry Rect="10,13,2,2" />
                             <RectangleGeometry Rect="14,13,2,2" />
@@ -391,12 +336,12 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
                             <RectangleGeometry Rect="30,13,2,2" />
                             <RectangleGeometry Rect="34,13,2,2" />
 
-                            <!-- Row: y = 33 (left) -->
+                            <!--  Row: y = 33 (left)  -->
                             <RectangleGeometry Rect="6,33,2,2" />
                             <RectangleGeometry Rect="10,33,2,2" />
                             <RectangleGeometry Rect="14,33,2,2" />
 
-                            <!-- Row: y = 53 (bottom) -->
+                            <!--  Row: y = 53 (bottom)  -->
                             <RectangleGeometry Rect="24,53,2,2" />
                             <RectangleGeometry Rect="28,53,2,2" />
                             <RectangleGeometry Rect="32,53,2,2" />
@@ -417,28 +362,22 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
     <DrawingImage x:Key="Icon.Inventory">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize ~255×220 → 100×(<=100): 100/255 ≈ 0.39215686 -->
+                <!--  Normalize ~255×220 → 100×(<=100): 100/255 ≈ 0.39215686  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="0.39215686" ScaleY="0.39215686"/>
+                    <ScaleTransform ScaleX="0.39215686" ScaleY="0.39215686" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness5}"
-               StartLineCap="Round"
-               EndLineCap="Round"
-               LineJoin="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness5}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M61.2,106h37.4v31.2H61.2V106z 
-                                 M61.2,178.7h37.4v-31.2H61.2V178.7z 
-                                 M61.2,220.1h37.4v-31.2H61.2V220.1z 
-                                 M109.7,178.7H147v-31.2h-37.4V178.7z 
-                                 M109.7,220.1H147v-31.2h-37.4V220.1z 
-                                 M158.2,188.9v31.2h37.4v-31.2H158.2z 
-                                 M255,67.2L128.3,7.6L1.7,67.4l7.9,16.5l16.1-7.7v144h18.2V75.6h169v144.8h18.2v-144
-                                 l16.1,7.5L255,67.2z"/>
+                        <PathGeometry Figures="M61.2,106h37.4v31.2H61.2V106z                                   M61.2,178.7h37.4v-31.2H61.2V178.7z                                   M61.2,220.1h37.4v-31.2H61.2V220.1z                                   M109.7,178.7H147v-31.2h-37.4V178.7z                                   M109.7,220.1H147v-31.2h-37.4V220.1z                                   M158.2,188.9v31.2h37.4v-31.2H158.2z                                   M255,67.2L128.3,7.6L1.7,67.4l7.9,16.5l16.1-7.7v144h18.2V75.6h169v144.8h18.2v-144                                  l16.1,7.5L255,67.2z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
@@ -448,31 +387,32 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
     <DrawingImage x:Key="Icon.Products">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize original 24×24 → 100×100 -->
+                <!--  Normalize original 24×24 → 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="4.1666667" ScaleY="4.1666667"/>
+                    <ScaleTransform ScaleX="4.1666667" ScaleY="4.1666667" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness0_6}"
-               StartLineCap="Round"
-               EndLineCap="Round"
-               LineJoin="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness0_6}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
-                            <!-- Outer box polygon -->
-                            <PathGeometry Figures="M22,7 L12,2 L2,7 L2,17 L12,22 L22,17 Z"/>
+                            <!--  Outer box polygon  -->
+                            <PathGeometry Figures="M22,7 L12,2 L2,7 L2,17 L12,22 L22,17 Z" />
 
-                            <!-- Inner diagonals -->
-                            <LineGeometry StartPoint="2,7" EndPoint="12,12"/>
-                            <LineGeometry StartPoint="12,22" EndPoint="12,12"/>
-                            <LineGeometry StartPoint="22,7" EndPoint="12,12"/>
+                            <!--  Inner diagonals  -->
+                            <LineGeometry StartPoint="2,7" EndPoint="12,12" />
+                            <LineGeometry StartPoint="12,22" EndPoint="12,12" />
+                            <LineGeometry StartPoint="22,7" EndPoint="12,12" />
 
-                            <!-- Top diagonal edge -->
-                            <LineGeometry StartPoint="17,4.5" EndPoint="7,9.5"/>
+                            <!--  Top diagonal edge  -->
+                            <LineGeometry StartPoint="17,4.5" EndPoint="7,9.5" />
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
@@ -483,47 +423,37 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
     <DrawingImage x:Key="Icon.Party">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize ~80×80 → 100×100 -->
+                <!--  Normalize ~80×80 → 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="1.25" ScaleY="1.25"/>
+                    <ScaleTransform ScaleX="1.25" ScaleY="1.25" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness1_5}"
-               StartLineCap="Round"
-               EndLineCap="Round"
-               LineJoin="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness1_5}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Head -->
-                            <EllipseGeometry Center="41.3,42.3" RadiusX="12.2" RadiusY="13.5"/>
+                            <!--  Head  -->
+                            <EllipseGeometry
+                                Center="41.3,42.3"
+                                RadiusX="12.2"
+                                RadiusY="13.5" />
 
-                            <!-- Body -->
-                            <PathGeometry Figures="M52.6,57.4c-3.1,2.8-7,4.5-11.3,4.5c-4.3,0-8.3-1.7-11.3-4.6
-                     c-5.5,2.5-11,5.7-11,10.7v2.1c0,2.5,2,4.5,4.5,4.5h35.7
-                     c2.5,0,4.5-2,4.5-4.5v-2.1C63.6,63,58.2,59.9,52.6,57.4z"/>
+                            <!--  Body  -->
+                            <PathGeometry Figures="M52.6,57.4c-3.1,2.8-7,4.5-11.3,4.5c-4.3,0-8.3-1.7-11.3-4.6                      c-5.5,2.5-11,5.7-11,10.7v2.1c0,2.5,2,4.5,4.5,4.5h35.7                      c2.5,0,4.5-2,4.5-4.5v-2.1C63.6,63,58.2,59.9,52.6,57.4z" />
 
-                            <!-- Side figure right (shoulder / companion) -->
-                            <PathGeometry Figures="M68,47.4c-0.2-0.1-0.3-0.2-0.5-0.3
-                     c-0.4-0.2-0.9-0.2-1.3,0.1
-                     c-2.1,1.3-4.6,2.1-7.2,2.1
-                     c-0.3,0-0.7,0-1,0
-                     c-0.5,1.3-1,2.6-1.7,3.7
-                     c0.4,0.2,0.9,0.3,1.4,0.6
-                     c5.7,2.5,9.7,5.6,12.5,9.8H75
-                     c2.2,0,4-1.8,4-4v-1.9
-                     C79,52.6,73.3,49.6,68,47.4z"/>
+                            <!--  Side figure right (shoulder / companion)  -->
+                            <PathGeometry Figures="M68,47.4c-0.2-0.1-0.3-0.2-0.5-0.3                      c-0.4-0.2-0.9-0.2-1.3,0.1                      c-2.1,1.3-4.6,2.1-7.2,2.1                      c-0.3,0-0.7,0-1,0                      c-0.5,1.3-1,2.6-1.7,3.7                      c0.4,0.2,0.9,0.3,1.4,0.6                      c5.7,2.5,9.7,5.6,12.5,9.8H75                      c2.2,0,4-1.8,4-4v-1.9                      C79,52.6,73.3,49.6,68,47.4z" />
 
-                            <!-- Side figure head -->
-                            <PathGeometry Figures="M66.9,34.2c0-4.9-3.6-8.9-7.9-8.9
-                     c-2.2,0-4.1,1-5.6,2.5
-                     c3.5,3.6,5.7,8.7,5.7,14.4
-                     c0,0.3,0,0.5,0,0.8
-                     C63.4,43,66.9,39.1,66.9,34.2z"/>
+                            <!--  Side figure head  -->
+                            <PathGeometry Figures="M66.9,34.2c0-4.9-3.6-8.9-7.9-8.9                      c-2.2,0-4.1,1-5.6,2.5                      c3.5,3.6,5.7,8.7,5.7,14.4                      c0,0.3,0,0.5,0,0.8                      C63.4,43,66.9,39.1,66.9,34.2z" />
 
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
@@ -535,43 +465,34 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
     <DrawingImage x:Key="Icon.Staff">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize ≈90×90 → 100×100 -->
+                <!--  Normalize ≈90×90 → 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="1.11" ScaleY="1.11"/>
+                    <ScaleTransform ScaleX="1.11" ScaleY="1.11" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness2}"
-               StartLineCap="Round"
-               EndLineCap="Round"
-               LineJoin="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness2}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Left shoulder / body -->
-                            <PathGeometry Figures="M38.391,56.001c-5.693-1.266-10.791-4.121-14.814-8.086
-                     c-6.549,3.213-9.785,7.955-9.785,14.494v22.193
-                     c3.148,1.465,11.26,4.762,22.541,5.967l-2.637-2.109
-                     c-0.832-0.664-1.225-1.74-1.008-2.783L38.391,56.001z"/>
+                            <!--  Left shoulder / body  -->
+                            <PathGeometry Figures="M38.391,56.001c-5.693-1.266-10.791-4.121-14.814-8.086                      c-6.549,3.213-9.785,7.955-9.785,14.494v22.193                      c3.148,1.465,11.26,4.762,22.541,5.967l-2.637-2.109                      c-0.832-0.664-1.225-1.74-1.008-2.783L38.391,56.001z" />
 
-                            <!-- Head -->
-                            <PathGeometry Figures="M45.01,51.079
-                     c13.783,0,25-11.295,25-25.174s-11.217-25.172-25-25.172
-                     c-13.775,0-24.982,11.293-24.982,25.172S31.234,51.079,45.01,51.079z"/>
+                            <!--  Head  -->
+                            <PathGeometry Figures="M45.01,51.079                      c13.783,0,25-11.295,25-25.174s-11.217-25.172-25-25.172                      c-13.775,0-24.982,11.293-24.982,25.172S31.234,51.079,45.01,51.079z" />
 
-                            <!-- Center torso / connector -->
-                            <PathGeometry Figures="M43.977,56.978L38.59,85.118
-                     L45.242,90.437L51.881,85.122L46.414,56.978z"/>
+                            <!--  Center torso / connector  -->
+                            <PathGeometry Figures="M43.977,56.978L38.59,85.118                      L45.242,90.437L51.881,85.122L46.414,56.978z" />
 
-                            <!-- Right shoulder / body -->
-                            <PathGeometry Figures="M66.475,47.896
-                     c-3.943,3.895-8.932,6.709-14.492,8.016l5.803,29.758
-                     c0.219,1.047-0.172,2.123-1.002,2.791l-2.496,1.996
-                     c6.957-0.83,14.496-2.648,22.398-5.959V62.409
-                     C76.686,55.862,73.309,51.114,66.475,47.896z"/>
+                            <!--  Right shoulder / body  -->
+                            <PathGeometry Figures="M66.475,47.896                      c-3.943,3.895-8.932,6.709-14.492,8.016l5.803,29.758                      c0.219,1.047-0.172,2.123-1.002,2.791l-2.496,1.996                      c6.957-0.83,14.496-2.648,22.398-5.959V62.409                      C76.686,55.862,73.309,51.114,66.475,47.896z" />
 
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
@@ -583,80 +504,23 @@ C240,5.5,234.5,0,227.8,0z M215.5,214.3H25.8V24.5h189.8v189.8H215.5z"/>
     <DrawingImage x:Key="Icon.OtherAccounts">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize ~32×32 → 100×100 -->
+                <!--  Normalize ~32×32 → 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="3.125" ScaleY="3.125"/>
+                    <ScaleTransform ScaleX="3.125" ScaleY="3.125" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness0_6}"
-               StartLineCap="Round"
-               EndLineCap="Round"
-               LineJoin="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness0_6}" />
                     </GeometryDrawing.Pen>
 
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M16 21.916
-c-4.797 0.020-8.806 3.369-9.837 7.856l-0.013 0.068c-0.011 0.048-0.017 0.103-0.017 0.16
-0 0.414 0.336 0.75 0.75 0.75 0.357 0 0.656-0.25 0.731-0.585l0.001-0.005
-c0.875-3.885 4.297-6.744 8.386-6.744s7.511 2.859 8.375 6.687l0.011 0.057
-c0.076 0.34 0.374 0.59 0.732 0.59h0.001
-c0.057 0 0.112-0.007 0.165-0.019l-0.005 0.001
-c0.34-0.076 0.59-0.375 0.59-0.733
-0-0.057-0.006-0.112-0.018-0.165l0.001 0.005
-c-1.045-4.554-5.055-7.903-9.849-7.924h-0.002z
-
-M9.164 10.602
-c2.582 0 4.676-2.093 4.676-4.676s-2.093-4.676-4.676-4.676
-c-2.582 0-4.676 2.093-4.676 4.676
-c0.003 2.581 2.095 4.673 4.675 4.676h0z
-
-M9.164 2.75
-c1.754 0 3.176 1.422 3.176 3.176s-1.422 3.176-3.176 3.176
-c-1.754 0-3.176-1.422-3.176-3.176
-c0.002-1.753 1.423-3.174 3.175-3.176h0z
-
-M22.926 10.602
-c2.582 0 4.676-2.093 4.676-4.676s-2.093-4.676-4.676-4.676
-c-2.582 0-4.676 2.093-4.676 4.676
-c0.003 2.581 2.095 4.673 4.675 4.676h0z
-
-M22.926 2.75
-c1.754 0 3.176 1.422 3.176 3.176s-1.422 3.176-3.176 3.176
-c-1.754 0-3.176-1.422-3.176-3.176
-c0.002-1.753 1.423-3.174 3.176-3.176h0z
-
-M30.822 19.84
-c-0.878-3.894-4.308-6.759-8.406-6.759
--0.423 0-0.839 0.031-1.246 0.089l0.046-0.006
-c-0.049 0.012-0.092 0.028-0.133 0.047l0.004-0.002
-c-0.751-2.129-2.745-3.627-5.089-3.627
--2.334 0-4.321 1.485-5.068 3.561l-0.012 0.038
-c-0.017-0.004-0.030-0.014-0.047-0.017
--0.359-0.053-0.773-0.084-1.195-0.084
--4.092 0.018-7.511 2.874-8.392 6.701l-0.011 0.058
-c-0.011 0.048-0.017 0.103-0.017 0.16
-0 0.414 0.336 0.75 0.75 0.75 0.357 0 0.656-0.25 0.731-0.585l0.001-0.005
-c0.737-3.207 3.56-5.565 6.937-5.579h0.002
-c0.335 0 0.664 0.024 0.985 0.07l-0.037-0.004
-c-0.008 0.119-0.036 0.232-0.036 0.354
-0.006 2.987 2.429 5.406 5.417 5.406s5.411-2.419 5.416-5.406v-0.001
-c0-0.12-0.028-0.233-0.036-0.352
-0.016-0.002 0.031 0.005 0.047 0.001
-0.294-0.044 0.634-0.068 0.98-0.068
-0.004 0 0.007 0 0.011 0h-0.001
-c3.379 0.013 6.203 2.371 6.93 5.531l0.009 0.048
-c0.076 0.34 0.375 0.589 0.732 0.59h0
-c0.057 0 0.112-0.007 0.165-0.019l-0.005 0.001
-c0.34-0.076 0.59-0.375 0.59-0.733
-0-0.057-0.006-0.112-0.018-0.165l0.001 0.005z
-
-M16 18.916
-c-2.163 0-3.917-1.753-3.917-3.917s1.754-3.917 3.917-3.917
-c2.163 0 3.917 1.754 3.917 3.917
-c-0.003 2.162-1.754 3.913-3.916 3.916h-0z"/>
+                        <PathGeometry Figures="M16 21.916 c-4.797 0.020-8.806 3.369-9.837 7.856l-0.013 0.068c-0.011 0.048-0.017 0.103-0.017 0.16 0 0.414 0.336 0.75 0.75 0.75 0.357 0 0.656-0.25 0.731-0.585l0.001-0.005 c0.875-3.885 4.297-6.744 8.386-6.744s7.511 2.859 8.375 6.687l0.011 0.057 c0.076 0.34 0.374 0.59 0.732 0.59h0.001 c0.057 0 0.112-0.007 0.165-0.019l-0.005 0.001 c0.34-0.076 0.59-0.375 0.59-0.733 0-0.057-0.006-0.112-0.018-0.165l0.001 0.005 c-1.045-4.554-5.055-7.903-9.849-7.924h-0.002z  M9.164 10.602 c2.582 0 4.676-2.093 4.676-4.676s-2.093-4.676-4.676-4.676 c-2.582 0-4.676 2.093-4.676 4.676 c0.003 2.581 2.095 4.673 4.675 4.676h0z  M9.164 2.75 c1.754 0 3.176 1.422 3.176 3.176s-1.422 3.176-3.176 3.176 c-1.754 0-3.176-1.422-3.176-3.176 c0.002-1.753 1.423-3.174 3.175-3.176h0z  M22.926 10.602 c2.582 0 4.676-2.093 4.676-4.676s-2.093-4.676-4.676-4.676 c-2.582 0-4.676 2.093-4.676 4.676 c0.003 2.581 2.095 4.673 4.675 4.676h0z  M22.926 2.75 c1.754 0 3.176 1.422 3.176 3.176s-1.422 3.176-3.176 3.176 c-1.754 0-3.176-1.422-3.176-3.176 c0.002-1.753 1.423-3.174 3.176-3.176h0z  M30.822 19.84 c-0.878-3.894-4.308-6.759-8.406-6.759 -0.423 0-0.839 0.031-1.246 0.089l0.046-0.006 c-0.049 0.012-0.092 0.028-0.133 0.047l0.004-0.002 c-0.751-2.129-2.745-3.627-5.089-3.627 -2.334 0-4.321 1.485-5.068 3.561l-0.012 0.038 c-0.017-0.004-0.030-0.014-0.047-0.017 -0.359-0.053-0.773-0.084-1.195-0.084 -4.092 0.018-7.511 2.874-8.392 6.701l-0.011 0.058 c-0.011 0.048-0.017 0.103-0.017 0.16 0 0.414 0.336 0.75 0.75 0.75 0.357 0 0.656-0.25 0.731-0.585l0.001-0.005 c0.737-3.207 3.56-5.565 6.937-5.579h0.002 c0.335 0 0.664 0.024 0.985 0.07l-0.037-0.004 c-0.008 0.119-0.036 0.232-0.036 0.354 0.006 2.987 2.429 5.406 5.417 5.406s5.411-2.419 5.416-5.406v-0.001 c0-0.12-0.028-0.233-0.036-0.352 0.016-0.002 0.031 0.005 0.047 0.001 0.294-0.044 0.634-0.068 0.98-0.068 0.004 0 0.007 0 0.011 0h-0.001 c3.379 0.013 6.203 2.371 6.93 5.531l0.009 0.048 c0.076 0.34 0.375 0.589 0.732 0.59h0 c0.057 0 0.112-0.007 0.165-0.019l-0.005 0.001 c0.34-0.076 0.59-0.375 0.59-0.733 0-0.057-0.006-0.112-0.018-0.165l0.001 0.005z  M16 18.916 c-2.163 0-3.917-1.753-3.917-3.917s1.754-3.917 3.917-3.917 c2.163 0 3.917 1.754 3.917 3.917 c-0.003 2.162-1.754 3.913-3.916 3.916h-0z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
@@ -666,45 +530,22 @@ c-0.003 2.162-1.754 3.913-3.916 3.916h-0z"/>
     <DrawingImage x:Key="Icon.Outlet">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize ~64×52 → 100×? -->
+                <!--  Normalize ~64×52 → 100×?  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="1.5625" ScaleY="1.5625"/>
+                    <ScaleTransform ScaleX="1.5625" ScaleY="1.5625" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness}"
-               StartLineCap="Round"
-               EndLineCap="Round"
-               LineJoin="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M63.8651199,16.83885L55.2782173,2.01175
-c-0.669899-1.1552999-1.8330002-1.8457-3.1113968-1.8457H11.7743196
-c-1.2841997,0-2.4970999,0.7236-3.1659994,1.8896L0.1327249,16.8427505
-c-0.1778047,0.3095989-0.1768047,0.6894989,0.0018953,0.9981003
-c0.1787,0.3085995,0.5088,0.4989986,0.8652999,0.4989986H5.39152
-v31.4707012c0,0.9520988,0.4052048,1.8798981,1.1122999,2.5477982
-c0.7011003,0.6612015,1.6289048,1.0254021,2.6131997,1.0254021
-h10.7520008h24.2617054H54.842617
-c0.9932022,0,1.9317017-0.3680992,2.642601-1.0381012
-c0.7139015-0.6748009,1.1231003-1.6123009,1.1231003-2.5732002v-31.4326
-h4.3916016c0.357399,0,0.687397-0.1903992,0.8661995-0.5009995
-C64.0448151,17.5292492,64.0448151,17.1484509,63.8651199,16.83885z
-M16.767725,16.3398495L20.6921196,2.16605h10.3078003v14.1737995H16.767725z
-M32.9999199,2.16605h10.3064995l3.925499,14.1737995H32.9999199V2.16605z
-M10.3426199,3.05075c0.3184004-0.5537,0.8535004-0.8847001,1.4316998-0.8847001h6.8424044
-L14.69242,16.3398495H6.39152H2.7254202L10.3426199,3.05075z
-M20.8690205,51.3837509V31.8183498h22.2617054v19.5654011H20.8690205z
-M56.6083183,49.7724495c0,0.419899-0.1767998,0.8174019-0.4952011,1.1190987
-c-0.3319969,0.3125-0.7958984,0.4922028-1.2705002,0.4922028h-9.7118912V30.8183498
-c0-0.5527-0.4473076-1-1-1H19.8690205
-c-0.5527,0-1,0.4473-1,1v20.5654011H9.1170197
-c-0.4647999,0-0.9179001-0.1748009-1.2411995-0.4794998
-c-0.3125-0.2959023-0.4843001-0.6836014-0.4843001-1.0937004V18.3398495h49.2167969V49.7724495z
-M57.6083183,16.3398495h-8.3007011L45.3811188,2.16605h6.7857018
-c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.6083183z"/>
+                        <PathGeometry Figures="M63.8651199,16.83885L55.2782173,2.01175 c-0.669899-1.1552999-1.8330002-1.8457-3.1113968-1.8457H11.7743196 c-1.2841997,0-2.4970999,0.7236-3.1659994,1.8896L0.1327249,16.8427505 c-0.1778047,0.3095989-0.1768047,0.6894989,0.0018953,0.9981003 c0.1787,0.3085995,0.5088,0.4989986,0.8652999,0.4989986H5.39152 v31.4707012c0,0.9520988,0.4052048,1.8798981,1.1122999,2.5477982 c0.7011003,0.6612015,1.6289048,1.0254021,2.6131997,1.0254021 h10.7520008h24.2617054H54.842617 c0.9932022,0,1.9317017-0.3680992,2.642601-1.0381012 c0.7139015-0.6748009,1.1231003-1.6123009,1.1231003-2.5732002v-31.4326 h4.3916016c0.357399,0,0.687397-0.1903992,0.8661995-0.5009995 C64.0448151,17.5292492,64.0448151,17.1484509,63.8651199,16.83885z M16.767725,16.3398495L20.6921196,2.16605h10.3078003v14.1737995H16.767725z M32.9999199,2.16605h10.3064995l3.925499,14.1737995H32.9999199V2.16605z M10.3426199,3.05075c0.3184004-0.5537,0.8535004-0.8847001,1.4316998-0.8847001h6.8424044 L14.69242,16.3398495H6.39152H2.7254202L10.3426199,3.05075z M20.8690205,51.3837509V31.8183498h22.2617054v19.5654011H20.8690205z M56.6083183,49.7724495c0,0.419899-0.1767998,0.8174019-0.4952011,1.1190987 c-0.3319969,0.3125-0.7958984,0.4922028-1.2705002,0.4922028h-9.7118912V30.8183498 c0-0.5527-0.4473076-1-1-1H19.8690205 c-0.5527,0-1,0.4473-1,1v20.5654011H9.1170197 c-0.4647999,0-0.9179001-0.1748009-1.2411995-0.4794998 c-0.3125-0.2959023-0.4843001-0.6836014-0.4843001-1.0937004V18.3398495h49.2167969V49.7724495z M57.6083183,16.3398495h-8.3007011L45.3811188,2.16605h6.7857018 c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.6083183z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
@@ -714,36 +555,34 @@ c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.608318
     <DrawingImage x:Key="Icon.Warehouse">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize 16×16 → 100×100 -->
+                <!--  Normalize 16×16 → 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="6.25" ScaleY="6.25"/>
+                    <ScaleTransform ScaleX="6.25" ScaleY="6.25" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness0_4}"
-               StartLineCap="Round"
-               EndLineCap="Round"
-               LineJoin="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness0_4}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Roof + main structure -->
-                            <PathGeometry Figures="M16,4 L7.94,0 L0,4 V5 H1 V16 H3 V7 H13 V16 H15 V5 H16 V4 Z
-                                   M4,6 V5 H6 V6 H4 Z
-                                   M7,6 V5 H9 V6 H7 Z
-                                   M10,6 V5 H12 V6 H10 Z"/>
+                            <!--  Roof + main structure  -->
+                            <PathGeometry Figures="M16,4 L7.94,0 L0,4 V5 H1 V16 H3 V7 H13 V16 H15 V5 H16 V4 Z                                    M4,6 V5 H6 V6 H4 Z                                    M7,6 V5 H9 V6 H7 Z                                    M10,6 V5 H12 V6 H10 Z" />
 
-                            <!-- Left door -->
-                            <PathGeometry Figures="M6,9 H5 V8 H4 V11 H7 V8 H6 V9 Z"/>
+                            <!--  Left door  -->
+                            <PathGeometry Figures="M6,9 H5 V8 H4 V11 H7 V8 H6 V9 Z" />
 
-                            <!-- Middle door -->
-                            <PathGeometry Figures="M6,13 H5 V12 H4 V15 H7 V12 H6 V13 Z"/>
+                            <!--  Middle door  -->
+                            <PathGeometry Figures="M6,13 H5 V12 H4 V15 H7 V12 H6 V13 Z" />
 
-                            <!-- Right door -->
-                            <PathGeometry Figures="M10,13 H9 V12 H8 V15 H11 V12 H10 V13 Z"/>
+                            <!--  Right door  -->
+                            <PathGeometry Figures="M10,13 H9 V12 H8 V15 H11 V12 H10 V13 Z" />
 
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
@@ -752,25 +591,26 @@ c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.608318
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    <!-- Outline-only conversion of the provided 30×30 SVG -->
+    <!--  Outline-only conversion of the provided 30×30 SVG  -->
     <DrawingImage x:Key="Icon.User">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- Normalize 30×30 → 100×100 -->
+                <!--  Normalize 30×30 → 100×100  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="3.3333333" ScaleY="3.3333333"/>
+                    <ScaleTransform ScaleX="3.3333333" ScaleY="3.3333333" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness0_6}"
-               LineJoin="Round"
-               StartLineCap="Round"
-               EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness0_6}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M9.5 9c-1.663 0-2.852.877-3.545 1.984C5.262 12.092 5 13.416 5 14.5c0 1.39-.427 2.684-1.777 3.584-.412.274-.218.916.277.916.64 0 1.426-.012 2.227-.307.298-.11.77-.358 1.06-.56-.088.367-.28.902-.433 1.103-.4.522-.956.764-1.854.764-.657 0-.66 1 0 1 1.102 0 2.046-.37 2.646-1.156.6-.785.854-1.898.854-3.344 0-.513-.678-.694-.934-.25-.505.876-1.08 1.28-1.685 1.504-.22.08-.452.053-.68.09C5.514 16.837 6 15.682 6 14.5c0-.916.244-2.092.803-2.984C7.36 10.623 8.17 10 9.5 10c1.33 0 2.14.623 2.697 1.516.56.892.803 2.068.803 2.984 0 1.182.485 2.337 1.3 3.344-.228-.037-.46-.01-.68-.09-.607-.223-1.18-.628-1.686-1.504-.256-.444-.935-.263-.934.25 0 1.446.255 2.526.69 3.287.438.76 1.105 1.213 1.81 1.213.668 0 .657-1 0-1-.295 0-.628-.163-.94-.71-.13-.224-.353-.79-.423-1.29.31.226.815.575 1.136.693.8.295 1.588.307 2.227.307.495 0 .69-.642.277-.916C14.427 17.184 14 15.89 14 14.5c0-1.084-.262-2.408-.955-3.516C12.352 9.877 11.163 9 9.5 9zM21 7c-1.893 0-3.2.848-3.965 1.893C16.27 9.937 16 11.14 16 12v2c0 .89.296 1.557.56 2.045.265.488.44.804.44.955v1.5c0 .495-.34 1.04-1.25 1.566-.996.575-2.496 1.42-3.5 2-.6.347-.94.842-1.098 1.3-.157.46-.152.884-.152 1.134 0 .672 1 .657 1 0 0-.25.005-.537.098-.81.092-.27.252-.525.652-.756.996-.575 2.496-1.42 3.5-2 1.09-.63 1.75-1.48 1.75-2.434V17c0-.597-.325-.998-.56-1.432-.236-.433-.44-.892-.44-1.568v-2c0-.64.23-1.687.84-2.518C18.45 8.652 19.393 8 21 8c1.607 0 2.55.652 3.16 1.482.61.83.84 1.88.84 2.518v2c0 .676-.204 1.135-.44 1.568-.235.434-.56.835-.56 1.432v1.5c0 .362-.01.784.156 1.23.165.443.518.87 1.094 1.204.578.333 1.065-.542.5-.868-.424-.245-.57-.455-.656-.685-.085-.23-.094-.518-.094-.88V17c0-.15.175-.467.44-.955.264-.488.56-1.156.56-2.045v-2c0-.86-.27-2.063-1.035-3.107C24.2 7.848 22.893 7 21 7zm-6-7C6.722 0 0 6.722 0 15c0 8.278 6.722 15 15 15 8.278 0 15-6.722 15-15 0-8.278-6.722-15-15-15zm0 1c7.738 0 14 6.262 14 14s-6.262 14-14 14S1 22.738 1 15 7.262 1 15 1z"/>
+                        <PathGeometry Figures="M9.5 9c-1.663 0-2.852.877-3.545 1.984C5.262 12.092 5 13.416 5 14.5c0 1.39-.427 2.684-1.777 3.584-.412.274-.218.916.277.916.64 0 1.426-.012 2.227-.307.298-.11.77-.358 1.06-.56-.088.367-.28.902-.433 1.103-.4.522-.956.764-1.854.764-.657 0-.66 1 0 1 1.102 0 2.046-.37 2.646-1.156.6-.785.854-1.898.854-3.344 0-.513-.678-.694-.934-.25-.505.876-1.08 1.28-1.685 1.504-.22.08-.452.053-.68.09C5.514 16.837 6 15.682 6 14.5c0-.916.244-2.092.803-2.984C7.36 10.623 8.17 10 9.5 10c1.33 0 2.14.623 2.697 1.516.56.892.803 2.068.803 2.984 0 1.182.485 2.337 1.3 3.344-.228-.037-.46-.01-.68-.09-.607-.223-1.18-.628-1.686-1.504-.256-.444-.935-.263-.934.25 0 1.446.255 2.526.69 3.287.438.76 1.105 1.213 1.81 1.213.668 0 .657-1 0-1-.295 0-.628-.163-.94-.71-.13-.224-.353-.79-.423-1.29.31.226.815.575 1.136.693.8.295 1.588.307 2.227.307.495 0 .69-.642.277-.916C14.427 17.184 14 15.89 14 14.5c0-1.084-.262-2.408-.955-3.516C12.352 9.877 11.163 9 9.5 9zM21 7c-1.893 0-3.2.848-3.965 1.893C16.27 9.937 16 11.14 16 12v2c0 .89.296 1.557.56 2.045.265.488.44.804.44.955v1.5c0 .495-.34 1.04-1.25 1.566-.996.575-2.496 1.42-3.5 2-.6.347-.94.842-1.098 1.3-.157.46-.152.884-.152 1.134 0 .672 1 .657 1 0 0-.25.005-.537.098-.81.092-.27.252-.525.652-.756.996-.575 2.496-1.42 3.5-2 1.09-.63 1.75-1.48 1.75-2.434V17c0-.597-.325-.998-.56-1.432-.236-.433-.44-.892-.44-1.568v-2c0-.64.23-1.687.84-2.518C18.45 8.652 19.393 8 21 8c1.607 0 2.55.652 3.16 1.482.61.83.84 1.88.84 2.518v2c0 .676-.204 1.135-.44 1.568-.235.434-.56.835-.56 1.432v1.5c0 .362-.01.784.156 1.23.165.443.518.87 1.094 1.204.578.333 1.065-.542.5-.868-.424-.245-.57-.455-.656-.685-.085-.23-.094-.518-.094-.88V17c0-.15.175-.467.44-.955.264-.488.56-1.156.56-2.045v-2c0-.86-.27-2.063-1.035-3.107C24.2 7.848 22.893 7 21 7zm-6-7C6.722 0 0 6.722 0 15c0 8.278 6.722 15 15 15 8.278 0 15-6.722 15-15 0-8.278-6.722-15-15-15zm0 1c7.738 0 14 6.262 14 14s-6.262 14-14 14S1 22.738 1 15 7.262 1 15 1z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
@@ -778,50 +618,48 @@ c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.608318
     </DrawingImage>
 
 
-    <!-- Outline-only conversion of 36×36 SVG → normalized to 100×100 using your vars -->
+    <!--  Outline-only conversion of 36×36 SVG → normalized to 100×100 using your vars  -->
     <DrawingImage x:Key="Icon.ChartOfAccounts">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- 100 / 36 = 2.7777778 -->
+                <!--  100 / 36 = 2.7777778  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="2.7777778" ScaleY="2.7777778"/>
+                    <ScaleTransform ScaleX="2.7777778" ScaleY="2.7777778" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness}"
-               LineJoin="Round"
-               StartLineCap="Round"
-               EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness}" />
                     </GeometryDrawing.Pen>
 
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Arrow connector polygon -->
-                            <PathGeometry Figures="M9.8,18.8
-                                   L26.2,18.8
-                                   L26.2,21.88
-                                   L27.8,21.88
-                                   L27.8,17.2
-                                   L18.8,17.2
-                                   L18.8,14
-                                   L17.2,14
-                                   L17.2,17.2
-                                   L8.2,17.2
-                                   L8.2,21.88
-                                   L9.8,21.88
-                                   Z"/>
+                            <!--  Arrow connector polygon  -->
+                            <PathGeometry Figures="M9.8,18.8                                    L26.2,18.8                                    L26.2,21.88                                    L27.8,21.88                                    L27.8,17.2                                    L18.8,17.2                                    L18.8,14                                    L17.2,14                                    L17.2,17.2                                    L8.2,17.2                                    L8.2,21.88                                    L9.8,21.88                                    Z" />
 
-                            <!-- Bottom-left rounded rectangle (x=2,y=23,w=14,h=10,r=2) -->
-                            <RectangleGeometry Rect="2,23,14,10" RadiusX="2" RadiusY="2"/>
+                            <!--  Bottom-left rounded rectangle (x=2,y=23,w=14,h=10,r=2)  -->
+                            <RectangleGeometry
+                                RadiusX="2"
+                                RadiusY="2"
+                                Rect="2,23,14,10" />
 
-                            <!-- Bottom-right rounded rectangle -->
-                            <RectangleGeometry Rect="20,23,14,10" RadiusX="2" RadiusY="2"/>
+                            <!--  Bottom-right rounded rectangle  -->
+                            <RectangleGeometry
+                                RadiusX="2"
+                                RadiusY="2"
+                                Rect="20,23,14,10" />
 
-                            <!-- Top rounded rectangle -->
-                            <RectangleGeometry Rect="11,3,14,10" RadiusX="2" RadiusY="2"/>
+                            <!--  Top rounded rectangle  -->
+                            <RectangleGeometry
+                                RadiusX="2"
+                                RadiusY="2"
+                                Rect="11,3,14,10" />
 
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
@@ -831,33 +669,34 @@ c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.608318
     </DrawingImage>
 
 
-    <!-- Outline-only conversion of 64×64 SVG → normalized to 100×100 using your vars -->
+    <!--  Outline-only conversion of 64×64 SVG → normalized to 100×100 using your vars  -->
     <DrawingImage x:Key="Icon.Voucher">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- 100 / 64 = 1.5625 -->
+                <!--  100 / 64 = 1.5625  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="1.5625" ScaleY="1.5625"/>
+                    <ScaleTransform ScaleX="1.5625" ScaleY="1.5625" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness1_5}"
-               LineJoin="Round"
-               StartLineCap="Round"
-               EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness1_5}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
-                            <!-- Outer frame / bottom bar -->
-                            <PathGeometry Figures="M57.43,50.5H52.26a2,2,0,1,1,0-4h3.17v-29H8.57v29H40.48a2,2,0,0,1,0,4H6.57a2,2,0,0,1-2-2v-33a2,2,0,0,1,2-2H57.43a2,2,0,0,1,2,2v33A2,2,0,0,1,57.43,50.5Z"/>
-                            <!-- Header bar -->
-                            <PathGeometry Figures="M57.43,27.36H6.57a2,2,0,0,1-2-2V15.5a2,2,0,0,1,2-2H57.43a2,2,0,0,1,2,2v9.86A2,2,0,0,1,57.43,27.36Zm-48.86-4H55.43V17.5H8.57Z"/>
-                            <!-- Prompt chevron -->
-                            <PathGeometry Figures="M17.87,38.86H13.32a2,2,0,0,1,0-4h4.55a2,2,0,1,1,0,4Z"/>
-                            <!-- Command line -->
-                            <PathGeometry Figures="M32.34,38.86h-8.4a2,2,0,1,1,0-4h8.4a2,2,0,0,1,0,4Z"/>
+                            <!--  Outer frame / bottom bar  -->
+                            <PathGeometry Figures="M57.43,50.5H52.26a2,2,0,1,1,0-4h3.17v-29H8.57v29H40.48a2,2,0,0,1,0,4H6.57a2,2,0,0,1-2-2v-33a2,2,0,0,1,2-2H57.43a2,2,0,0,1,2,2v33A2,2,0,0,1,57.43,50.5Z" />
+                            <!--  Header bar  -->
+                            <PathGeometry Figures="M57.43,27.36H6.57a2,2,0,0,1-2-2V15.5a2,2,0,0,1,2-2H57.43a2,2,0,0,1,2,2v9.86A2,2,0,0,1,57.43,27.36Zm-48.86-4H55.43V17.5H8.57Z" />
+                            <!--  Prompt chevron  -->
+                            <PathGeometry Figures="M17.87,38.86H13.32a2,2,0,0,1,0-4h4.55a2,2,0,1,1,0,4Z" />
+                            <!--  Command line  -->
+                            <PathGeometry Figures="M32.34,38.86h-8.4a2,2,0,1,1,0-4h8.4a2,2,0,0,1,0,4Z" />
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
@@ -865,32 +704,33 @@ c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.608318
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    <!-- Outline-only conversion of 24×24 SVG → normalized to 100×100 using your vars -->
+    <!--  Outline-only conversion of 24×24 SVG → normalized to 100×100 using your vars  -->
     <DrawingImage x:Key="Icon.VoucherCenter">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- 100 / 24 = 4.1666667 -->
+                <!--  100 / 24 = 4.1666667  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="4.1666667" ScaleY="4.1666667"/>
+                    <ScaleTransform ScaleX="4.1666667" ScaleY="4.1666667" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness0_6}"
-               LineJoin="Round"
-               StartLineCap="Round"
-               EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness0_6}" />
                     </GeometryDrawing.Pen>
 
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
-                            <!-- Book outline with bookmarks -->
-                            <PathGeometry Figures="M18 2 H6 C5.44772 2 5 2.44772 5 3 V22 L7.5 20 L9.5 22 L12 20 L14.5 22 L16.5 20 L19 22 V3 C19 2.44772 18.5523 2 18 2 Z"/>
-                            <!-- Lines -->
-                            <PathGeometry Figures="M9 6 H15"/>
-                            <PathGeometry Figures="M9 10 H15"/>
-                            <PathGeometry Figures="M9 14 H10"/>
+                            <!--  Book outline with bookmarks  -->
+                            <PathGeometry Figures="M18 2 H6 C5.44772 2 5 2.44772 5 3 V22 L7.5 20 L9.5 22 L12 20 L14.5 22 L16.5 20 L19 22 V3 C19 2.44772 18.5523 2 18 2 Z" />
+                            <!--  Lines  -->
+                            <PathGeometry Figures="M9 6 H15" />
+                            <PathGeometry Figures="M9 10 H15" />
+                            <PathGeometry Figures="M9 14 H10" />
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
@@ -898,40 +738,35 @@ c0.5566978,0,1.0723,0.3173001,1.3809052,0.8486001l7.7177925,13.3251991H57.608318
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    <!-- Outline-only conversion of 512×512 SVG → normalized to 100×100 using your vars -->
+    <!--  Outline-only conversion of 512×512 SVG → normalized to 100×100 using your vars  -->
     <DrawingImage x:Key="Icon.Ledger">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- 100 / 512 = 0.1953125 -->
+                <!--  100 / 512 = 0.1953125  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="0.1953125" ScaleY="0.1953125"/>
+                    <ScaleTransform ScaleX="0.1953125" ScaleY="0.1953125" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness9}"
-               LineJoin="Round"
-               StartLineCap="Round"
-               EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness9}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
                         <GeometryGroup>
 
-                            <!-- Main receipt outline -->
-                            <PathGeometry Figures="M446.32,0.427H163.645c-36.215,0-65.68,29.463-65.68,65.678v47.517H0v245.902
-c0,36.215,29.464,65.678,65.68,65.678h130.254v86.369h16.696h282.675H512V66.106
-C512,29.891,482.536,0.427,446.32,0.427z M97.967,359.525c0,17.803-14.484,32.287-32.287,32.287
-c-17.803,0-32.288-14.484-32.288-32.287V147.014h64.575V359.525z M195.935,391.814H122.84
-c5.412-9.542,8.518-20.556,8.518-32.287V66.106c0-17.803,14.485-32.287,32.288-32.287
-c17.803,0,32.288,14.484,32.288,32.287V391.814z M478.609,478.181H229.325V66.106
-c0-11.728-3.089-22.747-8.498-32.287H446.32c17.803,0,32.288,14.484,32.288,32.287V478.181z"/>
+                            <!--  Main receipt outline  -->
+                            <PathGeometry Figures="M446.32,0.427H163.645c-36.215,0-65.68,29.463-65.68,65.678v47.517H0v245.902 c0,36.215,29.464,65.678,65.68,65.678h130.254v86.369h16.696h282.675H512V66.106 C512,29.891,482.536,0.427,446.32,0.427z M97.967,359.525c0,17.803-14.484,32.287-32.287,32.287 c-17.803,0-32.288-14.484-32.288-32.287V147.014h64.575V359.525z M195.935,391.814H122.84 c5.412-9.542,8.518-20.556,8.518-32.287V66.106c0-17.803,14.485-32.287,32.288-32.287 c17.803,0,32.288,14.484,32.288,32.287V391.814z M478.609,478.181H229.325V66.106 c0-11.728-3.089-22.747-8.498-32.287H446.32c17.803,0,32.288,14.484,32.288,32.287V478.181z" />
 
-                            <!-- Bars -->
-                            <RectangleGeometry Rect="264.982,347.637,88.983,33.391"/>
-                            <RectangleGeometry Rect="264.982,82.365,177.964,33.391"/>
-                            <RectangleGeometry Rect="264.982,149.727,177.964,33.391"/>
-                            <RectangleGeometry Rect="264.982,217.088,177.964,33.391"/>
+                            <!--  Bars  -->
+                            <RectangleGeometry Rect="264.982,347.637,88.983,33.391" />
+                            <RectangleGeometry Rect="264.982,82.365,177.964,33.391" />
+                            <RectangleGeometry Rect="264.982,149.727,177.964,33.391" />
+                            <RectangleGeometry Rect="264.982,217.088,177.964,33.391" />
 
                         </GeometryGroup>
                     </GeometryDrawing.Geometry>
@@ -940,110 +775,91 @@ c0-11.728-3.089-22.747-8.498-32.287H446.32c17.803,0,32.288,14.484,32.288,32.287V
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    <!-- Outline-only conversion of 16×16 SVG → normalized to 100×100 using your vars -->
+    <!--  Outline-only conversion of 16×16 SVG → normalized to 100×100 using your vars  -->
     <DrawingImage x:Key="Icon.CashBook">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <!-- 100 / 16 = 6.25 -->
+                <!--  100 / 16 = 6.25  -->
                 <DrawingGroup.Transform>
-                    <ScaleTransform ScaleX="6.25" ScaleY="6.25"/>
+                    <ScaleTransform ScaleX="6.25" ScaleY="6.25" />
                 </DrawingGroup.Transform>
 
                 <GeometryDrawing Brush="{x:Null}">
                     <GeometryDrawing.Pen>
-                        <Pen Brush="{DynamicResource Icon.StrokeBrush}"
-               Thickness="{DynamicResource Icon.OutlineThickness0_4}"
-               LineJoin="Round"
-               StartLineCap="Round"
-               EndLineCap="Round"/>
+                        <Pen
+                            Brush="{DynamicResource Icon.StrokeBrush}"
+                            EndLineCap="Round"
+                            LineJoin="Round"
+                            StartLineCap="Round"
+                            Thickness="{DynamicResource Icon.OutlineThickness0_4}" />
                     </GeometryDrawing.Pen>
                     <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M14.5 2H9l-.35.15-.65.64-.65-.64L7 2H1.5l-.5.5v10l.5.5h5.29l.86.85h.7l.86-.85h5.29l.5-.5v-10l-.5-.5zm-7 10.32l-.18-.17L7 12H2V3h4.79l.74.74-.03 8.58zM14 12H9l-.35.15-.14.13V3.7l.7-.7H14v9zM6 5H3v1h3V5zm0 4H3v1h3V9zM3 7h3v1H3V7zm10-2h-3v1h3V5zm-3 2h3v1h-3V7zm0 2h3v1h-3V9z"/>
+                        <PathGeometry Figures="M14.5 2H9l-.35.15-.65.64-.65-.64L7 2H1.5l-.5.5v10l.5.5h5.29l.86.85h.7l.86-.85h5.29l.5-.5v-10l-.5-.5zm-7 10.32l-.18-.17L7 12H2V3h4.79l.74.74-.03 8.58zM14 12H9l-.35.15-.14.13V3.7l.7-.7H14v9zM6 5H3v1h3V5zm0 4H3v1h3V9zM3 7h3v1H3V7zm10-2h-3v1h3V5zm-3 2h3v1h-3V7zm0 2h3v1h-3V9z" />
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    
-    <!-- Plus / Add icon -->
-	<DrawingImage x:Key="Icon.Add">
-		<DrawingImage.Drawing>
-			<GeometryDrawing Brush="{StaticResource Clr.Primary}">
-				<GeometryDrawing.Geometry>
-					<PathGeometry Figures="M31,15 H21 V5 
-                                 A3,3 0 1 0 15,5 V15 H5 
-                                 A3,3 0 1 0 5,21 H15 V31 
-                                 A3,3 0 1 0 21,31 V21 H31 
-                                 A3,3 0 1 0 31,15 Z"/>
-				</GeometryDrawing.Geometry>
-			</GeometryDrawing>
-		</DrawingImage.Drawing>
-	</DrawingImage>
 
-    <!-- Brands / Company Add icon -->
+    <!--  Plus / Add icon  -->
+    <DrawingImage x:Key="Icon.Add">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{StaticResource Clr.Primary}">
+                <GeometryDrawing.Geometry>
+                    <PathGeometry Figures="M31,15 H21 V5                                   A3,3 0 1 0 15,5 V15 H5                                   A3,3 0 1 0 5,21 H15 V31                                   A3,3 0 1 0 21,31 V21 H31                                   A3,3 0 1 0 31,15 Z" />
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!--  Brands / Company Add icon  -->
     <DrawingImage x:Key="Icon.BrandsCompany">
         <DrawingImage.Drawing>
             <GeometryDrawing Brush="{StaticResource Clr.Primary}">
                 <GeometryDrawing.Geometry>
-                    <PathGeometry Figures="M12,15.5V13H9.5a.5.5,0,1,1,0-1H12V9.5a.5.5,0,1,1,1,0V12h2.5a.5.5,0,1,1,0,1H13v2.5a.5.5,0,0,1-1,0ZM6.7,16H0V1.5A1.525,1.525,0,0,1,1.545,0h7.21A1.526,1.526,0,0,1,10.3,1.5v6a.515.515,0,0,1-1.03,0v-6A.508.508,0,0,0,8.755,1H1.545a.509.509,0,0,0-.516.5V15H3.09V11.5a.509.509,0,0,1,.516-.5H6.7a.508.508,0,0,1,.515.5V15H8.755a.5.5,0,1,1,0,1ZM4.12,15H6.18V12H4.12ZM6.18,9V7H8.24V9ZM2.06,9V7H4.12V9ZM6.18,5V3H8.24V5ZM2.06,5V3H4.12V5Z"/>
+                    <PathGeometry Figures="M12,15.5V13H9.5a.5.5,0,1,1,0-1H12V9.5a.5.5,0,1,1,1,0V12h2.5a.5.5,0,1,1,0,1H13v2.5a.5.5,0,0,1-1,0ZM6.7,16H0V1.5A1.525,1.525,0,0,1,1.545,0h7.21A1.526,1.526,0,0,1,10.3,1.5v6a.515.515,0,0,1-1.03,0v-6A.508.508,0,0,0,8.755,1H1.545a.509.509,0,0,0-.516.5V15H3.09V11.5a.509.509,0,0,1,.516-.5H6.7a.508.508,0,0,1,.515.5V15H8.755a.5.5,0,1,1,0,1ZM4.12,15H6.18V12H4.12ZM6.18,9V7H8.24V9ZM2.06,9V7H4.12V9ZM6.18,5V3H8.24V5ZM2.06,5V3H4.12V5Z" />
                 </GeometryDrawing.Geometry>
             </GeometryDrawing>
         </DrawingImage.Drawing>
     </DrawingImage>
 
 
-    <!-- Category icon (converted from SVG) -->
+    <!--  Category icon (converted from SVG)  -->
     <DrawingImage x:Key="Icon.Category">
         <DrawingImage.Drawing>
             <GeometryDrawing Brush="{StaticResource Clr.Primary}">
                 <GeometryDrawing.Geometry>
-                    <PathGeometry Figures="M11 19v-3a3 3 0 0 0-3-3H5a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3zm-8 0v-3a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm19-3a3 3 0 0 0-3-3h-3a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3zm-1 3a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2zm1-14a3 3 0 0 0-3-3h-3a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3zm-1 3a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2zM2 5v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3V5a3 3 0 0 0-3-3H5a3 3 0 0 0-3 3zm1 0a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm6.5 11.238l-3.443 3.43-1.822-1.822.738-.738 1.084 1.088L8.762 15.5z"/>
+                    <PathGeometry Figures="M11 19v-3a3 3 0 0 0-3-3H5a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3zm-8 0v-3a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm19-3a3 3 0 0 0-3-3h-3a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3zm-1 3a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2zm1-14a3 3 0 0 0-3-3h-3a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3zm-1 3a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2zM2 5v3a3 3 0 0 0 3 3h3a3 3 0 0 0 3-3V5a3 3 0 0 0-3-3H5a3 3 0 0 0-3 3zm1 0a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm6.5 11.238l-3.443 3.43-1.822-1.822.738-.738 1.084 1.088L8.762 15.5z" />
                 </GeometryDrawing.Geometry>
             </GeometryDrawing>
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    
-    <!-- Minus / Remove icon -->
-	<DrawingImage x:Key="Icon.Remove">
-		<DrawingImage.Drawing>
-			<GeometryDrawing Brush="{StaticResource Clr.Primary}">
-				<GeometryDrawing.Geometry>
-					<PathGeometry Figures="M34,18 
-                                 a3,3 0 0 1 -3,3 
-                                 H5 
-                                 a3,3 0 1 1 0,-6 
-                                 h26 
-                                 a3,3 0 0 1 3,3 z"/>
-				</GeometryDrawing.Geometry>
-			</GeometryDrawing>
-		</DrawingImage.Drawing>
-	</DrawingImage>
 
-	<!-- Close / Cancel (X) icon -->
-	<DrawingImage x:Key="Icon.Close">
-		<DrawingImage.Drawing>
-			<GeometryDrawing Brush="{StaticResource Clr.Primary}">
-				<GeometryDrawing.Geometry>
-					<PathGeometry Figures="M11.383,13.644
-                                 A1.03,1.03 0 0 1 9.928,15.1
-                                 L6,11.172
-                                 L2.072,15.1
-                                 A1.03,1.03 0 1 1 0.617,13.644
-                                 L4.545,9.716
-                                 L0.617,5.79
-                                 A1.03,1.03 0 1 1 2.072,4.334
-                                 L6,8.261
-                                 L9.928,4.334
-                                 A1.03,1.03 0 0 1 11.383,5.79
-                                 L7.455,9.716 Z"/>
-				</GeometryDrawing.Geometry>
-			</GeometryDrawing>
-		</DrawingImage.Drawing>
-	</DrawingImage>
-	
-    <!-- Example: Trash bin icon -->
+    <!--  Minus / Remove icon  -->
+    <DrawingImage x:Key="Icon.Remove">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{StaticResource Clr.Primary}">
+                <GeometryDrawing.Geometry>
+                    <PathGeometry Figures="M34,18                                   a3,3 0 0 1 -3,3                                   H5                                   a3,3 0 1 1 0,-6                                   h26                                   a3,3 0 0 1 3,3 z" />
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!--  Close / Cancel (X) icon  -->
+    <DrawingImage x:Key="Icon.Close">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{StaticResource Clr.Primary}">
+                <GeometryDrawing.Geometry>
+                    <PathGeometry Figures="M11.383,13.644                                  A1.03,1.03 0 0 1 9.928,15.1                                  L6,11.172                                  L2.072,15.1                                  A1.03,1.03 0 1 1 0.617,13.644                                  L4.545,9.716                                  L0.617,5.79                                  A1.03,1.03 0 1 1 2.072,4.334                                  L6,8.261                                  L9.928,4.334                                  A1.03,1.03 0 0 1 11.383,5.79                                  L7.455,9.716 Z" />
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!--  Example: Trash bin icon  -->
     <DrawingImage x:Key="Icon.Delete">
         <DrawingImage.Drawing>
             <GeometryDrawing Brush="{StaticResource Clr.Danger}">
@@ -1054,126 +870,121 @@ c0-11.728-3.089-22.747-8.498-32.287H446.32c17.803,0,32.288,14.484,32.288,32.287V
         </DrawingImage.Drawing>
     </DrawingImage>
 
-	<!-- Recycle/Sync arrows icon -->
-	<DrawingImage x:Key="Icon.SyncArrows">
-		<DrawingImage.Drawing>
-			<DrawingGroup>
+    <!--  Recycle/Sync arrows icon  -->
+    <DrawingImage x:Key="Icon.SyncArrows">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
 
-				<!-- Curved arrow (top-right) -->
-				<GeometryDrawing Brush="{x:Null}">
-					<GeometryDrawing.Pen>
-						<Pen Brush="Black" Thickness="2" LineJoin="Miter"/>
-					</GeometryDrawing.Pen>
-					<GeometryDrawing.Geometry>
-						<!-- M25.7,10.9 C23.9,7.4,20.2,5,16,5 c-4.7,0,-8.6,2.9,-10.2,7 -->
-						<PathGeometry Figures="M 25.7,10.9 C 23.9,7.4 20.2,5 16,5 C 11.3,5 7.4,7.9 5.8,12"/>
-					</GeometryDrawing.Geometry>
-				</GeometryDrawing>
+                <!--  Curved arrow (top-right)  -->
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen
+                            Brush="Black"
+                            LineJoin="Miter"
+                            Thickness="2" />
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <!--  M25.7,10.9 C23.9,7.4,20.2,5,16,5 c-4.7,0,-8.6,2.9,-10.2,7  -->
+                        <PathGeometry Figures="M 25.7,10.9 C 23.9,7.4 20.2,5 16,5 C 11.3,5 7.4,7.9 5.8,12" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
 
-				<!-- Curved arrow (bottom-left) -->
-				<GeometryDrawing Brush="{x:Null}">
-					<GeometryDrawing.Pen>
-						<Pen Brush="Black" Thickness="2" LineJoin="Miter"/>
-					</GeometryDrawing.Pen>
-					<GeometryDrawing.Geometry>
-						<!-- M6.2,21 c1.8,3.5,5.5,6,9.8,6 c4.7,0,8.6,-2.9,10.2,-7 -->
-						<PathGeometry Figures="M 6.2,21 C 8,24.5 11.7,27 16,27 C 20.7,27 24.6,24.1 26.2,20"/>
-					</GeometryDrawing.Geometry>
-				</GeometryDrawing>
+                <!--  Curved arrow (bottom-left)  -->
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen
+                            Brush="Black"
+                            LineJoin="Miter"
+                            Thickness="2" />
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <!--  M6.2,21 c1.8,3.5,5.5,6,9.8,6 c4.7,0,8.6,-2.9,10.2,-7  -->
+                        <PathGeometry Figures="M 6.2,21 C 8,24.5 11.7,27 16,27 C 20.7,27 24.6,24.1 26.2,20" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
 
-				<!-- Polyline: 26,5 -> 26,11 -> 20,11 -->
-				<GeometryDrawing Brush="{x:Null}">
-					<GeometryDrawing.Pen>
-						<Pen Brush="Black" Thickness="2" LineJoin="Miter"/>
-					</GeometryDrawing.Pen>
-					<GeometryDrawing.Geometry>
-						<PathGeometry Figures="M 26,5 L 26,11 20,11"/>
-					</GeometryDrawing.Geometry>
-				</GeometryDrawing>
+                <!--  Polyline: 26,5 -> 26,11 -> 20,11  -->
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen
+                            Brush="Black"
+                            LineJoin="Miter"
+                            Thickness="2" />
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <PathGeometry Figures="M 26,5 L 26,11 20,11" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
 
-				<!-- Polyline: 6,27 -> 6,21 -> 12,21 -->
-				<GeometryDrawing Brush="{x:Null}">
-					<GeometryDrawing.Pen>
-						<Pen Brush="Black" Thickness="2" LineJoin="Miter"/>
-					</GeometryDrawing.Pen>
-					<GeometryDrawing.Geometry>
-						<PathGeometry Figures="M 6,27 L 6,21 12,21"/>
-					</GeometryDrawing.Geometry>
-				</GeometryDrawing>
+                <!--  Polyline: 6,27 -> 6,21 -> 12,21  -->
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen
+                            Brush="Black"
+                            LineJoin="Miter"
+                            Thickness="2" />
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <PathGeometry Figures="M 6,27 L 6,21 12,21" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
 
-			</DrawingGroup>
-		</DrawingImage.Drawing>
-	</DrawingImage>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
 
-	<!-- Magnifying glass / Search icon -->
-	<DrawingImage x:Key="Icon.Search">
-		<DrawingImage.Drawing>
-			<GeometryDrawing Brush="#444">
-				<GeometryDrawing.Geometry>
-					<PathGeometry Figures="M15.7,14.3 L11.5,10.1 C11.3,9.9 11,9.8 10.7,9.8 C11.5,8.8 12,7.4 12,6 C12,2.7 9.3,0 6,0 C2.7,0 0,2.7 0,6 C0,9.3 2.7,12 6,12 C7.4,12 8.8,11.5 9.8,10.6 C9.8,10.9 9.8,11.2 10.1,11.4 L14.3,15.6 C14.5,15.8 14.8,15.9 15,15.9 C15.2,15.9 15.5,15.8 15.7,15.6 C16.1,15.3 16.1,14.7 15.7,14.3 Z M6,10.5 C3.5,10.5 1.5,8.5 1.5,6 C1.5,3.5 3.5,1.5 6,1.5 C8.5,1.5 10.5,3.5 10.5,6 C10.5,8.5 8.5,10.5 6,10.5 Z"/>
-				</GeometryDrawing.Geometry>
-			</GeometryDrawing>
-		</DrawingImage.Drawing>
-	</DrawingImage>
+    <!--  Magnifying glass / Search icon  -->
+    <DrawingImage x:Key="Icon.Search">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="#444">
+                <GeometryDrawing.Geometry>
+                    <PathGeometry Figures="M15.7,14.3 L11.5,10.1 C11.3,9.9 11,9.8 10.7,9.8 C11.5,8.8 12,7.4 12,6 C12,2.7 9.3,0 6,0 C2.7,0 0,2.7 0,6 C0,9.3 2.7,12 6,12 C7.4,12 8.8,11.5 9.8,10.6 C9.8,10.9 9.8,11.2 10.1,11.4 L14.3,15.6 C14.5,15.8 14.8,15.9 15,15.9 C15.2,15.9 15.5,15.8 15.7,15.6 C16.1,15.3 16.1,14.7 15.7,14.3 Z M6,10.5 C3.5,10.5 1.5,8.5 1.5,6 C1.5,3.5 3.5,1.5 6,1.5 C8.5,1.5 10.5,3.5 10.5,6 C10.5,8.5 8.5,10.5 6,10.5 Z" />
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+        </DrawingImage.Drawing>
+    </DrawingImage>
 
-	<!-- Refresh / Redo Arrow icon -->
-	<DrawingImage x:Key="Icon.RefreshArrow">
-		<DrawingImage.Drawing>
-			<GeometryDrawing Brush="{StaticResource Clr.Primary}">
-				<GeometryDrawing.Geometry>
-					<PathGeometry Figures="M12.793,2.293
-                                 A1,1 0 0 1 14.207,2.293
-                                 L17.207,5.293
-                                 A1,1 0 0 1 17.207,6.707
-                                 L14.207,9.707
-                                 A1,1 0 0 1 12.793,8.293
-                                 L14.086,7
-                                 H12.5
-                                 C8.952,7 6,9.952 6,13.5
-                                 S8.952,20 12.5,20
-                                 S19,17.048 19,13.5
-                                 A1,1 0 1 1 21,13.5
-                                 C21,18.152 17.152,22 12.5,22
-                                 S4,18.152 4,13.5
-                                 S7.848,5 12.5,5
-                                 H14.086
-                                 L12.793,3.707
-                                 A1,1 0 0 1 12.793,2.293 Z"/>
-				</GeometryDrawing.Geometry>
-			</GeometryDrawing>
-		</DrawingImage.Drawing>
-	</DrawingImage>
+    <!--  Refresh / Redo Arrow icon  -->
+    <DrawingImage x:Key="Icon.RefreshArrow">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{StaticResource Clr.Primary}">
+                <GeometryDrawing.Geometry>
+                    <PathGeometry Figures="M12.793,2.293                                  A1,1 0 0 1 14.207,2.293                                  L17.207,5.293                                  A1,1 0 0 1 17.207,6.707                                  L14.207,9.707                                  A1,1 0 0 1 12.793,8.293                                  L14.086,7                                  H12.5                                  C8.952,7 6,9.952 6,13.5                                  S8.952,20 12.5,20                                  S19,17.048 19,13.5                                  A1,1 0 1 1 21,13.5                                  C21,18.152 17.152,22 12.5,22                                  S4,18.152 4,13.5                                  S7.848,5 12.5,5                                  H14.086                                  L12.793,3.707                                  A1,1 0 0 1 12.793,2.293 Z" />
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+        </DrawingImage.Drawing>
+    </DrawingImage>
 
-	<!-- Store / Outlet icon -->
-	
-
-	<!-- Warehouse / Building icon -->
-	
+    <!--  Store / Outlet icon  -->
 
 
-   
+    <!--  Warehouse / Building icon  -->
 
-    <!-- Product / Box (Outline / Sketch Style) -->
-   
 
-    <!-- User / Profile (Outline / Sketch Style) -->
-    
 
-    <!-- User / Profile (Outline / Sketch Style) -->
-    
 
-    <!-- Users / People Group (Outline / Sketch Style) -->
-    
 
-    <!-- Warehouse / Storage (Outline / Sketch Style) -->
-    <!-- Shop / Marketplace (Outline / Sketch Style, Bottom Lines Removed) -->
-    
-    <!-- Warehouse / Storage (Outline / Sketch Style) -->
-    
+    <!--  Product / Box (Outline / Sketch Style)  -->
 
-    <!-- Duo Profile / Faces (Outline / Sketch Style) -->
-    <!-- Users / Panel (Outline / Sketch Style) -->
-    
+
+    <!--  User / Profile (Outline / Sketch Style)  -->
+
+
+    <!--  User / Profile (Outline / Sketch Style)  -->
+
+
+    <!--  Users / People Group (Outline / Sketch Style)  -->
+
+
+    <!--  Warehouse / Storage (Outline / Sketch Style)  -->
+    <!--  Shop / Marketplace (Outline / Sketch Style, Bottom Lines Removed)  -->
+
+    <!--  Warehouse / Storage (Outline / Sketch Style)  -->
+
+
+    <!--  Duo Profile / Faces (Outline / Sketch Style)  -->
+    <!--  Users / Panel (Outline / Sketch Style)  -->
+
 
 
 </ResourceDictionary>

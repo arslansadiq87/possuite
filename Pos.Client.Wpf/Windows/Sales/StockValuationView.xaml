@@ -1,0 +1,84 @@
+﻿<UserControl
+    x:Class="Pos.Client.Wpf.Windows.Sales.StockValuationView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Pos.Client.Wpf.Windows.Sales">
+
+    <!-- Root Grid: Row 0 = Toolbar, Row 1 = DataGrid, Row 2 = Totals -->
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <ToolBar Grid.Row="0" Margin="0,0,0,6">
+            <TextBlock Text="Mode:" VerticalAlignment="Center"/>
+            <ComboBox Width="140"
+                      SelectedValue="{Binding Mode, Mode=TwoWay}"
+                      SelectedValuePath="Tag"
+                      Margin="6,0,12,0">
+                <ComboBoxItem Content="Cost" Tag="{x:Static local:StockValuationMode.Cost}" />
+                <ComboBoxItem Content="Sale" Tag="{x:Static local:StockValuationMode.Sale}" />
+            </ComboBox>
+
+            <TextBlock Text="As of:" VerticalAlignment="Center"/>
+            <DatePicker SelectedDate="{Binding AsOf, Mode=TwoWay}" Margin="6,0,12,0"/>
+
+            <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+            <Separator/>
+            <Button Content="Print" Click="OnPrintClick" />
+        </ToolBar>
+
+        <!-- Data -->
+        <DataGrid Grid.Row="1"
+                  x:Name="Grid"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  ItemsSource="{Binding Rows}"
+                  EnableRowVirtualization="True"
+                  EnableColumnVirtualization="True"
+                  Margin="0,0,0,6">
+            <DataGrid.Columns>
+                <DataGridTextColumn Width="140" Header="SKU"        Binding="{Binding Sku}" />
+                <DataGridTextColumn Width="*"   Header="Name"       Binding="{Binding DisplayName}" />
+                <DataGridTextColumn Width="160" Header="Brand"      Binding="{Binding Brand}" />
+                <DataGridTextColumn Width="160" Header="Category"   Binding="{Binding Category}" />
+                <DataGridTextColumn Width="110" Header="On Hand"    Binding="{Binding OnHand, StringFormat=N3}" />
+                <DataGridTextColumn Width="110" Header="Unit Cost"  Binding="{Binding UnitCost, StringFormat=N4}" />
+                <DataGridTextColumn Width="110" Header="Unit Price" Binding="{Binding UnitPrice, StringFormat=N2}" />
+                <DataGridTextColumn Width="120" Header="Total Cost" Binding="{Binding TotalCost, StringFormat=N2}" />
+                <DataGridTextColumn Width="120" Header="Total Price" Binding="{Binding TotalPrice, StringFormat=N2}" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Totals footer -->
+      
+
+        <StatusBar Grid.Row="2" HorizontalAlignment="Right" FontWeight="Bold">
+            <StatusBarItem>
+                <TextBlock Text="Totals:"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock>
+                    <Run Text="Qty: "/>
+                    <Run Text="{Binding SumQty,   StringFormat=Qty: {0:N3}}"/>
+                </TextBlock>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock>
+                    <Run Text="Cost: "/>
+                    <Run Text="{Binding SumCost,  StringFormat=Cost Total: {0:N2}}"/>
+                </TextBlock>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock>
+                    <Run Text="Price: "/>
+                    <Run Text="{Binding SumPrice, StringFormat=Sale Total: {0:N2}}"/>
+                </TextBlock>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</UserControl>

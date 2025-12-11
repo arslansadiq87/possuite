@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,7 +16,10 @@ namespace Pos.Client.Wpf.Windows.Settings
         public SecurityPage()
         {
             InitializeComponent();
+
             _userAdmin = App.Services.GetRequiredService<IUserAdminService>();
+
+            
         }
 
         private async void SavePin_Click(object sender, RoutedEventArgs e)

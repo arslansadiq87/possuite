@@ -320,12 +320,14 @@ namespace Pos.Persistence.Services
                     }
                     await db.SaveChangesAsync(ct);
 
-                    await _gl.PostVoucherAsync(v); // base posting
+                    // NOTE: use the same DbContext + transaction here
+                    await ((IGlPostingServiceDb)_gl).PostVoucherAsync(db, v, ct);
 
                     // outbox first, then save+commit
                     await _outbox.EnqueueUpsertAsync(db, v);
                     await db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
+
 
                     return v.Id;
                 }

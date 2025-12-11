@@ -1,257 +1,257 @@
-﻿<Fluent:RibbonWindow x:Class="Pos.Client.Wpf.Windows.Shell.DashboardWindow"
-                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-                     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-                     xmlns:shell="clr-namespace:Pos.Client.Wpf.Windows.Shell;assembly=Pos.Client.Wpf"
-                     xmlns:att="clr-namespace:Pos.Client.Wpf.Attached"
-                     xmlns:views="clr-namespace:Pos.Client.Wpf.Windows.Settings"
-                     xmlns:Fluent="urn:fluent-ribbon"
-                     mc:Ignorable="d"
-                     Title="POS — Dashboard"
-                     Width="1200"
-                     Height="800"
-                     WindowStartupLocation="CenterScreen">
+﻿<Fluent:RibbonWindow
+    x:Class="Pos.Client.Wpf.Windows.Shell.DashboardWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:Fluent="urn:fluent-ribbon"
+    xmlns:att="clr-namespace:Pos.Client.Wpf.Attached"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:shell="clr-namespace:Pos.Client.Wpf.Windows.Shell;assembly=Pos.Client.Wpf"
+    xmlns:views="clr-namespace:Pos.Client.Wpf.Windows.Settings"
+    Title="POS — Dashboard"
+    Width="1200"
+    Height="800"
+    WindowStartupLocation="CenterScreen"
+    mc:Ignorable="d">
 
-    <!-- ONE root content -->
+    <!--  ONE root content  -->
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <!-- Ribbon -->
+        <!--  Ribbon  -->
         <Fluent:Ribbon x:Name="MainRibbon" VerticalAlignment="Bottom">
             <Fluent:Ribbon.Resources>
                 <Style TargetType="Fluent:Button">
-                    <Setter Property="att:IconProps.IconSize" Value="12"/>
+                    <Setter Property="att:IconProps.IconSize" Value="12" />
                 </Style>
             </Fluent:Ribbon.Resources>
 
-            <!-- Backstage (MUST wrap in BackstageTabControl) -->
+            <!--  Backstage (MUST wrap in BackstageTabControl)  -->
             <Fluent:Ribbon.Menu>
                 <Fluent:Backstage x:Name="MainBackstage">
                     <Fluent:BackstageTabControl>
                         <Fluent:BackstageTabItem Header="General Settings">
-                            <!-- Fix: Ensure the InvoiceSettingsPage is properly defined and accessible -->
-                            <views:IdentitySettingsPage/>
+                            <!--  Fix: Ensure the InvoiceSettingsPage is properly defined and accessible  -->
+                            <views:IdentitySettingsPage />
                         </Fluent:BackstageTabItem>
                         <Fluent:BackstageTabItem Header="Invoice Settings">
-                            <!-- Fix: Ensure the InvoiceSettingsPage is properly defined and accessible -->
-                            <views:InvoiceSettingsPage/>
+                            <!--  Fix: Ensure the InvoiceSettingsPage is properly defined and accessible  -->
+                            <views:InvoiceSettingsPage />
                         </Fluent:BackstageTabItem>
-                        
+
                         <Fluent:BackstageTabItem Header="Barcode Labels">
-							<views:BarcodeLabelSettingsPage/>
-						</Fluent:BackstageTabItem>
+                            <views:BarcodeLabelSettingsPage />
+                        </Fluent:BackstageTabItem>
                         <Fluent:BackstageTabItem Header="Receipt Builder">
-                            <views:ReceiptBuilderPage/>
+                            <views:ReceiptBuilderPage />
                         </Fluent:BackstageTabItem>
                         <Fluent:BackstageTabItem Header="Security">
-                            <views:SecurityPage/>
+                            <views:SecurityPage />
                         </Fluent:BackstageTabItem>
-                        <!-- NEW: Backup & Restore -->
+                        <!--  NEW: Backup & Restore  -->
                         <Fluent:BackstageTabItem Header="Date &amp; Server">
-                            <views:BackupSettingsPage/>
+                            <views:BackupSettingsPage />
                         </Fluent:BackstageTabItem>
 
 
                         <Fluent:BackstageTabItem Header="About" KeyTip="A">
                             <StackPanel Margin="16">
-                                <TextBlock Text="PosSuite" FontSize="18" FontWeight="SemiBold"/>
-                                <TextBlock Text="Multi-outlet POS with offline-first sync" Margin="0,8,0,0"/>
-                                <Button Content="Exit" Width="110" Margin="0,12,0,0" Command="{Binding ExitCmd}"/>
+                                <TextBlock
+                                    FontSize="18"
+                                    FontWeight="SemiBold"
+                                    Text="PosSuite" />
+                                <TextBlock Margin="0,8,0,0" Text="Multi-outlet POS with offline-first sync" />
+                                <Button
+                                    Width="110"
+                                    Margin="0,12,0,0"
+                                    Command="{Binding ExitCmd}"
+                                    Content="Exit" />
                             </StackPanel>
                         </Fluent:BackstageTabItem>
 
-                        <!-- Optional: buttons directly inside the Backstage (valid) -->
+                        <!--  Optional: buttons directly inside the Backstage (valid)  -->
                         <!--<Fluent:Button Header="Theme: Blue" />-->
                     </Fluent:BackstageTabControl>
                 </Fluent:Backstage>
             </Fluent:Ribbon.Menu>
 
-            <!-- Quick Access (v11-correct) -->
+            <!--  Quick Access (v11-correct)  -->
             <Fluent:Ribbon.QuickAccessItems>
-                <!-- Bind to existing controls or provide inline content -->
-                <Fluent:QuickAccessMenuItem Target="{Binding ElementName=BtnNewSale}" IsChecked="True"/>
-                <Fluent:QuickAccessMenuItem Target="{Binding ElementName=BtnReports}" IsChecked="True"/>
+                <!--  Bind to existing controls or provide inline content  -->
+                <Fluent:QuickAccessMenuItem IsChecked="True" Target="{Binding ElementName=BtnNewSale}" />
+                <Fluent:QuickAccessMenuItem IsChecked="True" Target="{Binding ElementName=BtnReports}" />
             </Fluent:Ribbon.QuickAccessItems>
 
-            <!-- Contextual Tab Groups MUST be in this collection -->
+            <!--  Contextual Tab Groups MUST be in this collection  -->
             <Fluent:Ribbon.ContextualGroups>
-                <Fluent:RibbonContextualTabGroup x:Name="transferGroup" Header="Transfer" Visibility="{Binding TransferTabVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <Fluent:RibbonContextualTabGroup
+                    x:Name="transferGroup"
+                    Header="Transfer"
+                    Visibility="{Binding TransferTabVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </Fluent:Ribbon.ContextualGroups>
 
-            <!-- Normal tabs -->
+            <!--  Normal tabs  -->
             <Fluent:RibbonTabItem Header="Home" KeyTip="H">
-                <Fluent:RibbonGroupBox Header="Sales" >
-                    <Fluent:Button x:Name="BtnNewSale" IsTabStop="False" Header="New&#160;Sale" KeyTip="N" Command="{Binding NewSaleCmd}">
+                <Fluent:RibbonGroupBox Header="Sales">
+                    <Fluent:Button
+                        x:Name="BtnNewSale"
+                        Command="{Binding NewSaleCmd}"
+                        Header="New&#160;Sale"
+                        IsTabStop="False"
+                        KeyTip="N">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                            Source="{StaticResource Icon.SaleRegister}"/>
+                            <Image Source="{StaticResource Icon.SaleRegister}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Sale Center" Command="{Binding OpenSaleCenterCmd}">
+                    <Fluent:Button Command="{Binding OpenSaleCenterCmd}" Header="Sale Center">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.SaleCenter}"/>
+                            <Image Source="{StaticResource Icon.SaleCenter}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
 
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Inventory">
-                    <Fluent:Button Header="Purchase" Command="{Binding OpenPurchaseCmd}">
+                    <Fluent:Button Command="{Binding OpenPurchaseCmd}" Header="Purchase">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Purchase}"/>
+                            <Image Source="{StaticResource Icon.Purchase}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Purchase Center" Command="{Binding OpenPurchaseInvoiceCenterCmd}">
+                    <Fluent:Button Command="{Binding OpenPurchaseInvoiceCenterCmd}" Header="Purchase Center">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.PurchaseCenter}"/>
+                            <Image Source="{StaticResource Icon.PurchaseCenter}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
 
-                    <!-- NEW: Print Labels -->
-                    <Fluent:Button Header="Print Labels" Command="{Binding OpenLabelPrintCmd}">
+                    <!--  NEW: Print Labels  -->
+                    <Fluent:Button Command="{Binding OpenLabelPrintCmd}" Header="Print Labels">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                   Source="{StaticResource Icon.Barcode}"/>
+                            <Image Source="{StaticResource Icon.Barcode}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Transfer" Command="{Binding OpenTransferCmd}">
+                    <Fluent:Button Command="{Binding OpenTransferCmd}" Header="Transfer">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Transfer}"/>
+                            <Image Source="{StaticResource Icon.Transfer}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Transfer Center" Command="{Binding OpenTransferCenterCmd}">
+                    <Fluent:Button Command="{Binding OpenTransferCenterCmd}" Header="Transfer Center">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                Source="{StaticResource Icon.TransferCenter}"/>
+                            <Image Source="{StaticResource Icon.TransferCenter}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Stock" Command="{Binding OpenStockCheckCmd}">
+                    <Fluent:Button Command="{Binding OpenStockCheckCmd}" Header="Stock">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Inventory}"/>
+                            <Image Source="{StaticResource Icon.Inventory}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Admin">
-                    <Fluent:Button Header="Products" Command="{Binding OpenProductsCmd}">
+                    <Fluent:Button Command="{Binding OpenProductsCmd}" Header="Products">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Products}"/>
+                            <Image Source="{StaticResource Icon.Products}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Parties" Command="{Binding OpenPartiesCmd}">
+                    <Fluent:Button Command="{Binding OpenPartiesCmd}" Header="Parties">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Party}"/>
+                            <Image Source="{StaticResource Icon.Party}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Staff" Command="{Binding OpenStaffCmd}">
+                    <Fluent:Button Command="{Binding OpenStaffCmd}" Header="Staff">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Staff}"/>
+                            <Image Source="{StaticResource Icon.Staff}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Other Accounts" Command="{Binding OpenOtherAccountsCmd}">
+                    <Fluent:Button Command="{Binding OpenOtherAccountsCmd}" Header="Other Accounts">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.OtherAccounts}"/>
+                            <Image Source="{StaticResource Icon.OtherAccounts}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Outlets &amp; Counters" Command="{Binding OpenOutletsCountersCmd}">
+                    <Fluent:Button Command="{Binding OpenOutletsCountersCmd}" Header="Outlets &amp; Counters">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Outlet}"/>
+                            <Image Source="{StaticResource Icon.Outlet}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Warehouse" Command="{Binding OpenWarehousesCmd}">
+                    <Fluent:Button Command="{Binding OpenWarehousesCmd}" Header="Warehouse">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Warehouse}"/>
+                            <Image Source="{StaticResource Icon.Warehouse}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Users" Command="{Binding OpenUsersCmd}">
+                    <Fluent:Button Command="{Binding OpenUsersCmd}" Header="Users">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.User}"/>
+                            <Image Source="{StaticResource Icon.User}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Reports">
-                    <Fluent:Button x:Name="BtnReports"
-                         Header="Open&#160;Reports"
-                         Command="{Binding OpenReportsCmd}"/>
+                    <Fluent:Button
+                        x:Name="BtnReports"
+                        Command="{Binding OpenReportsCmd}"
+                        Header="Open&#160;Reports" />
                 </Fluent:RibbonGroupBox>
-               
+
 
                 <Fluent:RibbonGroupBox Header="Accounts">
-                    <Fluent:Button Header="Chart of Accounts" Command="{Binding OpenChartOfAccountsCmd}">
+                    <Fluent:Button Command="{Binding OpenChartOfAccountsCmd}" Header="Chart of Accounts">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.ChartOfAccounts}"/>
+                            <Image Source="{StaticResource Icon.ChartOfAccounts}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Voucher" Command="{Binding OpenVoucherEditorCmd}">
+                    <Fluent:Button Command="{Binding OpenVoucherEditorCmd}" Header="Voucher">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Voucher}"/>
+                            <Image Source="{StaticResource Icon.Voucher}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Voucher Center" Command="{Binding OpenVoucherCenterCmd}">
+                    <Fluent:Button Command="{Binding OpenVoucherCenterCmd}" Header="Voucher Center">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.VoucherCenter}"/>
+                            <Image Source="{StaticResource Icon.VoucherCenter}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Account Ledger" Command="{Binding OpenAccounteLedgerCmd}">
+                    <Fluent:Button Command="{Binding OpenAccounteLedgerCmd}" Header="Account Ledger">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.Ledger}"/>
+                            <Image Source="{StaticResource Icon.Ledger}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="Cash Book" Command="{Binding OpenCashBookCmd}">
+                    <Fluent:Button Command="{Binding OpenCashBookCmd}" Header="Cash Book">
                         <Fluent:Button.Icon>
-                            <Image Style="{StaticResource Icon.Image}"
-                                Source="{StaticResource Icon.CashBook}"/>
+                            <Image Source="{StaticResource Icon.CashBook}" Style="{StaticResource Icon.Image}" />
                         </Fluent:Button.Icon>
                     </Fluent:Button>
-                    <Fluent:Button Header="AR / AP Report" Command="{Binding OpenArApReportCmd}"/>
+                    <Fluent:Button Command="{Binding OpenArApReportCmd}" Header="AR / AP Report" />
 
 
                 </Fluent:RibbonGroupBox>
 
                 <Fluent:RibbonGroupBox Header="Till">
-                    <Fluent:Button Header="Open Till" Command="{Binding OpenTillCmd}">
+                    <Fluent:Button Command="{Binding OpenTillCmd}" Header="Open Till">
                         <Fluent:Button.Style>
                             <Style TargetType="{x:Type Fluent:Button}">
-                                <Setter Property="Visibility" Value="Visible"/>
+                                <Setter Property="Visibility" Value="Visible" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsTillOpen}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Fluent:Button.Style>
                     </Fluent:Button>
-                    <Fluent:Button Header="Till Summary" KeyTip="TS" Command="{Binding OpenTillSummaryCmd}"/>
+                    <Fluent:Button
+                        Command="{Binding OpenTillSummaryCmd}"
+                        Header="Till Summary"
+                        KeyTip="TS" />
 
 
-                    <Fluent:Button Header="Close Till" Command="{Binding CloseTillCmd}">
+                    <Fluent:Button Command="{Binding CloseTillCmd}" Header="Close Till">
                         <Fluent:Button.Style>
                             <Style TargetType="{x:Type Fluent:Button}">
-                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsTillOpen}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -264,59 +264,79 @@
                 </Fluent:RibbonGroupBox>-->
 
             </Fluent:RibbonTabItem>
-            
-            <!-- Contextual tab: associate via Group -->
-            <Fluent:RibbonTabItem Header="Transfer Tools" Group="{Binding Source={x:Reference transferGroup}}">
+
+            <Fluent:RibbonTabItem Header="Reports">
+                <Fluent:RibbonGroupBox Header="Purchase Reports">
+                    <Fluent:Button Command="{Binding OpenPurchaserLedgerCmd}" Header="Supplier Ledger" />
+                </Fluent:RibbonGroupBox>
+
+                <Fluent:RibbonGroupBox Header="Stock Reports">
+                    <Fluent:Button Command="{Binding OpenStockValuationCmd}" Header="Stock Valuation" />
+                </Fluent:RibbonGroupBox>
+            </Fluent:RibbonTabItem>
+
+            <!--  Contextual tab: associate via Group  -->
+            <Fluent:RibbonTabItem Group="{Binding Source={x:Reference transferGroup}}" Header="Transfer Tools">
                 <Fluent:RibbonGroupBox Header="Receive">
-                    <Fluent:Button Header="Receive Dispatch" Command="{Binding ReceiveDispatchCmd}"/>
+                    <Fluent:Button Command="{Binding ReceiveDispatchCmd}" Header="Receive Dispatch" />
                 </Fluent:RibbonGroupBox>
             </Fluent:RibbonTabItem>
 
         </Fluent:Ribbon>
-        <!-- Content (Tabbed) -->
-        <Border Grid.Row="1" CornerRadius="8" Padding="2" Margin="2" Background="{DynamicResource ControlBackgroundBrush}">
-            <!-- Center host: Tabbed documents -->
-            <TabControl x:Name="DocumentTabs"
+        <!--  Content (Tabbed)  -->
+        <Border
+            Grid.Row="1"
+            Margin="2"
+            Padding="2"
+            Background="{DynamicResource ControlBackgroundBrush}"
+            CornerRadius="8">
+            <!--  Center host: Tabbed documents  -->
+            <TabControl
+                x:Name="DocumentTabs"
+                Margin="0"
+                BorderThickness="0"
                 FocusManager.IsFocusScope="True"
                 ItemsSource="{Binding Tabs}"
-                SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
-                Margin="0"
-                BorderThickness="0">
-                <!-- Tab headers -->
+                SelectedItem="{Binding ActiveTab, Mode=TwoWay}">
+                <!--  Tab headers  -->
                 <TabControl.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
-                            <TextBlock Text="{Binding Title}" Margin="0,0,8,0"/>
-                            <Button Content="{StaticResource Icon.Close}"
-                                Style="{StaticResource Btn.IconBare}"
+                        <StackPanel Margin="0,0,4,0" Orientation="Horizontal">
+                            <TextBlock Margin="0,0,8,0" Text="{Binding Title}" />
+                            <Button
+                                Width="18"
+                                Height="18"
+                                Padding="0"
                                 att:IconProps.IconSize="12"
-                                Width="18" Height="18" Padding="0"
                                 Command="{Binding DataContext.CloseActiveTabCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"
-                                ToolTip="Close" Focusable="False"/>
+                                Content="{StaticResource Icon.Close}"
+                                Focusable="False"
+                                Style="{StaticResource Btn.IconBare}"
+                                ToolTip="Close" />
                         </StackPanel>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
 
-                <!-- Tab body -->
+                <!--  Tab body  -->
                 <TabControl.ContentTemplate>
                     <DataTemplate>
-                        <ContentPresenter Content="{Binding Content}"/>
+                        <ContentPresenter Content="{Binding Content}" />
                     </DataTemplate>
                 </TabControl.ContentTemplate>
 
-                <!-- Optional: context menu on tabs -->
+                <!--  Optional: context menu on tabs  -->
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem">
                         <Setter Property="ContextMenu">
                             <Setter.Value>
                                 <ContextMenu>
-                                    <MenuItem Header="Close" Command="{Binding PlacementTarget.DataContext.CloseActiveTabCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                    <Separator/>
-                                    <MenuItem Header="Close Others" Command="{Binding PlacementTarget.DataContext.CloseOthersCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                    <MenuItem Header="Close Tabs to the Left" Command="{Binding PlacementTarget.DataContext.CloseLeftCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                    <MenuItem Header="Close Tabs to the Right" Command="{Binding PlacementTarget.DataContext.CloseRightCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                    <Separator/>
-                                    <MenuItem Header="Close All" Command="{Binding PlacementTarget.DataContext.CloseAllTabsCmd, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                    <MenuItem Command="{Binding PlacementTarget.DataContext.CloseActiveTabCmd, RelativeSource={RelativeSource AncestorType=TabControl}}" Header="Close" />
+                                    <Separator />
+                                    <MenuItem Command="{Binding PlacementTarget.DataContext.CloseOthersCmd, RelativeSource={RelativeSource AncestorType=TabControl}}" Header="Close Others" />
+                                    <MenuItem Command="{Binding PlacementTarget.DataContext.CloseLeftCmd, RelativeSource={RelativeSource AncestorType=TabControl}}" Header="Close Tabs to the Left" />
+                                    <MenuItem Command="{Binding PlacementTarget.DataContext.CloseRightCmd, RelativeSource={RelativeSource AncestorType=TabControl}}" Header="Close Tabs to the Right" />
+                                    <Separator />
+                                    <MenuItem Command="{Binding PlacementTarget.DataContext.CloseAllTabsCmd, RelativeSource={RelativeSource AncestorType=TabControl}}" Header="Close All" />
                                 </ContextMenu>
                             </Setter.Value>
                         </Setter>
@@ -325,74 +345,103 @@
             </TabControl>
         </Border>
 
-        <!-- Status Bar -->
-        <Fluent:StatusBar Grid.Row="2" MinHeight="28" Padding="8,0">
-            <!-- Ensure DockPanel behavior like classic WPF StatusBar -->
+        <!--  Status Bar  -->
+        <Fluent:StatusBar
+            Grid.Row="2"
+            MinHeight="28"
+            Padding="8,0">
+            <!--  Ensure DockPanel behavior like classic WPF StatusBar  -->
             <Fluent:StatusBar.ItemContainerStyle>
                 <Style TargetType="{x:Type Fluent:StatusBarItem}">
-                    <Setter Property="VerticalAlignment" Value="Center"/>
-                    <Setter Property="Padding" Value="8,0"/>
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="Padding" Value="8,0" />
                 </Style>
             </Fluent:StatusBar.ItemContainerStyle>
             <Fluent:StatusBar.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <DockPanel LastChildFill="False"/>
+                    <DockPanel LastChildFill="False" />
                 </ItemsPanelTemplate>
             </Fluent:StatusBar.ItemsPanel>
 
-            <!-- RIGHT cluster (dock first) -->
-            <Fluent:StatusBarItem DockPanel.Dock="Right" Padding="8,0">
+            <!--  RIGHT cluster (dock first)  -->
+            <Fluent:StatusBarItem Padding="8,0" DockPanel.Dock="Right">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding OnlineText}" Margin="8,0" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
-                    <TextBlock Text="{Binding LastSyncText}" Margin="8,0" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
-                    <TextBlock Text="{Binding TillStatus}" Margin="8,0" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock
+                        Margin="8,0"
+                        Text="{Binding OnlineText}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        Margin="8,0"
+                        Opacity=".5"
+                        Text="|" />
+                    <TextBlock
+                        Margin="8,0"
+                        Text="{Binding LastSyncText}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        Margin="8,0"
+                        Opacity=".5"
+                        Text="|" />
+                    <TextBlock
+                        Margin="8,0"
+                        FontWeight="SemiBold"
+                        Text="{Binding TillStatus}"
+                        TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Fluent:StatusBarItem>
 
-            <!-- LEFT cluster (default dock = Left) -->
+            <!--  LEFT cluster (default dock = Left)  -->
             <Fluent:StatusBarItem Padding="8,0">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding OutletName}" Margin="8,0"/>
-                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
-                    <TextBlock Text="{Binding CounterName}" Margin="8,0"/>
-                    <TextBlock Text="|" Margin="8,0" Opacity=".5"/>
-                    <TextBlock Text="{Binding CurrentUserName}" Margin="8,0"/>
+                    <TextBlock Margin="8,0" Text="{Binding OutletName}" />
+                    <TextBlock
+                        Margin="8,0"
+                        Opacity=".5"
+                        Text="|" />
+                    <TextBlock Margin="8,0" Text="{Binding CounterName}" />
+                    <TextBlock
+                        Margin="8,0"
+                        Opacity=".5"
+                        Text="|" />
+                    <TextBlock Margin="8,0" Text="{Binding CurrentUserName}" />
                 </StackPanel>
             </Fluent:StatusBarItem>
         </Fluent:StatusBar>
 
         <!-- Overlay Layer: place this right before the closing </Grid> -->
-        <Grid x:Name="OverlayLayer"
-      Grid.RowSpan="3"
-      Panel.ZIndex="999"
-      Visibility="{Binding IsOverlayOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
-      Focusable="False"
-      IsVisibleChanged="OverlayLayer_IsVisibleChanged"
-      Background="#80000000">
+        <Grid
+            x:Name="OverlayLayer"
+            Grid.RowSpan="3"
+            Panel.ZIndex="999"
+            Background="#80000000"
+            Focusable="False"
+            IsVisibleChanged="OverlayLayer_IsVisibleChanged"
+            Visibility="{Binding IsOverlayOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
 
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Row="1" Grid.Column="1"
-                    CornerRadius="12"
+                <Border
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    MinWidth="420"
+                    MaxWidth="720"
                     Padding="16"
                     Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-                    MinWidth="420" MaxWidth="720"
-                    SnapsToDevicePixels="True"
-                    Effect="{DynamicResource ShadowEffect}">
+                    CornerRadius="12"
+                    Effect="{DynamicResource ShadowEffect}"
+                    SnapsToDevicePixels="True">
 
-                    <ContentPresenter Content="{Binding OverlayView}"/>
+                    <ContentPresenter Content="{Binding OverlayView}" />
                 </Border>
             </Grid>
         </Grid>

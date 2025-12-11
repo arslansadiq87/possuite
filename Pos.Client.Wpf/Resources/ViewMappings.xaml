@@ -1,0 +1,15 @@
+﻿<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:Acct="clr-namespace:Pos.Client.Wpf.Windows.Accounting"
+    xmlns:Sales="clr-namespace:Pos.Client.Wpf.Windows.Sales">
+
+    <!--  VM -> View mappings  -->
+    <DataTemplate DataType="{x:Type Acct:PurchaserLedgerVm}">
+        <Acct:PurchaserLedgerView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type Sales:StockValuationVm}">
+        <Sales:StockValuationView />
+    </DataTemplate>
+</ResourceDictionary>

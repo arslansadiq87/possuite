@@ -21,7 +21,6 @@ using System.Globalization;
 using System.Windows.Media.Imaging;
 
 
-
 namespace Pos.Client.Wpf.Windows.Inventory
 {
     public partial class LabelPrintView : UserControl
@@ -76,7 +75,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
             public string PriceText { get; init; } = "";
             public string Sku { get; init; } = "";
             public string Barcode { get; set; } = "";
-
             public bool IsCustomText { get; init; }
             public string CustomText { get; init; } = "";
             public CustomTextPosition CustomPosition { get; init; } = CustomTextPosition.MiddleCenter;
@@ -89,7 +87,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
         private readonly ObservableCollection<UiPurchaseRow> _purchases = new();
         private readonly ObservableCollection<UiLineRow> _lines = new();
-
         private readonly IPurchaseCenterReadService _purchaseRead;
         private readonly IItemsReadService _itemsRead;
         private readonly IBarcodeLabelSettingsService _labelSettings;
@@ -109,14 +106,11 @@ namespace Pos.Client.Wpf.Windows.Inventory
             _invoiceLocal = sp.GetRequiredService<IInvoiceSettingsLocalService>();
             _terminal = sp.GetRequiredService<ITerminalContext>();
             _tscVm = sp.GetRequiredService<BarcodeLabelSettingsViewModel>();
-
             PurchasesGrid.ItemsSource = _purchases;
             LinesGrid.ItemsSource = _lines;
-
             FromDate.SelectedDate = DateTime.Today.AddDays(-30);
             ToDate.SelectedDate = DateTime.Today;
             LoadSystemFonts();
-
             Loaded += async (_, __) => await LoadPurchasesAsync();
         }
 
@@ -128,38 +122,30 @@ namespace Pos.Client.Wpf.Windows.Inventory
                              .ToList();
 
             CustomFontFamilyBox.ItemsSource = fonts;
-
             // Try to select the default Windows UI font if present; fallback to first
             var defaultFamily = SystemFonts.MessageFontFamily;
             var match = fonts.FirstOrDefault(f => string.Equals(f.Source, defaultFamily.Source, StringComparison.OrdinalIgnoreCase));
-
             if (match != null)
                 CustomFontFamilyBox.SelectedItem = match;
             else if (fonts.Count > 0)
                 CustomFontFamilyBox.SelectedIndex = 0;
         }
 
-
         // --------- TAB 1: BY PURCHASE ---------
-
         private async Task LoadPurchasesAsync()
         {
             _purchases.Clear();
             _lines.Clear();
-
             DateTime? fromUtc = FromDate.SelectedDate?.Date.ToUniversalTime();
             DateTime? toUtc = ToDate.SelectedDate?.AddDays(1).Date.ToUniversalTime();
             var term = (SearchBox.Text ?? string.Empty).Trim();
-
             // Warehouse: only FINAL, non-voided, with Doc #
             bool wantFinal = true;
             bool wantDraft = false;
             bool wantVoided = false;
             bool onlyWithDoc = true;
-
             var rows = await _purchaseRead.SearchAsync(
                 fromUtc, toUtc, term, wantFinal, wantDraft, wantVoided, onlyWithDoc);
-
             foreach (var r in rows)
             {
                 _purchases.Add(new UiPurchaseRow
@@ -184,22 +170,17 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
             if (PurchasesGrid.SelectedItem is not UiPurchaseRow sel)
                 return;
-
             // Build item index once (for sale price + barcode)
             var index = await _itemsRead.BuildIndexAsync();
             var byId = index.ToDictionary(i => i.Id);
-
             var rows = await _purchaseRead.GetPreviewLinesAsync(sel.PurchaseId);
-
             foreach (var r in rows)
             {
                 var defaultPrintQty = (int)Math.Max(
                     0,
                     Math.Round(r.Qty, MidpointRounding.AwayFromZero));
-
                 decimal salePrice = 0m;
                 string barcode = "";
-
                 if (byId.TryGetValue(r.ItemId, out var meta))
                 {
                     salePrice = meta.Price; // POS sale price
@@ -207,7 +188,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
                                 ? meta.Sku
                                 : meta.Barcode;
                 }
-
                 _lines.Add(new UiLineRow
                 {
                     ItemId = r.ItemId,
@@ -222,7 +202,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
         }
 
 
-
         private async void PrintFromPurchase_Click(object sender, RoutedEventArgs e)
         {
             if (PurchasesGrid.SelectedItem is not UiPurchaseRow)
@@ -231,14 +210,12 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             if (_lines.Count == 0)
             {
                 MessageBox.Show("No items loaded for this purchase.", "Labels",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             var linesToPrint = _lines.Where(l => l.PrintQty > 0).ToList();
             if (linesToPrint.Count == 0)
             {
@@ -252,19 +229,15 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 // Build item index (Id -> ItemIndexDto) so we can get barcode & price
                 var index = await _itemsRead.BuildIndexAsync();
                 var byId = index.ToDictionary(i => i.Id);
-
                 var labels = new List<LabelPrintItem>();
-
                 foreach (var line in linesToPrint)
                 {
                     var code = string.IsNullOrWhiteSpace(line.Barcode)
                         ? line.Sku
                         : line.Barcode;
-
                     var name = line.DisplayName;
                     var priceText = line.Price.ToString("0.00");
                     var sku = line.Sku;
-
                     for (int i = 0; i < line.PrintQty; i++)
                     {
                         labels.Add(new LabelPrintItem
@@ -276,7 +249,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
                         });
                     }
                 }
-
 
                 await PrintLabelsAsync(labels, CancellationToken.None);
             }
@@ -293,7 +265,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             // 1) try selected item
             ItemIndexDto? item = ItemSearch.SelectedItem;
-
             // 2) If not selected (user just typed), resolve via query
             if (item is null)
             {
@@ -310,32 +281,26 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     }
                 }
             }
-
             if (item is null)
             {
                 MessageBox.Show("Select an item (or scan / type code and press Enter) before printing.", "Labels",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             // Keep labels & preview in sync
             await RefreshItemSelectionAsync(item, CancellationToken.None);
-
             if (!int.TryParse(ItemPrintQtyBox.Text, out var qty) || qty <= 0)
             {
                 MessageBox.Show("Enter a valid Print Qty (positive integer).", "Labels",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             var code = string.IsNullOrWhiteSpace(item.Barcode)
                 ? item.Sku
                 : item.Barcode;
-
             var name = item.DisplayName;
             var priceText = item.Price.ToString("0.00");
             var sku = item.Sku;
-
             var labels = new List<LabelPrintItem>();
             for (int i = 0; i < qty; i++)
             {
@@ -358,8 +323,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
-
         // --------- TAB 3: CUSTOM TEXT ---------
 
         private async void PrintCustomLabel_Click(object sender, RoutedEventArgs e)
@@ -371,25 +334,21 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             if (!int.TryParse(CustomPrintQtyBox.Text, out var qty) || qty <= 0)
             {
                 MessageBox.Show("Enter a valid Print Qty (positive integer).", "Labels",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             double fontSize;
             if (!double.TryParse(CustomFontSizeBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out fontSize) || fontSize <= 0)
             {
                 fontSize = 10.0; // fallback
             }
-
             var position = GetCustomPosition();
             bool bold = CustomBoldCheck.IsChecked == true;
             bool italic = CustomItalicCheck.IsChecked == true;
             string fontFamilyName = GetCustomFontFamilyName();
-
             var labels = new List<LabelPrintItem>();
             for (int i = 0; i < qty; i++)
             {
@@ -420,11 +379,9 @@ namespace Pos.Client.Wpf.Windows.Inventory
         {
             if (CustomFontFamilyBox?.SelectedItem is FontFamily ff)
                 return ff.Source;
-
             // Fallback to system UI font
             return SystemFonts.MessageFontFamily.Source;
         }
-
 
 
         private CustomTextPosition GetCustomPosition()
@@ -468,7 +425,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
         private async Task RefreshCustomPreviewAsync(CancellationToken ct)
         {
             if (!IsLoaded) return;
-
             var text = (CustomTextBox.Text ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(text))
             {
@@ -486,7 +442,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
             bool bold = CustomBoldCheck.IsChecked == true;
             bool italic = CustomItalicCheck.IsChecked == true;
             string fontFamilyName = GetCustomFontFamilyName();
-
 
             try
             {
@@ -519,27 +474,22 @@ namespace Pos.Client.Wpf.Windows.Inventory
             await RefreshCustomPreviewAsync(CancellationToken.None);
         }
 
-
         private ImageSource BuildCustomLabelImage(BarcodeLabelSettings s, LabelPrintItem item)
         {
             // ✅ normalize DPI once for all pixel math below
             int dpiNorm = Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi);
-
             double dipPerMm = 96.0 / 25.4;
             double widthDip = Math.Max(32, s.LabelWidthMm * dipPerMm);
             double heightDip = Math.Max(32, s.LabelHeightMm * dipPerMm);
-
             double pxPerDip = dpiNorm / 96.0;         // ✅ use dpiNorm
             int widthPx = Math.Max(32, (int)Math.Round(widthDip * pxPerDip));
             int heightPx = Math.Max(32, (int)Math.Round(heightDip * pxPerDip));
-
             var dv = new DrawingVisual();
             using (var dc = dv.RenderOpen())
             {
                 // Background
                 var rect = new Rect(0, 0, widthDip, heightDip);
                 dc.DrawRectangle(Brushes.White, null, rect);
-
                 // **ANTI-BLANK ANCHOR**
                 // Prevent some label drivers from treating the first page as "blank" and auto-feeding.
                 // This draws a near-invisible 1-alpha black line on the very top scanline.
@@ -548,21 +498,17 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 var almostTransparentBlack = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
                 almostTransparentBlack.Freeze();
                 dc.DrawRectangle(almostTransparentBlack, null, new Rect(0, 0, widthDip, 0.5));
-
                 // ---- existing text drawing code follows unchanged ----
                 string fontFamilyName = string.IsNullOrWhiteSpace(item.CustomFontFamilyName)
                     ? SystemFonts.MessageFontFamily.Source
                     : item.CustomFontFamilyName;
-
                 var typeface = new Typeface(
                     new FontFamily(fontFamilyName),
                     item.CustomItalic ? FontStyles.Italic : FontStyles.Normal,
                     item.CustomBold ? FontWeights.Bold : FontWeights.Normal,
                     FontStretches.Normal);
-
                 double pixelsPerDip = dpiNorm / 96.0;
                 double padding = 2.0;
-
                 double textAreaWidth;
                 switch (item.CustomPosition)
                 {
@@ -580,7 +526,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 }
 
                 textAreaWidth = Math.Max(0, textAreaWidth);
-
                 var ft = new FormattedText(
                     item.CustomText ?? string.Empty,
                     CultureInfo.CurrentUICulture,
@@ -597,7 +542,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 double textHeight = Math.Min(ft.Height, heightDip - 2.0 * padding);
                 double x = padding;
                 double y = padding;
-
                 switch (item.CustomPosition)
                 {
                     case CustomTextPosition.TopLeft:
@@ -606,14 +550,12 @@ namespace Pos.Client.Wpf.Windows.Inventory
                         ft.TextAlignment = TextAlignment.Center; x = (widthDip - textAreaWidth) / 2.0; y = padding; break;
                     case CustomTextPosition.TopRight:
                         ft.TextAlignment = TextAlignment.Right; x = widthDip - textAreaWidth - padding; y = padding; break;
-
                     case CustomTextPosition.MiddleLeft:
                         ft.TextAlignment = TextAlignment.Left; x = padding; y = (heightDip - textHeight) / 2.0; break;
                     case CustomTextPosition.MiddleCenter:
                         ft.TextAlignment = TextAlignment.Center; x = (widthDip - textAreaWidth) / 2.0; y = (heightDip - textHeight) / 2.0; break;
                     case CustomTextPosition.MiddleRight:
                         ft.TextAlignment = TextAlignment.Right; x = widthDip - textAreaWidth - padding; y = (heightDip - textHeight) / 2.0; break;
-
                     case CustomTextPosition.BottomLeft:
                         ft.TextAlignment = TextAlignment.Left; x = padding; y = heightDip - textHeight - padding; break;
                     case CustomTextPosition.BottomCenter:
@@ -631,9 +573,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
             return bmp;
         }
 
-
         // --------- CORE PRINTING (shared) ---------
-
         private async Task PrintLabelsAsync(
             IReadOnlyList<LabelPrintItem> items,
             CancellationToken ct)
@@ -644,19 +584,15 @@ namespace Pos.Client.Wpf.Windows.Inventory
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             var outletId = _terminal.OutletId;
             var settings = await _labelSettings.GetAsync(outletId, ct);
-
             // Resolve printer name:
             // 1) BarcodeLabelSettings.PrinterName
             // 2) InvoiceSettingsLocal.LabelPrinterName
             var local = await _invoiceLocal.GetForCounterWithFallbackAsync(_terminal.CounterId, ct);
-
             var printerName = !string.IsNullOrWhiteSpace(settings.PrinterName)
                 ? settings.PrinterName
                 : local?.LabelPrinterName;
-
             if (string.IsNullOrWhiteSpace(printerName))
             {
                 MessageBox.Show(
@@ -668,7 +604,6 @@ namespace Pos.Client.Wpf.Windows.Inventory
             }
 
             settings.PrinterName = printerName;
-
             var doc = BuildLabelsDocument(settings, items);
             var queue = ResolvePrintQueue(printerName);
             var pd = new PrintDialog
@@ -678,48 +613,49 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
             double pageWdip = doc.DocumentPaginator.PageSize.Width;
             double pageHdip = doc.DocumentPaginator.PageSize.Height;
-
             var ticket = queue.UserPrintTicket ?? new PrintTicket();
             ticket.PageMediaSize = new PageMediaSize(PageMediaSizeName.Unknown, pageWdip, pageHdip);
-
             var result = queue.MergeAndValidatePrintTicket(queue.DefaultPrintTicket, ticket);
             pd.PrintTicket = result.ValidatedPrintTicket ?? ticket;
-
             pd.PrintDocument(doc.DocumentPaginator, "POS – Item Labels");
         }
 
+        // Pos.Client.Wpf/Windows/Inventory/LabelPrintView.xaml.cs
         private FixedDocument BuildLabelsDocument(
-     BarcodeLabelSettings s,
-     IReadOnlyList<LabelPrintItem> items)
+            BarcodeLabelSettings s,
+            IReadOnlyList<LabelPrintItem> items)
         {
-            // --- constants & guards ---
+            // --- guards & normalized DPI ---
             int columns = Math.Max(1, s.Columns);
             int rows = Math.Max(1, s.Rows);
-            int dpi = Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi); // common thermal default: 203 dpi
-
-            // --- convert mm -> DIPs (WPF is 96 dpi world) ---
-            const double DipPerMm = 96.0 / 25.4;
-
-            double labelWidthDip = s.LabelWidthMm * DipPerMm;
-            double labelHeightDip = s.LabelHeightMm * DipPerMm;
-            double hGapDip = s.HorizontalGapMm * DipPerMm;
-            double vGapDip = s.VerticalGapMm * DipPerMm;
-
-            // --- snap page size to whole device dots at printer DPI ---
-            double pageWidthMm = columns * s.LabelWidthMm + (columns - 1) * s.HorizontalGapMm;
-            double pageHeightMm = rows * s.LabelHeightMm + (rows - 1) * s.VerticalGapMm;
-
-            int pageWPx = (int)Math.Round(pageWidthMm * dpi / 25.4);
-            int pageHPx = (int)Math.Round(pageHeightMm * dpi / 25.4);
-
-            double pageWidthDip = pageWPx * (96.0 / dpi);
-            double pageHeightDip = pageHPx * (96.0 / dpi);
-
-            // --- document ---
+            int dpi = Math.Max(96, s.Dpi <= 0 ? 203 : s.Dpi);
+            // --- compute page in mm and SNAP to device pixels ---
+            double pageWmm = columns * s.LabelWidthMm + (columns - 1) * s.HorizontalGapMm;
+            double pageHmm = rows * s.LabelHeightMm + (rows - 1) * s.VerticalGapMm;
+            // snap page to integer device pixels
+            int pageWPx = (int)Math.Round(pageWmm * dpi / 25.4);
+            int pageHPx = (int)Math.Round(pageHmm * dpi / 25.4);
+            // device-pixel label/gap sizes (SNAPPED once; prevents drift)
+            int labelWPx = (int)Math.Round(s.LabelWidthMm * dpi / 25.4);
+            int labelHPx = (int)Math.Round(s.LabelHeightMm * dpi / 25.4);
+            int gapWPx = (int)Math.Round(s.HorizontalGapMm * dpi / 25.4);
+            int gapHPx = (int)Math.Round(s.VerticalGapMm * dpi / 25.4);
+            // sanity: ensure pagePx matches our tiling math
+            int expectedWPx = columns * labelWPx + (columns - 1) * gapWPx;
+            int expectedHPx = rows * labelHPx + (rows - 1) * gapHPx;
+            pageWPx = expectedWPx;
+            pageHPx = expectedHPx;
+            // convert PX -> DIP for WPF
+            double pxToDip = 96.0 / dpi;
+            double pageWdip = pageWPx * pxToDip;
+            double pageHdip = pageHPx * pxToDip;
+            double labelWdip = labelWPx * pxToDip;
+            double labelHdip = labelHPx * pxToDip;
+            double gapWdip = gapWPx * pxToDip;
+            double gapHdip = gapHPx * pxToDip;
+            // --- document/page ---
             var doc = new FixedDocument();
-            doc.DocumentPaginator.PageSize = new Size(pageWidthDip, pageHeightDip);
-
-            // --- barcode zoom from settings (same logic as Settings/Test Print) ---
+            doc.DocumentPaginator.PageSize = new Size(pageWdip, pageHdip);
             double zoom = s.BarcodeZoomPct.HasValue
                 ? Math.Clamp(s.BarcodeZoomPct.Value / 100.0, 0.3, 2.0)
                 : 1.0;
@@ -729,18 +665,19 @@ namespace Pos.Client.Wpf.Windows.Inventory
             {
                 var page = new FixedPage
                 {
-                    Width = pageWidthDip,
-                    Height = pageHeightDip,
-                    Background = Brushes.White
+                    Width = pageWdip,
+                    Height = pageHdip,
+                    Background = Brushes.White,
+                    ClipToBounds = true
                 };
 
-                // --- Anti-blank anchor (prevents first-row skip on some thermal drivers) ---
+                // Anti-blank top anchor (prevents first-label skip on some drivers)
                 var anchorBrush = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
                 anchorBrush.Freeze();
                 var anchor = new Border
                 {
-                    Width = pageWidthDip,
-                    Height = 0.6,                 // ~1 device scanline at common DPIs
+                    Width = pageWdip,
+                    Height = Math.Max(0.5, 1.0 * pxToDip), // ~1 device scanline
                     Background = anchorBrush,
                     SnapsToDevicePixels = true,
                     UseLayoutRounding = true
@@ -753,10 +690,10 @@ namespace Pos.Client.Wpf.Windows.Inventory
                 {
                     for (int c = 0; c < columns && idx < items.Count; c++)
                     {
-                        var item = items[idx++];
+                        var it = items[idx++];
 
-                        ImageSource imgSrc = item.IsCustomText
-                            ? BuildCustomLabelImage(s, item)
+                        ImageSource imgSrc = it.IsCustomText
+                            ? BuildCustomLabelImage(s, it) // already normalized to dpi
                             : BarcodePreviewBuilder.Build(
                                 labelWidthMm: s.LabelWidthMm,
                                 labelHeightMm: s.LabelHeightMm,
@@ -764,13 +701,13 @@ namespace Pos.Client.Wpf.Windows.Inventory
                                 marginTopMm: s.MarginTopMm,
                                 dpi: dpi,
                                 codeType: s.CodeType,
-                                payload: item.Code,
+                                payload: it.Code,
                                 showName: s.ShowName,
                                 showPrice: s.ShowPrice,
                                 showSku: s.ShowSku,
-                                nameText: item.Name,
-                                priceText: item.PriceText,
-                                skuText: item.Sku,
+                                nameText: it.Name,
+                                priceText: it.PriceText,
+                                skuText: it.Sku,
                                 fontSizePt: s.FontSizePt,
                                 nameXmm: s.NameXmm,
                                 nameYmm: s.NameYmm,
@@ -793,25 +730,28 @@ namespace Pos.Client.Wpf.Windows.Inventory
                         var img = new Image
                         {
                             Source = imgSrc,
-                            Width = labelWidthDip,
-                            Height = labelHeightDip,
+                            Width = labelWdip,
+                            Height = labelHdip,
                             Stretch = Stretch.None,
                             SnapsToDevicePixels = true,
                             UseLayoutRounding = true
                         };
 
-                        double x = c * (labelWidthDip + hGapDip);
-                        double y = r * (labelHeightDip + vGapDip);
+                        // place at pixel-aligned positions to avoid cumulative DIP rounding
+                        int xPx = c * (labelWPx + gapWPx);
+                        int yPx = r * (labelHPx + gapHPx);
+                        double xDip = xPx * pxToDip;
+                        double yDip = yPx * pxToDip;
 
-                        FixedPage.SetLeft(img, x);
-                        FixedPage.SetTop(img, y);
+                        FixedPage.SetLeft(img, xDip);
+                        FixedPage.SetTop(img, yDip);
                         page.Children.Add(img);
                     }
                 }
 
-                // Force layout for drivers that are picky about first-page visuals
-                page.Measure(new Size(pageWidthDip, pageHeightDip));
-                page.Arrange(new Rect(0, 0, pageWidthDip, pageHeightDip));
+                // Force layout
+                page.Measure(new Size(pageWdip, pageHdip));
+                page.Arrange(new Rect(0, 0, pageWdip, pageHdip));
                 page.UpdateLayout();
 
                 var pc = new PageContent();
@@ -821,6 +761,7 @@ namespace Pos.Client.Wpf.Windows.Inventory
 
             return doc;
         }
+
 
 
         private static PrintQueue ResolvePrintQueue(string printerName)

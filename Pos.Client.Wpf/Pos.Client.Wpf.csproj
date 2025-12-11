@@ -40,6 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Page Remove="Resources\ViewMappings.xaml" />
     <Page Remove="Windows\Accounting\AccountDialog.xaml" />
     <Page Remove="Windows\Accounting\OpeningBalanceWindow.xaml" />
     <Page Remove="Windows\Accounting\VoucherEditorWindow.xaml" />

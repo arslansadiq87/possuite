@@ -43,6 +43,8 @@ namespace Pos.Client.Wpf.Windows.Settings
         [ObservableProperty] private bool enableHourlyBackup;
         [ObservableProperty] private string? backupBaseFolder;
         [ObservableProperty] private bool useServerForBackupRestore;
+        public IAsyncRelayCommand RestoreOtherPcDataCommand { get; }
+        
 
         public bool HasBackupFolder => !string.IsNullOrWhiteSpace(BackupBaseFolder);
         partial void OnBackupBaseFolderChanged(string? value) => OnPropertyChanged(nameof(HasBackupFolder));
@@ -65,13 +67,17 @@ namespace Pos.Client.Wpf.Windows.Settings
         public BackupSettingsViewModel(
             IServerSettingsService serverSvc,
             Services.IBackupService backupSvc,
-            ITerminalContext terminal)
+            ITerminalContext terminal
+            )
         {
             _serverSvc = serverSvc;
             _backupSvc = backupSvc;
             _terminal = terminal;
 
             _ = InitAsync();
+            RestoreOtherPcDataCommand = new AsyncRelayCommand(OnRestoreOtherPcDataAsync);
+            
+
         }
 
         // ───────────────── Lifecycle ─────────────────
@@ -115,7 +121,124 @@ namespace Pos.Client.Wpf.Windows.Settings
             }
         }
 
+        // Pos.Client.Wpf/Windows/Settings/BackupSettingsViewModel.cs
+
+        private async Task OnRestoreOtherPcDataAsync()
+        {
+            if (!IsAdmin)
+            {
+                System.Windows.MessageBox.Show(
+                    "Only admin users can restore backups.",
+                    "Restore other PC data",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "SQLite database|*.db;*.sqlite;*.bak|All files|*.*",
+                Title = "Select database backup from another PC"
+            };
+
+            // No forced subfolder here – we want to allow USB / external drives easily
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            var confirm = System.Windows.MessageBox.Show(
+                "This will OVERWRITE the local POS database with the selected file.\n\n" +
+                "Use this when moving data from another PC or testing client data.\n\n" +
+                "The application will close after restore. Continue?",
+                "Restore other PC data",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirm != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                await _backupSvc.RestoreFromLocalBackupAsync(dlg.FileName, CancellationToken.None);
+
+                System.Windows.MessageBox.Show(
+                    "Restore completed. The application will now close. Please restart.",
+                    "Restore other PC data",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                System.Windows.Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(
+                    "Restore failed:\n\n" + ex.Message,
+                    "Restore other PC data",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+
         // ───────────────── Commands ─────────────────
+
+        [RelayCommand]
+        private async Task ManualBackupAsync()
+        {
+            if (UseServerForBackupRestore)
+            {
+                System.Windows.MessageBox.Show(
+                    "Manual backup from this screen works only in Offline (local) mode.",
+                    "Manual backup",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(BackupBaseFolder) || !Directory.Exists(BackupBaseFolder))
+            {
+                System.Windows.MessageBox.Show(
+                    "Please select a Backup Location first, then try again.",
+                    "Manual backup",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            var now = DateTime.Now;
+            var defaultFileName = now.ToString("yyyyMMdd_HHmmss") + "_manual.db";
+
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "SQLite database|*.db|All files|*.*",
+                Title = "Save manual backup",
+                FileName = defaultFileName,
+                InitialDirectory = BackupBaseFolder
+            };
+
+            var result = dlg.ShowDialog();
+            if (result != true)
+                return;
+
+            try
+            {
+                await _backupSvc.CreateManualBackupAsync(dlg.FileName, CancellationToken.None);
+
+                System.Windows.MessageBox.Show(
+                    "Manual backup created successfully.",
+                    "Manual backup",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(
+                    "Manual backup failed:\n\n" + ex.Message,
+                    "Manual backup",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
 
         // PasswordBox → VM (safe bridge for API key)
         [RelayCommand]

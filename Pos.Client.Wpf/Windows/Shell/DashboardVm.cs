@@ -105,8 +105,11 @@ public sealed class DashboardVm : ObservableObject
         OpenVoucherCenterCmd = new RelayCommand(OpenVoucherCenterTab);
 
         OpenAccounteLedgerCmd = new RelayCommand((OpenAccounteLedgerTab));
+        OpenPurchaserLedgerCmd = new RelayCommand(OpenPurchaserLedgerTab);   // NEW
+        OpenStockValuationCmd = new RelayCommand(OpenStockValuationTab);    // NEW
 
-      
+
+
         OpenPayrollCmd = new RelayCommand(() =>
             _nav.Show<Pos.Client.Wpf.Windows.Accounting.PayrollRunWindow>());
 
@@ -233,7 +236,11 @@ public sealed class DashboardVm : ObservableObject
     // NEW commands
     public IAsyncRelayCommand OpenTillCmd { get; }
     public IAsyncRelayCommand CloseTillCmd { get; }
-    
+
+    public IRelayCommand OpenPurchaserLedgerCmd { get; }   // NEW
+    public IRelayCommand OpenStockValuationCmd { get; }    // NEW
+
+
     // Notify views if you want (optional hook from window/tabs)
     public event Action? TillChanged;
 
@@ -367,6 +374,22 @@ public sealed class DashboardVm : ObservableObject
         _views.OpenTab<Pos.Client.Wpf.Windows.Inventory.LabelPrintView>(
             "Print Labels",
             "Print Labels");
+    }
+
+    private void OpenPurchaserLedgerTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Accounting.PurchaserLedgerView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Accounting.PurchaserLedgerView>(
+            "Supplier Ledger",    // title shown on tab header
+            "Supplier Ledger");   // optional tag/category
+    }
+
+    private void OpenStockValuationTab()
+    {
+        if (TryActivateTab<Pos.Client.Wpf.Windows.Sales.StockValuationView>()) return;
+        _views.OpenTab<Pos.Client.Wpf.Windows.Sales.StockValuationView>(
+            "Stock Valuation",    // title shown on tab header
+            "Stock Valuation");   // optional tag/category
     }
 
 

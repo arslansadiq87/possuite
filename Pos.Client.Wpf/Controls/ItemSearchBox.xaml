@@ -41,12 +41,17 @@
             <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4"
               Padding="4" Width="{Binding ElementName=SearchBox, Path=ActualWidth}">
                 <ListBox x:Name="List"
-         MouseDoubleClick="List_MouseDoubleClick"
+             MouseDoubleClick="List_MouseDoubleClick"
          PreviewKeyDown="List_PreviewKeyDown"
          BorderThickness="0"
          ScrollViewer.VerticalScrollBarVisibility="Auto"
+         ScrollViewer.CanContentScroll="True"
+         VirtualizingStackPanel.IsVirtualizing="True"
+         VirtualizingStackPanel.VirtualizationMode="Recycling"
+         MaxHeight="360"
          IsTextSearchEnabled="True"
          TextSearch.TextPath="DisplayName">
+
                     <!-- Keep keyboard behaviour by NOT disabling focus -->
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">

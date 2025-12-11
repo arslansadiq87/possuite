@@ -82,6 +82,12 @@ namespace Pos.Client.Wpf.Controls
         private readonly DispatcherTimer _burstReset =
             new() { Interval = TimeSpan.FromMilliseconds(220) };
 
+        
+        // Debounced search for manual typing (avoids heavy work per key)
+        private readonly DispatcherTimer _searchDebounce =
+            new() { Interval = TimeSpan.FromMilliseconds(120) };
+
+
         public ItemSearchBox()
         {
             InitializeComponent();
@@ -99,13 +105,16 @@ namespace Pos.Client.Wpf.Controls
             _terminal = sp.GetService<ITerminalContext>();
 
 
-            Loaded += OnLoaded;
+            
             _burstReset.Tick += (_, __) =>
             {
                 _suppressDropdown = false;
                 _burstCount = 0;
                 _burstReset.Stop();
             };
+            _searchDebounce.Tick += SearchDebounce_Tick;   // NEW
+            
+            Loaded += OnLoaded;
         }
 
 
@@ -220,19 +229,84 @@ namespace Pos.Client.Wpf.Controls
             FocusSearch();
         }
 
-        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        private void SearchDebounce_Tick(object? sender, EventArgs e)
         {
-            Query = SearchBox.Text ?? "";
-            var now = DateTime.UtcNow;
-            _burstCount = (now - _lastAt).TotalMilliseconds <= 40 ? _burstCount + 1 : 1;
-            _lastAt = now;
-            if (_burstCount >= 4) { _suppressDropdown = true; _burstReset.Stop(); _burstReset.Start(); }
-            _view?.Refresh();
-            var has = _view != null && _view.Cast<object>().Any();
-            Popup.IsOpen = !_suppressDropdown && Query.Length > 0 && has;
+            _searchDebounce.Stop();
+
+            if (_view == null)
+                return;
+
+            var term = (Query ?? string.Empty).Trim();
+
+            // Empty query: hide popup, optionally reset view
+            if (term.Length == 0)
+            {
+                Popup.IsOpen = false;
+                _view.Refresh();            // reset any previous filter
+                return;
+            }
+
+            // With large catalogs, filtering on a single character
+            // can still be expensive and not very useful.
+            if (term.Length == 1)
+            {
+                Popup.IsOpen = false;
+                return;
+            }
+
+            // Actually filter the in-memory index
+            _view.Refresh();
+
+            var has = _view.Cast<object>().Any();
+
+            // EXTRA protection to avoid scanner popup flash:
+            // only allow popup when we are NOT in a burst (i.e., human typing)
+            var allowPopup = !_suppressDropdown && has;
+            Popup.IsOpen = allowPopup;
+
             if (Popup.IsOpen && List.Items.Count > 0 && List.SelectedIndex < 0)
                 List.SelectedIndex = 0;
         }
+
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            Query = SearchBox.Text ?? string.Empty;
+
+            var now = DateTime.UtcNow;
+            var deltaMs = (now - _lastAt).TotalMilliseconds;
+            _lastAt = now;
+
+            // If keys arrive within 40ms, treat as a "burst" (scanner)
+            _burstCount = deltaMs <= 40 ? _burstCount + 1 : 1;
+
+            // --- BARCODE SCANNER MODE ---
+            // Fast continuous stream: don't filter, don't open popup
+            if (_burstCount >= 4)
+            {
+                _suppressDropdown = true;
+                Popup.IsOpen = false;
+
+                _searchDebounce.Stop();   // no manual search while scanner is active
+                _burstReset.Stop();
+                _burstReset.Start();      // will reset _suppressDropdown / _burstCount after 220ms
+
+                // Scanner will normally send Enter at the end; ConfirmPickAsync()
+                // will do a single _lookup.FindOneAsync(Query.Trim()).
+                return;
+            }
+
+            // --- NORMAL MANUAL TYPING MODE ---
+            if (_view == null)
+                return;
+
+            // Debounce the actual filtering work; if user types quickly,
+            // we only refresh once they pause for ~120ms.
+            _searchDebounce.Stop();
+            _searchDebounce.Start();
+        }
+
+
 
         private async Task ConfirmPickAsync()
         {

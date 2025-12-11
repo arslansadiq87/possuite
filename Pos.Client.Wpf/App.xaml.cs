@@ -270,6 +270,19 @@ namespace Pos.Client.Wpf
             sc.AddSingleton<Pos.Persistence.Sync.ISyncTokenService, Pos.Persistence.Sync.SyncTokenService>();
             sc.AddSingleton<Pos.Persistence.Sync.IOutboxWriter, Pos.Persistence.Sync.OutboxWriter>();
             //sc.AddScoped<IOutboxWriter, OutboxWriter>();
+
+            sc.AddScoped<IPurchaseLedgerReadService, PurchaseLedgerReadService>();
+            sc.AddScoped<IStockValuationReadService, StockValuationReadService>();
+
+
+            // Reports VMs
+            sc.AddTransient<Pos.Client.Wpf.Windows.Accounting.PurchaserLedgerView>();
+            sc.AddTransient<Pos.Client.Wpf.Windows.Sales.StockValuationView>();
+
+            sc.AddTransient<Windows.Accounting.PurchaserLedgerVm>();
+            sc.AddTransient<Windows.Sales.StockValuationVm>();
+
+
             sc.AddHttpClient<Pos.Client.Wpf.Services.Sync.ISyncHttp, Pos.Client.Wpf.Services.Sync.SyncHttp>(c =>
             {
                 c.BaseAddress = new Uri("http://localhost:5089/"); // TODO: set
@@ -282,6 +295,7 @@ namespace Pos.Client.Wpf
                 b.AddConsole(); // optional for console runs
                 b.SetMinimumLevel(LogLevel.Information);
             });
+
 
             Services = sc.BuildServiceProvider();
             TimeZoneBootstrapper.ApplyInitial(Services);
